@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #1f1f1f;
+  --color-secondary: #6e62e5;
+  --color-background-light: #f3f3f1;
+  --color-background-dark: #1a1a1a;
+  --color-card-light: #ffffff;
+  --color-card-dark: #262626;
+  --color-sidebar-light: #f3f3f1;
+  --color-sidebar-dark: #1f1f1f;
+  --color-purple-light: #ede9fe;
+  --color-purple-dark: #3b0764;
+  --color-whatsapp: #25D366;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Playfair Display", serif;
+
+  --shadow-soft: 0 10px 40px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --shadow-deep: 0 20px 50px rgba(0, 0, 0, 0.12);
+
+  @keyframes dash {
+    from { stroke-dashoffset: 1000; }
+    to { stroke-dashoffset: 0; }
+  }
+}
+
+@layer base {
+  body {
+    @apply font-sans;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #374151;
+}

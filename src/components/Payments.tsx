@@ -1,0 +1,640 @@
+import React, { useState, useEffect } from 'react';
+import { Payment, PaymentTab, OrderTimelineEvent } from '../types';
+
+type RightTab = 'details' | 'copilot';
+
+const PAYMENTS: Payment[] = [
+  {
+    id: '1',
+    orderId: 'ORD-55210',
+    paymentId: 'PAY-99281',
+    customerName: 'Sarah Jenkins',
+    amount: '$129.00',
+    currency: 'USD',
+    paymentMethod: 'Visa ···· 4242',
+    psp: 'Stripe',
+    date: 'Oct 12',
+    lastUpdate: '2m ago',
+    orderStatus: 'Delivered',
+    paymentStatus: 'Captured',
+    refundStatus: 'Refund failed',
+    disputeStatus: 'N/A',
+    reconciliationStatus: 'Mismatch',
+    approvalStatus: 'Approval needed',
+    riskLevel: 'Low',
+    paymentType: 'Standard',
+    summary: 'Refund failed at PSP level, reconciliation mismatch',
+    badges: ['Refund Failed', 'Mismatch', 'Approval Needed'],
+    tab: 'blocked',
+    conflictDetected: 'Refund marked as "Succeeded" in OMS but "Failed" in Stripe (PSP)',
+    recommendedNextAction: 'Manually retry refund in Stripe or reconcile states',
+    context: 'Customer requested refund due to wrong size. OMS triggered refund but Stripe returned a generic failure.',
+    systemStates: {
+      oms: 'Refunded',
+      psp: 'Capture Succeeded (Refund Failed)',
+      refund: 'Failed',
+      dispute: 'N/A',
+      reconciliation: 'Mismatch',
+      canonical: 'Refund Blocked'
+    },
+    relatedCases: [
+      { id: 'CAS-88219', type: 'Refund Inquiry', status: 'Open' }
+    ],
+    timeline: [
+      { id: 't1', type: 'system', content: 'Payment authorized', time: 'Oct 12, 09:00 AM', system: 'Stripe' },
+      { id: 't2', type: 'system', content: 'Payment captured', time: 'Oct 12, 09:05 AM', system: 'Stripe' },
+      { id: 't3', type: 'system', content: 'Refund requested (OMS)', time: 'Oct 14, 10:00 AM', system: 'OMS' },
+      { id: 't4', type: 'system', content: 'Refund execution started', time: 'Oct 14, 10:01 AM', system: 'PSP-Bridge' },
+      { id: 't5', type: 'system', content: 'Refund failed: Generic decline', time: 'Oct 14, 10:01 AM', system: 'Stripe' }
+    ]
+  },
+  {
+    id: '2',
+    orderId: 'ORD-55211',
+    paymentId: 'PAY-99282',
+    customerName: 'Marcus Chen',
+    amount: '$2,450.00',
+    currency: 'USD',
+    paymentMethod: 'Bank Transfer',
+    psp: 'Adyen',
+    date: 'Oct 13',
+    lastUpdate: '15m ago',
+    orderStatus: 'Processing',
+    paymentStatus: 'Pending',
+    refundStatus: 'N/A',
+    disputeStatus: 'N/A',
+    reconciliationStatus: 'Pending',
+    approvalStatus: 'N/A',
+    riskLevel: 'Medium',
+    paymentType: 'B2B',
+    summary: 'Large bank transfer pending reconciliation',
+    badges: ['Pending', 'Reconciliation'],
+    tab: 'reconciliation',
+    conflictDetected: 'Amount received in bank doesn\'t match Order total exactly (FX difference?)',
+    recommendedNextAction: 'Verify FX rate applied by Adyen',
+    context: 'High value B2B order. Payment received but reconciliation is pending due to a $0.05 difference.',
+    systemStates: {
+      oms: 'Awaiting Payment',
+      psp: 'Received',
+      refund: 'N/A',
+      dispute: 'N/A',
+      reconciliation: 'Pending',
+      canonical: 'Awaiting Reconciliation'
+    },
+    relatedCases: [],
+    timeline: [
+      { id: 't1', type: 'system', content: 'Order created', time: 'Oct 13, 11:00 AM', system: 'OMS' },
+      { id: 't2', type: 'system', content: 'Bank transfer initiated', time: 'Oct 13, 11:30 AM', system: 'Customer' },
+      { id: 't3', type: 'system', content: 'Funds received by Adyen', time: 'Oct 15, 09:00 AM', system: 'Adyen' }
+    ]
+  },
+  {
+    id: '3',
+    orderId: 'ORD-55213',
+    paymentId: 'PAY-99283',
+    customerName: 'Elena Rodriguez',
+    amount: '$89.50',
+    currency: 'USD',
+    paymentMethod: 'PayPal',
+    psp: 'PayPal',
+    date: 'Oct 11',
+    lastUpdate: '3h ago',
+    orderStatus: 'Delivered',
+    paymentStatus: 'Captured',
+    refundStatus: 'N/A',
+    disputeStatus: 'Open',
+    reconciliationStatus: 'Matched',
+    approvalStatus: 'N/A',
+    riskLevel: 'High',
+    paymentType: 'Standard',
+    summary: 'Chargeback opened: Item not as described',
+    badges: ['Dispute', 'High Risk'],
+    tab: 'disputes',
+    conflictDetected: 'Dispute opened while order is marked as "Delivered" with no return request',
+    recommendedNextAction: 'Upload delivery evidence to PayPal',
+    context: 'Customer opened a dispute directly via PayPal claiming the item was not as described.',
+    systemStates: {
+      oms: 'Delivered',
+      psp: 'Disputed',
+      refund: 'N/A',
+      dispute: 'Open',
+      reconciliation: 'Matched',
+      canonical: 'Disputed'
+    },
+    relatedCases: [
+      { id: 'CAS-88220', type: 'Dispute Management', status: 'Open' }
+    ],
+    timeline: [
+      { id: 't1', type: 'system', content: 'Payment captured', time: 'Oct 11, 10:00 AM', system: 'PayPal' },
+      { id: 't2', type: 'system', content: 'Order delivered', time: 'Oct 13, 02:00 PM', system: 'Carrier' },
+      { id: 't3', type: 'system', content: 'Dispute opened by customer', time: 'Oct 15, 08:00 AM', system: 'PayPal' }
+    ],
+    disputeReference: 'PP-D-99281',
+    chargebackAmount: '$89.50'
+  },
+  {
+    id: '4',
+    orderId: 'ORD-55214',
+    paymentId: 'PAY-99284',
+    customerName: 'James Wilson',
+    amount: '$54.00',
+    currency: 'USD',
+    paymentMethod: 'Apple Pay',
+    psp: 'Stripe',
+    date: 'Oct 14',
+    lastUpdate: '5m ago',
+    orderStatus: 'Cancelled',
+    paymentStatus: 'Refunded',
+    refundStatus: 'Full Refund',
+    disputeStatus: 'N/A',
+    reconciliationStatus: 'Matched',
+    approvalStatus: 'Approved',
+    riskLevel: 'Low',
+    paymentType: 'Standard',
+    summary: 'Full refund executed successfully',
+    badges: ['Refunded', 'Matched'],
+    tab: 'refunds',
+    context: 'Order cancelled by customer before fulfillment. Refund processed automatically.',
+    systemStates: {
+      oms: 'Cancelled',
+      psp: 'Refunded',
+      refund: 'Succeeded',
+      dispute: 'N/A',
+      reconciliation: 'Matched',
+      canonical: 'Refunded'
+    },
+    relatedCases: [],
+    timeline: [
+      { id: 't1', type: 'system', content: 'Payment captured', time: 'Oct 14, 11:10 AM', system: 'Stripe' },
+      { id: 't2', type: 'system', content: 'Order cancelled', time: 'Oct 14, 11:30 AM', system: 'OMS' },
+      { id: 't3', type: 'system', content: 'Refund triggered', time: 'Oct 14, 11:31 AM', system: 'OMS' },
+      { id: 't4', type: 'system', content: 'Refund succeeded', time: 'Oct 14, 11:32 AM', system: 'Stripe' }
+    ],
+    refundAmount: '$54.00',
+    refundType: 'Full'
+  }
+];
+
+export default function Payments() {
+  const [rightTab, setRightTab] = useState<RightTab>('copilot');
+  const [activeTab, setActiveTab] = useState<PaymentTab>('all');
+  const [selectedId, setSelectedId] = useState<string>('1');
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+
+  const filteredPayments = PAYMENTS.filter(p => {
+    if (activeTab === 'all') return true;
+    return p.tab === activeTab;
+  });
+
+  const selectedPayment = filteredPayments.find(p => p.id === selectedId) || filteredPayments[0];
+
+  useEffect(() => {
+    if (filteredPayments.length > 0 && !filteredPayments.find(p => p.id === selectedId)) {
+      setSelectedId(filteredPayments[0].id);
+    }
+  }, [activeTab, filteredPayments, selectedId]);
+
+  return (
+    <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
+      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
+        {/* Payments Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Payments</h1>
+            <div className="flex space-x-1">
+              {[
+                { id: 'all', label: 'All payments', count: PAYMENTS.length },
+                { id: 'refunds', label: 'Refunds', count: PAYMENTS.filter(p => p.tab === 'refunds').length },
+                { id: 'disputes', label: 'Disputes', count: PAYMENTS.filter(p => p.tab === 'disputes').length },
+                { id: 'reconciliation', label: 'Reconciliation', count: PAYMENTS.filter(p => p.tab === 'reconciliation').length },
+                { id: 'blocked', label: 'Blocked', count: PAYMENTS.filter(p => p.tab === 'blocked').length },
+              ].map(tab => (
+                <span 
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as PaymentTab)}
+                  className={`px-3 py-1 text-sm font-medium rounded-full cursor-pointer transition-colors ${
+                    activeTab === tab.id 
+                      ? 'bg-black text-white' 
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center text-gray-500 text-sm mr-2">
+              <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+              Sync Active
+            </div>
+            <button className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+              <span className="material-symbols-outlined">filter_list</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content Area: Three Panes */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Pane: List */}
+          <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
+            <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
+              {filteredPayments.map((pay) => (
+                <div
+                  key={pay.id}
+                  onClick={() => setSelectedId(pay.id)}
+                  className={`p-4 rounded-xl border cursor-pointer group relative transition-all duration-200 ${
+                    selectedId === pay.id
+                      ? `bg-white dark:bg-gray-800 border-secondary shadow-card scale-[1.02] z-10`
+                      : 'bg-white dark:bg-card-dark border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 shadow-sm hover:shadow-card'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="flex flex-col">
+                      <span className={`font-semibold text-sm ${selectedId === pay.id ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {pay.customerName}
+                      </span>
+                      <span className="text-xs text-gray-400 font-mono">{pay.paymentId}</span>
+                    </div>
+                    <span className="text-xs text-gray-400">{pay.lastUpdate}</span>
+                  </div>
+                  <div className="mb-2">
+                    <p className={`text-sm truncate ${selectedId === pay.id ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-600 dark:text-gray-300 font-normal'}`}>
+                      {pay.summary}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {pay.badges.map(badge => (
+                      <span key={badge} className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                        badge === 'Conflict' || badge === 'High Risk' || badge === 'Blocked' || badge === 'Refund Failed'
+                          ? 'bg-red-50 text-red-700 border-red-200'
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}>
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Middle Pane: Details */}
+          <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-card-dark overflow-y-auto custom-scrollbar">
+            {selectedPayment && (
+              <div className="p-8 w-full space-y-8">
+                {/* Header Info */}
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedPayment.paymentId}</h2>
+                      <span className={`px-2 py-1 text-[10px] font-bold rounded uppercase tracking-wider ${
+                        selectedPayment.paymentStatus === 'Captured' || selectedPayment.paymentStatus === 'Completed' ? 'bg-green-100 text-green-700 border border-green-200' :
+                        selectedPayment.paymentStatus === 'Failed' || selectedPayment.paymentStatus === 'Disputed' ? 'bg-red-100 text-red-700 border-red-200' :
+                        'bg-blue-100 text-blue-700 border border-blue-200'
+                      }`}>
+                        {selectedPayment.paymentStatus}
+                      </span>
+                    </div>
+                    <p className="text-gray-500 text-sm">Order {selectedPayment.orderId} · {selectedPayment.customerName} · {selectedPayment.date}</p>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <button className="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                      View in {selectedPayment.psp}
+                    </button>
+                    <button className="px-4 py-2 text-sm font-bold text-white bg-black rounded-lg hover:opacity-90 transition-colors">
+                      Reconcile
+                    </button>
+                    {!isRightSidebarOpen && (
+                      <button 
+                        onClick={() => setIsRightSidebarOpen(true)}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all shadow-sm ml-1"
+                        title="Show Sidebar"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Conflict Alert if any */}
+                {selectedPayment.conflictDetected && (
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3">
+                    <span className="material-symbols-outlined text-red-500 mt-0.5">warning</span>
+                    <div>
+                      <h4 className="text-sm font-bold text-red-900">Conflict Detected</h4>
+                      <p className="text-sm text-red-700">{selectedPayment.conflictDetected}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Grid Info */}
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">Payment Details</span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">Method</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{selectedPayment.paymentMethod}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">PSP</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{selectedPayment.psp}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">Amount</span>
+                        <span className="font-bold text-gray-900 dark:text-white">{selectedPayment.amount} {selectedPayment.currency}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">System States</span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">OMS</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{selectedPayment.systemStates.oms}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">PSP</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{selectedPayment.systemStates.psp}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">Refund</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{selectedPayment.systemStates.refund}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">Risk Analysis</span>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${selectedPayment.riskLevel === 'Low' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-bold text-gray-900 dark:text-white">{selectedPayment.riskLevel} Risk</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 leading-relaxed">Based on PSP fraud signals and reconciliation status.</p>
+                  </div>
+                </div>
+
+                {/* Timeline */}
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Payment Timeline</h3>
+                  <div className="space-y-4">
+                    {selectedPayment.timeline.map((event, idx) => {
+                      const getEventIcon = (content: string) => {
+                        const c = content.toLowerCase();
+                        if (c.includes('authorized')) return 'lock';
+                        if (c.includes('captured')) return 'payments';
+                        if (c.includes('refund requested')) return 'undo';
+                        if (c.includes('execution started')) return 'play_arrow';
+                        if (c.includes('failed')) return 'error';
+                        if (c.includes('created')) return 'add_shopping_cart';
+                        if (c.includes('transfer initiated')) return 'account_balance';
+                        if (c.includes('funds received')) return 'savings';
+                        if (c.includes('delivered')) return 'local_shipping';
+                        if (c.includes('dispute opened')) return 'gavel';
+                        if (c.includes('cancelled')) return 'cancel';
+                        if (c.includes('refund triggered')) return 'bolt';
+                        if (c.includes('refund succeeded')) return 'check_circle';
+                        return 'circle';
+                      };
+
+                      return (
+                        <div key={event.id} className="flex gap-4 relative">
+                          {idx !== selectedPayment.timeline.length - 1 && (
+                            <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
+                          )}
+                          <div className={`w-6 h-6 rounded-full border-2 border-white dark:border-gray-900 z-10 flex items-center justify-center ${
+                            idx === selectedPayment.timeline.length - 1 ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-400'
+                          }`}>
+                            <span className="material-symbols-outlined text-[14px]">{getEventIcon(event.content)}</span>
+                          </div>
+                          <div className="flex-1 pb-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex flex-col">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">{event.content}</p>
+                                <span className="text-[10px] text-gray-400 uppercase tracking-wider">{event.system}</span>
+                              </div>
+                              <span className="text-xs text-gray-400">{event.time}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Pane: Copilot/Details */}
+          <div className={`transition-all duration-300 bg-white dark:bg-card-dark flex flex-col overflow-hidden ${isRightSidebarOpen ? 'w-80 lg:w-96 border-l border-gray-100 dark:border-gray-700' : 'w-0 border-none'}`}>
+            <div className="flex items-center border-b border-gray-100 dark:border-gray-700 px-2 flex-shrink-0">
+              <button
+                onClick={() => setRightTab('details')}
+                className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${
+                  rightTab === 'details'
+                    ? 'text-gray-900 border-gray-900 font-bold'
+                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
+                }`}
+              >
+                Details
+              </button>
+              <button
+                onClick={() => setRightTab('copilot')}
+                className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 flex items-center justify-center gap-2 ${
+                  rightTab === 'copilot'
+                    ? 'text-secondary border-secondary font-bold bg-purple-50/50 dark:bg-purple-900/10'
+                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
+                }`}
+              >
+                <span className="material-symbols-outlined text-lg">smart_toy</span>
+                Copilot
+              </button>
+              <div className="flex items-center gap-1 ml-auto">
+                <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
+                  <span className="material-symbols-outlined text-[20px]">settings</span>
+                </button>
+                <button 
+                  onClick={() => setIsRightSidebarOpen(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
+                  title="Hide Sidebar"
+                >
+                  <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {rightTab === 'copilot' ? (
+                <div className="p-4 flex flex-col gap-4">
+                  {/* Copilot Case Summary */}
+                  <div className="flex gap-2">
+                    <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5">
+                      <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                    </div>
+                    <div className="flex flex-col gap-2 max-w-[85%] w-full">
+                      <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-2.5 px-3.5 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Payment Summary</h4>
+                        <p className="leading-relaxed mb-3">Payment {selectedPayment.paymentId} for {selectedPayment.customerName} is currently {selectedPayment.paymentStatus}. The amount is {selectedPayment.amount}.</p>
+                        
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Conflict Detection</h4>
+                        <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-800/30 text-xs text-red-700 dark:text-red-400 mb-3">
+                          {selectedPayment.paymentStatus === 'Failed' ? 'Payment failed in PSP but OMS still shows pending.' : 'No major conflicts detected.'}
+                        </div>
+
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
+                        <p className="text-xs bg-white/50 dark:bg-black/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic">
+                          {selectedPayment.recommendedNextAction || "Monitor payment reconciliation."}
+                        </p>
+                      </div>
+                      
+                      <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500 mb-2">Suggested Reply</h4>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed italic mb-3">
+                          "Hi {selectedPayment.customerName.split(' ')[0]}, I'm looking into the payment for order {selectedPayment.paymentId}. It's currently {selectedPayment.paymentStatus} and I'll update you shortly."
+                        </p>
+                        <button className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
+                          Apply to Composer
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {/* Case Attributes */}
+                  <div className="p-4">
+                    <button className="w-full py-2 flex items-center justify-between text-sm font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-lg text-gray-600">assignment</span>
+                        Payment Attributes
+                      </div>
+                      <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
+                    </button>
+                    <div className="grid grid-cols-2 gap-4 mt-3">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">tag</span>
+                          Payment ID
+                        </span>
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedPayment.paymentId}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">person</span>
+                          Customer
+                        </span>
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedPayment.customerName}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">payments</span>
+                          Amount
+                        </span>
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedPayment.amount}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">info</span>
+                          Status
+                        </span>
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedPayment.paymentStatus}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">credit_card</span>
+                          Method
+                        </span>
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedPayment.paymentMethod}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">account_balance</span>
+                          PSP
+                        </span>
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedPayment.psp}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Operational Links */}
+                  <div className="p-4">
+                    <button className="w-full py-2 flex items-center justify-between text-sm font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-lg text-gray-600">link</span>
+                        Operational Links
+                      </div>
+                      <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
+                    </button>
+                    <div className="space-y-2 mt-2">
+                      <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
+                        Payment Gateway (PSP)
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      </a>
+                      <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
+                        Order Management System (OMS)
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      </a>
+                      <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
+                        Reconciliation Tool
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Related Cases */}
+                  <div className="p-4">
+                    <button className="w-full py-2 flex items-center justify-between text-sm font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-lg text-gray-600">history</span>
+                        Related Cases
+                      </div>
+                      <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
+                    </button>
+                    <div className="space-y-2 mt-2">
+                      <p className="text-xs text-gray-400 italic p-2">No related cases found.</p>
+                    </div>
+                  </div>
+
+                  {/* Internal Notes */}
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span className="material-symbols-outlined text-lg text-gray-600">sticky_note_2</span>
+                        Internal Notes
+                      </h3>
+                      <button className="text-xs text-secondary font-bold hover:underline">+ Add Note</button>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="p-3 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-100 dark:border-yellow-800/20">
+                        <p className="text-xs text-yellow-900 dark:text-yellow-100 leading-relaxed italic">
+                          "Payment failed twice. Customer notified to update payment method."
+                        </p>
+                        <div className="mt-2 flex justify-between items-center text-[10px] text-yellow-700/70">
+                          <span>By System</span>
+                          <span>2d ago</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Copilot Input Area */}
+            <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
+              <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
+                <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
+                <input className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9" placeholder="Ask a question..." type="text" />
+                <div className="flex items-center gap-1">
+                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
+                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">arrow_upward</span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
