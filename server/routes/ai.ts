@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/client.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { sendError } from '../http/errors.js';
 
 const router = Router();
 const TENANT_ID = 'tenant_default';
@@ -77,7 +78,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
     let parsed;
     try { parsed = JSON.parse(text); } catch {
-      return res.status(500).json({ error: 'AI response parse failed', raw: text });
+      return sendError(res, 500, 'AI_RESPONSE_PARSE_FAILED', 'AI response parse failed', { raw: text });
     }
 
     // Persist AI output to case
@@ -92,7 +93,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
     res.json(parsed);
   } catch (err: any) {
     console.error('AI diagnose error:', err);
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, 'AI_DIAGNOSE_ERROR', err.message || 'AI diagnose error');
   }
 });
 
@@ -137,7 +138,7 @@ Return ONLY the reply text, nothing else.`;
     res.json({ draft });
   } catch (err: any) {
     console.error('AI draft error:', err);
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, 'AI_DRAFT_ERROR', err.message || 'AI draft error');
   }
 });
 
@@ -181,7 +182,7 @@ Return ONLY valid JSON.`;
     const parsed = JSON.parse(text);
     res.json(parsed);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, 'AI_POLICY_CHECK_ERROR', err.message || 'AI policy check error');
   }
 });
 

@@ -1,12 +1,19 @@
 import { Router } from 'express';
 import { getDb } from '../db/client.js';
+import { sendError } from '../http/errors.js';
+import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { requirePermission } from '../middleware/authorization.js';
 
 const router = Router();
-const TENANT_ID = 'tenant_default';
+
+router.use(extractMultiTenant);
+router.use(requirePermission('knowledge.read'));
 
 // GET /api/knowledge/articles
-router.get('/articles', (req, res) => {
+router.get('/articles', (req: MultiTenantRequest, res) => {
   const db = getDb();
+  if (!req.tenantId) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant context is missing');
+  const tenantId = req.tenantId;
   const { domain_id, type, status, q } = req.query;
 
   let query = `
@@ -16,7 +23,7 @@ router.get('/articles', (req, res) => {
     LEFT JOIN users u ON a.owner_user_id = u.id
     WHERE a.tenant_id = ?
   `;
-  const params: any[] = [TENANT_ID];
+  const params: any[] = [tenantId];
   if (domain_id) { query += ' AND a.domain_id = ?'; params.push(domain_id); }
   if (type) { query += ' AND a.type = ?'; params.push(type); }
   if (status) { query += ' AND a.status = ?'; params.push(status); }
@@ -27,23 +34,27 @@ router.get('/articles', (req, res) => {
 });
 
 // GET /api/knowledge/articles/:id
-router.get('/articles/:id', (req, res) => {
+router.get('/articles/:id', (req: MultiTenantRequest, res) => {
   const db = getDb();
+  if (!req.tenantId) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant context is missing');
+  const tenantId = req.tenantId;
   const article = db.prepare(`
     SELECT a.*, d.name as domain_name, u.name as owner_name
     FROM knowledge_articles a
     LEFT JOIN knowledge_domains d ON a.domain_id = d.id
     LEFT JOIN users u ON a.owner_user_id = u.id
     WHERE a.id = ? AND a.tenant_id = ?
-  `).get(req.params.id, TENANT_ID);
-  if (!article) return res.status(404).json({ error: 'Not found' });
+  `).get(req.params.id, tenantId);
+  if (!article) return sendError(res, 404, 'KNOWLEDGE_ARTICLE_NOT_FOUND', 'Knowledge article not found');
   res.json(article);
 });
 
 // GET /api/knowledge/domains
-router.get('/domains', (req, res) => {
+router.get('/domains', (req: MultiTenantRequest, res) => {
   const db = getDb();
-  const domains = db.prepare('SELECT * FROM knowledge_domains WHERE tenant_id = ?').all(TENANT_ID);
+  if (!req.tenantId) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant context is missing');
+  const tenantId = req.tenantId;
+  const domains = db.prepare('SELECT * FROM knowledge_domains WHERE tenant_id = ?').all(tenantId);
   res.json(domains.map((d: any) => {
     const count = db.prepare('SELECT COUNT(*) as c FROM knowledge_articles WHERE domain_id = ? AND status = "published"').get(d.id) as any;
     return { ...d, article_count: count.c };
@@ -51,9 +62,11 @@ router.get('/domains', (req, res) => {
 });
 
 // GET /api/knowledge/policies
-router.get('/policies', (req, res) => {
+router.get('/policies', (req: MultiTenantRequest, res) => {
   const db = getDb();
-  res.json(db.prepare('SELECT * FROM policy_rules WHERE tenant_id = ? AND is_active = 1').all(TENANT_ID).map(parseJsonPolicy));
+  if (!req.tenantId) return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant context is missing');
+  const tenantId = req.tenantId;
+  res.json(db.prepare('SELECT * FROM policy_rules WHERE tenant_id = ? AND is_active = 1').all(tenantId).map(parseJsonPolicy));
 });
 
 function parseJsonPolicy(row: any) {

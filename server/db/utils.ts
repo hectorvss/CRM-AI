@@ -11,7 +11,7 @@ export const JSON_COLUMNS = [
   'ai_evidence_refs', 'tags', 'attachments',
   'settings', 'permissions', 'action_payload',
   'evidence_package', 'context', 'trigger_payload',
-  'normalized_payload'
+  'normalized_payload', 'citations'
 ];
 
 /**

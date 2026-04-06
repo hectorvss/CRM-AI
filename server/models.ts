@@ -99,6 +99,20 @@ export interface Case {
   closed_at: string | null;
 }
 
+export interface CaseDraftReply {
+  id: string;
+  case_id: string;
+  conversation_id: string;
+  content: string;
+  generated_by: string | null;
+  generated_at: string;
+  citations: string[];
+  status: 'pending_review' | 'approved' | 'rejected' | 'sent';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  tenant_id: string;
+}
+
 export interface CanonicalEvent {
   id: string;
   dedupe_key: string;

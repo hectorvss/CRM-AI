@@ -1,12 +1,15 @@
 import { Router, Response } from 'express';
 import { getDb } from '../db/client.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { requirePermission } from '../middleware/authorization.js';
 import { parseRow } from '../db/utils.js';
+import { sendError } from '../http/errors.js';
 
 const router = Router();
 
 // Apply multi-tenant middleware
 router.use(extractMultiTenant);
+router.use(requirePermission('cases.read'));
 
 // ── GET /api/customers ───────────────────────────────────────
 router.get('/', (req: MultiTenantRequest, res: Response) => {
@@ -33,7 +36,7 @@ router.get('/', (req: MultiTenantRequest, res: Response) => {
     const enriched = customers.map((c: any) => {
       const openCases = db.prepare(`
         SELECT COUNT(*) as count FROM cases 
-        WHERE customer_id = ? AND tenant_id = ? AND status NOT IN ("resolved","closed")
+        WHERE customer_id = ? AND tenant_id = ? AND status NOT IN ('resolved','closed')
       `).get(c.id, req.tenantId) as any;
       
       const allCases = db.prepare(`
@@ -56,7 +59,7 @@ router.get('/', (req: MultiTenantRequest, res: Response) => {
     res.json(enriched);
   } catch (error) {
     console.error('Error fetching customers:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 
@@ -66,7 +69,7 @@ router.get('/:id', (req: MultiTenantRequest, res: Response) => {
     const db = getDb();
     const customer = db.prepare('SELECT * FROM customers WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(req.params.id, req.tenantId, req.workspaceId) as any;
     
-    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+    if (!customer) return sendError(res, 404, 'CUSTOMER_NOT_FOUND', 'Customer not found');
 
     const cases = db.prepare(`
       SELECT id, case_number, type, status, priority, created_at 
@@ -104,7 +107,7 @@ router.get('/:id', (req: MultiTenantRequest, res: Response) => {
     });
   } catch (error) {
     console.error('Error fetching customer detail:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 

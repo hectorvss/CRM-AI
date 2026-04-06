@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { getDb } from '../db/client.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { requirePermission } from '../middleware/authorization.js';
 import { parseRow } from '../db/utils.js';
+import { sendError } from '../http/errors.js';
 
 const router = Router();
 
 // Apply multi-tenant middleware to all audit routes
 router.use(extractMultiTenant);
+router.use(requirePermission('audit.read'));
 
 // GET /api/audit/:entityType/:entityId - Fetch audit logs for a specific entity
 router.get('/:entityType/:entityId', (req: MultiTenantRequest, res) => {
@@ -23,7 +26,7 @@ router.get('/:entityType/:entityId', (req: MultiTenantRequest, res) => {
     res.json(logs.map(parseRow));
   } catch (error) {
     console.error('Audit fetch error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 
@@ -42,7 +45,7 @@ router.get('/workspace/all', (req: MultiTenantRequest, res) => {
     res.json(logs.map(parseRow));
   } catch (error) {
     console.error('Audit fetch error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 

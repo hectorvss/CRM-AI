@@ -1,12 +1,15 @@
 import { Router, Response } from 'express';
 import { getDb } from '../db/client.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { requirePermission } from '../middleware/authorization.js';
 import { parseRow } from '../db/utils.js';
+import { sendError } from '../http/errors.js';
 
 const router = Router();
 
 // Apply multi-tenant middleware
 router.use(extractMultiTenant);
+router.use(requirePermission('cases.read'));
 
 // ── GET /api/orders ──────────────────────────────────────────
 router.get('/', (req: MultiTenantRequest, res: Response) => {
@@ -36,7 +39,7 @@ router.get('/', (req: MultiTenantRequest, res: Response) => {
     res.json(orders.map(parseRow));
   } catch (error) {
     console.error('Error fetching orders:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 
@@ -50,7 +53,7 @@ router.get('/:id', (req: MultiTenantRequest, res: Response) => {
       WHERE o.id = ? AND o.tenant_id = ? AND o.workspace_id = ?
     `).get(req.params.id, req.tenantId, req.workspaceId) as any;
     
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!order) return sendError(res, 404, 'ORDER_NOT_FOUND', 'Order not found');
 
     const events = db.prepare('SELECT * FROM order_events WHERE order_id = ? ORDER BY time ASC').all(req.params.id);
     
@@ -68,7 +71,7 @@ router.get('/:id', (req: MultiTenantRequest, res: Response) => {
     });
   } catch (error) {
     console.error('Error fetching order detail:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 

@@ -23,6 +23,8 @@ import aiRouter from './routes/ai.js';
 import iamRouter from './routes/iam.js';
 import workspacesRouter from './routes/workspaces.js';
 import billingRouter from './routes/billing.js';
+import reconciliationRouter from './routes/reconciliation.js';
+import policyRouter from './routes/policy.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 
 dotenv.config({ path: '.env.local' });
@@ -72,6 +74,8 @@ app.use('/api/ai', aiRouter);
 app.use('/api/iam', iamRouter);
 app.use('/api/workspaces', workspacesRouter);
 app.use('/api/billing', billingRouter);
+app.use('/api/reconciliation', reconciliationRouter);
+app.use('/api/policy', policyRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

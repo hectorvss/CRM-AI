@@ -1,12 +1,15 @@
 import { Router, Response } from 'express';
 import { getDb } from '../db/client.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { requirePermission } from '../middleware/authorization.js';
 import { parseRow, logAudit } from '../db/utils.js';
+import { sendError } from '../http/errors.js';
 
 const router = Router();
 
 // Apply multi-tenant middleware
 router.use(extractMultiTenant);
+router.use(requirePermission('cases.read'));
 
 // ── GET /api/conversations/:id ────────────────────────────
 router.get('/:id', (req: MultiTenantRequest, res: Response) => {
@@ -16,11 +19,11 @@ router.get('/:id', (req: MultiTenantRequest, res: Response) => {
       'SELECT * FROM conversations WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
     ).get(req.params.id, req.tenantId, req.workspaceId);
     
-    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    if (!conv) return sendError(res, 404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
     res.json(parseRow(conv));
   } catch (error) {
     console.error('Error fetching conversation:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 
@@ -34,19 +37,19 @@ router.get('/:id/messages', (req: MultiTenantRequest, res: Response) => {
     res.json(messages.map(parseRow));
   } catch (error) {
     console.error('Error fetching messages:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 
 // ── POST /api/conversations/:id/messages ─────────────────
-router.post('/:id/messages', (req: MultiTenantRequest, res: Response) => {
+router.post('/:id/messages', requirePermission('cases.write'), (req: MultiTenantRequest, res: Response) => {
   try {
     const db = getDb();
     const conv = db.prepare(
       'SELECT * FROM conversations WHERE id = ? AND tenant_id = ?'
     ).get(req.params.id, req.tenantId) as any;
     
-    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    if (!conv) return sendError(res, 404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
 
     const { type, content, sender_name } = req.body;
     const messageId = crypto.randomUUID();
@@ -81,7 +84,7 @@ router.post('/:id/messages', (req: MultiTenantRequest, res: Response) => {
     res.json({ success: true, id: messageId });
   } catch (error) {
     console.error('Error sending message:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 
@@ -93,7 +96,7 @@ router.get('/by-case/:caseId', (req: MultiTenantRequest, res: Response) => {
       'SELECT * FROM conversations WHERE case_id = ? AND tenant_id = ? AND workspace_id = ?'
     ).get(req.params.caseId, req.tenantId, req.workspaceId) as any;
 
-    if (!conv) return res.status(404).json({ error: 'No conversation found for this case' });
+    if (!conv) return sendError(res, 404, 'CASE_CONVERSATION_NOT_FOUND', 'No conversation found for this case');
 
     const messages = db.prepare(
       'SELECT * FROM messages WHERE conversation_id = ? AND tenant_id = ? ORDER BY sent_at ASC'
@@ -102,7 +105,7 @@ router.get('/by-case/:caseId', (req: MultiTenantRequest, res: Response) => {
     res.json({ ...parseRow(conv), messages: messages.map(parseRow) });
   } catch (error) {
     console.error('Error fetching conversation by case:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 
