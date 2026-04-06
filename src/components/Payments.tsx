@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Payment, PaymentTab, OrderTimelineEvent } from '../types';
+import { paymentsApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 
@@ -181,7 +183,48 @@ export default function Payments() {
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
-  const filteredPayments = PAYMENTS.filter(p => {
+  // Fetch from API, fallback to static
+  const { data: apiPayments } = useApi(() => paymentsApi.list(), [], []);
+
+  const mapApiPayment = (p: any): Payment => ({
+    id: p.id,
+    orderId: p.order_id || 'N/A',
+    paymentId: p.external_payment_id || p.id,
+    customerName: p.customer_name || 'Unknown',
+    amount: `$${Number(p.amount || 0).toFixed(2)}`,
+    currency: p.currency || 'USD',
+    paymentMethod: p.payment_method || 'Unknown',
+    psp: p.psp || 'Unknown',
+    date: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
+    lastUpdate: p.last_update || '-',
+    orderStatus: p.system_states?.oms || 'Unknown',
+    paymentStatus: p.status || 'Unknown',
+    refundStatus: p.system_states?.refund || 'N/A',
+    disputeStatus: p.system_states?.dispute || 'N/A',
+    reconciliationStatus: p.system_states?.reconciliation || 'N/A',
+    approvalStatus: p.approval_status || 'N/A',
+    riskLevel: p.risk_level === 'high' ? 'High' : p.risk_level === 'medium' ? 'Medium' : 'Low',
+    paymentType: p.payment_type || 'Standard',
+    summary: p.summary || '',
+    badges: Array.isArray(p.badges) ? p.badges : [],
+    tab: p.tab || 'all',
+    conflictDetected: p.conflict_detected || '',
+    recommendedNextAction: p.recommended_action || '',
+    context: p.summary || '',
+    systemStates: typeof p.system_states === 'object' && p.system_states ? p.system_states : {
+      oms: 'N/A', psp: p.status || 'N/A', refund: 'N/A', dispute: 'N/A', reconciliation: 'N/A', canonical: 'N/A'
+    },
+    relatedCases: [],
+    timeline: [],
+    refundAmount: p.refund_amount ? `$${p.refund_amount}` : undefined,
+    refundType: p.refund_type || undefined,
+    disputeReference: p.dispute_reference || undefined,
+    chargebackAmount: p.chargeback_amount ? `$${p.chargeback_amount}` : undefined,
+  });
+
+  const payments = (apiPayments && apiPayments.length > 0) ? apiPayments.map(mapApiPayment) : PAYMENTS;
+
+  const filteredPayments = payments.filter(p => {
     if (activeTab === 'all') return true;
     return p.tab === activeTab;
   });
@@ -203,11 +246,11 @@ export default function Payments() {
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Payments</h1>
             <div className="flex space-x-1">
               {[
-                { id: 'all', label: 'All payments', count: PAYMENTS.length },
-                { id: 'refunds', label: 'Refunds', count: PAYMENTS.filter(p => p.tab === 'refunds').length },
-                { id: 'disputes', label: 'Disputes', count: PAYMENTS.filter(p => p.tab === 'disputes').length },
-                { id: 'reconciliation', label: 'Reconciliation', count: PAYMENTS.filter(p => p.tab === 'reconciliation').length },
-                { id: 'blocked', label: 'Blocked', count: PAYMENTS.filter(p => p.tab === 'blocked').length },
+                { id: 'all', label: 'All payments', count: payments.length },
+                { id: 'refunds', label: 'Refunds', count: payments.filter(p => p.tab === 'refunds').length },
+                { id: 'disputes', label: 'Disputes', count: payments.filter(p => p.tab === 'disputes').length },
+                { id: 'reconciliation', label: 'Reconciliation', count: payments.filter(p => p.tab === 'reconciliation').length },
+                { id: 'blocked', label: 'Blocked', count: payments.filter(p => p.tab === 'blocked').length },
               ].map(tab => (
                 <span 
                   key={tab.id}

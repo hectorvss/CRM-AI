@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { customersApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
 type CustomerTab = 'all_activity' | 'conversations' | 'orders' | 'system_logs';
 
@@ -165,7 +167,42 @@ export default function Customers() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<CustomerTab>('all_activity');
 
-  const selectedCustomer = mockCustomers.find(c => c.id === selectedCustomerId);
+  // Fetch from API, fallback to mock
+  const { data: apiCustomers } = useApi(() => customersApi.list(), [], []);
+
+  const mapApiCustomer = (c: any) => ({
+    id: c.id,
+    name: c.name || 'Unknown',
+    email: c.email || '',
+    avatar: c.avatar || (c.name ? c.name.substring(0, 2).toUpperCase() : 'UN'),
+    role: c.role || 'Customer',
+    company: c.company || 'Personal',
+    location: c.location || 'N/A',
+    timezone: c.timezone || 'N/A',
+    since: c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
+    segment: (c.segment === 'VIP Enterprise' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
+    ltv: c.ltv ? `$${Number(c.ltv).toLocaleString()}` : '$0',
+    orders: c.total_orders || 0,
+    openCases: c.open_cases || 0,
+    csat: c.csat_score || 0,
+    health: (c.health === 'Excellent' || c.health === 'Good' || c.health === 'At Risk') ? c.health : 'Good',
+    topIssue: c.top_issue || 'N/A',
+    risk: c.risk_flag || undefined,
+    badges: Array.isArray(c.badges) ? c.badges : [],
+    orders_list: [],
+    cases: [],
+    activity: [],
+    sources: [] as any[],
+    plan: c.plan || 'Standard',
+    nextRenewal: c.next_renewal || 'N/A',
+    reconciliation: c.reconciliation || null,
+  });
+
+  const customers: typeof mockCustomers = (apiCustomers && apiCustomers.length > 0)
+    ? apiCustomers.map(mapApiCustomer) as any
+    : mockCustomers;
+
+  const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
 
   const renderListView = () => (
     <div className="flex-1 flex flex-col overflow-hidden">

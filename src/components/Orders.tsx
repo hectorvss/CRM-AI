@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Order, OrderTab } from '../types';
 import CaseHeader from './CaseHeader';
+import { ordersApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 
@@ -303,7 +305,52 @@ export default function Orders() {
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
-  const filteredOrders = ORDERS.filter(o => {
+  // Load orders from API, fall back to static data on error
+  const { data: apiOrders, loading } = useApi(
+    () => ordersApi.list(activeTab !== 'all' ? { tab: activeTab } : {}),
+    [activeTab],
+    []
+  );
+
+  // Map API data shape to component shape
+  const mapApiOrder = (o: any): Order => ({
+    id: o.id,
+    customerName: o.customer_name || o.external_order_id || 'Unknown',
+    orderId: o.external_order_id,
+    brand: o.brand || 'Acme Store',
+    date: o.order_date ? new Date(o.order_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
+    total: `$${Number(o.total_amount || 0).toFixed(2)}`,
+    currency: o.currency || 'USD',
+    country: o.country || 'US',
+    channel: o.brand || 'Shopify',
+    orderStatus: o.status || 'Unknown',
+    paymentStatus: o.system_states?.psp || 'Unknown',
+    fulfillmentStatus: o.system_states?.wms || 'N/A',
+    returnStatus: o.system_states?.returns_platform || 'N/A',
+    refundStatus: o.system_states?.refund_status || 'N/A',
+    approvalStatus: o.approval_status === 'pending' ? 'Pending' : o.approval_status === 'not_required' ? 'Not Required' : o.approval_status || 'N/A',
+    riskLevel: o.risk_level === 'high' ? 'High' : o.risk_level === 'medium' ? 'Medium' : 'Low',
+    orderType: o.order_type || 'Standard',
+    summary: o.summary || '',
+    lastUpdate: o.last_update || 'Unknown',
+    badges: Array.isArray(o.badges) ? o.badges : [],
+    tab: o.tab || 'all',
+    conflictDetected: o.conflict_detected || '',
+    recommendedNextAction: o.recommended_action || '',
+    context: o.summary || '',
+    systemStates: typeof o.system_states === 'object' && o.system_states ? o.system_states : {
+      oms: 'Unknown', psp: 'Unknown', wms: 'Unknown', carrier: 'Unknown', canonical: 'Unknown'
+    },
+    relatedCases: [],
+    timeline: (o.events || []).map((e: any, i: number) => ({ id: String(i), type: 'system', content: e.content, time: e.time }))
+  });
+
+  // Use API orders if available, otherwise fall back to static
+  const rawOrders = (apiOrders && apiOrders.length > 0) ? apiOrders.map(mapApiOrder) : ORDERS;
+  const orders = rawOrders;
+
+
+  const filteredOrders = orders.filter(o => {
     if (activeTab === 'all') return true;
     
     if (activeTab === 'attention') {
@@ -359,31 +406,16 @@ export default function Orders() {
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Orders</h1>
             <div className="flex space-x-1">
               {[
-                { id: 'all', label: 'All orders', count: ORDERS.length },
-                { id: 'attention', label: 'Needs attention', count: ORDERS.filter(o => (
-                  o.relatedCases.length > 0 ||
-                  o.refundStatus.toLowerCase().includes('pending') ||
-                  o.refundStatus.toLowerCase().includes('issue') ||
-                  o.returnStatus.toLowerCase().includes('issue') ||
-                  o.conflictDetected !== '' ||
-                  o.approvalStatus === 'Pending' ||
-                  o.approvalStatus === 'Waiting Info' ||
-                  o.orderStatus === 'Blocked' ||
-                  o.riskLevel === 'High' ||
-                  o.recommendedNextAction !== '' ||
-                  o.summary.toLowerCase().includes('refund') ||
-                  o.summary.toLowerCase().includes('cancellation') ||
-                  o.summary.toLowerCase().includes('return')
-                )).length },
-                { id: 'refunds', label: 'Refunds', count: ORDERS.filter(o => (
-                  o.refundStatus !== 'N/A' && o.refundStatus !== 'Not issued' ||
-                  o.summary.toLowerCase().includes('refund') ||
-                  o.badges.includes('Refund Pending')
-                )).length },
-                { id: 'conflicts', label: 'Conflicts', count: ORDERS.filter(o => (
-                  o.conflictDetected !== '' ||
-                  o.badges.includes('Conflict')
-                )).length },
+                { id: 'all', label: 'All orders', count: orders.length },
+                { id: 'attention', label: 'Needs attention',
+                  count: orders.filter(o => o.conflictDetected !== '' || o.riskLevel === 'High' || o.approvalStatus === 'Pending').length
+                },
+                { id: 'refunds', label: 'Refunds',
+                  count: orders.filter(o => o.summary.toLowerCase().includes('refund') || o.badges.includes('Refund Pending')).length
+                },
+                { id: 'conflicts', label: 'Conflicts',
+                  count: orders.filter(o => o.conflictDetected !== '' || o.badges.includes('Conflict')).length
+                },
               ].map(tab => (
                 <span 
                   key={tab.id}

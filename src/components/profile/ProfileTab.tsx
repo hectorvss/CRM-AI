@@ -1,6 +1,20 @@
 import React from 'react';
+import { useApi } from '../../api/hooks';
+import { iamApi } from '../../api/client';
 
 export default function ProfileTab() {
+  const { data: user, loading, error } = useApi<any>(iamApi.me);
+
+  if (loading) {
+    return <div className="p-6 text-sm text-gray-500">Loading profile data...</div>;
+  }
+
+  if (error || !user) {
+    return <div className="p-6 text-sm text-red-500">Error loading profile data.</div>;
+  }
+
+  const workspace = user.memberships && user.memberships.length > 0 ? user.memberships[0] : null;
+
   return (
     <div className="space-y-8">
       {/* Personal Info */}
@@ -12,7 +26,7 @@ export default function ProfileTab() {
         <div className="p-6 space-y-6">
           <div className="flex items-center gap-6">
             <div className="relative">
-              <img src="https://i.pravatar.cc/150?img=11" alt="User" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover" />
+              <img src={user.avatar_url || "https://i.pravatar.cc/150?img=11"} alt="User" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover" />
               <button className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
                 <span className="material-symbols-outlined text-[14px]">edit</span>
               </button>
@@ -29,7 +43,7 @@ export default function ProfileTab() {
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
               <input 
                 type="text" 
-                defaultValue="Alex Morgan"
+                defaultValue={user.name}
                 className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
               />
             </div>
@@ -37,42 +51,28 @@ export default function ProfileTab() {
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Work Email</label>
               <input 
                 type="email" 
-                defaultValue="alex.morgan@supportalpha.com"
+                defaultValue={user.email}
                 readOnly
                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Phone Number</label>
-              <input 
-                type="tel" 
-                defaultValue="+1 (555) 123-4567"
-                className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Job Title</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Role ID</label>
               <input 
                 type="text" 
-                defaultValue="Support Lead"
-                className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                defaultValue={user.role}
+                readOnly
+                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Department</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Joined At</label>
               <input 
                 type="text" 
-                defaultValue="Customer Success"
-                className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                defaultValue={new Date(user.created_at).toLocaleDateString()}
+                readOnly
+                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
               />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Location / Timezone</label>
-              <select className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none">
-                <option>(GMT-05:00) Eastern Time</option>
-                <option>(GMT+00:00) UTC</option>
-                <option>(GMT+01:00) Europe/Madrid</option>
-              </select>
             </div>
           </div>
         </div>
@@ -88,29 +88,27 @@ export default function ProfileTab() {
           <div className="p-6 space-y-4">
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Workspace</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">Support Alpha</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">{workspace ? workspace.workspace_name : 'No Workspace'}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Role</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">Support Lead</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{user.role}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Status</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30">Active</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30">
+                {workspace ? workspace.status : 'Active'}
+              </span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Member Since</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">Jan 15, 2024</span>
-            </div>
-            <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Last Login</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">Today, 08:42 AM</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">{new Date(user.created_at).toLocaleDateString()}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-500 dark:text-gray-400">Login Method</span>
               <div className="flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-[14px] text-gray-400">password</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">Password</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">Internal Auth</span>
               </div>
             </div>
           </div>
@@ -125,15 +123,15 @@ export default function ProfileTab() {
           <div className="p-6 space-y-4">
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">User ID</span>
-              <span className="text-xs font-mono text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">USR-98234-A</span>
+              <span className="text-xs font-mono text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{user.id}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Member ID</span>
-              <span className="text-xs font-mono text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">MEM-4412</span>
+              <span className="text-xs font-mono text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{workspace ? workspace.id : 'N/A'}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Identity Provider</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">Internal Auth</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">System (Local)</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-500 dark:text-gray-400">Email Status</span>

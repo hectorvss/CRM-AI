@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import CaseHeader from './CaseHeader';
+import { approvalsApi } from '../api/client';
+import { useApi, useMutation } from '../api/hooks';
 
 type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
@@ -178,7 +180,52 @@ export default function Approvals() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ApprovalStatus>('pending');
 
-  const selectedItem = mockApprovals.find(item => item.id === selectedId);
+  // Fetch from API, fallback to static
+  const { data: apiApprovals, refetch } = useApi(() => approvalsApi.list(), [], []);
+  
+  const { mutate: decide, loading: deciding } = useMutation(
+    ({ id, decision, note, decided_by }: { id: string, decision: 'approved' | 'rejected', note?: string, decided_by?: string }) => 
+        approvalsApi.decide(id, decision, note, decided_by)
+  );
+
+  const handleDecision = async (id: string, decision: 'approved' | 'rejected') => {
+    try {
+      await decide({ id, decision, note: 'Decided from UI', decided_by: 'Admin' });
+      refetch();
+      setSelectedId(null);
+    } catch (error) {
+      console.error('Failed to decide:', error);
+    }
+  };
+
+  const mapApiApproval = (a: any): ApprovalItem => ({
+    id: a.id,
+    type: a.action_type?.replace(/_/g, ' ') || 'Approval',
+    amount: a.action_payload?.amount ? `$${Number(a.action_payload.amount / 100).toFixed(2)}` : undefined,
+    customerName: a.customer_name || 'Unknown',
+    company: a.company || undefined,
+    team: a.assigned_team_id || 'Operations',
+    status: (a.status === 'pending' || a.status === 'approved' || a.status === 'rejected') ? a.status : 'pending',
+    priority: a.risk_level === 'high' ? 'high' : 'normal',
+    sla: '24h',
+    timeAgo: a.created_at ? new Date(a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-',
+    description: a.action_payload?.reason || a.action_type || 'Approval required',
+    aiRecommendation: a.risk_level === 'high' ? 'Review carefully' : 'Approve',
+    aiConfidence: a.risk_level === 'high' ? 85 : 95,
+    aiAction: a.risk_level === 'high' ? 'review' : 'approve',
+    initials: (a.customer_name || 'UN').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+    tags: [a.action_type?.replace(/_/g, ' ') || 'General'],
+    approvedBy: a.decision_by || undefined,
+    rejectedReason: a.decision_note || undefined,
+    executionStatus: a.status === 'approved' ? 'Executed Successfully' : undefined,
+    avatarColor: a.risk_level === 'high' ? 'red' : a.risk_level === 'medium' ? 'orange' : 'blue',
+  });
+
+  const approvals = (apiApprovals && apiApprovals.length > 0)
+    ? apiApprovals.map(mapApiApproval)
+    : mockApprovals;
+
+  const selectedItem = approvals.find(item => item.id === selectedId);
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -229,7 +276,7 @@ export default function Approvals() {
                           : 'font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-transparent hover:border-gray-300'
                       }`}
                     >
-                      {s.charAt(0).toUpperCase() + s.slice(1)} {s === 'pending' && `(12)`}
+                   {s.charAt(0).toUpperCase() + s.slice(1)} {s === 'pending' && `(${approvals.filter(i => i.status === 'pending').length})`}
                     </button>
                   ))}
                 </div>
@@ -240,7 +287,7 @@ export default function Approvals() {
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                 <div className="xl:col-span-9 space-y-4">
-                  {mockApprovals.filter(item => item.status === filter).map((item) => (
+                  {approvals.filter(item => item.status === filter).map((item) => (
                     <div 
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
@@ -454,11 +501,19 @@ export default function Approvals() {
                   actions={
                     selectedItem?.status === 'pending' ? (
                       <div className="flex gap-2 mr-4">
-                        <button className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm flex items-center gap-1">
+                        <button 
+                          onClick={() => handleDecision(selectedItem?.id, 'rejected')}
+                          disabled={deciding}
+                          className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm flex items-center gap-1 disabled:opacity-50"
+                        >
                           <span className="material-symbols-outlined text-sm">close</span>
                           Reject
                         </button>
-                        <button className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-sm flex items-center gap-1">
+                        <button 
+                          onClick={() => handleDecision(selectedItem?.id, 'approved')}
+                          disabled={deciding}
+                          className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-sm flex items-center gap-1 disabled:opacity-50"
+                        >
                           <span className="material-symbols-outlined text-sm">check</span>
                           Approve
                         </button>

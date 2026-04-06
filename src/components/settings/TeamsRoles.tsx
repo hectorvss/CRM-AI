@@ -40,16 +40,31 @@ export default function TeamsRolesTab() {
   );
 }
 
+import { useApi } from '../../api/hooks';
+import { iamApi } from '../../api/client';
+
 function MembersSeatsView() {
+  const { data: users, loading, error } = useApi<any[]>(iamApi.users);
+
+  if (loading) {
+     return <div className="p-6 text-sm text-gray-500">Loading members data...</div>;
+  }
+  
+  if (error || !users) {
+     return <div className="p-6 text-sm text-red-500">Error loading members data.</div>;
+  }
+
+  const activeCount = users.length;
+
   return (
     <div className="flex flex-col gap-6 h-full">
       {/* Seats & Access Overview Block */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Total Seats', value: '24 / 50', icon: 'group', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400' },
-          { label: 'Active Members', value: '22', icon: 'person_check', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400' },
-          { label: 'Pending Invites', value: '2', icon: 'schedule', color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' },
-          { label: 'Admins', value: '3', icon: 'admin_panel_settings', color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 dark:text-indigo-400' },
+          { label: 'Total Seats', value: `${activeCount} / 50`, icon: 'group', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400' },
+          { label: 'Active Members', value: activeCount.toString(), icon: 'person_check', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400' },
+          { label: 'Pending Invites', value: '0', icon: 'schedule', color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400' },
+          { label: 'Admins', value: users.filter((u: any) => u.role === 'admin').length.toString(), icon: 'admin_panel_settings', color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 dark:text-indigo-400' },
         ].map((stat, i) => (
           <div key={i} className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4 shadow-sm">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stat.color}`}>
@@ -79,26 +94,18 @@ function MembersSeatsView() {
           </div>
           
           <div className="flex-1 overflow-y-auto p-2">
-            {[
-              { name: 'Sarah Jenkins', email: 'sarah@company.com', role: 'Admin', team: 'Engineering', status: 'Active', selected: true },
-              { name: 'Michael Chen', email: 'michael@company.com', role: 'Agent', team: 'Support', status: 'Active', selected: false },
-              { name: 'Emily Rodriguez', email: 'emily@company.com', role: 'Viewer', team: 'Billing', status: 'Pending', selected: false },
-              { name: 'David Kim', email: 'david@company.com', role: 'Approver', team: 'Security', status: 'Active', selected: false },
-              { name: 'Alex Thompson', email: 'alex@company.com', role: 'Agent', team: 'Support', status: 'Active', selected: false },
-            ].map((member, i) => (
-              <button key={i} className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors ${member.selected ? 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 border border-transparent'}`}>
+            {users.map((member: any, i: number) => (
+              <button key={i} className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors ${i === 0 ? 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 border border-transparent'}`}>
                 <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 font-bold text-xs">
-                  {member.name.split(' ').map(n => n[0]).join('')}
+                  {member.name.split(' ').map((n: string) => n[0]).join('')}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center mb-0.5">
-                    <h4 className={`text-sm font-bold truncate ${member.selected ? 'text-indigo-900 dark:text-indigo-100' : 'text-gray-900 dark:text-white'}`}>{member.name}</h4>
-                    {member.status === 'Pending' && <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">Pending</span>}
+                    <h4 className={`text-sm font-bold truncate ${i === 0 ? 'text-indigo-900 dark:text-indigo-100' : 'text-gray-900 dark:text-white'}`}>{member.name}</h4>
                   </div>
                   <p className="text-xs text-gray-500 truncate">{member.email}</p>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[10px] font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{member.role}</span>
-                    <span className="text-[10px] font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{member.team}</span>
+                    <span className="text-[10px] font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded capitalize">{member.role}</span>
                   </div>
                 </div>
               </button>

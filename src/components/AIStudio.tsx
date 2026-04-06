@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { agentsApi } from '../api/client';
+import { useApi } from '../api/hooks';
 import { connectionCategories } from '../connectionsData';
 import ConnectionsView from './ConnectionsView';
 import PermissionsView from './PermissionsView';
@@ -316,9 +318,30 @@ export default function AIStudio() {
   const [expandedConnection, setExpandedConnection] = useState<string | null>(null);
   const [configTab, setConfigTab] = useState<'Overview' | 'Configure' | 'Test' | 'Logs'>('Configure');
 
+  const { data: apiAgents } = useApi(agentsApi.list);
+
   const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Connections', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
 
-  const activeAgentData = connectionCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || connectionCategories[0].agents[0];
+  // Map API agents into the categories structure for rendering
+  const mappedCategories = apiAgents && apiAgents.length > 0 
+    ? [...new Set(apiAgents.map(a => a.category))].map(cat => ({
+        title: String(cat).toUpperCase().replace('_', ' '),
+        agents: apiAgents.filter(a => a.category === cat).map(a => ({
+          name: a.name,
+          desc: a.description,
+          icon: a.icon || 'smart_toy',
+          iconColor: a.color || 'text-indigo-600',
+          active: a.status === 'active',
+          locked: ['Supervisor', 'Reconciliation Agent', 'Audit & Observability Agent'].includes(a.name),
+          purpose: a.system_prompt || a.description,
+          triggers: a.triggers || ['System defined triggers'],
+          dependencies: a.dependencies || ['Core routing', 'Context Window'],
+          ioLogic: { input: 'Canonical event', output: 'Approved action or Routing' }
+        }))
+      }))
+    : originalCategories;
+
+  const activeAgentData = mappedCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || mappedCategories[0].agents[0];
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -592,7 +615,7 @@ export default function AIStudio() {
                 </div>
 
                 {/* Categories */}
-                {originalCategories.map((category, catIdx) => (
+                {mappedCategories.map((category, catIdx) => (
                   <div key={catIdx} className="space-y-4">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{category.title}</h3>
                     <div className="space-y-3">
@@ -648,20 +671,13 @@ export default function AIStudio() {
                                     <div>
                                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Purpose</p>
                                       <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                                        {agent.purpose || (agent.name === 'Supervisor' 
-                                          ? 'Orchestrates the entire agent flow, routing user intent to the correct specialized agent and managing hand-offs.' 
-                                          : agent.name === 'Approval Gatekeeper'
-                                          ? 'Intercepts high-stakes actions like refunds or sensitive data changes, enforcing human-in-the-loop verification before execution.'
-                                          : 'Validates safety and quality before replies or actions are sent. Ensures compliance with brand voice and restricted topics.')}
+                                        {agent.purpose}
                                       </p>
                                     </div>
                                     <div>
                                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Triggers</p>
                                       <ul className="space-y-1.5">
-                                        {(agent.triggers || [
-                                          agent.name === 'Supervisor' ? 'New user message' : agent.name === 'Approval Gatekeeper' ? 'Refunds over threshold' : 'Pre-send validation',
-                                          agent.name === 'Supervisor' ? 'Tool execution results' : agent.name === 'Approval Gatekeeper' ? 'Low confidence score actions' : 'Pre-write action'
-                                        ]).map((trigger, i) => (
+                                        {agent.triggers.map((trigger, i) => (
                                           <li key={i} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
                                             {trigger}
@@ -674,7 +690,7 @@ export default function AIStudio() {
                                     <div>
                                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Dependencies</p>
                                       <div className="flex flex-wrap gap-2">
-                                        {(agent.dependencies || ['Intent Router', 'Context Window']).map(dep => (
+                                        {agent.dependencies.map(dep => (
                                           <span key={dep} className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-[10px] font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">{dep}</span>
                                         ))}
                                       </div>

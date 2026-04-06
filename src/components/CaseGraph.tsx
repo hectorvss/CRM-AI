@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Page } from '../types';
 import TreeGraph from './TreeGraph';
 import { MOCK_CASES_DATA } from '../data/mockCases';
+import { casesApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 type ResolveTab = 'overview' | 'identifiers' | 'policy' | 'execution';
@@ -15,13 +17,32 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
   const [resolutionPath, setResolutionPath] = useState<'ai' | 'manual'>('ai');
   const [resolveTab, setResolveTab] = useState<ResolveTab>('overview');
 
-  // Mock data for the list
-  const cases = [
+  // Static fallback list
+  const STATIC_CASES = [
     { id: '1', orderId: 'ORD-55210', customerName: 'Sarah Jenkins', summary: 'Refund conflict detected', lastUpdate: '2m ago', badges: ['Conflict', 'High Risk'] },
     { id: '2', orderId: 'ORD-55211', customerName: 'Marcus Chen', summary: 'Damaged item dispute', lastUpdate: '15m ago', badges: ['High Risk'] },
     { id: '3', orderId: 'ORD-55213', customerName: 'Elena Rodriguez', summary: 'Return label created', lastUpdate: '3h ago', badges: ['In Transit'] },
     { id: '4', orderId: 'ORD-55214', customerName: 'James Wilson', summary: 'Return blocked by policy', lastUpdate: '5m ago', badges: ['Blocked', 'Conflict'] },
   ];
+
+  // Fetch cases from API
+  const { data: apiCases } = useApi(() => casesApi.list(), [], []);
+
+  const cases = (apiCases && apiCases.length > 0)
+    ? apiCases.map((c: any) => ({
+        id: c.id,
+        orderId: Array.isArray(c.order_ids) && c.order_ids.length > 0 ? c.order_ids[0] : c.case_number,
+        customerName: c.customer_name || c.case_number,
+        summary: c.ai_diagnosis || c.type?.replace(/_/g, ' ') || 'No summary',
+        lastUpdate: c.last_activity_at ? new Date(c.last_activity_at).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-',
+        badges: [
+          ...(c.has_reconciliation_conflicts ? ['Conflict'] : []),
+          ...(c.risk_level === 'high' ? ['High Risk'] : []),
+          ...(c.status === 'blocked' ? ['Blocked'] : []),
+          ...(c.tags ? (Array.isArray(c.tags) ? c.tags.filter((t: string) => t === 'In Transit') : []) : []),
+        ],
+      }))
+    : STATIC_CASES;
 
   const currentCase = MOCK_CASES_DATA[selectedId] || MOCK_CASES_DATA['1'];
   const caseData = currentCase.rootData;

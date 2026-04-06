@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { mockArticleDetails } from './KnowledgeData';
+import { knowledgeApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
 type KnowledgeTab = 'library' | 'gaps' | 'test';
 
@@ -84,6 +86,25 @@ export default function Knowledge() {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>('library');
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
 
+  const { data: apiArticles } = useApi(() => knowledgeApi.listArticles(), [], []);
+
+  const mapApiArticle = (a: any): KnowledgeItem => ({
+    id: a.id,
+    type: (a.type?.toUpperCase() === 'POLICY' ? 'POLICY' :
+           a.type?.toUpperCase() === 'ARTICLE' ? 'ARTICLE' :
+           a.type?.toUpperCase() === 'SNIPPET' ? 'SNIPPET' : 'PLAYBOOK') as KnowledgeItem['type'],
+    title: a.title || 'Untitled',
+    category: a.domain || a.category || 'General',
+    visibility: a.visibility === 'internal' ? 'Internal' : 'Public',
+    status: a.status === 'published' ? 'Published' : 'Draft',
+    owner: a.owner_name || 'Unknown',
+    ownerInitials: (a.owner_name || 'UN').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+    lastUpdated: a.updated_at ? new Date(a.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
+    health: a.health === 'stale' ? 'Stale' : 'OK',
+  });
+
+  const library = (apiArticles && apiArticles.length > 0) ? apiArticles.map(mapApiArticle) : mockLibrary;
+
   const renderLibrary = () => (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-6">
       <div className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden flex flex-col">
@@ -127,7 +148,7 @@ export default function Knowledge() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
-              {mockLibrary.map((item) => (
+              {library.map((item) => (
                 <tr 
                   key={item.id} 
                   className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors cursor-pointer"

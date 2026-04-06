@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { connectorsApi } from '../api/client';
+import { useApi, useMutation } from '../api/hooks';
 
 type IntegrationCategory = 'All Apps' | 'Support' | 'Commerce' | 'Communication' | 'CRM' | 'Knowledge' | 'Productivity' | 'Automation';
 
@@ -68,16 +70,31 @@ export default function ToolsIntegrations() {
   const [activeCategory, setActiveCategory] = useState<IntegrationCategory>('All Apps');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const { data: apiConnectors, refetch } = useApi(connectorsApi.list);
+
   const categories: IntegrationCategory[] = ['All Apps', 'Support', 'Commerce', 'Communication', 'CRM', 'Knowledge', 'Productivity', 'Automation'];
 
-  const filteredIntegrations = allIntegrations.filter(app => {
+  const integrations = apiConnectors && apiConnectors.length > 0 
+    ? apiConnectors.map(c => ({
+        id: c.system.toLowerCase(),
+        name: c.system,
+        category: (c.category || 'Support') as IntegrationCategory,
+        description: `Integration with ${c.system}`,
+        powers: c.connector_capabilities?.length > 0 ? c.connector_capabilities[0].action_schema : 'Basic Sync',
+        status: c.status === 'active' ? 'Connected' : c.status === 'error' ? 'Error' : 'Not Connected',
+        icon: c.system.charAt(0),
+        color: 'bg-indigo-600'
+      })) as Integration[]
+    : allIntegrations;
+
+  const filteredIntegrations = integrations.filter(app => {
     const matchesCategory = activeCategory === 'All Apps' || app.category === activeCategory;
     const matchesSearch = app.name.toLowerCase().includes(searchQuery.toLowerCase()) || app.description.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  const connectedCount = allIntegrations.filter(app => app.status === 'Connected' || app.status === 'Syncing').length;
-  const errorCount = allIntegrations.filter(app => app.status === 'Error' || app.status === 'Reconnect Required').length;
+  const connectedCount = integrations.filter(app => app.status === 'Connected' || app.status === 'Syncing').length;
+  const errorCount = integrations.filter(app => app.status === 'Error' || app.status === 'Reconnect Required').length;
 
   const renderIntegrationCard = (integration: Integration) => (
     <div key={integration.id} className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-card p-6 flex flex-col md:flex-row items-center gap-6 group hover:shadow-md transition-all duration-200 relative overflow-hidden">
@@ -435,7 +452,7 @@ export default function ToolsIntegrations() {
                   <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Connected & Recommended</h2>
                 </div>
                 <div className="flex flex-col gap-4">
-                  {allIntegrations.filter(app => topCriticalIds.includes(app.id)).map(renderIntegrationCard)}
+                  {integrations.filter(app => topCriticalIds.includes(app.id)).map(renderIntegrationCard)}
                 </div>
               </section>
             )}

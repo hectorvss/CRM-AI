@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { workflowsApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
 type WorkflowView = 'list' | 'builder' | 'new';
 
@@ -156,6 +158,28 @@ export default function Workflows() {
 
   const filters = ['All', 'Orders', 'Refunds', 'Returns', 'Approvals', 'Conflicts', 'Escalations'];
 
+  // Fetch from API, fallback to static
+  const { data: apiWorkflows } = useApi(() => workflowsApi.list(), [], []);
+
+  const mapApiWorkflow = (w: any): Workflow => ({
+    id: w.id,
+    name: w.name,
+    category: w.category || 'General',
+    description: w.description || '',
+    enabled: w.is_enabled !== false,
+    metrics: [
+      { label: 'Cases processed', value: String(w.metrics?.executions || 0) },
+      { label: 'Execution success rate', value: w.metrics?.success_rate ? `${w.metrics.success_rate}%` : 'N/A' },
+      { label: 'Avg time saved', value: w.metrics?.avg_time_saved || 'N/A' },
+    ],
+    lastRun: w.last_run_at ? new Date(w.last_run_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Never',
+    lastEdited: w.updated_at ? new Date(w.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
+    status: (w.health_status === 'blocked' || w.health_status === 'warning' || w.health_status === 'needs_setup' || w.health_status === 'dependency_missing') ? w.health_status : 'active',
+    statusMessage: w.health_message || undefined,
+  });
+
+  const workflows = (apiWorkflows && apiWorkflows.length > 0) ? apiWorkflows.map(mapApiWorkflow) : mockWorkflows;
+
   const handleWorkflowClick = (wf: Workflow) => {
     setSelectedWorkflow(wf);
     setView('builder');
@@ -166,7 +190,7 @@ export default function Workflows() {
     setView('new');
   };
 
-  const filteredWorkflows = mockWorkflows.filter(wf => 
+  const filteredWorkflows = workflows.filter(wf => 
     activeFilter === 'All' || wf.category === activeFilter
   );
 

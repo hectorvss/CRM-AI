@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Conversation, Channel, CaseTab } from '../types';
+import { casesApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 
@@ -341,7 +343,47 @@ export default function Inbox() {
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
-  const filteredConversations = CONVERSATIONS.filter(c => c.tab === activeTab);
+  // Fetch from API, fallback to CONVERSATIONS static data
+  const { data: apiCases } = useApi(() => casesApi.list(), [], []);
+
+  const mapApiCase = (c: any): Conversation => ({
+    id: c.id,
+    tab: (c.assignee_user_id ? 'assigned' : 'unassigned') as CaseTab,
+    assignee: c.assignee_user_id || undefined,
+    contactName: c.customer_name || 'Unknown',
+    channel: (c.channel as Channel) || 'web_chat',
+    lastMessage: c.summary || 'New case',
+    time: c.created_at ? new Date(c.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-',
+    priority: c.priority === 'high' ? 'high' : 'normal',
+    tags: c.tags ? (Array.isArray(c.tags) ? c.tags : [c.tags]) : [],
+    unread: c.status === 'new',
+    caseId: c.case_reference || c.id,
+    orderId: c.order_id || 'N/A',
+    company: c.company || 'Personal',
+    brand: c.brand || 'N/A',
+    caseType: c.case_type || 'General',
+    riskLevel: c.risk_level === 'high' ? 'High' : c.risk_level === 'medium' ? 'Medium' : 'Low',
+    orderStatus: c.system_states?.oms || 'N/A',
+    paymentStatus: c.system_states?.psp || 'N/A',
+    fulfillmentStatus: c.system_states?.wms || 'N/A',
+    refundStatus: c.system_states?.refund || 'N/A',
+    approvalStatus: c.approval_status || 'N/A',
+    context: c.summary || '',
+    assignedTeam: c.assignee_team_id || 'Support',
+    lastSync: '1m ago',
+    slaStatus: c.sla_status || 'Waiting',
+    slaTime: c.sla_deadline || 'N/A',
+    recommendedNextAction: c.recommended_action || '',
+    conflictDetected: c.conflict_detected || undefined,
+    relatedCases: [],
+    messages: [],
+  });
+
+  const conversations = (apiCases && apiCases.length > 0)
+    ? apiCases.map(mapApiCase)
+    : CONVERSATIONS;
+
+  const filteredConversations = conversations.filter(c => c.tab === activeTab);
   const selectedConv = filteredConversations.find(c => c.id === selectedId) || filteredConversations[0];
 
   useEffect(() => {

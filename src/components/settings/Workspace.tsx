@@ -1,6 +1,20 @@
 import React from 'react';
+import { useApi } from '../../api/hooks';
+import { workspacesApi } from '../../api/client';
 
 export default function WorkspaceTab() {
+  const { data: workspaces, loading, error } = useApi<any[]>(workspacesApi.list);
+
+  if (loading) {
+    return <div className="p-6 text-sm text-gray-500">Loading workspace data...</div>;
+  }
+
+  if (error || !workspaces || workspaces.length === 0) {
+    return <div className="p-6 text-sm text-red-500">Error loading workspace data or no workspace found.</div>;
+  }
+
+  const workspace = workspaces[0];
+
   return (
     <div className="space-y-8">
       {/* Workspace Profile */}
@@ -31,7 +45,7 @@ export default function WorkspaceTab() {
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Workspace Name</label>
               <input 
                 type="text" 
-                defaultValue="Support Alpha"
+                defaultValue={workspace.name}
                 className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
               />
             </div>
@@ -41,7 +55,7 @@ export default function WorkspaceTab() {
                 <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500 text-sm">https://</span>
                 <input 
                   type="text" 
-                  defaultValue="support-alpha.helpdesk.com"
+                  defaultValue={workspace.slug + ".helpdesk.com"}
                   className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-r-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                 />
               </div>
@@ -50,7 +64,7 @@ export default function WorkspaceTab() {
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Default Timezone</label>
-            <select className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none">
+            <select className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none" defaultValue="(GMT-05:00) Eastern Time">
               <option>(GMT+01:00) Europe/Madrid</option>
               <option>(GMT+00:00) UTC</option>
               <option>(GMT-05:00) Eastern Time</option>

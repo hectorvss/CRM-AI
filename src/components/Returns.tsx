@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Return, ReturnTab, OrderTimelineEvent } from '../types';
 import CaseHeader from './CaseHeader';
+import { returnsApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 
@@ -241,7 +243,52 @@ export default function Returns() {
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
-  const filteredReturns = RETURNS.filter(r => {
+  // Fetch from API, fallback to static
+  const { data: apiReturns } = useApi(() => returnsApi.list(), [], []);
+
+  const mapApiReturn = (r: any): Return => ({
+    id: r.id,
+    orderId: r.order_id || 'N/A',
+    returnId: r.external_return_id || r.id,
+    customerName: r.customer_name || 'Unknown',
+    brand: r.brand || 'N/A',
+    date: r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
+    total: `$${Number(r.return_value || 0).toFixed(2)}`,
+    currency: r.currency || 'USD',
+    country: r.country || 'N/A',
+    returnType: r.type || 'Standard',
+    returnReason: r.return_reason || 'N/A',
+    returnValue: `$${Number(r.return_value || 0).toFixed(2)}`,
+    riskLevel: r.risk_level === 'high' ? 'High' : r.risk_level === 'medium' ? 'Medium' : 'Low',
+    orderStatus: r.system_states?.oms || 'N/A',
+    returnStatus: r.status || 'Unknown',
+    inspectionStatus: r.inspection_status || 'N/A',
+    refundStatus: r.refund_status || 'N/A',
+    approvalStatus: r.approval_status || 'N/A',
+    carrierStatus: r.carrier_status || r.system_states?.carrier || 'N/A',
+    summary: r.summary || '',
+    lastUpdate: r.last_update || '-',
+    badges: Array.isArray(r.badges) ? r.badges : [],
+    tab: r.tab || 'all',
+    conflictDetected: r.conflict_detected || '',
+    recommendedNextAction: r.recommended_action || '',
+    context: r.summary || '',
+    method: r.method || 'N/A',
+    systemStates: typeof r.system_states === 'object' && r.system_states ? {
+      oms: r.system_states.oms || 'N/A',
+      returnsPlatform: r.system_states.returns_platform || 'N/A',
+      wms: r.system_states.wms || 'N/A',
+      carrier: r.system_states.carrier || 'N/A',
+      psp: r.system_states.psp || 'N/A',
+      canonical: r.system_states.canonical || 'N/A',
+    } : { oms: 'N/A', returnsPlatform: 'N/A', wms: 'N/A', carrier: 'N/A', psp: 'N/A', canonical: 'N/A' },
+    relatedCases: [],
+    timeline: [],
+  });
+
+  const returns = (apiReturns && apiReturns.length > 0) ? apiReturns.map(mapApiReturn) : RETURNS;
+
+  const filteredReturns = returns.filter(r => {
     if (activeTab === 'all') return true;
     return r.tab === activeTab;
   });
@@ -263,12 +310,12 @@ export default function Returns() {
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Returns</h1>
             <div className="flex space-x-1">
               {[
-                { id: 'all', label: 'All returns', count: RETURNS.length },
-                { id: 'pending_review', label: 'Pending review', count: RETURNS.filter(r => r.tab === 'pending_review').length },
-                { id: 'in_transit', label: 'In transit', count: RETURNS.filter(r => r.tab === 'in_transit').length },
-                { id: 'received', label: 'Received', count: RETURNS.filter(r => r.tab === 'received').length },
-                { id: 'refund_pending', label: 'Refund pending', count: RETURNS.filter(r => r.tab === 'refund_pending').length },
-                { id: 'blocked', label: 'Blocked', count: RETURNS.filter(r => r.tab === 'blocked').length },
+                { id: 'all', label: 'All returns', count: returns.length },
+                { id: 'pending_review', label: 'Pending review', count: returns.filter(r => r.tab === 'pending_review').length },
+                { id: 'in_transit', label: 'In transit', count: returns.filter(r => r.tab === 'in_transit').length },
+                { id: 'received', label: 'Received', count: returns.filter(r => r.tab === 'received').length },
+                { id: 'refund_pending', label: 'Refund pending', count: returns.filter(r => r.tab === 'refund_pending').length },
+                { id: 'blocked', label: 'Blocked', count: returns.filter(r => r.tab === 'blocked').length },
               ].map(tab => (
                 <span 
                   key={tab.id}
