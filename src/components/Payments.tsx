@@ -5,6 +5,22 @@ import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 
+const formatDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+
+const formatRelativeLabel = (value?: string | null) => {
+  if (!value) return '-';
+  const diffMs = Date.now() - new Date(value).getTime();
+  const diffMin = Math.max(1, Math.round(diffMs / 60000));
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  return `${Math.round(diffHour / 24)}d ago`;
+};
+
+const titleCase = (value?: string | null) =>
+  value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
+
 const PAYMENTS: Payment[] = [
   {
     id: '1',
@@ -195,14 +211,14 @@ export default function Payments() {
     currency: p.currency || 'USD',
     paymentMethod: p.payment_method || 'Unknown',
     psp: p.psp || 'Unknown',
-    date: p.created_at ? new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
-    lastUpdate: p.last_update || '-',
-    orderStatus: p.system_states?.oms || 'Unknown',
-    paymentStatus: p.status || 'Unknown',
-    refundStatus: p.system_states?.refund || 'N/A',
-    disputeStatus: p.system_states?.dispute || 'N/A',
-    reconciliationStatus: p.system_states?.reconciliation || 'N/A',
-    approvalStatus: p.approval_status || 'N/A',
+    date: formatDate(p.created_at),
+    lastUpdate: formatRelativeLabel(p.last_update),
+    orderStatus: titleCase(p.system_states?.oms || 'Unknown'),
+    paymentStatus: titleCase(p.status || 'Unknown'),
+    refundStatus: titleCase(p.system_states?.refund || 'N/A'),
+    disputeStatus: titleCase(p.system_states?.dispute || 'N/A'),
+    reconciliationStatus: titleCase(p.system_states?.reconciliation || 'N/A'),
+    approvalStatus: titleCase(p.approval_status || 'N/A'),
     riskLevel: p.risk_level === 'high' ? 'High' : p.risk_level === 'medium' ? 'Medium' : 'Low',
     paymentType: p.payment_type || 'Standard',
     summary: p.summary || '',
@@ -210,12 +226,22 @@ export default function Payments() {
     tab: p.tab || 'all',
     conflictDetected: p.conflict_detected || '',
     recommendedNextAction: p.recommended_action || '',
-    context: p.summary || '',
+    context: p.canonical_context?.case_state?.conflict?.root_cause || p.summary || '',
     systemStates: typeof p.system_states === 'object' && p.system_states ? p.system_states : {
       oms: 'N/A', psp: p.status || 'N/A', refund: 'N/A', dispute: 'N/A', reconciliation: 'N/A', canonical: 'N/A'
     },
-    relatedCases: [],
-    timeline: [],
+    relatedCases: Array.isArray(p.related_cases) ? p.related_cases.map((c: any) => ({
+      id: c.case_number || c.id,
+      type: c.type || 'Case',
+      status: titleCase(c.status || 'open')
+    })) : [],
+    timeline: (p.events || []).map((e: any, i: number) => ({
+      id: e.id || String(i),
+      type: e.type || 'system',
+      content: e.content,
+      time: e.time || e.occurred_at || '-',
+      system: e.system || e.source,
+    })),
     refundAmount: p.refund_amount ? `$${p.refund_amount}` : undefined,
     refundType: p.refund_type || undefined,
     disputeReference: p.dispute_reference || undefined,

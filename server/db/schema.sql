@@ -50,8 +50,10 @@ CREATE TABLE IF NOT EXISTS teams (
 CREATE TABLE IF NOT EXISTS customers (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
-  workspace_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default',
   canonical_email TEXT,
+  email TEXT,                              -- alias / channel-ingest shorthand
+  phone TEXT,                              -- phone number for WhatsApp / SMS channels
   canonical_name TEXT,
   segment TEXT NOT NULL DEFAULT 'regular',
   risk_level TEXT NOT NULL DEFAULT 'low',
@@ -173,29 +175,39 @@ CREATE TABLE IF NOT EXISTS case_links (
 
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
-  case_id TEXT NOT NULL REFERENCES cases(id),
+  case_id TEXT REFERENCES cases(id),        -- nullable: set after case is created
   customer_id TEXT REFERENCES customers(id),
   channel TEXT NOT NULL DEFAULT 'email',
   status TEXT NOT NULL DEFAULT 'open',
+  subject TEXT,                              -- email subject / thread title
   external_thread_id TEXT,
+  first_message_at TEXT,
+  last_message_at TEXT,
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   tenant_id TEXT NOT NULL,
-  workspace_id TEXT NOT NULL
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default'
 );
 
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
   conversation_id TEXT NOT NULL REFERENCES conversations(id),
-  case_id TEXT NOT NULL REFERENCES cases(id),
+  case_id TEXT REFERENCES cases(id),        -- nullable: linked after case creation
+  customer_id TEXT REFERENCES customers(id),
   type TEXT NOT NULL DEFAULT 'customer',
+  direction TEXT NOT NULL DEFAULT 'inbound', -- 'inbound' | 'outbound'
   sender_id TEXT,
   sender_name TEXT,
   content TEXT NOT NULL,
+  content_type TEXT NOT NULL DEFAULT 'text', -- 'text' | 'html' | 'markdown'
   channel TEXT NOT NULL DEFAULT 'email',
+  external_message_id TEXT,                  -- platform-native ID for dedup
+  draft_reply_id TEXT REFERENCES draft_replies(id),
   sentiment TEXT,
   sentiment_score REAL,
   attachments TEXT DEFAULT '[]',
   sent_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   delivered_at TEXT,
   read_at TEXT,
   tenant_id TEXT NOT NULL
@@ -211,10 +223,15 @@ CREATE TABLE IF NOT EXISTS draft_replies (
   content TEXT NOT NULL,
   generated_by TEXT,
   generated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  tone TEXT DEFAULT 'professional',          -- 'professional' | 'friendly' | 'empathetic'
+  confidence REAL DEFAULT 0.5,               -- AI confidence 0–1
+  has_policies INTEGER DEFAULT 0,            -- 1 if knowledge articles were referenced
   citations TEXT DEFAULT '[]',
   status TEXT NOT NULL DEFAULT 'pending_review',
   reviewed_by TEXT,
   reviewed_at TEXT,
+  sent_at TEXT,                              -- set when the draft is actually delivered
+  updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   tenant_id TEXT NOT NULL
 );
 
@@ -290,6 +307,7 @@ CREATE TABLE IF NOT EXISTS payments (
   payment_type TEXT DEFAULT 'standard',
   approval_status TEXT DEFAULT 'not_required',
   summary TEXT,
+  has_conflict INTEGER DEFAULT 0,
   conflict_detected TEXT,
   recommended_action TEXT,
   badges TEXT DEFAULT '[]',
@@ -337,6 +355,7 @@ CREATE TABLE IF NOT EXISTS returns (
   inspection_status TEXT,
   refund_status TEXT,
   carrier_status TEXT,
+  has_conflict INTEGER DEFAULT 0,
   approval_status TEXT DEFAULT 'not_required',
   risk_level TEXT DEFAULT 'low',
   linked_refund_id TEXT,
@@ -642,13 +661,13 @@ CREATE TABLE IF NOT EXISTS canonical_events (
   id TEXT PRIMARY KEY,
   dedupe_key TEXT NOT NULL UNIQUE,
   tenant_id TEXT NOT NULL,
-  workspace_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default',
   source_system TEXT NOT NULL,
-  source_entity_type TEXT NOT NULL,
-  source_entity_id TEXT NOT NULL,
+  source_entity_type TEXT NOT NULL DEFAULT 'unknown',
+  source_entity_id TEXT NOT NULL DEFAULT '',
   event_type TEXT NOT NULL,
   event_category TEXT,
-  occurred_at TEXT NOT NULL,
+  occurred_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   ingested_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   processed_at TEXT,
   canonical_entity_type TEXT,
@@ -658,7 +677,8 @@ CREATE TABLE IF NOT EXISTS canonical_events (
   normalized_payload TEXT DEFAULT '{}',
   confidence REAL DEFAULT 1.0,
   mapping_version TEXT DEFAULT '1.0',
-  status TEXT NOT NULL DEFAULT 'received'
+  status TEXT NOT NULL DEFAULT 'received',
+  updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 );
 
 -- ============================================================
@@ -820,4 +840,57 @@ CREATE TABLE IF NOT EXISTS usage_events (
   reference_type TEXT,
   billing_period TEXT NOT NULL,
   occurred_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+-- ============================================================
+-- ASYNC JOB QUEUE
+-- ============================================================
+-- SQLite-backed queue. No external broker required.
+-- The worker polls this table and claims jobs atomically.
+-- Statuses: pending → processing → completed
+--                              ↘ failed (retryable → back to pending after backoff)
+--                              ↘ dead   (max_attempts exhausted)
+
+CREATE TABLE IF NOT EXISTS jobs (
+  id           TEXT    PRIMARY KEY,
+  type         TEXT    NOT NULL,                          -- JobType discriminant
+  payload      TEXT    NOT NULL DEFAULT '{}',             -- JSON payload
+  status       TEXT    NOT NULL DEFAULT 'pending',        -- pending|processing|completed|failed|dead
+  priority     INTEGER NOT NULL DEFAULT 10,               -- lower = higher priority
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  run_at       TEXT    NOT NULL DEFAULT (CURRENT_TIMESTAMP), -- earliest eligible time
+  started_at   TEXT,
+  finished_at  TEXT,
+  error        TEXT,                                      -- last error message
+  created_at   TEXT    NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  tenant_id    TEXT,
+  workspace_id TEXT,
+  trace_id     TEXT                                       -- distributed tracing correlation
+);
+
+-- Worker claims jobs ordered by priority ASC, run_at ASC
+CREATE INDEX IF NOT EXISTS idx_jobs_queue
+  ON jobs(status, run_at, priority)
+  WHERE status = 'pending';
+
+-- Admin / dashboard queries by tenant
+CREATE INDEX IF NOT EXISTS idx_jobs_tenant
+  ON jobs(tenant_id, status, created_at DESC);
+
+-- Look up a specific job by trace for debugging
+CREATE INDEX IF NOT EXISTS idx_jobs_trace
+  ON jobs(trace_id)
+  WHERE trace_id IS NOT NULL;
+
+-- ============================================================
+-- SCHEMA MIGRATIONS TRACKING
+-- ============================================================
+-- Tracks which incremental ALTER TABLE migrations have been applied.
+-- Prevents re-running migrations on existing databases.
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  version TEXT NOT NULL UNIQUE,
+  applied_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 );

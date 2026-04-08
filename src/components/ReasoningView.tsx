@@ -1,18 +1,50 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { connectionCategories } from '../connectionsData';
+import { agentsApi } from '../api/client';
+import { useApi, useMutation } from '../api/hooks';
 import { agentReasoningConfig, defaultReasoningConfig, AgentReasoningConfig } from '../agentReasoningConfig';
 
 export default function ReasoningView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAgent, setSelectedAgent] = useState<string | null>('Supervisor');
   const [filter, setFilter] = useState<'All' | 'Active' | 'Restricted' | 'Draft'>('All');
+  const { data: apiAgents, refetch } = useApi(agentsApi.list, [], []);
+  const saveDraft = useMutation((payload: { id: string; body: Record<string, any> }) => agentsApi.updatePolicyDraft(payload.id, payload.body));
+  const publishDraft = useMutation((id: string) => agentsApi.publishPolicyDraft(id));
+  const rollbackDraft = useMutation((id: string) => agentsApi.rollbackPolicy(id));
 
   const allAgents = connectionCategories.flatMap(c => c.agents);
   const currentAgent = allAgents.find(a => a.name === selectedAgent);
   const agentConfig: AgentReasoningConfig = selectedAgent && agentReasoningConfig[selectedAgent] 
     ? agentReasoningConfig[selectedAgent] 
     : defaultReasoningConfig;
+  const selectedApiAgent = apiAgents?.find((agent: any) => agent.name === selectedAgent);
+
+  const handleSaveDraft = async () => {
+    if (!selectedApiAgent) return;
+    await saveDraft.mutate({
+      id: selectedApiAgent.id,
+      body: { reasoning_profile: agentConfig },
+    });
+    refetch();
+  };
+
+  const handlePublishDraft = async () => {
+    if (!selectedApiAgent) return;
+    await saveDraft.mutate({
+      id: selectedApiAgent.id,
+      body: { reasoning_profile: agentConfig },
+    });
+    await publishDraft.mutate(selectedApiAgent.id);
+    refetch();
+  };
+
+  const handleRollback = async () => {
+    if (!selectedApiAgent) return;
+    await rollbackDraft.mutate(selectedApiAgent.id);
+    refetch();
+  };
 
   const filteredCategories = connectionCategories.map(category => ({
     ...category,
@@ -140,13 +172,13 @@ export default function ReasoningView() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                  <button onClick={handleRollback} className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">
                     Reset
                   </button>
-                  <button className="px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400 rounded-lg transition-colors">
+                  <button onClick={handleSaveDraft} className="px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400 rounded-lg transition-colors">
                     Save draft
                   </button>
-                  <button className="px-4 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 rounded-lg transition-colors shadow-sm">
+                  <button onClick={handlePublishDraft} className="px-4 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 rounded-lg transition-colors shadow-sm">
                     Publish
                   </button>
                 </div>

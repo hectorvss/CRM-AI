@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useApi } from '../api/hooks';
+import { reportsApi } from '../api/client';
 
 type ReportsTab = 'overview' | 'ai_resume' | 'business_areas' | 'agents' | 'approvals_risk' | 'cost_roi';
 
@@ -51,20 +53,33 @@ const GENERATED_REPORTS = [
 export default function Reports() {
   const [activeTab, setActiveTab] = useState<ReportsTab>('overview');
   const [selectedReportId, setSelectedReportId] = useState('1');
+  const [period] = useState('7d');
+
+  // ── Real API data ────────────────────────────────────────────────
+  const { data: overviewData } = useApi(() => reportsApi.overview(period), [period]);
+  const { data: intentsData } = useApi(() => reportsApi.intents(period), [period]);
+  const { data: agentsData } = useApi(() => reportsApi.agents(period), [period]);
+  const { data: approvalsData } = useApi(() => reportsApi.approvals(period), [period]);
+  const { data: costsData } = useApi(() => reportsApi.costs(period), [period]);
+  const { data: slaData } = useApi(() => reportsApi.sla(period), [period]);
+
+  const fallbackOverviewKpis = [
+    { label: 'AI Resolution Rate', value: '68%', change: '+12%', trend: 'up', sub: 'Improving intent match' },
+    { label: 'Deflection Rate', value: '52%', change: '+9%', trend: 'up', sub: 'Self-serve articles up' },
+    { label: 'Escalation Rate', value: '18%', change: '-3%', trend: 'down', sub: 'Fewer missing sources' },
+    { label: 'Time to FR', value: '45s', change: 'AI vs 12m Human', trend: 'neutral', sub: 'AI response instant' },
+    { label: 'Time to Resolution', value: '2h', change: 'AI vs 18h Human', trend: 'neutral', sub: 'Faster tool runs' },
+    { label: 'Approval Throughput', value: '74%', change: '+6%', trend: 'up', sub: 'Approvals slower in Billing' },
+    { label: 'Tool Success Rate', value: '96%', change: '-2%', trend: 'down', sub: 'Shopify lookup errors' },
+    { label: 'CSAT Delta', value: '+0.4', change: '', trend: 'up', sub: 'High user satisfaction' },
+  ];
+
+  const overviewKpis = overviewData?.kpis?.length ? overviewData.kpis : fallbackOverviewKpis;
 
   const renderOverview = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[
-          { label: 'AI Resolution Rate', value: '68%', change: '+12%', trend: 'up', sub: 'Improving intent match' },
-          { label: 'Deflection Rate', value: '52%', change: '+9%', trend: 'up', sub: 'Self-serve articles up' },
-          { label: 'Escalation Rate', value: '18%', change: '-3%', trend: 'down', sub: 'Fewer missing sources' },
-          { label: 'Time to FR', value: '45s', change: 'AI vs 12m Human', trend: 'neutral', sub: 'AI response instant' },
-          { label: 'Time to Resolution', value: '2h', change: 'AI vs 18h Human', trend: 'neutral', sub: 'Faster tool runs' },
-          { label: 'Approval Throughput', value: '74%', change: '+6%', trend: 'up', sub: 'Approvals slower in Billing' },
-          { label: 'Tool Success Rate', value: '96%', change: '-2%', trend: 'down', sub: 'Shopify lookup errors' },
-          { label: 'CSAT Delta', value: '+0.4', change: '', trend: 'up', sub: 'High user satisfaction' },
-        ].map((metric, i) => (
+        {overviewKpis.map((metric: any, i: number) => (
           <KPICard key={i} metric={metric} index={i} />
         ))}
       </div>
@@ -454,13 +469,18 @@ export default function Reports() {
                 </tr>
               </thead>
               <tbody className="text-sm divide-y divide-gray-100 dark:divide-gray-800">
-                {[
+                {(intentsData?.intents?.length ? intentsData.intents.map((intent: any) => ({
+                  name: intent.name?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) || intent.name,
+                  volume: intent.volume || '0',
+                  handled: intent.handled || '0%',
+                  color: parseInt(intent.handled) >= 70 ? 'bg-green-500' : parseInt(intent.handled) >= 40 ? 'bg-orange-400' : 'bg-red-500',
+                })) : [
                   { name: 'Full Refund Request', volume: '1,245', handled: '72%', color: 'bg-green-500' },
                   { name: 'Subscription Cancel', volume: '890', handled: '85%', color: 'bg-green-500' },
                   { name: 'Invoice Lookup', volume: '654', handled: '94%', color: 'bg-green-500' },
                   { name: 'Partial Refund Request', volume: '432', handled: '45%', color: 'bg-orange-400' },
                   { name: 'Payment Failed', volume: '321', handled: '22%', color: 'bg-red-500' },
-                ].map((intent, i) => (
+                ]).map((intent: any, i: number) => (
                   <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-200">{intent.name}</td>
                     <td className="px-5 py-3 text-right text-gray-600 dark:text-gray-400">{intent.volume}</td>
@@ -519,17 +539,35 @@ export default function Reports() {
     </div>
   );
 
+  const fallbackAgentCards = [
+    { name: 'Supervisor', rate: '98.2%', change: '+1.2%', trend: 'up', icon: 'supervisor_account', sub: 'Routing accuracy' },
+    { name: 'Knowledge Retriever', rate: '82.4%', change: '-4.2%', trend: 'down', icon: 'search', active: true, sub: 'Search precision' },
+    { name: 'Canonicalizer', rate: '95.1%', change: '+0.8%', trend: 'up', icon: 'merge_type', sub: 'Entity extraction' },
+    { name: 'Intent Router', rate: '97.6%', change: '+2.1%', trend: 'up', icon: 'route', sub: 'Intent matching' },
+    { name: 'Composer', rate: '92.3%', change: '0.0%', trend: 'neutral', icon: 'edit_document', sub: 'Response quality' },
+    { name: 'QA Check', rate: '99.8%', change: '+0.2%', trend: 'up', icon: 'verified', sub: 'Policy adherence' },
+  ];
+
+  const AGENT_ICON_MAP: Record<string, string> = {
+    'orchestration': 'supervisor_account', 'ingest': 'merge_type', 'resolution': 'build',
+    'communication': 'edit_document', 'observability': 'verified', 'connectors': 'cable',
+  };
+
+  const agentCards = agentsData?.agents?.length
+    ? agentsData.agents.slice(0, 6).map((a: any) => ({
+        name: a.name,
+        rate: a.successRate || '0%',
+        change: '',
+        trend: parseFloat(a.successRate) >= 90 ? 'up' : parseFloat(a.successRate) >= 70 ? 'neutral' : 'down',
+        icon: AGENT_ICON_MAP[a.category] || 'smart_toy',
+        sub: `${a.totalRuns} runs • ${a.tokensUsed || 0} tokens`,
+      }))
+    : fallbackAgentCards;
+
   const renderAgents = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[
-          { name: 'Supervisor', rate: '98.2%', change: '+1.2%', trend: 'up', icon: 'supervisor_account', sub: 'Routing accuracy' },
-          { name: 'Knowledge Retriever', rate: '82.4%', change: '-4.2%', trend: 'down', icon: 'search', active: true, sub: 'Search precision' },
-          { name: 'Canonicalizer', rate: '95.1%', change: '+0.8%', trend: 'up', icon: 'merge_type', sub: 'Entity extraction' },
-          { name: 'Intent Router', rate: '97.6%', change: '+2.1%', trend: 'up', icon: 'route', sub: 'Intent matching' },
-          { name: 'Composer', rate: '92.3%', change: '0.0%', trend: 'neutral', icon: 'edit_document', sub: 'Response quality' },
-          { name: 'QA Check', rate: '99.8%', change: '+0.2%', trend: 'up', icon: 'verified', sub: 'Policy adherence' },
-        ].map((agent, i) => (
+        {agentCards.map((agent: any, i: number) => (
           <div key={i} className={`rounded-xl p-5 border shadow-card flex flex-col justify-between h-[180px] relative overflow-hidden group cursor-pointer transition-all ${agent.active ? 'bg-indigo-50/30 dark:bg-indigo-900/10 border-indigo-500 dark:border-indigo-400 ring-1 ring-indigo-500' : 'bg-white dark:bg-card-dark border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}>
             <div className="flex items-start justify-between z-10 relative">
               <div>
@@ -690,12 +728,12 @@ export default function Reports() {
           <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-6">Approvals Funnel</h2>
             <div className="flex justify-between items-center text-center">
-              {[
+              {(approvalsData?.funnel?.length ? approvalsData.funnel : [
                 { label: 'Requested', val: '1,420' },
                 { label: 'Approved', val: '1,180' },
                 { label: 'Rejected', val: '156' },
                 { label: 'Executed', val: '1,156' },
-              ].map((step, i) => (
+              ]).map((step: any, i: number) => (
                 <React.Fragment key={i}>
                   <div className="flex-1">
                     <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{step.val}</div>

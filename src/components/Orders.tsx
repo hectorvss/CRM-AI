@@ -6,6 +6,22 @@ import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 
+const formatDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+
+const formatRelativeLabel = (value?: string | null) => {
+  if (!value) return 'Unknown';
+  const diffMs = Date.now() - new Date(value).getTime();
+  const diffMin = Math.max(1, Math.round(diffMs / 60000));
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  return `${Math.round(diffHour / 24)}d ago`;
+};
+
+const titleCase = (value?: string | null) =>
+  value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
+
 const ORDERS: Order[] = [
   {
     id: '1',
@@ -318,31 +334,41 @@ export default function Orders() {
     customerName: o.customer_name || o.external_order_id || 'Unknown',
     orderId: o.external_order_id,
     brand: o.brand || 'Acme Store',
-    date: o.order_date ? new Date(o.order_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
+    date: formatDate(o.order_date),
     total: `$${Number(o.total_amount || 0).toFixed(2)}`,
     currency: o.currency || 'USD',
     country: o.country || 'US',
-    channel: o.brand || 'Shopify',
-    orderStatus: o.status || 'Unknown',
+    channel: o.canonical_context?.case_state?.channel_context?.channel || o.brand || 'Shopify',
+    orderStatus: titleCase(o.status || o.system_states?.oms || 'Unknown'),
     paymentStatus: o.system_states?.psp || 'Unknown',
     fulfillmentStatus: o.system_states?.wms || 'N/A',
-    returnStatus: o.system_states?.returns_platform || 'N/A',
-    refundStatus: o.system_states?.refund_status || 'N/A',
-    approvalStatus: o.approval_status === 'pending' ? 'Pending' : o.approval_status === 'not_required' ? 'Not Required' : o.approval_status || 'N/A',
+    returnStatus: titleCase(o.system_states?.returns_platform || 'N/A'),
+    refundStatus: titleCase(o.system_states?.refund_status || 'N/A'),
+    approvalStatus: titleCase(o.approval_status || 'N/A'),
     riskLevel: o.risk_level === 'high' ? 'High' : o.risk_level === 'medium' ? 'Medium' : 'Low',
     orderType: o.order_type || 'Standard',
     summary: o.summary || '',
-    lastUpdate: o.last_update || 'Unknown',
+    lastUpdate: formatRelativeLabel(o.last_update),
     badges: Array.isArray(o.badges) ? o.badges : [],
     tab: o.tab || 'all',
     conflictDetected: o.conflict_detected || '',
     recommendedNextAction: o.recommended_action || '',
-    context: o.summary || '',
+    context: o.canonical_context?.case_state?.conflict?.root_cause || o.summary || '',
     systemStates: typeof o.system_states === 'object' && o.system_states ? o.system_states : {
       oms: 'Unknown', psp: 'Unknown', wms: 'Unknown', carrier: 'Unknown', canonical: 'Unknown'
     },
-    relatedCases: [],
-    timeline: (o.events || []).map((e: any, i: number) => ({ id: String(i), type: 'system', content: e.content, time: e.time }))
+    relatedCases: Array.isArray(o.related_cases) ? o.related_cases.map((c: any) => ({
+      id: c.case_number || c.id,
+      type: c.type || 'Case',
+      status: titleCase(c.status || 'open')
+    })) : [],
+    timeline: (o.events || []).map((e: any, i: number) => ({
+      id: e.id || String(i),
+      type: e.type || 'system',
+      content: e.content,
+      time: e.time || e.occurred_at || '-',
+      system: e.system || e.source,
+    }))
   });
 
   // Use API orders if available, otherwise fall back to static

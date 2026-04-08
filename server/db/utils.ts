@@ -7,11 +7,16 @@
  * Standard mapping for SQLite stringified JSON columns to JS objects.
  */
 export const JSON_COLUMNS = [
-  'order_ids', 'payment_ids', 'return_ids', 
+  'order_ids', 'payment_ids', 'return_ids',
   'ai_evidence_refs', 'tags', 'attachments',
   'settings', 'permissions', 'action_payload',
   'evidence_package', 'context', 'trigger_payload',
-  'normalized_payload'
+  'normalized_payload', 'system_states', 'badges',
+  'permission_profile', 'reasoning_profile', 'safety_profile',
+  'knowledge_profile', 'capabilities', 'linked_workflow_ids',
+  'linked_approval_policy_ids', 'nodes', 'edges', 'trigger',
+  'auth_config', 'conditions', 'action_mapping',
+  'approval_mapping', 'escalation_mapping',
 ];
 
 /**
@@ -27,7 +32,17 @@ export function parseRow<T = any>(row: any): T {
         result[col] = JSON.parse(result[col]);
       } catch {
         // Fallback for empty or malformed strings
-        result[col] = col.endsWith('_ids') || col === 'tags' || col === 'attachments' || col === 'ai_evidence_refs' ? [] : {};
+        result[col] = col.endsWith('_ids')
+          || col === 'tags'
+          || col === 'attachments'
+          || col === 'ai_evidence_refs'
+          || col === 'linked_workflow_ids'
+          || col === 'linked_approval_policy_ids'
+          || col === 'nodes'
+          || col === 'edges'
+          || col === 'conditions'
+          ? []
+          : {};
       }
     }
   });

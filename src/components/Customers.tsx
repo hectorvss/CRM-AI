@@ -163,46 +163,128 @@ const mockCustomers: Customer[] = [
   }
 ];
 
+function buildInitialsAvatar(name: string) {
+  const initials = name.split(' ').map(part => part[0]).slice(0, 2).join('').toUpperCase() || 'CU';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="32" fill="#EDE9FE"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="24" font-weight="700" fill="#6D28D9">${initials}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export default function Customers() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<CustomerTab>('all_activity');
 
   // Fetch from API, fallback to mock
   const { data: apiCustomers } = useApi(() => customersApi.list(), [], []);
+  const { data: apiSelectedState } = useApi(
+    () => selectedCustomerId ? customersApi.state(selectedCustomerId) : Promise.resolve(null),
+    [selectedCustomerId]
+  );
 
-  const mapApiCustomer = (c: any) => ({
-    id: c.id,
-    name: c.name || 'Unknown',
-    email: c.email || '',
-    avatar: c.avatar || (c.name ? c.name.substring(0, 2).toUpperCase() : 'UN'),
-    role: c.role || 'Customer',
-    company: c.company || 'Personal',
-    location: c.location || 'N/A',
-    timezone: c.timezone || 'N/A',
-    since: c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
-    segment: (c.segment === 'VIP Enterprise' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
-    ltv: c.ltv ? `$${Number(c.ltv).toLocaleString()}` : '$0',
-    orders: c.total_orders || 0,
-    openCases: c.open_cases || 0,
-    csat: c.csat_score || 0,
-    health: (c.health === 'Excellent' || c.health === 'Good' || c.health === 'At Risk') ? c.health : 'Good',
-    topIssue: c.top_issue || 'N/A',
-    risk: c.risk_flag || undefined,
-    badges: Array.isArray(c.badges) ? c.badges : [],
-    orders_list: [],
-    cases: [],
-    activity: [],
-    sources: [] as any[],
-    plan: c.plan || 'Standard',
-    nextRenewal: c.next_renewal || 'N/A',
-    reconciliation: c.reconciliation || null,
-  });
+  const mapApiCustomer = (c: any) => {
+    const name = c.canonical_name || c.name || 'Unknown';
+    const email = c.canonical_email || c.email || '';
+    const ltv = c.lifetime_value ?? c.ltv ?? 0;
+    const segment = c.segment || 'regular';
+    return {
+      id: c.id,
+      name,
+      email,
+      avatar: c.avatar || buildInitialsAvatar(name),
+      role: c.role || 'Customer',
+      company: c.company || 'Personal',
+      location: c.location || 'N/A',
+      timezone: c.timezone || 'N/A',
+      since: c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
+      segment: (segment === 'vip' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
+      ltv: `$${Number(ltv).toLocaleString()}`,
+      orders: c.total_orders || 0,
+      openCases: c.open_cases || 0,
+      csat: c.csat_score || 0,
+      health: c.risk_level === 'high' || c.risk_level === 'critical' ? 'At Risk' : c.risk_level === 'medium' ? 'Good' : 'Excellent',
+      topIssue: c.top_issue || 'N/A',
+      risk: c.risk_level === 'high' || c.risk_level === 'critical' ? 'High Risk' : undefined,
+      badges: Array.isArray(c.badges) ? c.badges : [],
+      orders_list: [],
+      cases: [],
+      activity: [],
+      sources: (c.linked_identities || []).map((li: any) => ({
+        system: li.system, externalId: li.external_id,
+      })),
+      plan: c.plan || 'Standard',
+      nextRenewal: c.next_renewal || 'N/A',
+      reconciliation: c.reconciliation || null,
+    };
+  };
 
   const customers: typeof mockCustomers = (apiCustomers && apiCustomers.length > 0)
     ? apiCustomers.map(mapApiCustomer) as any
     : mockCustomers;
 
-  const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+  const selectedCustomer = React.useMemo(() => {
+    const fallbackCustomer = customers.find(c => c.id === selectedCustomerId) || null;
+    if (!apiSelectedState) return fallbackCustomer;
+
+    const customer = apiSelectedState.customer || {};
+    const systems = apiSelectedState.systems || {};
+    const recentCases = apiSelectedState.recent_cases || [];
+    const linkedIdentities = apiSelectedState.linked_identities || [];
+    const unresolvedConflicts = apiSelectedState.unresolved_conflicts || [];
+
+    const reconciliation = {
+      status: unresolvedConflicts.length > 0 ? 'Conflict' : 'Healthy',
+      mismatches: unresolvedConflicts.length,
+      lastChecked: 'just now',
+      domains: unresolvedConflicts.map((conflict: any) => ({
+        domain: conflict.conflict_type,
+        systems: [
+          { name: 'Cases', value: conflict.case_number },
+          { name: 'Recommended', value: conflict.recommended_action || 'Review required' },
+        ],
+        age: 'recent',
+        severity: conflict.severity === 'critical' ? 'High' : conflict.severity === 'warning' ? 'Medium' : 'Low',
+        sourceOfTruth: 'Case Runtime',
+        writebackStatus: 'Requires approval',
+        action: conflict.recommended_action || 'Review case',
+        actionType: 'approval',
+        context: conflict.recommended_action || 'Conflict detected in canonical state',
+      })),
+    };
+
+    return {
+      ...(fallbackCustomer || {}),
+      id: customer.id,
+      name: customer.canonical_name || fallbackCustomer?.name || 'Unknown',
+      email: customer.canonical_email || fallbackCustomer?.email || '',
+      avatar: fallbackCustomer?.avatar || buildInitialsAvatar(customer.canonical_name || fallbackCustomer?.name || 'Unknown'),
+      role: fallbackCustomer?.role || 'Customer',
+      company: fallbackCustomer?.company || 'Personal',
+      location: fallbackCustomer?.location || 'N/A',
+      timezone: fallbackCustomer?.timezone || 'N/A',
+      since: customer.created_at ? new Date(customer.created_at).getFullYear().toString() : (fallbackCustomer?.since || 'N/A'),
+      segment: customer.segment === 'vip' ? 'VIP Enterprise' : (fallbackCustomer?.segment || 'Standard'),
+      openTickets: apiSelectedState.metrics?.open_cases || 0,
+      aiImpact: fallbackCustomer?.aiImpact || { resolved: 0 },
+      topIssue: unresolvedConflicts[0]?.conflict_type || fallbackCustomer?.topIssue || 'N/A',
+      risk: customer.risk_level === 'high' || customer.risk_level === 'critical' ? 'Churn Risk' : (fallbackCustomer?.risk || 'Healthy'),
+      sources: linkedIdentities.length > 0
+        ? linkedIdentities.map((identity: any) => ({
+            name: identity.system,
+            icon: 'https://www.svgrepo.com/show/532295/asterisk.svg',
+          }))
+        : (fallbackCustomer?.sources || []),
+      plan: fallbackCustomer?.plan || 'Standard',
+      ltv: `$${Number(apiSelectedState.metrics?.lifetime_value || customer.lifetime_value || 0).toLocaleString()}`,
+      nextRenewal: fallbackCustomer?.nextRenewal || 'N/A',
+      orders: (systems.orders?.nodes || []).map((node: any) => ({
+        id: node.label,
+        date: node.timestamp ? new Date(node.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
+        total: 'N/A',
+        status: node.status === 'critical' ? 'Processing' : 'Delivered',
+        items: [],
+      })),
+      reconciliation,
+    } as Customer;
+  }, [apiSelectedState, customers, selectedCustomerId]);
 
   const renderListView = () => (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -265,7 +347,7 @@ export default function Customers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800 bg-white dark:bg-card-dark">
-                {mockCustomers.map((customer) => (
+                {customers.map((customer) => (
                   <tr 
                     key={customer.id} 
                     className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"

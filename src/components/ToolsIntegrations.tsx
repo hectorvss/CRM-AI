@@ -71,6 +71,8 @@ export default function ToolsIntegrations() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const { data: apiConnectors, refetch } = useApi(connectorsApi.list);
+  const testConnector = useMutation((id: string) => connectorsApi.test(id));
+  const updateConnector = useMutation((payload: { id: string; body: Record<string, any> }) => connectorsApi.update(payload.id, payload.body));
 
   const categories: IntegrationCategory[] = ['All Apps', 'Support', 'Commerce', 'Communication', 'CRM', 'Knowledge', 'Productivity', 'Automation'];
 
@@ -141,7 +143,22 @@ export default function ToolsIntegrations() {
           </div>
         )}
         
-        <button className={`text-sm font-semibold px-5 py-2 rounded-xl transition-colors shadow-card min-w-[100px] border ${
+        <button
+          onClick={async () => {
+            const apiConnector = apiConnectors?.find((c: any) => c.system.toLowerCase() === integration.id);
+            if (!apiConnector) return;
+
+            if (integration.status === 'Error' || integration.status === 'Reconnect Required') {
+              await testConnector.mutate(apiConnector.id);
+            } else {
+              await updateConnector.mutate({
+                id: apiConnector.id,
+                body: { status: apiConnector.status === 'active' ? 'inactive' : 'active' },
+              });
+            }
+            refetch();
+          }}
+          className={`text-sm font-semibold px-5 py-2 rounded-xl transition-colors shadow-card min-w-[100px] border ${
           integration.status === 'Connected' || integration.status === 'Syncing' ? 'text-gray-700 dark:text-white border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700' :
           integration.status === 'Error' || integration.status === 'Reconnect Required' ? 'text-red-600 bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900 hover:bg-red-100 dark:hover:bg-red-900/40' :
           'text-white bg-gray-900 dark:bg-white dark:text-black hover:bg-black dark:hover:bg-gray-200'

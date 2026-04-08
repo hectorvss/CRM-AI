@@ -1,9 +1,10 @@
 import { getDb } from './client.js';
 import { randomUUID } from 'crypto';
+import { seedAgents } from '../agents/seed.js';
 
-const TENANT_ID = 'tenant_default';
-const WORKSPACE_ID = 'ws_default';
 const ORG_ID = 'org_default';
+const TENANT_ID = ORG_ID;
+const WORKSPACE_ID = 'ws_default';
 
 export function seedDatabase(): void {
   const db = getDb();
@@ -551,6 +552,9 @@ export function seedDatabase(): void {
     insertAgentVer.run(vId, a.id, 1, 'published', 100, new Date().toISOString(), TENANT_ID);
     db.prepare('UPDATE agents SET current_version_id=? WHERE id=?').run(vId, a.id);
   });
+
+  // ── Agent Engine — full 22-agent roster with profiles ────────────────
+  seedAgents(db, TENANT_ID);
 
   console.log('✅ Database seeded successfully');
 }
