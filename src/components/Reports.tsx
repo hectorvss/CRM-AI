@@ -59,6 +59,8 @@ const GENERATED_REPORTS = [
   { id: '4', title: 'Weekly Exec Brief', date: 'Oct 14, 2023', time: '09:00 AM', audience: 'Executive / C-Suite', status: 'Archived', severity: 'normal', range: 'Oct 7 - Oct 14' },
 ];
 
+const recommendedActions: any[] = [];
+
 export default function Reports() {
   const [activeTab, setActiveTab] = useState<ReportsTab>('overview');
   const [selectedReportId, setSelectedReportId] = useState('1');

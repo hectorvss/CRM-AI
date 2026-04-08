@@ -89,3 +89,16 @@ export function getAgentImpl(slug: string): AgentImplementation {
 export function hasAgentImpl(slug: string): boolean {
   return REGISTRY.has(slug);
 }
+
+export function getImplementationMode(slug: string): 'implemented' | 'delegated' | 'stub' {
+  if (!REGISTRY.has(slug)) return 'stub';
+  // Agents with actual implementations (not noopAgent)
+  const implementedSlugs = [
+    'triage-agent', 'intent-router', 'identity-resolver', 'customer-profiler',
+    'knowledge-retriever', 'draft-reply-agent', 'qa-policy-check', 'approval-gatekeeper',
+    'audit-logger', 'report-generator'
+  ];
+  if (implementedSlugs.includes(slug)) return 'implemented';
+  // Pipeline-delegated agents (handled by their own job handlers)
+  return 'delegated';
+}

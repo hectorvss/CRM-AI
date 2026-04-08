@@ -384,7 +384,7 @@ export default function AIStudio() {
     agentsApi.publishPolicyDraft(payload.id, payload.body || {}),
   );
   const rollbackDraft = useMutation((payload: { id: string; body?: Record<string, any> }) =>
-    agentsApi.rollbackPolicy(payload.id, payload.body || {}),
+    agentsApi.rollbackPolicy(payload.id, payload.body?.versionId || undefined),
   );
   const updateAgentConfig = useMutation((payload: { id: string; body: Record<string, any> }) =>
     agentsApi.config(payload.id, payload.body),

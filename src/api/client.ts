@@ -198,6 +198,23 @@ export const agentsApi = {
       body: JSON.stringify(payload),
     }),
   runs: (id: string, limit = 20) => request<any[]>(`/agents/${id}/runs?limit=${limit}`),
+  policyDraft: (id: string) => request<any>(`/agents/${id}/policy-bundle:draft`),
+  effectivePolicy: (id: string) => request<any>(`/agents/${id}/effective-policy`),
+  updatePolicyDraft: (id: string, payload: Record<string, any>) =>
+    request<any>(`/agents/${id}/policy-bundle:draft`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  publishPolicyDraft: (id: string, payload?: Record<string, any>) =>
+    request<any>(`/agents/${id}/policy-bundle:publish`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+  rollbackPolicy: (id: string, versionId?: string) =>
+    request<any>(`/agents/${id}/policy-bundle:rollback`, {
+      method: 'POST',
+      body: JSON.stringify({ versionId }),
+    }),
 };
 
 // ── Connectors ────────────────────────────────────────────

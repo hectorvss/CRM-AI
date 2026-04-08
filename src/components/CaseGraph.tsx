@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Page } from '../types';
 import TreeGraph from './TreeGraph';
@@ -8,6 +8,14 @@ import type { GraphBranch } from './TreeGraph';
 
 type RightTab = 'details' | 'copilot';
 type ResolveTab = 'overview' | 'identifiers' | 'policy' | 'execution';
+
+const MOCK_CASES_DATA: Record<string, any> = {
+  '1': {
+    rootData: { orderId: 'ORD-001', customerName: 'John Doe', riskLevel: 'Low Risk', status: 'Open' },
+    branches: [],
+    copilot: { summary: 'Case 1', rootCause: 'Unknown', conflict: 'None', recommendation: 'Pending', actionText: 'View Details', reply: '' },
+  },
+};
 
 function formatStatus(value?: string | null) {
   if (!value) return 'N/A';
@@ -119,8 +127,19 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
     return MOCK_CASES_DATA['1'];
   }, [selectedId, apiCaseDetail]);
 
-  const caseData = currentCase.rootData;
-  const copilotData = currentCase.copilot;
+  const caseData = currentCase?.rootData || { orderId: '', customerName: '', riskLevel: '', status: '' };
+  const copilotData = currentCase?.copilot || { summary: '', rootCause: '', conflict: '', recommendation: '', actionText: '', reply: '' };
+  const branches = currentCase?.branches || [];
+  const rootData = caseData;
+  const timeline: any[] = [];
+  const caseResolve: any = {};
+  const caseState: any = {};
+  const caseGraph: any = {};
+  const links: any[] = [];
+  const relatedCases: any[] = [];
+  const impactedBranches: any[] = [];
+  const internalNotes: any[] = [];
+  const recommendedActions: any[] = [];
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">

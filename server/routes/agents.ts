@@ -2,9 +2,11 @@ import { Router, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { parseRow } from '../db/utils.js';
+import { parseRow, logAudit } from '../db/utils.js';
 import { runAgent } from '../agents/runner.js';
 import { triggerAgents } from '../agents/orchestrator.js';
+import { hasAgentImpl, getImplementationMode } from '../agents/registry.js';
+import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
 
 const router = Router();
 
