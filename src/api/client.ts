@@ -199,6 +199,8 @@ export const agentsApi = {
       body: JSON.stringify(payload),
     }),
   effectivePolicy: (id: string) => request<any>(`/agents/${id}/effective-policy`),
+  knowledgeAccess: (id: string, caseId?: string) =>
+    request<any>(`/agents/${id}/knowledge-access${caseId ? `?caseId=${encodeURIComponent(caseId)}` : ''}`),
   run: (id: string, caseId: string, triggerEvent = 'case_created', context = {}) =>
     request<any>(`/agents/${id}/run`, {
       method: 'POST',
@@ -269,6 +271,25 @@ export const reportsApi = {
   approvals: (period = '7d') => request<any>(`/reports/approvals?period=${period}`),
   costs: (period = '7d') => request<any>(`/reports/costs?period=${period}`),
   sla: (period = '7d') => request<any>(`/reports/sla?period=${period}`),
+};
+
+export const operationsApi = {
+  overview: () => request<any>('/operations/overview'),
+  jobs: () => request<any[]>('/operations/jobs'),
+  deadLetterJobs: () => request<any[]>('/operations/jobs/dead-letter'),
+  retryJob: (id: string) =>
+    request<any>(`/operations/jobs/${id}/retry`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  webhooks: () => request<any[]>('/operations/webhooks'),
+  replayWebhook: (id: string) =>
+    request<any>(`/operations/webhooks/${id}/replay`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  canonicalEvents: () => request<any[]>('/operations/canonical-events'),
+  agentRuns: () => request<any[]>('/operations/agent-runs'),
 };
 
 // ── Health ────────────────────────────────────────────────

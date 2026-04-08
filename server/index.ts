@@ -11,8 +11,9 @@ dotenv.config();
 
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { runMigrations } from './db/client.js';
+import { getDb, runMigrations } from './db/client.js';
 import { seedDatabase } from './db/seed.js';
+import { seedAgents } from './agents/seed.js';
 import { startWorker, stopWorker, workerStatus } from './queue/worker.js';
 import { countJobs } from './queue/client.js';
 import { startScheduledJobs, stopScheduledJobs } from './queue/scheduledJobs.js';
@@ -65,6 +66,7 @@ mkdirSync(DATA_DIR, { recursive: true });
 
 // ── Database ──────────────────────────────────────────────
 runMigrations();
+seedAgents(getDb(), 'org_default');
 seedDatabase();
 
 // ── Integrations ──────────────────────────────────────────

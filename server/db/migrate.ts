@@ -205,6 +205,29 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       });
     },
   },
+  {
+    version: '2026-04-08-002',
+    up(db) {
+      addColumn(db, 'agents', 'updated_at', `TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)`);
+      db.prepare('UPDATE agents SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL').run();
+    },
+  },
+  {
+    version: '2026-04-08-003',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS case_knowledge_links (
+          id TEXT PRIMARY KEY,
+          case_id TEXT NOT NULL REFERENCES cases(id),
+          article_id TEXT NOT NULL REFERENCES knowledge_articles(id),
+          tenant_id TEXT NOT NULL,
+          relevance_score REAL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+          UNIQUE(case_id, article_id)
+        )
+      `);
+    },
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────────────

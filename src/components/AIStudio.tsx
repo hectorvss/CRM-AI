@@ -312,7 +312,7 @@ const originalCategories = [
 
 export default function AIStudio() {
   const [activeTab, setActiveTab] = useState<AIStudioTab>('Overview');
-  const [selectedAgent, setSelectedAgent] = useState<string>('Shopify Agent');
+  const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [selectedConnection, setSelectedConnection] = useState<string>('Supervisor');
   const [expandedConnection, setExpandedConnection] = useState<string | null>(null);
@@ -321,13 +321,31 @@ export default function AIStudio() {
   const { data: apiAgents, refetch: refetchAgents } = useApi(agentsApi.list);
 
   const CATEGORY_ICONS: Record<string, string> = {
-    orchestration: 'supervisor_account', ingest: 'input', resolution: 'build',
-    communication: 'forum', observability: 'monitoring', connectors: 'cable',
+    orchestration: 'supervisor_account',
+    ingest: 'input',
+    ingest_intelligence: 'input',
+    resolution: 'build',
+    resolution_reconciliation: 'build',
+    identity_customer_truth: 'fingerprint',
+    system_tool: 'cable',
+    communication: 'forum',
+    observability: 'monitoring',
+    observability_communication: 'monitoring',
+    connectors: 'cable',
   };
 
   const CATEGORY_COLORS: Record<string, string> = {
-    orchestration: 'text-purple-600', ingest: 'text-blue-600', resolution: 'text-orange-600',
-    communication: 'text-green-600', observability: 'text-gray-600', connectors: 'text-cyan-600',
+    orchestration: 'text-purple-600',
+    ingest: 'text-blue-600',
+    ingest_intelligence: 'text-blue-600',
+    resolution: 'text-orange-600',
+    resolution_reconciliation: 'text-orange-600',
+    identity_customer_truth: 'text-teal-600',
+    system_tool: 'text-cyan-600',
+    communication: 'text-green-600',
+    observability: 'text-gray-600',
+    observability_communication: 'text-gray-600',
+    connectors: 'text-cyan-600',
   };
 
   const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Connections', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
@@ -336,23 +354,28 @@ export default function AIStudio() {
   const mappedCategories = apiAgents && apiAgents.length > 0
     ? [...new Set(apiAgents.map((a: any) => a.category))].map(cat => ({
         title: String(cat).toUpperCase().replace(/_/g, ' '),
-        agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => ({
+        agents: apiAgents
+          .filter((a: any) => a.category === cat)
+          .sort((left: any, right: any) => (left.sort_order ?? 999) - (right.sort_order ?? 999))
+          .map((a: any) => ({
           id: a.id,
           slug: a.slug,
           name: a.name,
           desc: a.description || a.slug,
-          icon: CATEGORY_ICONS[a.category] || 'smart_toy',
-          iconColor: CATEGORY_COLORS[a.category] || 'text-indigo-600',
+          icon: a.capabilities?.ui?.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
+          iconColor: a.capabilities?.ui?.iconColor || CATEGORY_COLORS[a.category] || 'text-indigo-600',
           active: !!a.is_active,
           locked: !!a.is_locked,
-          purpose: a.reasoning_profile?.systemInstruction || a.description || a.slug,
-          triggers: ['System defined triggers'],
-          dependencies: ['Core routing', 'Context Window'],
-          ioLogic: { input: 'Canonical event', output: 'Approved action or Routing' },
+          purpose: a.capabilities?.ui?.purpose || a.reasoning_profile?.systemInstruction || a.description || a.slug,
+          triggers: a.capabilities?.ui?.triggers || ['System defined triggers'],
+          dependencies: a.capabilities?.ui?.dependencies || ['Core routing', 'Context Window'],
+          ioLogic: a.capabilities?.ui?.ioLogic || { input: 'Canonical event', output: 'Approved action or routing' },
           metrics: a.metrics || {},
           permissionProfile: a.permission_profile,
           reasoningProfile: a.reasoning_profile,
           safetyProfile: a.safety_profile,
+          knowledgeProfile: a.knowledge_profile,
+          capabilities: a.capabilities,
         }))
       }))
     : originalCategories;

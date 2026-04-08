@@ -14,6 +14,7 @@
 
 import type { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ContextWindow } from '../pipeline/contextWindow.js';
+import type { AgentKnowledgeBundle, KnowledgeProfile } from '../services/agentKnowledge.js';
 
 // ── Profiles (stored as JSON in agent_versions) ───────────────────────────────
 
@@ -101,6 +102,8 @@ export interface AgentRunContext {
   permissions: PermissionProfile;
   reasoning: ReasoningProfile;
   safety: SafetyProfile;
+  knowledgeProfile: KnowledgeProfile;
+  knowledgeBundle: AgentKnowledgeBundle;
   /** Pre-built context window for the case */
   contextWindow: ContextWindow;
   /** Gemini client configured with the reasoning profile */
@@ -167,6 +170,7 @@ export interface AgentVersionRow {
   permission_profile: string | null;  // JSON
   reasoning_profile: string | null;   // JSON
   safety_profile: string | null;      // JSON
+  knowledge_profile: string | null;   // JSON
   published_at: string | null;
   tenant_id: string;
 }
@@ -177,15 +181,14 @@ export interface AgentRunRow {
   agent_version_id: string;
   case_id: string;
   tenant_id: string;
-  workspace_id: string;
-  trigger_event: string;
-  status: 'running' | 'completed' | 'failed' | 'skipped';
+  trigger_type: string;
+  outcome_status: 'running' | 'completed' | 'failed' | 'skipped';
   confidence: number | null;
   tokens_used: number | null;
   cost_credits: number | null;
-  summary: string | null;
-  output: string | null;  // JSON
-  error_message: string | null;
+  evidence_refs: string | null;
+  execution_decision: string | null;
+  error: string | null;
   started_at: string;
-  finished_at: string | null;
+  ended_at: string | null;
 }

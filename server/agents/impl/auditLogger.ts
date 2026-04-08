@@ -1,16 +1,3 @@
-/**
- * server/agents/impl/auditLogger.ts
- *
- * Audit Logger Agent — writes structured audit events for agent chain outcomes.
- *
- * Runs last in every agent chain and records:
- *   - What trigger fired
- *   - Which agents ran and their outcomes (queried from agent_runs)
- *   - Case state snapshot at audit time
- *
- * No Gemini — pure DB writes.
- */
-
 import { randomUUID } from 'crypto';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
@@ -20,15 +7,13 @@ export const auditLoggerImpl: AgentImplementation = {
   slug: 'audit-logger',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, tenantId, runId, triggerEvent } = ctx;
+    const { contextWindow, tenantId, runId, triggerEvent, workspaceId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
     const now = new Date().toISOString();
 
-    // ── Collect runs from this trigger chain ──────────────────────────────
-    // All runs that started within the last 30 seconds for this case
     const recentRuns = db.prepare(`
-      SELECT agent_id, status, confidence, tokens_used, summary, started_at
+      SELECT agent_id, outcome_status, confidence, tokens_used, evidence_refs, started_at
       FROM agent_runs
       WHERE case_id = ? AND tenant_id = ?
         AND started_at >= datetime('now', '-30 seconds')
@@ -36,39 +21,37 @@ export const auditLoggerImpl: AgentImplementation = {
       ORDER BY started_at ASC
     `).all(caseId, tenantId, runId) as any[];
 
-    // ── Case state snapshot ───────────────────────────────────────────────
     const snapshot = {
       caseId,
-      caseNumber:    contextWindow.case.caseNumber,
-      status:        contextWindow.case.status,
-      priority:      contextWindow.case.priority,
-      riskScore:     (contextWindow.case as any).riskScore ?? null,
-      riskLevel:     contextWindow.case.riskLevel,
+      caseNumber: contextWindow.case.caseNumber,
+      status: contextWindow.case.status,
+      priority: contextWindow.case.priority,
+      riskScore: (contextWindow.case as any).riskScore ?? null,
+      riskLevel: contextWindow.case.riskLevel,
       approvalState: contextWindow.case.approvalState,
       conflictCount: contextWindow.conflicts.length,
       triggerEvent,
     };
 
-    // ── Write audit event ─────────────────────────────────────────────────
     try {
       db.prepare(`
         INSERT INTO audit_events
-          (id, tenant_id, entity_type, entity_id, event_type, description, metadata, created_at)
-        VALUES (?, ?, 'case', ?, ?, ?, ?, ?)
+          (id, tenant_id, workspace_id, actor_id, actor_type, action, entity_type, entity_id, metadata, occurred_at)
+        VALUES (?, ?, ?, 'audit-observability', 'system', ?, 'case', ?, ?, ?)
       `).run(
         randomUUID(),
         tenantId,
+        workspaceId,
+        `AGENT_CHAIN_COMPLETED:${triggerEvent}`,
         caseId,
-        `agent_chain_completed:${triggerEvent}`,
-        `Agent chain completed for trigger "${triggerEvent}" — ${recentRuns.length} agents ran`,
         JSON.stringify({
           triggerEvent,
-          agentsRan: recentRuns.map(r => ({
-            agentId: r.agent_id,
-            status: r.status,
-            confidence: r.confidence,
-            tokens: r.tokens_used,
-            summary: r.summary,
+          agentsRan: recentRuns.map((row) => ({
+            agentId: row.agent_id,
+            status: row.outcome_status,
+            confidence: row.confidence,
+            tokens: row.tokens_used,
+            evidence: row.evidence_refs,
           })),
           caseSnapshot: snapshot,
           auditRunId: runId,
@@ -80,16 +63,19 @@ export const auditLoggerImpl: AgentImplementation = {
       return { success: false, error: err?.message };
     }
 
-    // ── Update case last_activity_at ──────────────────────────────────────
     try {
-      db.prepare(
-        'UPDATE cases SET last_activity_at = ? WHERE id = ? AND tenant_id = ?'
-      ).run(now, caseId, tenantId);
-    } catch { /* non-critical */ }
+      db.prepare(`
+        UPDATE cases
+        SET last_activity_at = ?
+        WHERE id = ? AND tenant_id = ?
+      `).run(now, caseId, tenantId);
+    } catch {
+      // Non-critical.
+    }
 
     return {
       success: true,
-      confidence: 1.0,
+      confidence: 1,
       summary: `Audit recorded: ${recentRuns.length} agents ran for "${triggerEvent}"`,
       output: {
         auditEventWritten: true,

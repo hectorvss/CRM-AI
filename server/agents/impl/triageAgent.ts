@@ -35,7 +35,7 @@ export const triageAgentImpl: AgentImplementation = {
   slug: 'triage-agent',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, tenantId } = ctx;
+    const { contextWindow, gemini, reasoning, tenantId, knowledgeBundle } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
 
@@ -45,6 +45,8 @@ export const triageAgentImpl: AgentImplementation = {
     const prompt = `You are a CRM triage specialist. Analyze this support case and classify it.
 
 ${contextStr}
+
+${knowledgeBundle.promptContext ? `RELEVANT KNOWLEDGE:\n${knowledgeBundle.promptContext}\n` : ''}
 
 Return a JSON object with exactly these fields:
 {
@@ -153,7 +155,7 @@ SLA tiers:
       tokensUsed,
       costCredits,
       summary: `Triaged as ${priority}/${severity} (${slaTier}). ${triageReason}`,
-      output: { urgency, severity, priority, slaTier, requiresImmediateEscalation, suggestedTags },
+      output: { urgency, severity, priority, slaTier, requiresImmediateEscalation, suggestedTags, citations: knowledgeBundle.citations },
     };
   },
 };

@@ -22,6 +22,7 @@ import { getDb } from '../db/client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildContextWindow } from '../pipeline/contextWindow.js';
+import { resolveAgentKnowledgeBundle, type KnowledgeProfile } from '../services/agentKnowledge.js';
 import { getAgentImpl } from './registry.js';
 import {
   DEFAULT_PERMISSION_PROFILE,
@@ -99,6 +100,10 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     ...DEFAULT_SAFETY_PROFILE,
     ...safeJson<Partial<SafetyProfile>>(versionRow.safety_profile, {}),
   };
+  const knowledgeProfile: KnowledgeProfile = safeJson<KnowledgeProfile>(
+    versionRow.knowledge_profile,
+    {},
+  );
 
   // ── Step 4: Build context window ──────────────────────────────────────────
   const contextWindow = buildContextWindow(caseId, tenantId);
@@ -106,6 +111,20 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     logger.warn('Could not build context window for case', { caseId, tenantId });
     return { success: false, error: `Case "${caseId}" not found` };
   }
+
+  const knowledgeBundle = resolveAgentKnowledgeBundle({
+    tenantId,
+    workspaceId,
+    knowledgeProfile,
+    caseContext: {
+      type: contextWindow.case.type,
+      intent: contextWindow.case.intent,
+      tags: contextWindow.case.tags,
+      customerSegment: contextWindow.customer?.segment ?? null,
+      conflictDomains: contextWindow.conflicts.map((conflict) => conflict.domain),
+      latestMessage: contextWindow.messages.at(-1)?.content ?? null,
+    },
+  });
 
   // ── Step 5: Get implementation ────────────────────────────────────────────
   const impl = getAgentImpl(agentSlug);
@@ -115,11 +134,11 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   try {
     db.prepare(`
       INSERT INTO agent_runs
-        (id, agent_id, agent_version_id, case_id, tenant_id, workspace_id,
-         trigger_event, status, started_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?)
+        (id, agent_id, agent_version_id, case_id, tenant_id,
+         trigger_type, outcome_status, started_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'running', ?)
     `).run(
-      runId, agentRow.id, versionRow.id, caseId, tenantId, workspaceId,
+      runId, agentRow.id, versionRow.id, caseId, tenantId,
       triggerEvent, startedAt,
     );
   } catch (err) {
@@ -137,6 +156,8 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     permissions,
     reasoning,
     safety,
+    knowledgeProfile,
+    knowledgeBundle,
     contextWindow,
     gemini,
     tenantId,
@@ -164,18 +185,24 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   const status = result.success ? 'completed' : 'failed';
 
   try {
+    const evidenceRefs = result.output
+      ? JSON.stringify(result.output)
+      : result.summary
+        ? JSON.stringify([{ summary: result.summary }])
+        : null;
+
     db.prepare(`
       UPDATE agent_runs SET
-        status = ?, confidence = ?, tokens_used = ?, cost_credits = ?,
-        summary = ?, output = ?, error_message = ?, finished_at = ?
+        outcome_status = ?, confidence = ?, tokens_used = ?, cost_credits = ?,
+        evidence_refs = ?, execution_decision = ?, error = ?, ended_at = ?
       WHERE id = ?
     `).run(
       status,
       result.confidence ?? null,
       result.tokensUsed ?? null,
       result.costCredits ?? null,
-      result.summary ?? null,
-      result.output ? JSON.stringify(result.output) : null,
+      evidenceRefs,
+      result.success ? 'proceed' : 'blocked',
       result.error ?? null,
       finishedAt,
       runId,
@@ -187,15 +214,26 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   // ── Step 11: Update credit ledger ─────────────────────────────────────────
   if (result.costCredits && result.costCredits > 0) {
     try {
+      const previousBalance = (db.prepare(`
+        SELECT balance_after
+        FROM credit_ledger
+        WHERE org_id = ?
+        ORDER BY occurred_at DESC
+        LIMIT 1
+      `).get(tenantId) as { balance_after: number } | undefined)?.balance_after ?? 0;
+
+      const balanceAfter = previousBalance - result.costCredits;
+
       db.prepare(`
         INSERT INTO credit_ledger
-          (id, tenant_id, workspace_id, type, amount, description, reference_id, created_at)
-        VALUES (?, ?, ?, 'debit', ?, ?, ?, ?)
+          (id, org_id, tenant_id, entry_type, amount, reason, reference_id, balance_after, occurred_at)
+        VALUES (?, ?, ?, 'debit', ?, ?, ?, ?, ?)
       `).run(
-        randomUUID(), tenantId, workspaceId,
+        randomUUID(), tenantId, tenantId,
         result.costCredits,
         `Agent run: ${agentSlug}`,
         runId,
+        balanceAfter,
         finishedAt,
       );
     } catch { /* non-critical */ }

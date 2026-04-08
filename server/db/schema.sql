@@ -696,7 +696,18 @@ CREATE TABLE IF NOT EXISTS agents (
   is_locked INTEGER DEFAULT 0,
   is_active INTEGER DEFAULT 1,
   current_version_id TEXT,
-  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE TABLE IF NOT EXISTS case_knowledge_links (
+  id TEXT PRIMARY KEY,
+  case_id TEXT NOT NULL REFERENCES cases(id),
+  article_id TEXT NOT NULL REFERENCES knowledge_articles(id),
+  tenant_id TEXT NOT NULL,
+  relevance_score REAL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  UNIQUE(case_id, article_id)
 );
 
 CREATE TABLE IF NOT EXISTS agent_versions (

@@ -326,10 +326,12 @@ async function handleReconcileCase(
   if (domains.has('payment')) {
     for (const orderId of orderIds) {
       const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
-      // Find associated payment via customer_id + order linkage
-      const payment = db.prepare(
-        'SELECT * FROM payments WHERE order_id = ? OR id IN (SELECT unnested FROM json_each(?)) LIMIT 1'
-      ).get(orderId, caseRow.payment_ids) as any ?? (
+      // SQLite json_each exposes `value`, not a synthetic `unnested` column.
+      // Keep the lookup simple and deterministic: prefer explicit order linkage,
+      // then fall back to the first linked payment on the case.
+      const payment = (
+        db.prepare('SELECT * FROM payments WHERE order_id = ? LIMIT 1').get(orderId) as any
+      ) ?? (
         paymentIds.length > 0
           ? db.prepare('SELECT * FROM payments WHERE id = ? LIMIT 1').get(paymentIds[0]) as any
           : null

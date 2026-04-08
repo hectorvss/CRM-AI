@@ -5,6 +5,8 @@ import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenan
 import { logAudit, parseRow } from '../db/utils.js';
 import { runAgent } from '../agents/runner.js';
 import { triggerAgents } from '../agents/orchestrator.js';
+import { hasAgentImpl, getImplementationMode } from '../agents/registry.js';
+import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
 
 const router = Router();
 
@@ -135,7 +137,8 @@ router.get('/', (req: MultiTenantRequest, res: Response) => {
     const db = getDb();
     const agents = db.prepare(`
       SELECT a.*, av.version_number, av.status as version_status, av.rollout_percentage,
-             av.permission_profile, av.reasoning_profile, av.safety_profile
+             av.permission_profile, av.reasoning_profile, av.safety_profile,
+             av.knowledge_profile, av.capabilities
       FROM agents a
       LEFT JOIN agent_versions av ON a.current_version_id = av.id
       WHERE a.tenant_id = ?
@@ -150,8 +153,20 @@ router.get('/', (req: MultiTenantRequest, res: Response) => {
       `).get(a.id, req.tenantId) as any;
       
       const parsed = parseRow(a);
-      return { ...parsed, metrics: runs };
+      return {
+        ...parsed,
+        has_registered_impl: hasAgentImpl(parsed.slug),
+        implementation_mode: getImplementationMode(parsed.slug),
+        runtime_kind: parsed.capabilities?.runtime_kind ?? 'unknown',
+        model_tier: parsed.capabilities?.model_tier ?? 'none',
+        sort_order: parsed.capabilities?.sort_order ?? 999,
+        metrics: runs,
+      };
     });
+
+    result.sort((left: any, right: any) =>
+      (left.sort_order ?? 999) - (right.sort_order ?? 999) || String(left.name).localeCompare(String(right.name))
+    );
 
     res.json(result);
   } catch (error) {
@@ -327,6 +342,74 @@ router.get('/:id/effective-policy', (req: MultiTenantRequest, res: Response) => 
     res.json(buildEffectivePolicy(agent, connectorCapabilities));
   } catch (error) {
     console.error('Error fetching effective policy:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/:id/knowledge-access', (req: MultiTenantRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const agent = getAgentWithVersion(db, req.params.id, req.tenantId!);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+    const caseId = String(req.query.caseId ?? '');
+    let caseContext: any = undefined;
+
+    if (caseId) {
+      const caseRow = db.prepare(`
+        SELECT c.*, cu.segment as customer_segment
+        FROM cases c
+        LEFT JOIN customers cu ON c.customer_id = cu.id
+        WHERE c.id = ? AND c.tenant_id = ?
+      `).get(caseId, req.tenantId) as any;
+
+      if (caseRow) {
+        const parsedCase = parseRow(caseRow) as any;
+        const latestMessage = db.prepare(`
+          SELECT content
+          FROM messages
+          WHERE case_id = ? AND tenant_id = ?
+          ORDER BY sent_at DESC
+          LIMIT 1
+        `).get(caseId, req.tenantId) as any;
+
+        const conflicts = db.prepare(`
+          SELECT conflict_domain
+          FROM reconciliation_issues
+          WHERE case_id = ? AND tenant_id = ?
+          ORDER BY id DESC
+          LIMIT 10
+        `).all(caseId, req.tenantId) as any[];
+
+        caseContext = {
+          type: parsedCase.type,
+          intent: parsedCase.intent,
+          tags: parsedCase.tags ?? [],
+          customerSegment: parsedCase.customer_segment ?? null,
+          conflictDomains: conflicts.map((item) => item.conflict_domain).filter(Boolean),
+          latestMessage: latestMessage?.content ?? null,
+        };
+      }
+    }
+
+    const bundle = resolveAgentKnowledgeBundle({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      knowledgeProfile: parseRow(agent).knowledge_profile ?? {},
+      caseContext,
+    });
+
+    res.json({
+      agent_id: agent.id,
+      case_id: caseId || null,
+      knowledge_profile: bundle.profile,
+      accessible_documents: bundle.accessibleDocuments,
+      blocked_documents: bundle.blockedDocuments,
+      citations: bundle.citations,
+      prompt_context: bundle.promptContext,
+    });
+  } catch (error) {
+    console.error('Error fetching agent knowledge access:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

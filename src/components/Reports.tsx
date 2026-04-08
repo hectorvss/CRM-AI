@@ -1,9 +1,18 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApi } from '../api/hooks';
-import { reportsApi } from '../api/client';
+import { operationsApi, reportsApi } from '../api/client';
 
 type ReportsTab = 'overview' | 'ai_resume' | 'business_areas' | 'agents' | 'approvals_risk' | 'cost_roi';
+
+function formatPercent(value: number): string {
+  return `${Math.round(value)}%`;
+}
+
+function formatRatio(numerator: number, denominator: number): string {
+  if (denominator <= 0) return '0%';
+  return formatPercent((numerator / denominator) * 100);
+}
 
 const KPICard: React.FC<{ metric: any, index: number }> = ({ metric, index }) => (
   <div className="bg-white dark:bg-card-dark rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-card flex flex-col justify-between h-[180px] relative overflow-hidden group">
@@ -62,6 +71,7 @@ export default function Reports() {
   const { data: approvalsData } = useApi(() => reportsApi.approvals(period), [period]);
   const { data: costsData } = useApi(() => reportsApi.costs(period), [period]);
   const { data: slaData } = useApi(() => reportsApi.sla(period), [period]);
+  const { data: operationsData } = useApi(() => operationsApi.overview(), []);
 
   const fallbackOverviewKpis = [
     { label: 'AI Resolution Rate', value: '68%', change: '+12%', trend: 'up', sub: 'Improving intent match' },
@@ -74,7 +84,101 @@ export default function Reports() {
     { label: 'CSAT Delta', value: '+0.4', change: '', trend: 'up', sub: 'High user satisfaction' },
   ];
 
-  const overviewKpis = overviewData?.kpis?.length ? overviewData.kpis : fallbackOverviewKpis;
+  const operationalOverviewKpis = operationsData ? (() => {
+    const operations = operationsData as any;
+    const queue = (operations.queue || {}) as Record<string, number>;
+    const webhooks = (operations.webhooks || {}) as Record<string, number>;
+    const canonicalEvents = (operations.canonical_events || {}) as Record<string, number>;
+    const integrationHealth = Array.isArray(operations.integrations?.health)
+      ? operations.integrations.health
+      : [];
+    const healthyIntegrations = integrationHealth.filter((item: any) => item.healthy).length;
+    const processedWebhooks = Number(webhooks.processed || 0);
+    const totalWebhooks = Object.values(webhooks).reduce(
+      (sum, count) => sum + Number(count || 0),
+      0,
+    );
+    const linkedCanonical = Number(canonicalEvents.linked || 0);
+    const totalCanonical = Object.values(canonicalEvents).reduce(
+      (sum, count) => sum + Number(count || 0),
+      0,
+    );
+
+    return [
+      {
+        label: 'Queue Pending',
+        value: String(queue.pending || 0),
+        change: operations.worker?.running ? 'Worker online' : 'Worker offline',
+        trend: operations.worker?.running ? 'up' : 'down',
+        sub: `${queue.processing || 0} processing now`,
+      },
+      {
+        label: 'Webhook Throughput',
+        value: formatRatio(processedWebhooks, totalWebhooks || processedWebhooks),
+        change: `${processedWebhooks}/${totalWebhooks || processedWebhooks || 0}`,
+        trend: processedWebhooks > 0 ? 'up' : 'neutral',
+        sub: 'Processed inbound integrations',
+      },
+      {
+        label: 'Canonical Link Rate',
+        value: formatRatio(linkedCanonical, totalCanonical || linkedCanonical),
+        change: `${linkedCanonical}/${totalCanonical || linkedCanonical || 0}`,
+        trend: linkedCanonical > 0 ? 'up' : 'neutral',
+        sub: 'Events linked into cases',
+      },
+      {
+        label: 'Integrations Healthy',
+        value: `${healthyIntegrations}/${integrationHealth.length || 0}`,
+        change: integrationHealth.length ? formatRatio(healthyIntegrations, integrationHealth.length) : '',
+        trend: integrationHealth.length && healthyIntegrations < integrationHealth.length ? 'down' : 'up',
+        sub: 'Registered connector health',
+      },
+    ];
+  })() : [];
+
+  const overviewKpis = overviewData?.kpis?.length
+    ? [...overviewData.kpis.slice(0, 4), ...operationalOverviewKpis].slice(0, 8)
+    : [...fallbackOverviewKpis.slice(0, 4), ...operationalOverviewKpis].slice(0, 8);
+
+  const operationalAlerts = Array.isArray((operationsData as any)?.alerts)
+    ? ((operationsData as any).alerts as string[])
+    : [];
+
+  const recommendedActions = operationalAlerts.length
+    ? operationalAlerts.map((alert) => {
+        if (alert === 'dead_jobs_detected') {
+          return {
+            label: 'Review and retry dead-letter jobs',
+            impact: 'High Impact',
+            effort: 'S',
+            owner: 'Ops',
+            impactColor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+          };
+        }
+        if (alert === 'stale_webhooks_detected') {
+          return {
+            label: 'Replay stale webhook events and verify connector health',
+            impact: 'High Impact',
+            effort: 'M',
+            owner: 'Eng',
+            impactColor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+          };
+        }
+        return {
+          label: 'Inspect recent agent failures in operations',
+          impact: 'Med Impact',
+          effort: 'S',
+          owner: 'AI Team',
+          impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+        };
+      })
+    : [
+        { label: 'Fix Shopify lookup integration errors', impact: 'High Impact', effort: 'M', owner: 'Eng', impactColor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+        { label: 'Create KB article for annual plan refunds', impact: 'Med Impact', effort: 'S', owner: 'CX', impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
+        { label: 'Review SLA breaches in Approvals', impact: 'Med Impact', effort: 'S', owner: 'Ops', impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
+        { label: "Optimize 'Login Issue' intent routing", impact: 'Low Impact', effort: 'L', owner: 'AI Team', impactColor: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
+        { label: 'Update agent guidelines for Order Status', impact: 'Low Impact', effort: 'M', owner: 'CX', impactColor: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
+      ];
 
   const renderOverview = () => (
     <div className="space-y-8">
@@ -126,14 +230,8 @@ export default function Reports() {
             Recommended Actions
           </h2>
           <div className="space-y-3">
-            {[
-              { label: 'Fix Shopify lookup integration errors', impact: 'High Impact', effort: 'M', owner: 'Eng', impactColor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
-              { label: 'Create KB article for annual plan refunds', impact: 'Med Impact', effort: 'S', owner: 'CX', impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-              { label: 'Review SLA breaches in Approvals', impact: 'Med Impact', effort: 'S', owner: 'Ops', impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-              { label: "Optimize 'Login Issue' intent routing", impact: 'Low Impact', effort: 'L', owner: 'AI Team', impactColor: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
-              { label: 'Update agent guidelines for Order Status', impact: 'Low Impact', effort: 'M', owner: 'CX', impactColor: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
-            ].map((action, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
+            {recommendedActions.map((action, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
                 <input className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4" type="checkbox" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-800 dark:text-gray-200 font-medium mb-1 line-clamp-2">{action.label}</p>
