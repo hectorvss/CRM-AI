@@ -7,11 +7,12 @@
  * Standard mapping for SQLite stringified JSON columns to JS objects.
  */
 export const JSON_COLUMNS = [
-  'order_ids', 'payment_ids', 'return_ids', 
+  'order_ids', 'payment_ids', 'return_ids',
   'ai_evidence_refs', 'tags', 'attachments',
   'settings', 'permissions', 'action_payload',
   'evidence_package', 'context', 'trigger_payload',
-  'normalized_payload'
+  'normalized_payload', 'system_states', 'badges',
+  'permission_profile', 'reasoning_profile', 'safety_profile',
 ];
 
 /**

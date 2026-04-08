@@ -125,6 +125,22 @@ export const workflowsApi = {
 export const agentsApi = {
   list: () => request<any[]>('/agents'),
   get: (id: string) => request<any>(`/agents/${id}`),
+  run: (id: string, caseId: string, triggerEvent = 'case_created', context = {}) =>
+    request<any>(`/agents/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify({ caseId, triggerEvent, context }),
+    }),
+  trigger: (caseId: string, triggerEvent: string, agentSlug?: string, context = {}) =>
+    request<any>('/agents/trigger', {
+      method: 'POST',
+      body: JSON.stringify({ caseId, triggerEvent, agentSlug, context }),
+    }),
+  config: (id: string, payload: { permissionProfile?: any; reasoningProfile?: any; safetyProfile?: any; isActive?: boolean }) =>
+    request<any>(`/agents/${id}/config`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  runs: (id: string, limit = 20) => request<any[]>(`/agents/${id}/runs?limit=${limit}`),
 };
 
 // ── Connectors ────────────────────────────────────────────
@@ -159,6 +175,16 @@ export const iamApi = {
 export const workspacesApi = {
   list: () => request<any[]>('/workspaces'),
   get: (id: string) => request<any>(`/workspaces/${id}`),
+};
+
+// ── Reports ──────────────────────────────────────────────
+export const reportsApi = {
+  overview: (period = '7d') => request<any>(`/reports/overview?period=${period}`),
+  intents: (period = '7d') => request<any>(`/reports/intents?period=${period}`),
+  agents: (period = '7d') => request<any>(`/reports/agents?period=${period}`),
+  approvals: (period = '7d') => request<any>(`/reports/approvals?period=${period}`),
+  costs: (period = '7d') => request<any>(`/reports/costs?period=${period}`),
+  sla: (period = '7d') => request<any>(`/reports/sla?period=${period}`),
 };
 
 // ── Health ────────────────────────────────────────────────

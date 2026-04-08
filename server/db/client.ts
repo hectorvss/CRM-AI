@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { readFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { runIncrementalMigrations } from './migrate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,9 +29,13 @@ export function getDb(): Database.Database {
 export function runMigrations(): void {
   const db = getDb();
   try {
+    // Step 1: apply base schema (CREATE TABLE IF NOT EXISTS — safe to re-run)
     const schema = readFileSync(SCHEMA_PATH, 'utf-8');
     db.exec(schema);
     console.log('✅ Database schema applied');
+
+    // Step 2: apply incremental ALTER TABLE migrations for existing databases
+    runIncrementalMigrations(db);
   } catch (err: any) {
     console.error('❌ Migration failed:', err.message);
     throw err;

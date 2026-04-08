@@ -318,25 +318,41 @@ export default function AIStudio() {
   const [expandedConnection, setExpandedConnection] = useState<string | null>(null);
   const [configTab, setConfigTab] = useState<'Overview' | 'Configure' | 'Test' | 'Logs'>('Configure');
 
-  const { data: apiAgents } = useApi(agentsApi.list);
+  const { data: apiAgents, refetch: refetchAgents } = useApi(agentsApi.list);
+
+  const CATEGORY_ICONS: Record<string, string> = {
+    orchestration: 'supervisor_account', ingest: 'input', resolution: 'build',
+    communication: 'forum', observability: 'monitoring', connectors: 'cable',
+  };
+
+  const CATEGORY_COLORS: Record<string, string> = {
+    orchestration: 'text-purple-600', ingest: 'text-blue-600', resolution: 'text-orange-600',
+    communication: 'text-green-600', observability: 'text-gray-600', connectors: 'text-cyan-600',
+  };
 
   const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Connections', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
 
   // Map API agents into the categories structure for rendering
-  const mappedCategories = apiAgents && apiAgents.length > 0 
-    ? [...new Set(apiAgents.map(a => a.category))].map(cat => ({
-        title: String(cat).toUpperCase().replace('_', ' '),
-        agents: apiAgents.filter(a => a.category === cat).map(a => ({
+  const mappedCategories = apiAgents && apiAgents.length > 0
+    ? [...new Set(apiAgents.map((a: any) => a.category))].map(cat => ({
+        title: String(cat).toUpperCase().replace(/_/g, ' '),
+        agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => ({
+          id: a.id,
+          slug: a.slug,
           name: a.name,
-          desc: a.description,
-          icon: a.icon || 'smart_toy',
-          iconColor: a.color || 'text-indigo-600',
-          active: a.status === 'active',
-          locked: ['Supervisor', 'Reconciliation Agent', 'Audit & Observability Agent'].includes(a.name),
-          purpose: a.system_prompt || a.description,
-          triggers: a.triggers || ['System defined triggers'],
-          dependencies: a.dependencies || ['Core routing', 'Context Window'],
-          ioLogic: { input: 'Canonical event', output: 'Approved action or Routing' }
+          desc: a.description || a.slug,
+          icon: CATEGORY_ICONS[a.category] || 'smart_toy',
+          iconColor: CATEGORY_COLORS[a.category] || 'text-indigo-600',
+          active: !!a.is_active,
+          locked: !!a.is_locked,
+          purpose: a.reasoning_profile?.systemInstruction || a.description || a.slug,
+          triggers: ['System defined triggers'],
+          dependencies: ['Core routing', 'Context Window'],
+          ioLogic: { input: 'Canonical event', output: 'Approved action or Routing' },
+          metrics: a.metrics || {},
+          permissionProfile: a.permission_profile,
+          reasoningProfile: a.reasoning_profile,
+          safetyProfile: a.safety_profile,
         }))
       }))
     : originalCategories;

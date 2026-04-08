@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Page } from '../types';
 import TreeGraph from './TreeGraph';
 import { MOCK_CASES_DATA } from '../data/mockCases';
 import { casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import type { GraphBranch } from './TreeGraph';
 
 type RightTab = 'details' | 'copilot';
 type ResolveTab = 'overview' | 'identifiers' | 'policy' | 'execution';
@@ -44,7 +45,53 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
       }))
     : STATIC_CASES;
 
-  const currentCase = MOCK_CASES_DATA[selectedId] || MOCK_CASES_DATA['1'];
+  // Fetch case detail from API
+  const { data: apiCaseDetail } = useApi(
+    () => selectedId ? casesApi.get(selectedId) : Promise.resolve(null),
+    [selectedId]
+  );
+
+  // Build detail view from API data, falling back to mock
+  const currentCase = useMemo(() => {
+    // Try mock data first (static IDs '1','2','3','4')
+    if (MOCK_CASES_DATA[selectedId]) return MOCK_CASES_DATA[selectedId];
+
+    // Build from API detail
+    if (apiCaseDetail) {
+      const c = apiCaseDetail;
+      const orderIds = Array.isArray(c.order_ids) ? c.order_ids : [];
+      const riskLabel = c.risk_level === 'high' || c.risk_level === 'critical' ? 'High Risk Case' : c.risk_level === 'medium' ? 'Medium Risk' : 'Low Risk';
+      const statusLabel = c.has_reconciliation_conflicts ? 'Conflict Detected' : c.status?.replace(/_/g, ' ') || 'Open';
+
+      const branches: GraphBranch[] = [
+        { id: 'orders', label: 'Orders', icon: 'shopping_bag', page: 'orders' as any, status: c.has_reconciliation_conflicts ? 'critical' : 'healthy', nodes: orderIds.map((oid: string, i: number) => ({ id: `o${i}`, label: oid, status: 'healthy' as const, context: 'Order', icon: 'shopping_bag', timestamp: c.created_at })) },
+        { id: 'payments', label: 'Payments', icon: 'payments', page: 'payments' as any, status: c.has_reconciliation_conflicts ? 'critical' : 'healthy', nodes: [{ id: 'p1', label: 'Payment', status: 'healthy' as const, context: c.approval_state || 'N/A', icon: 'payments', timestamp: c.created_at }] },
+        { id: 'returns', label: 'Returns', icon: 'assignment_return', page: 'returns' as any, status: 'healthy', nodes: [{ id: 'r1', label: 'Return', status: 'healthy' as const, context: c.type || 'N/A', icon: 'assignment_return', timestamp: c.created_at }] },
+        { id: 'approvals', label: 'Approvals', icon: 'check_circle', page: 'approvals' as any, status: c.approval_state === 'pending' ? 'warning' : 'healthy', nodes: [{ id: 'a1', label: `Approval: ${c.approval_state || 'N/A'}`, status: c.approval_state === 'pending' ? 'warning' as const : 'healthy' as const, context: c.approval_state || 'N/A', icon: 'check_circle', timestamp: c.created_at }] },
+      ];
+
+      return {
+        rootData: {
+          orderId: orderIds[0] || c.case_number || c.id,
+          customerName: c.customer_name || 'Unknown',
+          riskLevel: riskLabel,
+          status: statusLabel,
+        },
+        branches,
+        copilot: {
+          summary: c.ai_diagnosis || `Case ${c.case_number}: ${c.type?.replace(/_/g, ' ')}`,
+          rootCause: c.ai_root_cause || 'Root cause analysis pending.',
+          conflict: c.has_reconciliation_conflicts ? (c.conflict_severity || 'Conflict detected') : 'No conflicts.',
+          recommendation: c.ai_recommended_action || 'Awaiting analysis.',
+          actionText: c.approval_state === 'pending' ? 'Approve Resolution' : 'View Details',
+          reply: '',
+        },
+      };
+    }
+
+    return MOCK_CASES_DATA['1'];
+  }, [selectedId, apiCaseDetail]);
+
   const caseData = currentCase.rootData;
   const copilotData = currentCase.copilot;
 

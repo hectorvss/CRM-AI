@@ -170,33 +170,41 @@ export default function Customers() {
   // Fetch from API, fallback to mock
   const { data: apiCustomers } = useApi(() => customersApi.list(), [], []);
 
-  const mapApiCustomer = (c: any) => ({
-    id: c.id,
-    name: c.name || 'Unknown',
-    email: c.email || '',
-    avatar: c.avatar || (c.name ? c.name.substring(0, 2).toUpperCase() : 'UN'),
-    role: c.role || 'Customer',
-    company: c.company || 'Personal',
-    location: c.location || 'N/A',
-    timezone: c.timezone || 'N/A',
-    since: c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
-    segment: (c.segment === 'VIP Enterprise' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
-    ltv: c.ltv ? `$${Number(c.ltv).toLocaleString()}` : '$0',
-    orders: c.total_orders || 0,
-    openCases: c.open_cases || 0,
-    csat: c.csat_score || 0,
-    health: (c.health === 'Excellent' || c.health === 'Good' || c.health === 'At Risk') ? c.health : 'Good',
-    topIssue: c.top_issue || 'N/A',
-    risk: c.risk_flag || undefined,
-    badges: Array.isArray(c.badges) ? c.badges : [],
-    orders_list: [],
-    cases: [],
-    activity: [],
-    sources: [] as any[],
-    plan: c.plan || 'Standard',
-    nextRenewal: c.next_renewal || 'N/A',
-    reconciliation: c.reconciliation || null,
-  });
+  const mapApiCustomer = (c: any) => {
+    const name = c.canonical_name || c.name || 'Unknown';
+    const email = c.canonical_email || c.email || '';
+    const ltv = c.lifetime_value ?? c.ltv ?? 0;
+    const segment = c.segment || 'regular';
+    return {
+      id: c.id,
+      name,
+      email,
+      avatar: c.avatar || (name ? name.substring(0, 2).toUpperCase() : 'UN'),
+      role: c.role || 'Customer',
+      company: c.company || 'Personal',
+      location: c.location || 'N/A',
+      timezone: c.timezone || 'N/A',
+      since: c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
+      segment: (segment === 'vip' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
+      ltv: `$${Number(ltv).toLocaleString()}`,
+      orders: c.total_orders || 0,
+      openCases: c.open_cases || 0,
+      csat: c.csat_score || 0,
+      health: c.risk_level === 'high' || c.risk_level === 'critical' ? 'At Risk' : c.risk_level === 'medium' ? 'Good' : 'Excellent',
+      topIssue: c.top_issue || 'N/A',
+      risk: c.risk_level === 'high' || c.risk_level === 'critical' ? 'High Risk' : undefined,
+      badges: Array.isArray(c.badges) ? c.badges : [],
+      orders_list: [],
+      cases: [],
+      activity: [],
+      sources: (c.linked_identities || []).map((li: any) => ({
+        system: li.system, externalId: li.external_id,
+      })),
+      plan: c.plan || 'Standard',
+      nextRenewal: c.next_renewal || 'N/A',
+      reconciliation: c.reconciliation || null,
+    };
+  };
 
   const customers: typeof mockCustomers = (apiCustomers && apiCustomers.length > 0)
     ? apiCustomers.map(mapApiCustomer) as any
