@@ -15,50 +15,80 @@ import { logger } from '../utils/logger.js';
 
 // ── Implementations ───────────────────────────────────────────────────────────
 
-import { triageAgentImpl }       from './impl/triageAgent.js';
-import { identityResolverImpl }  from './impl/identityResolver.js';
-import { customerProfilerImpl }  from './impl/customerProfiler.js';
-import { knowledgeRetrieverImpl }from './impl/knowledgeRetriever.js';
-import { draftReplyAgentImpl }   from './impl/draftReplyAgent.js';
-import { qaCheckImpl }           from './impl/qaCheck.js';
-import { auditLoggerImpl }       from './impl/auditLogger.js';
-import { reportGeneratorImpl }   from './impl/reportGenerator.js';
+import { triageAgentImpl }              from './impl/triageAgent.js';
+import { identityResolverImpl }         from './impl/identityResolver.js';
+import { customerProfilerImpl }         from './impl/customerProfiler.js';
+import { knowledgeRetrieverImpl }       from './impl/knowledgeRetriever.js';
+import { draftReplyAgentImpl }          from './impl/draftReplyAgent.js';
+import { qaCheckImpl }                  from './impl/qaCheck.js';
+import { auditLoggerImpl }             from './impl/auditLogger.js';
+import { reportGeneratorImpl }         from './impl/reportGenerator.js';
+import { escalationManagerImpl }       from './impl/escalationManager.js';
+import { fraudDetectorImpl }           from './impl/fraudDetector.js';
+import { slaMonitorImpl }             from './impl/slaMonitor.js';
+import { shopifyConnectorImpl }        from './impl/shopifyConnector.js';
+import { stripeConnectorImpl }         from './impl/stripeConnector.js';
+import { composerTranslatorImpl }      from './impl/composerTranslator.js';
+import { identityMappingAgentImpl }    from './impl/identityMappingAgent.js';
+import { customerIdentityAgentImpl }   from './impl/customerIdentityAgent.js';
+import { helpdeskAgentImpl }           from './impl/helpdeskAgent.js';
+import { omsErpAgentImpl }            from './impl/omsErpAgent.js';
+import { returnsAgentImpl }           from './impl/returnsAgent.js';
+import { subscriptionAgentImpl }       from './impl/subscriptionAgent.js';
+import { logisticsTrackingAgentImpl }  from './impl/logisticsTrackingAgent.js';
+import { slaEscalationAgentImpl }      from './impl/slaEscalationAgent.js';
+import { customerCommunicationAgentImpl } from './impl/customerCommunicationAgent.js';
+import { workflowRuntimeAgentImpl }    from './impl/workflowRuntimeAgent.js';
 
 // ── Registry map ──────────────────────────────────────────────────────────────
 
 const REGISTRY = new Map<string, AgentImplementation>([
-  // ── Triage & classification ────────────────────────────────────────────────
-  ['triage-agent',             triageAgentImpl],
-  ['intent-router',            triageAgentImpl],        // reuse triage logic
-
-  // ── Identity & customer ────────────────────────────────────────────────────
-  ['identity-resolver',        identityResolverImpl],
-  ['customer-profiler',        customerProfilerImpl],
-
-  // ── Knowledge ─────────────────────────────────────────────────────────────
-  ['knowledge-retriever',      knowledgeRetrieverImpl],
-
-  // ── Communication ──────────────────────────────────────────────────────────
-  ['draft-reply-agent',        draftReplyAgentImpl],
-
-  // ── Quality & compliance ───────────────────────────────────────────────────
+  // ── Orchestration ─────────────────────────────────────────────────────────
+  ['supervisor',               noopAgent('supervisor')],            // delegated to orchestrator
+  ['approval-gatekeeper',      qaCheckImpl],                        // shares QA logic
   ['qa-policy-check',          qaCheckImpl],
-  ['approval-gatekeeper',      qaCheckImpl],            // shares QA logic
+  ['escalation-manager',       escalationManagerImpl],
 
-  // ── Observability ──────────────────────────────────────────────────────────
-  ['audit-observability',      auditLoggerImpl],
-  ['audit-logger',             auditLoggerImpl],
+  // ── Ingest & Intelligence ─────────────────────────────────────────────────
+  ['channel-ingest',           noopAgent('channel-ingest')],        // delegated to pipeline
+  ['canonicalizer',            noopAgent('canonicalizer')],         // delegated to pipeline
+  ['intent-router',            triageAgentImpl],                    // reuse triage logic
+  ['triage-agent',             triageAgentImpl],
+  ['knowledge-retriever',      knowledgeRetrieverImpl],
+  ['composer-translator',      composerTranslatorImpl],
 
-  // ── Reporting & diagnosis ──────────────────────────────────────────────────
+  // ── Resolution & Reconciliation ───────────────────────────────────────────
+  ['reconciliation-agent',     noopAgent('reconciliation-agent')],  // delegated to pipeline
+  ['case-resolution-planner',  noopAgent('case-resolution-planner')], // delegated to pipeline
+  ['resolution-executor',      noopAgent('resolution-executor')],   // delegated to pipeline
+  ['workflow-runtime-agent',   workflowRuntimeAgentImpl],
+  ['fraud-detector',           fraudDetectorImpl],
   ['report-generator',         reportGeneratorImpl],
 
-  // ── Existing pipeline agents (mapped to noop — handled by pipeline jobs) ──
-  ['channel-ingest',           noopAgent('channel-ingest')],
-  ['canonicalizer',            noopAgent('canonicalizer')],
-  ['reconciliation-agent',     noopAgent('reconciliation-agent')],
-  ['case-resolution-planner',  noopAgent('case-resolution-planner')],
-  ['resolution-executor',      noopAgent('resolution-executor')],
-  ['supervisor',               noopAgent('supervisor')],
+  // ── Identity & Customer Truth ─────────────────────────────────────────────
+  ['identity-resolver',        identityResolverImpl],
+  ['identity-mapping-agent',   identityMappingAgentImpl],
+  ['customer-identity-agent',  customerIdentityAgentImpl],
+  ['customer-profiler',        customerProfilerImpl],
+
+  // ── System / Tool Connectors ──────────────────────────────────────────────
+  ['helpdesk-agent',           helpdeskAgentImpl],
+  ['stripe-agent',             stripeConnectorImpl],
+  ['stripe-connector',         stripeConnectorImpl],
+  ['shopify-agent',            shopifyConnectorImpl],
+  ['shopify-connector',        shopifyConnectorImpl],
+  ['oms-erp-agent',            omsErpAgentImpl],
+  ['returns-agent',            returnsAgentImpl],
+  ['subscription-agent',       subscriptionAgentImpl],
+  ['logistics-tracking-agent', logisticsTrackingAgentImpl],
+
+  // ── Observability & Communication ─────────────────────────────────────────
+  ['sla-monitor',              slaMonitorImpl],
+  ['sla-escalation-agent',     slaEscalationAgentImpl],
+  ['customer-communication-agent', customerCommunicationAgentImpl],
+  ['audit-observability',      auditLoggerImpl],
+  ['audit-logger',             auditLoggerImpl],
+  ['draft-reply-agent',        draftReplyAgentImpl],
 ]);
 
 // ── Noop stub (for pipeline agents handled by their own job handlers) ─────────
@@ -92,13 +122,10 @@ export function hasAgentImpl(slug: string): boolean {
 
 export function getImplementationMode(slug: string): 'implemented' | 'delegated' | 'stub' {
   if (!REGISTRY.has(slug)) return 'stub';
-  // Agents with actual implementations (not noopAgent)
-  const implementedSlugs = [
-    'triage-agent', 'intent-router', 'identity-resolver', 'customer-profiler',
-    'knowledge-retriever', 'draft-reply-agent', 'qa-policy-check', 'approval-gatekeeper',
-    'audit-logger', 'report-generator'
+  const delegatedSlugs = [
+    'supervisor', 'channel-ingest', 'canonicalizer',
+    'reconciliation-agent', 'case-resolution-planner', 'resolution-executor',
   ];
-  if (implementedSlugs.includes(slug)) return 'implemented';
-  // Pipeline-delegated agents (handled by their own job handlers)
-  return 'delegated';
+  if (delegatedSlugs.includes(slug)) return 'delegated';
+  return 'implemented';
 }

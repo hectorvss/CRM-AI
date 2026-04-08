@@ -28,31 +28,55 @@ type TriggerEvent = AgentTriggerPayload['triggerEvent'];
 
 const ROUTING_TABLE: Record<TriggerEvent, string[]> = {
   case_created: [
-    'triage-agent',           // classify urgency + severity
-    'identity-resolver',      // link cross-system identities
-    'customer-profiler',      // build risk score + segment
-    'knowledge-retriever',    // attach relevant policy articles
-    'audit-logger',           // record case creation audit event
+    'triage-agent',                 // classify urgency + severity + SLA
+    'identity-resolver',            // link cross-system identities
+    'identity-mapping-agent',       // deep cross-system identity mapping
+    'customer-identity-agent',      // canonical customer truth + metrics
+    'customer-profiler',            // build risk score + segment
+    'knowledge-retriever',          // attach relevant policy articles
+    'helpdesk-agent',               // sync helpdesk tags + notes
+    'shopify-connector',            // read order state from Shopify
+    'stripe-connector',             // read payment state from Stripe
+    'logistics-tracking-agent',     // check shipping/tracking status
+    'fraud-detector',               // scan for fraud signals
+    'sla-monitor',                  // set initial SLA tracking
+    'customer-communication-agent', // decide if ack message needed
+    'audit-logger',                 // record case creation audit event
   ],
 
   message_received: [
-    'triage-agent',           // re-evaluate urgency on new message
-    'knowledge-retriever',    // refresh relevant policies
-    'draft-reply-agent',      // generate AI draft reply
-    'audit-logger',           // record message receipt audit event
+    'triage-agent',                 // re-evaluate urgency on new message
+    'helpdesk-agent',               // sync helpdesk tags from message
+    'knowledge-retriever',          // refresh relevant policies
+    'sla-monitor',                  // check first-response SLA
+    'customer-communication-agent', // decide communication strategy
+    'draft-reply-agent',            // generate AI draft reply
+    'audit-logger',                 // record message receipt audit event
   ],
 
   conflicts_detected: [
-    'qa-policy-check',        // validate resolution against policies
-    'approval-gatekeeper',    // determine if approval is required
-    'report-generator',       // generate AI diagnosis for conflicts
-    'audit-logger',           // record conflict detection audit event
+    'shopify-connector',            // read latest Shopify state
+    'stripe-connector',             // read latest Stripe state
+    'oms-erp-agent',                // verify back-office consistency
+    'returns-agent',                // check return lifecycle state
+    'subscription-agent',           // check subscription state if relevant
+    'qa-policy-check',              // validate resolution against policies
+    'approval-gatekeeper',          // determine if approval is required
+    'fraud-detector',               // scan conflicts for fraud patterns
+    'escalation-manager',           // check if escalation needed
+    'report-generator',             // generate AI diagnosis for conflicts
+    'workflow-runtime-agent',       // pause workflows if needed
+    'audit-logger',                 // record conflict detection audit event
   ],
 
   case_resolved: [
-    'qa-policy-check',        // final compliance check
-    'report-generator',       // generate resolution summary report
-    'audit-logger',           // record case resolution audit event
+    'qa-policy-check',              // final compliance check
+    'report-generator',             // generate resolution summary report
+    'workflow-runtime-agent',       // complete active workflows
+    'sla-escalation-agent',         // final SLA status update
+    'customer-communication-agent', // send resolution confirmation
+    'composer-translator',          // draft localized resolution message
+    'audit-logger',                 // record case resolution audit event
   ],
 };
 
