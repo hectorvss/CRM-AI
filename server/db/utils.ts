@@ -28,7 +28,17 @@ export function parseRow<T = any>(row: any): T {
         result[col] = JSON.parse(result[col]);
       } catch {
         // Fallback for empty or malformed strings
-        result[col] = col.endsWith('_ids') || col === 'tags' || col === 'attachments' || col === 'ai_evidence_refs' ? [] : {};
+        result[col] = col.endsWith('_ids')
+          || col === 'tags'
+          || col === 'attachments'
+          || col === 'ai_evidence_refs'
+          || col === 'linked_workflow_ids'
+          || col === 'linked_approval_policy_ids'
+          || col === 'nodes'
+          || col === 'edges'
+          || col === 'conditions'
+          ? []
+          : {};
       }
     }
   });

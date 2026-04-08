@@ -24,7 +24,11 @@ export const casesApi = {
     return request<any[]>(`/cases${qs}`);
   },
   get: (id: string) => request<any>(`/cases/${id}`),
+  state: (id: string) => request<any>(`/cases/${id}/state`),
+  graph: (id: string) => request<any>(`/cases/${id}/graph`),
+  resolve: (id: string) => request<any>(`/cases/${id}/resolve`),
   timeline: (id: string) => request<any[]>(`/cases/${id}/timeline`),
+  inboxView: (id: string) => request<any>(`/cases/${id}/inbox-view`),
   updateStatus: (id: string, status: string, reason?: string, changed_by?: string) =>
     request<any>(`/cases/${id}/status`, {
       method: 'PATCH',
@@ -39,6 +43,16 @@ export const casesApi = {
     request<any>(`/cases/${id}/notes`, {
       method: 'POST',
       body: JSON.stringify({ content, created_by }),
+    }),
+  addInternalNote: (id: string, content: string) =>
+    request<any>(`/cases/${id}/internal-note`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+  reply: (id: string, content: string, draft_reply_id?: string) =>
+    request<any>(`/cases/${id}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ content, draft_reply_id }),
     }),
 };
 
@@ -60,6 +74,7 @@ export const customersApi = {
     return request<any[]>(`/customers${qs}`);
   },
   get: (id: string) => request<any>(`/customers/${id}`),
+  state: (id: string) => request<any>(`/customers/${id}/state`),
 };
 
 // ── Orders ────────────────────────────────────────────────
@@ -69,6 +84,7 @@ export const ordersApi = {
     return request<any[]>(`/orders${qs}`);
   },
   get: (id: string) => request<any>(`/orders/${id}`),
+  context: (id: string) => request<any>(`/orders/${id}/context`),
 };
 
 // ── Payments ─────────────────────────────────────────────
@@ -78,6 +94,7 @@ export const paymentsApi = {
     return request<any[]>(`/payments${qs}`);
   },
   get: (id: string) => request<any>(`/payments/${id}`),
+  context: (id: string) => request<any>(`/payments/${id}/context`),
 };
 
 // ── Returns ──────────────────────────────────────────────
@@ -87,6 +104,7 @@ export const returnsApi = {
     return request<any[]>(`/returns${qs}`);
   },
   get: (id: string) => request<any>(`/returns/${id}`),
+  context: (id: string) => request<any>(`/returns/${id}/context`),
 };
 
 // ── Approvals ─────────────────────────────────────────────
@@ -96,10 +114,19 @@ export const approvalsApi = {
     return request<any[]>(`/approvals${qs}`);
   },
   get: (id: string) => request<any>(`/approvals/${id}`),
+  context: (id: string) => request<any>(`/approvals/${id}/context`),
   decide: (id: string, decision: 'approved' | 'rejected', note?: string, decided_by?: string) =>
     request<any>(`/approvals/${id}/decide`, {
       method: 'POST',
       body: JSON.stringify({ decision, note, decided_by }),
+    }),
+};
+
+export const executionApi = {
+  authorizeAction: (payload: Record<string, any>) =>
+    request<any>('/execution/authorize-action', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 };
 
@@ -110,6 +137,21 @@ export const knowledgeApi = {
     return request<any[]>(`/knowledge/articles${qs}`);
   },
   getArticle: (id: string) => request<any>(`/knowledge/articles/${id}`),
+  createArticle: (payload: Record<string, any>) =>
+    request<any>('/knowledge/articles', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateArticle: (id: string, payload: Record<string, any>) =>
+    request<any>(`/knowledge/articles/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  publishArticle: (id: string) =>
+    request<any>(`/knowledge/articles/${id}/publish`, {
+      method: 'POST',
+      body: '{}',
+    }),
   listDomains: () => request<any[]>('/knowledge/domains'),
   listPolicies: () => request<any[]>('/knowledge/policies'),
 };
@@ -117,7 +159,22 @@ export const knowledgeApi = {
 // ── Workflows ─────────────────────────────────────────────
 export const workflowsApi = {
   list: () => request<any[]>('/workflows'),
+  create: (payload: Record<string, any>) =>
+    request<any>('/workflows', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   get: (id: string) => request<any>(`/workflows/${id}`),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/workflows/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  publish: (id: string) =>
+    request<any>(`/workflows/${id}/publish`, {
+      method: 'POST',
+      body: '{}',
+    }),
   recentRuns: () => request<any[]>('/workflows/runs/recent'),
 };
 
@@ -147,6 +204,16 @@ export const agentsApi = {
 export const connectorsApi = {
   list: () => request<any[]>('/connectors'),
   get: (id: string) => request<any>(`/connectors/${id}`),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/connectors/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  test: (id: string) =>
+    request<any>(`/connectors/${id}/test`, {
+      method: 'POST',
+      body: '{}',
+    }),
 };
 
 // ── AI ────────────────────────────────────────────────────

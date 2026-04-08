@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { workflowsApi } from '../api/client';
-import { useApi } from '../api/hooks';
+import { useApi, useMutation } from '../api/hooks';
 
 type WorkflowView = 'list' | 'builder' | 'new';
 
@@ -160,6 +160,9 @@ export default function Workflows() {
 
   // Fetch from API, fallback to static
   const { data: apiWorkflows } = useApi(() => workflowsApi.list(), [], []);
+  const createWorkflow = useMutation((payload: Record<string, any>) => workflowsApi.create(payload));
+  const updateWorkflow = useMutation((payload: { id: string; body: Record<string, any> }) => workflowsApi.update(payload.id, payload.body));
+  const publishWorkflow = useMutation((id: string) => workflowsApi.publish(id));
 
   const mapApiWorkflow = (w: any): Workflow => ({
     id: w.id,
@@ -185,9 +188,51 @@ export default function Workflows() {
     setView('builder');
   };
 
-  const handleNewWorkflow = () => {
-    setSelectedWorkflow(null);
-    setView('new');
+  const handleNewWorkflow = async () => {
+    const created = await createWorkflow.mutate({
+      name: 'New workflow draft',
+      description: 'Draft workflow created from template',
+      trigger: { type: 'manual' },
+      nodes: [{ id: 'start', type: 'trigger', label: 'Start' }],
+      edges: [],
+    });
+    if (created?.id) {
+      const mapped = mapApiWorkflow(created);
+      setSelectedWorkflow(mapped);
+      setView('builder');
+    } else {
+      setSelectedWorkflow(null);
+      setView('new');
+    }
+  };
+
+  const handleSaveWorkflow = async () => {
+    if (!selectedWorkflow?.id) return;
+    const updated = await updateWorkflow.mutate({
+      id: selectedWorkflow.id,
+      body: {
+        name: selectedWorkflow.name,
+        description: selectedWorkflow.description,
+        trigger: { type: selectedWorkflow.category.toLowerCase() || 'manual' },
+        nodes: [
+          { id: 'start', type: 'trigger', label: selectedWorkflow.category || 'Trigger' },
+          { id: 'action', type: 'action', label: selectedWorkflow.name },
+        ],
+        edges: [{ id: 'edge_1', source: 'start', target: 'action' }],
+      },
+    });
+    if (updated?.id) {
+      setSelectedWorkflow(mapApiWorkflow(updated));
+    }
+  };
+
+  const handlePublishWorkflow = async () => {
+    if (!selectedWorkflow?.id) return;
+    await handleSaveWorkflow();
+    const published = await publishWorkflow.mutate(selectedWorkflow.id);
+    if (published?.id) {
+      setSelectedWorkflow(mapApiWorkflow(published));
+    }
   };
 
   const filteredWorkflows = workflows.filter(wf => 
@@ -408,8 +453,17 @@ export default function Workflows() {
                   <span className="material-symbols-outlined text-sm">play_arrow</span>
                   Run dry-run
                 </button>
-                <button className="px-5 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 transition-opacity shadow-card">
+                <button
+                  onClick={handleSaveWorkflow}
+                  className="px-5 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-xs font-bold rounded-lg hover:opacity-90 transition-opacity shadow-card"
+                >
                   Save
+                </button>
+                <button
+                  onClick={handlePublishWorkflow}
+                  className="px-5 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 transition-opacity shadow-card"
+                >
+                  Publish
                 </button>
               </div>
             </div>

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { agentsApi } from '../api/client';
-import { useApi } from '../api/hooks';
+import { useApi, useMutation } from '../api/hooks';
 import { connectionCategories } from '../connectionsData';
 import ConnectionsView from './ConnectionsView';
 import PermissionsView from './PermissionsView';
@@ -312,7 +312,7 @@ const originalCategories = [
 
 export default function AIStudio() {
   const [activeTab, setActiveTab] = useState<AIStudioTab>('Overview');
-  const [selectedAgent, setSelectedAgent] = useState<string>('Shopify Agent');
+  const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [selectedConnection, setSelectedConnection] = useState<string>('Supervisor');
   const [expandedConnection, setExpandedConnection] = useState<string | null>(null);
@@ -357,7 +357,99 @@ export default function AIStudio() {
       }))
     : originalCategories;
 
-  const activeAgentData = mappedCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || mappedCategories[0].agents[0];
+  const activeAgentData = mappedCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || mappedCategories[0]?.agents?.[0];
+  const selectedAgentId = activeAgentData?.id;
+
+  useEffect(() => {
+    if (!selectedAgent && mappedCategories[0]?.agents?.[0]?.name) {
+      setSelectedAgent(mappedCategories[0].agents[0].name);
+    }
+  }, [mappedCategories, selectedAgent]);
+
+  const { data: policyDraft, refetch: refetchDraft } = useApi(
+    () => (selectedAgentId ? agentsApi.policyDraft(selectedAgentId) : Promise.resolve(null)),
+    [selectedAgentId],
+    null,
+  );
+  const { data: effectivePolicy, refetch: refetchEffective } = useApi(
+    () => (selectedAgentId ? agentsApi.effectivePolicy(selectedAgentId) : Promise.resolve(null)),
+    [selectedAgentId],
+    null,
+  );
+
+  const updateDraft = useMutation((payload: { id: string; body: Record<string, any> }) =>
+    agentsApi.updatePolicyDraft(payload.id, payload.body),
+  );
+  const publishDraft = useMutation((payload: { id: string; body?: Record<string, any> }) =>
+    agentsApi.publishPolicyDraft(payload.id, payload.body || {}),
+  );
+  const rollbackDraft = useMutation((payload: { id: string; body?: Record<string, any> }) =>
+    agentsApi.rollbackPolicy(payload.id, payload.body || {}),
+  );
+  const updateAgentConfig = useMutation((payload: { id: string; body: Record<string, any> }) =>
+    agentsApi.config(payload.id, payload.body),
+  );
+
+  const runtimeSummary = useMemo(() => {
+    const bundle = policyDraft?.bundle || {};
+    const effective = effectivePolicy || {};
+    const permissionKeys = Object.keys(bundle.permission_profile || effective.permission_profile || {});
+    const reasoningKeys = Object.keys(bundle.reasoning_profile || effective.reasoning_profile || {});
+    const safetyKeys = Object.keys(bundle.safety_profile || effective.safety_profile || {});
+    const knowledgeKeys = Object.keys(bundle.knowledge_profile || effective.knowledge_profile || {});
+    return {
+      version: bundle.version_number || effective.version_id || '-',
+      status: policyDraft?.bundle_status || effective.version_status || 'published',
+      permissions: permissionKeys.length,
+      reasoning: reasoningKeys.length,
+      safety: safetyKeys.length,
+      knowledge: knowledgeKeys.length,
+      rollout: bundle.rollout_percentage ?? effective.rollout_policy?.rollout_percentage ?? 100,
+    };
+  }, [effectivePolicy, policyDraft]);
+
+  const handleSaveDraft = async () => {
+    if (!selectedAgentId || !activeAgentData) return;
+    await updateDraft.mutate({
+      id: selectedAgentId,
+      body: {
+        permission_profile: activeAgentData.permissionProfile || {},
+        reasoning_profile: activeAgentData.reasoningProfile || {},
+        safety_profile: activeAgentData.safetyProfile || {},
+        knowledge_profile: policyDraft?.bundle?.knowledge_profile || {},
+        rollout_policy: { rollout_percentage: runtimeSummary.rollout },
+      },
+    });
+    refetchDraft();
+    refetchEffective();
+    refetchAgents();
+  };
+
+  const handlePublishDraft = async () => {
+    if (!selectedAgentId) return;
+    await publishDraft.mutate({ id: selectedAgentId });
+    refetchDraft();
+    refetchEffective();
+    refetchAgents();
+  };
+
+  const handleRollbackDraft = async () => {
+    if (!selectedAgentId) return;
+    await rollbackDraft.mutate({ id: selectedAgentId });
+    refetchDraft();
+    refetchEffective();
+    refetchAgents();
+  };
+
+  const handleToggleAgent = async (agent: any) => {
+    if (!agent?.id || agent.locked) return;
+    await updateAgentConfig.mutate({
+      id: agent.id,
+      body: { isActive: !agent.active },
+    });
+    refetchAgents();
+    refetchEffective();
+  };
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -604,6 +696,81 @@ export default function AIStudio() {
             >
               {/* Left Side: Agent List */}
               <div className="flex-1 space-y-8 pb-12 w-full">
+                {activeAgentData && (
+                  <div className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">
+                    <div className="flex items-start justify-between gap-6">
+                      <div>
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className={`w-10 h-10 rounded-xl ${activeAgentData.iconColor} flex items-center justify-center`}>
+                            <span className="material-symbols-outlined text-xl">{activeAgentData.icon}</span>
+                          </div>
+                          <div>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">{activeAgentData.name}</h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{activeAgentData.desc}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                            Bundle {String(runtimeSummary.version)}
+                          </span>
+                          <span className="rounded-lg border border-indigo-200 dark:border-indigo-800/40 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
+                            {runtimeSummary.status}
+                          </span>
+                          <span className="rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">
+                            Rollout {runtimeSummary.rollout}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleRollbackDraft}
+                          className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        >
+                          Rollback
+                        </button>
+                        <button
+                          onClick={handleSaveDraft}
+                          className="rounded-xl bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-300 dark:hover:bg-indigo-900/40"
+                        >
+                          Save draft
+                        </button>
+                        <button
+                          onClick={handlePublishDraft}
+                          className="rounded-xl bg-black px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-black"
+                        >
+                          Publish
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Permissions</p>
+                        <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{runtimeSummary.permissions}</p>
+                      </div>
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Reasoning</p>
+                        <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{runtimeSummary.reasoning}</p>
+                      </div>
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Safety</p>
+                        <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{runtimeSummary.safety}</p>
+                      </div>
+                      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 p-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Knowledge</p>
+                        <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{runtimeSummary.knowledge}</p>
+                      </div>
+                    </div>
+                    {effectivePolicy && (
+                      <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/70 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">Effective policy</p>
+                        <p className="mt-2 text-sm text-blue-900 dark:text-blue-200">
+                          Runtime governed by restrictive precedence across workspace safety, domain safety, role permissions, agent overrides and case conditions.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Search & Filters */}
                 <div className="flex items-center gap-3">
                   <div className="relative flex-1">
@@ -665,7 +832,13 @@ export default function AIStudio() {
                                   <span className="text-[10px] font-bold uppercase tracking-wider">Locked ON</span>
                                 </div>
                               ) : (
-                                <div className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleAgent(agent);
+                                  }}
+                                  className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                                >
                                   <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${agent.active ? 'right-0.5' : 'left-0.5'}`}></div>
                                 </div>
                               )}

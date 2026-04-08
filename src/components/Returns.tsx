@@ -6,6 +6,22 @@ import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 
+const formatDate = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+
+const formatRelativeLabel = (value?: string | null) => {
+  if (!value) return '-';
+  const diffMs = Date.now() - new Date(value).getTime();
+  const diffMin = Math.max(1, Math.round(diffMs / 60000));
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  return `${Math.round(diffHour / 24)}d ago`;
+};
+
+const titleCase = (value?: string | null) =>
+  value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
+
 const RETURNS: Return[] = [
   {
     id: '1',
@@ -252,7 +268,7 @@ export default function Returns() {
     returnId: r.external_return_id || r.id,
     customerName: r.customer_name || 'Unknown',
     brand: r.brand || 'N/A',
-    date: r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
+    date: formatDate(r.created_at),
     total: `$${Number(r.return_value || 0).toFixed(2)}`,
     currency: r.currency || 'USD',
     country: r.country || 'N/A',
@@ -260,19 +276,19 @@ export default function Returns() {
     returnReason: r.return_reason || 'N/A',
     returnValue: `$${Number(r.return_value || 0).toFixed(2)}`,
     riskLevel: r.risk_level === 'high' ? 'High' : r.risk_level === 'medium' ? 'Medium' : 'Low',
-    orderStatus: r.system_states?.oms || 'N/A',
-    returnStatus: r.status || 'Unknown',
-    inspectionStatus: r.inspection_status || 'N/A',
-    refundStatus: r.refund_status || 'N/A',
-    approvalStatus: r.approval_status || 'N/A',
-    carrierStatus: r.carrier_status || r.system_states?.carrier || 'N/A',
+    orderStatus: titleCase(r.system_states?.oms || 'N/A'),
+    returnStatus: titleCase(r.status || 'Unknown'),
+    inspectionStatus: titleCase(r.inspection_status || 'N/A'),
+    refundStatus: titleCase(r.refund_status || 'N/A'),
+    approvalStatus: titleCase(r.approval_status || 'N/A'),
+    carrierStatus: titleCase(r.carrier_status || r.system_states?.carrier || 'N/A'),
     summary: r.summary || '',
-    lastUpdate: r.last_update || '-',
+    lastUpdate: formatRelativeLabel(r.last_update),
     badges: Array.isArray(r.badges) ? r.badges : [],
     tab: r.tab || 'all',
     conflictDetected: r.conflict_detected || '',
     recommendedNextAction: r.recommended_action || '',
-    context: r.summary || '',
+    context: r.canonical_context?.case_state?.conflict?.root_cause || r.summary || '',
     method: r.method || 'N/A',
     systemStates: typeof r.system_states === 'object' && r.system_states ? {
       oms: r.system_states.oms || 'N/A',
@@ -282,8 +298,18 @@ export default function Returns() {
       psp: r.system_states.psp || 'N/A',
       canonical: r.system_states.canonical || 'N/A',
     } : { oms: 'N/A', returnsPlatform: 'N/A', wms: 'N/A', carrier: 'N/A', psp: 'N/A', canonical: 'N/A' },
-    relatedCases: [],
-    timeline: [],
+    relatedCases: Array.isArray(r.related_cases) ? r.related_cases.map((c: any) => ({
+      id: c.case_number || c.id,
+      type: c.type || 'Case',
+      status: titleCase(c.status || 'open')
+    })) : [],
+    timeline: (r.events || []).map((e: any, i: number) => ({
+      id: e.id || String(i),
+      type: e.type || 'system',
+      content: e.content,
+      time: e.time || e.occurred_at || '-',
+      system: e.system || e.source,
+    })),
   });
 
   const returns = (apiReturns && apiReturns.length > 0) ? apiReturns.map(mapApiReturn) : RETURNS;

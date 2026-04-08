@@ -5,6 +5,15 @@ import { reportsApi } from '../api/client';
 
 type ReportsTab = 'overview' | 'ai_resume' | 'business_areas' | 'agents' | 'approvals_risk' | 'cost_roi';
 
+function formatPercent(value: number): string {
+  return `${Math.round(value)}%`;
+}
+
+function formatRatio(numerator: number, denominator: number): string {
+  if (denominator <= 0) return '0%';
+  return formatPercent((numerator / denominator) * 100);
+}
+
 const KPICard: React.FC<{ metric: any, index: number }> = ({ metric, index }) => (
   <div className="bg-white dark:bg-card-dark rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-card flex flex-col justify-between h-[180px] relative overflow-hidden group">
     <div className="flex items-start justify-between z-10 relative">
@@ -126,14 +135,8 @@ export default function Reports() {
             Recommended Actions
           </h2>
           <div className="space-y-3">
-            {[
-              { label: 'Fix Shopify lookup integration errors', impact: 'High Impact', effort: 'M', owner: 'Eng', impactColor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
-              { label: 'Create KB article for annual plan refunds', impact: 'Med Impact', effort: 'S', owner: 'CX', impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-              { label: 'Review SLA breaches in Approvals', impact: 'Med Impact', effort: 'S', owner: 'Ops', impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-              { label: "Optimize 'Login Issue' intent routing", impact: 'Low Impact', effort: 'L', owner: 'AI Team', impactColor: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
-              { label: 'Update agent guidelines for Order Status', impact: 'Low Impact', effort: 'M', owner: 'CX', impactColor: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
-            ].map((action, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
+            {recommendedActions.map((action, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
                 <input className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4" type="checkbox" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-800 dark:text-gray-200 font-medium mb-1 line-clamp-2">{action.label}</p>

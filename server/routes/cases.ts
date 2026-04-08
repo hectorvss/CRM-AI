@@ -3,24 +3,116 @@ import { getDb } from '../db/client.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { parseRow, logAudit } from '../db/utils.js';
 import { Case } from '../models.js';
+import {
+  buildCaseGraphView,
+  buildCaseListSummary,
+  buildCaseResolveView,
+  buildCaseTimeline,
+  getCaseCanonicalState,
+} from '../services/canonicalState.js';
+import { enqueue } from '../queue/client.js';
+import { JobType } from '../queue/types.js';
 
 const router = Router();
 
-// Apply multi-tenant middleware to all case routes
 router.use(extractMultiTenant);
 
-// ── GET /api/cases ─────────────────────────────────────────
+function computeSlaView(caseRow: any) {
+  const deadline = caseRow.sla_resolution_deadline;
+  if (!deadline) {
+    return {
+      status: caseRow.sla_status || 'on_track',
+      label: 'Waiting',
+      time: 'N/A',
+    };
+  }
+
+  const diffMs = new Date(deadline).getTime() - Date.now();
+  if (diffMs <= 0) {
+    return {
+      status: 'breached',
+      label: 'Overdue',
+      time: 'Overdue',
+    };
+  }
+
+  const diffMinutes = Math.max(1, Math.round(diffMs / 60000));
+  const time = diffMinutes < 60
+    ? `${diffMinutes}m remaining`
+    : `${Math.round(diffMinutes / 60)}h remaining`;
+
+  return {
+    status: caseRow.sla_status || 'on_track',
+    label: caseRow.sla_status === 'at_risk' ? 'SLA risk' : 'Waiting',
+    time,
+  };
+}
+
+function buildInboxView(caseId: string, tenantId: string, workspaceId: string) {
+  const db = getDb();
+  const caseRow = db.prepare(`
+    SELECT *
+    FROM cases
+    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+  `).get(caseId, tenantId, workspaceId) as any;
+
+  if (!caseRow) return null;
+
+  const parsedCase = parseRow(caseRow) as any;
+  const state = getCaseCanonicalState(caseId, tenantId, workspaceId);
+  const conversation = parsedCase.conversation_id
+    ? db.prepare(`
+        SELECT *
+        FROM conversations
+        WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+      `).get(parsedCase.conversation_id, tenantId, workspaceId)
+    : null;
+
+  const parsedConversation = conversation ? parseRow(conversation) : null;
+  const messages = parsedConversation
+    ? db.prepare(`
+        SELECT *
+        FROM messages
+        WHERE conversation_id = ? AND tenant_id = ?
+        ORDER BY sent_at ASC
+      `).all(parsedConversation.id, tenantId).map(parseRow)
+    : [];
+  const drafts = db.prepare(`
+    SELECT *
+    FROM draft_replies
+    WHERE case_id = ? AND tenant_id = ?
+    ORDER BY generated_at DESC
+  `).all(caseId, tenantId).map(parseRow);
+  const internalNotes = db.prepare(`
+    SELECT *
+    FROM internal_notes
+    WHERE case_id = ? AND tenant_id = ?
+    ORDER BY created_at DESC
+  `).all(caseId, tenantId).map(parseRow);
+
+  return {
+    case: parsedCase,
+    state,
+    conversation: parsedConversation,
+    messages,
+    drafts,
+    latest_draft: drafts[0] ?? null,
+    internal_notes: internalNotes,
+    sla: computeSlaView(parsedCase),
+  };
+}
+
 router.get('/', (req: MultiTenantRequest, res: Response) => {
   try {
     const db = getDb();
     const { status, assigned_user_id, priority, risk_level, q } = req.query;
 
     let query = `
-      SELECT c.*, 
-             cu.canonical_name as customer_name, cu.canonical_email as customer_email,
-             cu.segment as customer_segment,
-             u.name as assigned_user_name,
-             t.name as assigned_team_name
+      SELECT c.*,
+             cu.canonical_name AS customer_name, cu.canonical_email AS customer_email,
+             cu.segment AS customer_segment,
+             u.name AS assigned_user_name,
+             t.name AS assigned_team_name
       FROM cases c
       LEFT JOIN customers cu ON c.customer_id = cu.id
       LEFT JOIN users u ON c.assigned_user_id = u.id
@@ -33,33 +125,45 @@ router.get('/', (req: MultiTenantRequest, res: Response) => {
     if (assigned_user_id) { query += ` AND c.assigned_user_id = ?`; params.push(assigned_user_id); }
     if (priority) { query += ` AND c.priority = ?`; params.push(priority); }
     if (risk_level) { query += ` AND c.risk_level = ?`; params.push(risk_level); }
-    if (q) { 
-      query += ` AND (c.case_number LIKE ? OR cu.canonical_name LIKE ? OR cu.canonical_email LIKE ?)`; 
-      const term = `%${q}%`; 
-      params.push(term, term, term); 
+    if (q) {
+      query += ` AND (c.case_number LIKE ? OR cu.canonical_name LIKE ? OR cu.canonical_email LIKE ?)`;
+      const term = `%${q}%`;
+      params.push(term, term, term);
     }
 
     query += ` ORDER BY c.last_activity_at DESC`;
 
     const cases = db.prepare(query).all(...params);
-    res.json(cases.map(row => parseRow<Case>(row)));
+    const enriched = cases.map(row => {
+      const parsed = parseRow<Case>(row) as any;
+      const summary = buildCaseListSummary(parsed.id, req.tenantId!, req.workspaceId!);
+
+      return {
+        ...parsed,
+        latest_message_preview: summary?.latest_message_preview || null,
+        channel_context: summary?.channel_context || null,
+        system_status_summary: summary?.system_status_summary || null,
+        conflict_summary: summary?.conflict_summary || null,
+      };
+    });
+
+    res.json(enriched);
   } catch (error) {
     console.error('Error fetching cases:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ── GET /api/cases/:id ─────────────────────────────────────
 router.get('/:id', (req: MultiTenantRequest, res: Response) => {
   try {
     const db = getDb();
-    const c = db.prepare(`
+    const row = db.prepare(`
       SELECT c.*,
-             cu.canonical_name as customer_name, cu.canonical_email as customer_email,
-             cu.segment as customer_segment, cu.lifetime_value, cu.risk_level as customer_risk,
+             cu.canonical_name AS customer_name, cu.canonical_email AS customer_email,
+             cu.segment AS customer_segment, cu.lifetime_value, cu.risk_level AS customer_risk,
              cu.total_orders, cu.total_spent, cu.dispute_rate, cu.refund_rate,
-             u.name as assigned_user_name, u.email as assigned_user_email,
-             t.name as assigned_team_name
+             u.name AS assigned_user_name, u.email AS assigned_user_email,
+             t.name AS assigned_team_name
       FROM cases c
       LEFT JOIN customers cu ON c.customer_id = cu.id
       LEFT JOIN users u ON c.assigned_user_id = u.id
@@ -67,39 +171,55 @@ router.get('/:id', (req: MultiTenantRequest, res: Response) => {
       WHERE c.id = ? AND c.tenant_id = ? AND c.workspace_id = ?
     `).get(req.params.id, req.tenantId, req.workspaceId);
 
-    if (!c) return res.status(404).json({ error: 'Case not found' });
-    res.json(parseRow<Case>(c));
+    if (!row) return res.status(404).json({ error: 'Case not found' });
+
+    const parsed = parseRow<Case>(row) as any;
+    res.json({
+      ...parsed,
+      state_snapshot: getCaseCanonicalState(req.params.id, req.tenantId!, req.workspaceId!),
+    });
   } catch (error) {
     console.error('Error fetching case:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ── GET /api/cases/:id/timeline ───────────────────────────
+router.get('/:id/state', (req: MultiTenantRequest, res: Response) => {
+  try {
+    const state = getCaseCanonicalState(req.params.id, req.tenantId!, req.workspaceId!);
+    if (!state) return res.status(404).json({ error: 'Case not found' });
+    res.json(state);
+  } catch (error) {
+    console.error('Error fetching case state:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/:id/graph', (req: MultiTenantRequest, res: Response) => {
+  try {
+    const graph = buildCaseGraphView(req.params.id, req.tenantId!, req.workspaceId!);
+    if (!graph) return res.status(404).json({ error: 'Case not found' });
+    res.json(graph);
+  } catch (error) {
+    console.error('Error fetching case graph:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/:id/resolve', (req: MultiTenantRequest, res: Response) => {
+  try {
+    const resolve = buildCaseResolveView(req.params.id, req.tenantId!, req.workspaceId!);
+    if (!resolve) return res.status(404).json({ error: 'Case not found' });
+    res.json(resolve);
+  } catch (error) {
+    console.error('Error fetching case resolve view:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/:id/timeline', (req: MultiTenantRequest, res: Response) => {
   try {
-    const db = getDb();
-    const caseId = req.params.id;
-
-    const timeline: any[] = [];
-
-    // Messages
-    const msgs = db.prepare(`
-      SELECT 'message' as entry_type, id, 'message' as type, sender_name as actor, content, sent_at as occurred_at, 'message' as icon
-      FROM messages WHERE case_id = ? AND tenant_id = ? ORDER BY sent_at ASC
-    `).all(caseId, req.tenantId);
-    timeline.push(...msgs);
-
-    // Status history
-    const statuses = db.prepare(`
-      SELECT 'status_change' as entry_type, id, 'status_change' as type, changed_by as actor, 
-             ('Status changed: ' || from_status || ' → ' || to_status) as content, created_at as occurred_at, 'flag' as icon
-      FROM case_status_history WHERE case_id = ? AND tenant_id = ? ORDER BY created_at ASC
-    `).all(caseId, req.tenantId);
-    timeline.push(...statuses);
-
-    // Sort by occurred_at
-    timeline.sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
+    const timeline = buildCaseTimeline(req.params.id, req.tenantId!, req.workspaceId!);
     res.json(timeline);
   } catch (error) {
     console.error('Error fetching timeline:', error);
@@ -107,7 +227,17 @@ router.get('/:id/timeline', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-// ── PATCH /api/cases/:id/status ───────────────────────────
+router.get('/:id/inbox-view', (req: MultiTenantRequest, res: Response) => {
+  try {
+    const view = buildInboxView(req.params.id, req.tenantId!, req.workspaceId!);
+    if (!view) return res.status(404).json({ error: 'Case not found' });
+    res.json(view);
+  } catch (error) {
+    console.error('Error fetching inbox view:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.patch('/:id/status', (req: MultiTenantRequest, res: Response) => {
   try {
     const db = getDb();
@@ -117,17 +247,16 @@ router.patch('/:id/status', (req: MultiTenantRequest, res: Response) => {
     if (!existing) return res.status(404).json({ error: 'Case not found' });
 
     db.prepare(`
-      UPDATE cases 
-      SET status = ?, updated_at = CURRENT_TIMESTAMP, last_activity_at = CURRENT_TIMESTAMP 
+      UPDATE cases
+      SET status = ?, updated_at = CURRENT_TIMESTAMP, last_activity_at = CURRENT_TIMESTAMP
       WHERE id = ? AND tenant_id = ?
     `).run(status, req.params.id, req.tenantId);
 
     db.prepare(`
-      INSERT INTO case_status_history (id, case_id, from_status, to_status, changed_by, changed_by_type, reason, tenant_id) 
+      INSERT INTO case_status_history (id, case_id, from_status, to_status, changed_by, changed_by_type, reason, tenant_id)
       VALUES (?, ?, ?, ?, ?, 'human', ?, ?)
     `).run(crypto.randomUUID(), req.params.id, existing.status, status, changed_by || req.userId, reason || null, req.tenantId);
 
-    // Audit Event
     logAudit(db, {
       tenantId: req.tenantId!,
       workspaceId: req.workspaceId!,
@@ -137,7 +266,7 @@ router.patch('/:id/status', (req: MultiTenantRequest, res: Response) => {
       entityId: req.params.id,
       oldValue: { status: existing.status },
       newValue: { status },
-      metadata: { reason }
+      metadata: { reason },
     });
 
     res.json({ success: true, status });
@@ -147,19 +276,17 @@ router.patch('/:id/status', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-// ── PATCH /api/cases/:id/assign ───────────────────────────
 router.patch('/:id/assign', (req: MultiTenantRequest, res: Response) => {
   try {
     const db = getDb();
     const { user_id, team_id } = req.body;
 
     db.prepare(`
-      UPDATE cases 
-      SET assigned_user_id = ?, assigned_team_id = ?, updated_at = CURRENT_TIMESTAMP 
+      UPDATE cases
+      SET assigned_user_id = ?, assigned_team_id = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND tenant_id = ?
     `).run(user_id || null, team_id || null, req.params.id, req.tenantId);
 
-    // Audit Event
     logAudit(db, {
       tenantId: req.tenantId!,
       workspaceId: req.workspaceId!,
@@ -167,12 +294,142 @@ router.patch('/:id/assign', (req: MultiTenantRequest, res: Response) => {
       action: 'CASE_ASSIGNMENT_UPDATE',
       entityType: 'case',
       entityId: req.params.id,
-      newValue: { user_id, team_id }
+      newValue: { user_id, team_id },
     });
 
     res.json({ success: true });
   } catch (error) {
     console.error('Error assigning case:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/internal-note', (req: MultiTenantRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const { content } = req.body;
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ error: 'Note content is required' });
+    }
+
+    const caseRow = db.prepare(`
+      SELECT id, conversation_id
+      FROM cases
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).get(req.params.id, req.tenantId, req.workspaceId) as any;
+
+    if (!caseRow) return res.status(404).json({ error: 'Case not found' });
+
+    const noteId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO internal_notes (id, case_id, content, created_by, created_by_type, created_at, tenant_id)
+      VALUES (?, ?, ?, ?, 'human', ?, ?)
+    `).run(noteId, req.params.id, String(content).trim(), req.userId || 'user_local', now, req.tenantId);
+
+    if (caseRow.conversation_id) {
+      db.prepare(`
+        INSERT INTO messages (
+          id, conversation_id, case_id, type, direction, sender_id, sender_name,
+          content, channel, sent_at, created_at, tenant_id
+        )
+        VALUES (?, ?, ?, 'internal', 'outbound', ?, ?, ?, 'internal', ?, ?, ?)
+      `).run(
+        crypto.randomUUID(),
+        caseRow.conversation_id,
+        req.params.id,
+        req.userId || 'user_local',
+        'Internal Note',
+        String(content).trim(),
+        now,
+        now,
+        req.tenantId,
+      );
+    }
+
+    db.prepare(`
+      UPDATE cases
+      SET last_activity_at = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND tenant_id = ?
+    `).run(now, req.params.id, req.tenantId);
+
+    logAudit(db, {
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'user_local',
+      action: 'CASE_INTERNAL_NOTE_CREATED',
+      entityType: 'case',
+      entityId: req.params.id,
+      metadata: { noteId },
+    });
+
+    res.status(201).json({ success: true, noteId });
+  } catch (error) {
+    console.error('Error creating internal note:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/reply', (req: MultiTenantRequest, res: Response) => {
+  try {
+    const db = getDb();
+    const { content, draft_reply_id } = req.body;
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ error: 'Reply content is required' });
+    }
+
+    const caseRow = db.prepare(`
+      SELECT id, case_number, conversation_id, source_channel
+      FROM cases
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).get(req.params.id, req.tenantId, req.workspaceId) as any;
+
+    if (!caseRow) return res.status(404).json({ error: 'Case not found' });
+    if (!caseRow.conversation_id) return res.status(400).json({ error: 'Case has no active conversation' });
+
+    const conversation = db.prepare(`
+      SELECT id, channel
+      FROM conversations
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).get(caseRow.conversation_id, req.tenantId, req.workspaceId) as any;
+
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+    enqueue(
+      JobType.SEND_MESSAGE,
+      {
+        caseId: req.params.id,
+        conversationId: conversation.id,
+        channel: conversation.channel || caseRow.source_channel || 'web_chat',
+        content: String(content).trim(),
+        draftReplyId: draft_reply_id || undefined,
+      },
+      {
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId!,
+        traceId: `${req.params.id}:reply:${Date.now()}`,
+        priority: 4,
+      },
+    );
+
+    logAudit(db, {
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'user_local',
+      action: 'CASE_REPLY_QUEUED',
+      entityType: 'case',
+      entityId: req.params.id,
+      metadata: {
+        conversationId: conversation.id,
+        channel: conversation.channel,
+        draftReplyId: draft_reply_id || null,
+      },
+    });
+
+    res.status(202).json({ success: true, queued: true });
+  } catch (error) {
+    console.error('Error queueing reply:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -2,9 +2,9 @@ import { getDb } from './client.js';
 import { randomUUID } from 'crypto';
 import { seedAgents } from '../agents/seed.js';
 
-const TENANT_ID = 'tenant_default';
-const WORKSPACE_ID = 'ws_default';
 const ORG_ID = 'org_default';
+const TENANT_ID = ORG_ID;
+const WORKSPACE_ID = 'ws_default';
 
 export function seedDatabase(): void {
   const db = getDb();

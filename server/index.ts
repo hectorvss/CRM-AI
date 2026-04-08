@@ -63,6 +63,7 @@ mkdirSync(DATA_DIR, { recursive: true });
 
 // ── Database ──────────────────────────────────────────────
 runMigrations();
+seedAgents(getDb(), 'org_default');
 seedDatabase();
 
 // ── Integrations ──────────────────────────────────────────

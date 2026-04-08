@@ -22,7 +22,7 @@ router.get('/', (req, res) => {
     LEFT JOIN cases c ON a.case_id = c.id
     LEFT JOIN customers cu ON c.customer_id = cu.id
     LEFT JOIN users u ON a.assigned_to = u.id
-    WHERE a.tenant_id = ?
+    WHERE a.tenant_id = ? AND a.workspace_id = ?
   `;
   const params: any[] = [tenantId];
 
@@ -162,9 +162,13 @@ router.post('/:id/decide', (req, res) => {
 
 function parseJsonApproval(row: any) {
   const result = { ...row };
-  ['action_payload', 'evidence_package'].forEach(f => {
-    if (result[f] && typeof result[f] === 'string') {
-      try { result[f] = JSON.parse(result[f]); } catch { result[f] = {}; }
+  ['action_payload', 'evidence_package'].forEach(field => {
+    if (result[field] && typeof result[field] === 'string') {
+      try {
+        result[field] = JSON.parse(result[field]);
+      } catch {
+        result[field] = {};
+      }
     }
   });
   return result;

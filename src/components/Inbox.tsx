@@ -4,6 +4,22 @@ import { casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
+type ComposeMode = 'reply' | 'internal';
+
+const formatTime = (value?: string | null) =>
+  value ? new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+const formatRelativeTime = (value?: string | null) => {
+  if (!value) return '-';
+  const diffMinutes = Math.max(1, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+  if (diffMinutes < 60) return `${diffMinutes}m`;
+  const hours = Math.round(diffMinutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+};
+
+const titleCase = (value?: string | null) =>
+  value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
 const CONVERSATIONS: Conversation[] = [
   {
@@ -342,9 +358,17 @@ export default function Inbox() {
   const [activeTab, setActiveTab] = useState<CaseTab>('assigned');
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [composeMode, setComposeMode] = useState<ComposeMode>('reply');
+  const [composerText, setComposerText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch from API, fallback to CONVERSATIONS static data
-  const { data: apiCases } = useApi(() => casesApi.list(), [], []);
+  const { data: apiCases } = useApi(() => casesApi.list(), [refreshKey], []);
+  const { data: selectedInboxView } = useApi(
+    () => selectedId ? casesApi.inboxView(selectedId) : Promise.resolve(null),
+    [selectedId, refreshKey]
+  );
 
   const mapApiCase = (c: any): Conversation => {
     const orderIds = Array.isArray(c.order_ids) ? c.order_ids : [];
@@ -387,13 +411,73 @@ export default function Inbox() {
     : CONVERSATIONS;
 
   const filteredConversations = conversations.filter(c => c.tab === activeTab);
-  const selectedConv = filteredConversations.find(c => c.id === selectedId) || filteredConversations[0];
+  const selectedBaseConv = filteredConversations.find(c => c.id === selectedId) || filteredConversations[0];
+  const selectedConv = selectedBaseConv ? {
+    ...selectedBaseConv,
+    orderId: selectedInboxView?.state?.identifiers?.order_ids?.[0] || selectedBaseConv.orderId,
+    context: selectedInboxView?.state?.conflict?.root_cause || selectedInboxView?.case?.ai_diagnosis || selectedBaseConv.context,
+    recommendedNextAction: selectedInboxView?.state?.conflict?.recommended_action || selectedBaseConv.recommendedNextAction,
+    conflictDetected: selectedInboxView?.state?.conflict?.root_cause || selectedBaseConv.conflictDetected,
+    slaStatus: selectedInboxView?.sla?.label || selectedBaseConv.slaStatus,
+    slaTime: selectedInboxView?.sla?.time || selectedBaseConv.slaTime,
+    relatedCases: selectedInboxView?.state?.related?.linked_cases?.map((linked: any) => ({
+      id: linked.case_number || linked.id,
+      type: linked.type || 'Case',
+      status: titleCase(linked.status || 'open'),
+    })) || selectedBaseConv.relatedCases,
+    messages: selectedInboxView?.messages?.map((msg: any) => ({
+      id: msg.id,
+      type: msg.type === 'agent' ? 'agent' : msg.type === 'internal' ? 'internal' : msg.type === 'system' ? 'system' : msg.direction === 'outbound' ? 'agent' : 'customer',
+      sender: msg.sender_name || (msg.direction === 'outbound' ? 'Agent' : 'Customer'),
+      content: msg.content,
+      time: formatTime(msg.sent_at),
+    })) || selectedBaseConv.messages,
+  } : undefined;
 
   useEffect(() => {
     if (filteredConversations.length > 0 && !filteredConversations.find(c => c.id === selectedId)) {
       setSelectedId(filteredConversations[0].id);
     }
   }, [activeTab, filteredConversations, selectedId]);
+
+  useEffect(() => {
+    setComposeMode('reply');
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (selectedInboxView?.latest_draft?.content) {
+      setComposerText(selectedInboxView.latest_draft.content);
+      return;
+    }
+    setComposerText('');
+  }, [selectedInboxView?.latest_draft?.id, selectedId]);
+
+  const handleApplyDraft = () => {
+    const draft = selectedInboxView?.latest_draft?.content;
+    if (draft) {
+      setComposeMode('reply');
+      setComposerText(draft);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedConv || !composerText.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      if (composeMode === 'internal') {
+        await casesApi.addInternalNote(selectedConv.id, composerText.trim());
+      } else {
+        await casesApi.reply(selectedConv.id, composerText.trim(), selectedInboxView?.latest_draft?.id);
+      }
+      setComposerText('');
+      setRefreshKey(key => key + 1);
+    } catch (error) {
+      console.error('Inbox action failed:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const getSuggestedReply = (conv: Conversation) => {
     const firstName = conv.contactName.split(' ')[0];
@@ -735,17 +819,26 @@ export default function Inbox() {
                 <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><span className="material-symbols-outlined text-lg">format_italic</span></button>
                 <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><span className="material-symbols-outlined text-lg">link</span></button>
                 <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
-                <button className={`relative inline-flex items-center h-5 rounded-full w-9 transition-colors focus:outline-none ${selectedConv.channel === 'email' ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'}`} id="toggle">
-                  <span className={`inline-block w-3 h-3 transform bg-white rounded-full transition-transform ${selectedConv.channel === 'email' ? 'translate-x-5' : 'translate-x-1'}`}></span>
+                <button
+                  onClick={() => setComposeMode(mode => mode === 'reply' ? 'internal' : 'reply')}
+                  className={`relative inline-flex items-center h-5 rounded-full w-9 transition-colors focus:outline-none ${composeMode === 'reply' ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'}`}
+                  id="toggle"
+                >
+                  <span className={`inline-block w-3 h-3 transform bg-white rounded-full transition-transform ${composeMode === 'reply' ? 'translate-x-5' : 'translate-x-1'}`}></span>
                 </button>
-                <span className={`text-xs font-medium ${selectedConv.channel === 'email' ? 'text-blue-600' : 'text-gray-500'}`}>
-                  {selectedConv.channel === 'email' ? 'Reply as Email' : 'Internal Note'}
+                <span className={`text-xs font-medium ${composeMode === 'reply' ? 'text-blue-600' : 'text-gray-500'}`}>
+                  {composeMode === 'reply' ? `Reply as ${selectedConv.channel === 'email' ? 'Email' : selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 'Web Chat'}` : 'Internal Note'}
                 </span>
                 <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500 flex items-center gap-1 ml-auto">
                   <span className="material-symbols-outlined text-lg">sentiment_satisfied</span>
                 </button>
               </div>
-              <textarea className="w-full bg-transparent border-0 focus:ring-0 text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2" placeholder={`Write your reply to ${selectedConv.contactName}...`}></textarea>
+              <textarea
+                value={composerText}
+                onChange={(event) => setComposerText(event.target.value)}
+                className="w-full bg-transparent border-0 focus:ring-0 text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2"
+                placeholder={composeMode === 'reply' ? `Write your reply to ${selectedConv.contactName}...` : `Write an internal note for ${selectedConv.contactName}...`}
+              ></textarea>
               <div className="flex justify-between items-center px-2 pt-1">
                 <div className="flex space-x-2">
                   <button className="text-gray-400 hover:text-gray-600"><span className="material-symbols-outlined text-xl">attach_file</span></button>
@@ -753,9 +846,15 @@ export default function Inbox() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400">Press ⌘ + Enter to send</span>
-                  <button className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    selectedConv.channel === 'email' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-black dark:bg-white text-white dark:text-black hover:opacity-90'
-                  }`}>Send</button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={isSubmitting || !composerText.trim()}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                      composeMode === 'reply' && selectedConv.channel === 'email' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-black dark:bg-white text-white dark:text-black hover:opacity-90'
+                    }`}
+                  >
+                    {isSubmitting ? 'Sending...' : composeMode === 'reply' ? 'Send' : 'Save note'}
+                  </button>
                 </div>
               </div>
             </div>
@@ -857,9 +956,12 @@ export default function Inbox() {
                           </div>
                           <div className="relative group">
                             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic mb-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                              {getSuggestedReply(selectedConv)}
+                              {selectedInboxView?.latest_draft?.content || getSuggestedReply(selectedConv)}
                             </p>
-                            <button className="w-full py-2.5 bg-secondary text-white text-xs font-bold rounded-xl hover:bg-secondary/90 transition-all shadow-lg shadow-secondary/20 flex items-center justify-center gap-2">
+                            <button
+                              onClick={handleApplyDraft}
+                              className="w-full py-2.5 bg-secondary text-white text-xs font-bold rounded-xl hover:bg-secondary/90 transition-all shadow-lg shadow-secondary/20 flex items-center justify-center gap-2"
+                            >
                               <span className="material-symbols-outlined text-sm">content_copy</span>
                               Apply to Composer
                             </button>
@@ -999,18 +1101,27 @@ export default function Inbox() {
                           <span className="material-symbols-outlined text-lg text-gray-600">sticky_note_2</span>
                           Internal Notes
                         </h3>
-                        <button className="text-xs text-secondary font-bold hover:underline">+ Add Note</button>
+                        <button
+                          onClick={() => setComposeMode('internal')}
+                          className="text-xs text-secondary font-bold hover:underline"
+                        >
+                          + Add Note
+                        </button>
                       </div>
                       <div className="space-y-3">
-                        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-100 dark:border-yellow-800/20">
-                          <p className="text-xs text-yellow-900 dark:text-yellow-100 leading-relaxed italic">
-                            "Customer called twice regarding the refund. Flagged as high priority for finance team."
-                          </p>
-                          <div className="mt-2 flex justify-between items-center text-[10px] text-yellow-700/70">
-                            <span>By Agent Sarah</span>
-                            <span>2h ago</span>
+                        {selectedInboxView?.internal_notes?.length ? selectedInboxView.internal_notes.map((note: any) => (
+                          <div key={note.id} className="p-3 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-100 dark:border-yellow-800/20">
+                            <p className="text-xs text-yellow-900 dark:text-yellow-100 leading-relaxed italic">
+                              "{note.content}"
+                            </p>
+                            <div className="mt-2 flex justify-between items-center text-[10px] text-yellow-700/70">
+                              <span>{note.created_by || 'Internal Note'}</span>
+                              <span>{formatTime(note.created_at)}</span>
+                            </div>
                           </div>
-                        </div>
+                        )) : (
+                          <p className="text-xs text-gray-400 italic p-2">No internal notes yet.</p>
+                        )}
                       </div>
                     </div>
                   </div>

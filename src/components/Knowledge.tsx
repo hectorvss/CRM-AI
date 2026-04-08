@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { mockArticleDetails } from './KnowledgeData';
 import { knowledgeApi } from '../api/client';
-import { useApi } from '../api/hooks';
+import { useApi, useMutation } from '../api/hooks';
 
 type KnowledgeTab = 'library' | 'gaps' | 'test';
 
@@ -85,8 +85,22 @@ const mockLibrary: KnowledgeItem[] = [
 export default function Knowledge() {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>('library');
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftContent, setDraftContent] = useState('');
+  const [draftType, setDraftType] = useState<KnowledgeItem['type']>('ARTICLE');
+  const [draftStatus, setDraftStatus] = useState<'Published' | 'Draft'>('Draft');
 
-  const { data: apiArticles } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const { data: apiArticles, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const { data: selectedArticle } = useApi(
+    () => (selectedArticleId ? knowledgeApi.getArticle(selectedArticleId) : Promise.resolve(null)),
+    [selectedArticleId],
+    null,
+  );
+  const createArticle = useMutation((payload: Record<string, any>) => knowledgeApi.createArticle(payload));
+  const updateArticle = useMutation((payload: { id: string; body: Record<string, any> }) => knowledgeApi.updateArticle(payload.id, payload.body));
+  const publishArticle = useMutation((id: string) => knowledgeApi.publishArticle(id));
 
   const mapApiArticle = (a: any): KnowledgeItem => ({
     id: a.id,
@@ -104,6 +118,90 @@ export default function Knowledge() {
   });
 
   const library = (apiArticles && apiArticles.length > 0) ? apiArticles.map(mapApiArticle) : mockLibrary;
+
+  useEffect(() => {
+    if (!editorOpen) return;
+
+    if (editorMode === 'edit' && selectedArticle) {
+      setDraftTitle(selectedArticle.title || '');
+      setDraftContent(selectedArticle.content || '');
+      setDraftType((selectedArticle.type?.toUpperCase?.() || 'ARTICLE') as KnowledgeItem['type']);
+      setDraftStatus(selectedArticle.status === 'published' ? 'Published' : 'Draft');
+      return;
+    }
+
+    if (editorMode === 'create') {
+      setDraftTitle('');
+      setDraftContent('');
+      setDraftType('ARTICLE');
+      setDraftStatus('Draft');
+    }
+  }, [editorMode, editorOpen, selectedArticle]);
+
+  const articleData = selectedArticle
+    ? {
+        id: selectedArticle.id,
+        title: selectedArticle.title,
+        type: (selectedArticle.type || 'article').toUpperCase(),
+        owner: selectedArticle.owner_name || 'Unknown',
+        ownerInitials: (selectedArticle.owner_name || 'UN').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+        lastUpdated: selectedArticle.updated_at ? new Date(selectedArticle.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
+        domain: selectedArticle.domain_name || 'General',
+        scope: selectedArticle.status === 'published' ? 'Published' : 'Draft',
+        reviewOwner: selectedArticle.owner_name || 'Unknown',
+        purpose: selectedArticle.content?.slice(0, 220) || '',
+        content: <p>{selectedArticle.content}</p>,
+        aiCitationPreview: {
+          text: selectedArticle.content?.slice(0, 180) || '',
+          sources: [selectedArticle.title || 'Knowledge article'],
+        },
+      }
+    : (selectedArticleId ? mockArticleDetails[selectedArticleId] : null);
+
+  const openCreateEditor = () => {
+    setEditorMode('create');
+    setEditorOpen(true);
+  };
+
+  const openEditEditor = () => {
+    setEditorMode('edit');
+    setEditorOpen(true);
+  };
+
+  const handleSaveArticle = async () => {
+    if (!draftTitle.trim() || !draftContent.trim()) return;
+
+    if (editorMode === 'create') {
+      const created = await createArticle.mutate({
+        title: draftTitle,
+        content: draftContent,
+        type: draftType.toLowerCase(),
+        status: draftStatus === 'Published' ? 'published' : 'draft',
+      });
+      if (created?.id) {
+        setSelectedArticleId(created.id);
+      }
+    } else if (selectedArticleId) {
+      await updateArticle.mutate({
+        id: selectedArticleId,
+        body: {
+          title: draftTitle,
+          content: draftContent,
+          type: draftType.toLowerCase(),
+          status: draftStatus === 'Published' ? 'published' : 'draft',
+        },
+      });
+    }
+
+    setEditorOpen(false);
+    refetch();
+  };
+
+  const handlePublishSelected = async () => {
+    if (!selectedArticleId) return;
+    await publishArticle.mutate(selectedArticleId);
+    refetch();
+  };
 
   const renderLibrary = () => (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-6">
@@ -215,7 +313,6 @@ export default function Knowledge() {
   );
 
   const renderArticleDetail = () => {
-    const articleData = selectedArticleId ? mockArticleDetails[selectedArticleId] : null;
     if (!articleData) return null;
 
     return (
@@ -235,9 +332,19 @@ export default function Knowledge() {
               <span className="material-symbols-outlined text-lg">visibility</span>
               View Public Link
             </button>
-            <button className="px-4 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 transition-all shadow-xl flex items-center gap-2">
+            <button
+              onClick={openEditEditor}
+              className="px-4 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 transition-all shadow-xl flex items-center gap-2"
+            >
               <span className="material-symbols-outlined text-lg">edit</span>
               Edit Article
+            </button>
+            <button
+              onClick={handlePublishSelected}
+              className="px-4 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 text-xs font-bold rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-all shadow-card flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-lg">publish</span>
+              Publish
             </button>
             <button className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">
               <span className="material-symbols-outlined">more_horiz</span>
@@ -716,7 +823,10 @@ export default function Knowledge() {
                       <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-widest">Stale items: 6</span>
                     </div>
                     <div className="relative group">
-                      <button className="px-6 py-2.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-xl hover:opacity-90 transition-all shadow-xl flex items-center gap-2">
+                      <button
+                        onClick={openCreateEditor}
+                        className="px-6 py-2.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-xl hover:opacity-90 transition-all shadow-xl flex items-center gap-2"
+                      >
                         Create
                         <span className="material-symbols-outlined text-lg">arrow_drop_down</span>
                       </button>
@@ -751,6 +861,99 @@ export default function Knowledge() {
         )}
       </AnimatePresence>
       </div>
+      <AnimatePresence>
+        {editorOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-6"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              className="w-full max-w-3xl rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-card-dark shadow-2xl overflow-hidden"
+            >
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    {editorMode === 'create' ? 'Create Knowledge Article' : 'Edit Knowledge Article'}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    This writes directly to the backend knowledge library.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setEditorOpen(false)}
+                  className="rounded-lg p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <div className="grid grid-cols-3 gap-4">
+                  <label className="col-span-2">
+                    <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Title</span>
+                    <input
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Type</span>
+                    <select
+                      value={draftType}
+                      onChange={(e) => setDraftType(e.target.value as KnowledgeItem['type'])}
+                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none"
+                    >
+                      <option value="ARTICLE">Article</option>
+                      <option value="POLICY">Policy</option>
+                      <option value="SNIPPET">Snippet</option>
+                      <option value="PLAYBOOK">Playbook</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Content</span>
+                  <textarea
+                    value={draftContent}
+                    onChange={(e) => setDraftContent(e.target.value)}
+                    rows={14}
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Status</span>
+                  <select
+                    value={draftStatus}
+                    onChange={(e) => setDraftStatus(e.target.value as 'Published' | 'Draft')}
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none"
+                  >
+                    <option value="Draft">Draft</option>
+                    <option value="Published">Published</option>
+                  </select>
+                </label>
+              </div>
+              <div className="flex items-center justify-end gap-3 border-t border-gray-100 dark:border-gray-800 px-6 py-4">
+                <button
+                  onClick={() => setEditorOpen(false)}
+                  className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveArticle}
+                  className="rounded-xl bg-black px-4 py-2 text-sm font-bold text-white dark:bg-white dark:text-black"
+                >
+                  {editorMode === 'create' ? 'Create' : 'Save changes'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
