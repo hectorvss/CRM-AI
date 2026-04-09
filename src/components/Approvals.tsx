@@ -122,11 +122,6 @@ export default function Approvals() {
     }));
   }, [apiApprovals]);
 
-  useEffect(() => {
-    if (!selectedId && approvals.length > 0) setSelectedId(approvals[0].id);
-  }, [approvals, selectedId]);
-
-  const selectedItem = approvals.find(item => item.id === selectedId) || null;
   const { data: selectedContext, refetch: refetchContext } = useApi(
     () => selectedId ? approvalsApi.context(selectedId) : Promise.resolve(null),
     [selectedId],
@@ -157,7 +152,22 @@ export default function Approvals() {
   const selectedResolve = selectedContext?.resolve;
   const latestCustomerMessage = selectedContext?.conversation?.latest_customer_message;
   const latestAgentMessage = selectedContext?.conversation?.latest_agent_message;
-  const approvalsForFilter = approvals.filter(item => item.status === filter);
+  const visibleApprovals = useMemo(
+    () => approvals.filter(item => item.status === filter),
+    [approvals, filter],
+  );
+
+  useEffect(() => {
+    if (visibleApprovals.length === 0) {
+      if (selectedId) setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !visibleApprovals.some(item => item.id === selectedId)) {
+      setSelectedId(visibleApprovals[0].id);
+    }
+  }, [visibleApprovals, selectedId]);
+
+  const selectedItem = visibleApprovals.find(item => item.id === selectedId) || null;
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -165,12 +175,12 @@ export default function Approvals() {
         <AnimatePresence mode="wait">
           {!selectedItem ? (
             <motion.div key="empty" className="flex-1 flex items-center justify-center text-sm text-gray-500">
-              Loading approvals...
+              No approvals found for this filter.
             </motion.div>
           ) : (
             <motion.div key="detail" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col overflow-hidden">
               <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 text-sm text-gray-500 flex items-center">
-                <button onClick={() => setSelectedId(approvalsForFilter[0]?.id || null)} className="flex items-center gap-2 hover:text-gray-700 dark:hover:text-gray-200">
+                <button onClick={() => setSelectedId(visibleApprovals[0]?.id || approvals[0]?.id || null)} className="flex items-center gap-2 hover:text-gray-700 dark:hover:text-gray-200">
                   <span className="material-symbols-outlined text-lg">arrow_back</span>
                   Back to Queue
                 </button>
@@ -362,7 +372,7 @@ export default function Approvals() {
                     ))}
                   </div>
                   <div className="max-h-[480px] overflow-y-auto custom-scrollbar p-4 space-y-4">
-                    {approvalsForFilter.map(item => (
+                    {visibleApprovals.map(item => (
                       <div key={item.id} onClick={() => setSelectedId(item.id)} className={`group bg-white dark:bg-card-dark border rounded-2xl p-5 shadow-card hover:shadow-md transition-all cursor-pointer relative ${selectedId === item.id ? 'border-gray-900 dark:border-white' : 'border-gray-200 dark:border-gray-800'}`}>
                         <div className="flex items-start justify-between pr-8">
                           <div className="space-y-1">

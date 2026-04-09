@@ -17,11 +17,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+function unwrapList<T = any>(payload: any): T[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.value)) return payload.value;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
 // ── Cases ─────────────────────────────────────────────────
 export const casesApi = {
   list: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<any[]>(`/cases${qs}`);
+    return request<any>(`/cases${qs}`).then(unwrapList);
   },
   get: (id: string) => request<any>(`/cases/${id}`),
   state: (id: string) => request<any>(`/cases/${id}/state`),
@@ -71,7 +78,7 @@ export const conversationsApi = {
 export const customersApi = {
   list: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<any[]>(`/customers${qs}`);
+    return request<any>(`/customers${qs}`).then(unwrapList);
   },
   get: (id: string) => request<any>(`/customers/${id}`),
   state: (id: string) => request<any>(`/customers/${id}/state`),
@@ -81,7 +88,7 @@ export const customersApi = {
 export const ordersApi = {
   list: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<any[]>(`/orders${qs}`);
+    return request<any>(`/orders${qs}`).then(unwrapList);
   },
   get: (id: string) => request<any>(`/orders/${id}`),
   context: (id: string) => request<any>(`/orders/${id}/context`),
@@ -91,7 +98,7 @@ export const ordersApi = {
 export const paymentsApi = {
   list: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<any[]>(`/payments${qs}`);
+    return request<any>(`/payments${qs}`).then(unwrapList);
   },
   get: (id: string) => request<any>(`/payments/${id}`),
   context: (id: string) => request<any>(`/payments/${id}/context`),
@@ -101,7 +108,7 @@ export const paymentsApi = {
 export const returnsApi = {
   list: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<any[]>(`/returns${qs}`);
+    return request<any>(`/returns${qs}`).then(unwrapList);
   },
   get: (id: string) => request<any>(`/returns/${id}`),
   context: (id: string) => request<any>(`/returns/${id}/context`),
@@ -111,7 +118,7 @@ export const returnsApi = {
 export const approvalsApi = {
   list: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<any[]>(`/approvals${qs}`);
+    return request<any>(`/approvals${qs}`).then(unwrapList);
   },
   get: (id: string) => request<any>(`/approvals/${id}`),
   context: (id: string) => request<any>(`/approvals/${id}/context`),
@@ -134,7 +141,7 @@ export const executionApi = {
 export const knowledgeApi = {
   listArticles: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<any[]>(`/knowledge/articles${qs}`);
+    return request<any>(`/knowledge/articles${qs}`).then(unwrapList);
   },
   getArticle: (id: string) => request<any>(`/knowledge/articles/${id}`),
   createArticle: (payload: Record<string, any>) =>
@@ -152,13 +159,13 @@ export const knowledgeApi = {
       method: 'POST',
       body: '{}',
     }),
-  listDomains: () => request<any[]>('/knowledge/domains'),
-  listPolicies: () => request<any[]>('/knowledge/policies'),
+  listDomains: () => request<any>('/knowledge/domains').then(unwrapList),
+  listPolicies: () => request<any>('/knowledge/policies').then(unwrapList),
 };
 
 // ── Workflows ─────────────────────────────────────────────
 export const workflowsApi = {
-  list: () => request<any[]>('/workflows'),
+  list: () => request<any>('/workflows').then(unwrapList),
   create: (payload: Record<string, any>) =>
     request<any>('/workflows', {
       method: 'POST',
@@ -175,13 +182,32 @@ export const workflowsApi = {
       method: 'POST',
       body: '{}',
     }),
-  recentRuns: () => request<any[]>('/workflows/runs/recent'),
+  recentRuns: () => request<any>('/workflows/runs/recent').then(unwrapList),
 };
 
 // ── Agents ────────────────────────────────────────────────
 export const agentsApi = {
-  list: () => request<any[]>('/agents'),
+  list: () => request<any>('/agents').then(unwrapList),
   get: (id: string) => request<any>(`/agents/${id}`),
+  policyDraft: (id: string) => request<any>(`/agents/${id}/policy-bundle:draft`),
+  updatePolicyDraft: (id: string, payload: Record<string, any>) =>
+    request<any>(`/agents/${id}/policy-bundle:draft`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  publishPolicyDraft: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/agents/${id}/policy-bundle:publish`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  rollbackPolicy: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/agents/${id}/policy-bundle:rollback`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  effectivePolicy: (id: string) => request<any>(`/agents/${id}/effective-policy`),
+  knowledgeAccess: (id: string, caseId?: string) =>
+    request<any>(`/agents/${id}/knowledge-access${caseId ? `?caseId=${encodeURIComponent(caseId)}` : ''}`),
   run: (id: string, caseId: string, triggerEvent = 'case_created', context = {}) =>
     request<any>(`/agents/${id}/run`, {
       method: 'POST',
@@ -197,29 +223,12 @@ export const agentsApi = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
-  runs: (id: string, limit = 20) => request<any[]>(`/agents/${id}/runs?limit=${limit}`),
-  policyDraft: (id: string) => request<any>(`/agents/${id}/policy-bundle:draft`),
-  effectivePolicy: (id: string) => request<any>(`/agents/${id}/effective-policy`),
-  updatePolicyDraft: (id: string, payload: Record<string, any>) =>
-    request<any>(`/agents/${id}/policy-bundle:draft`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    }),
-  publishPolicyDraft: (id: string, payload?: Record<string, any>) =>
-    request<any>(`/agents/${id}/policy-bundle:publish`, {
-      method: 'POST',
-      body: JSON.stringify(payload || {}),
-    }),
-  rollbackPolicy: (id: string, versionId?: string) =>
-    request<any>(`/agents/${id}/policy-bundle:rollback`, {
-      method: 'POST',
-      body: JSON.stringify({ versionId }),
-    }),
+  runs: (id: string, limit = 20) => request<any>(`/agents/${id}/runs?limit=${limit}`).then(unwrapList),
 };
 
 // ── Connectors ────────────────────────────────────────────
 export const connectorsApi = {
-  list: () => request<any[]>('/connectors'),
+  list: () => request<any>('/connectors').then(unwrapList),
   get: (id: string) => request<any>(`/connectors/${id}`),
   update: (id: string, payload: Record<string, any>) =>
     request<any>(`/connectors/${id}`, {
@@ -253,11 +262,11 @@ export const aiApi = {
 // ── IAM & Workspaces ──────────────────────────────────────────
 export const iamApi = {
   me: () => request<any>('/iam/me'),
-  users: () => request<any[]>('/iam/users'),
+  users: () => request<any>('/iam/users').then(unwrapList),
 };
 
 export const workspacesApi = {
-  list: () => request<any[]>('/workspaces'),
+  list: () => request<any>('/workspaces').then(unwrapList),
   get: (id: string) => request<any>(`/workspaces/${id}`),
 };
 
@@ -269,6 +278,25 @@ export const reportsApi = {
   approvals: (period = '7d') => request<any>(`/reports/approvals?period=${period}`),
   costs: (period = '7d') => request<any>(`/reports/costs?period=${period}`),
   sla: (period = '7d') => request<any>(`/reports/sla?period=${period}`),
+};
+
+export const operationsApi = {
+  overview: () => request<any>('/operations/overview'),
+  jobs: () => request<any>('/operations/jobs').then(unwrapList),
+  deadLetterJobs: () => request<any>('/operations/jobs/dead-letter').then(unwrapList),
+  retryJob: (id: string) =>
+    request<any>(`/operations/jobs/${id}/retry`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  webhooks: () => request<any>('/operations/webhooks').then(unwrapList),
+  replayWebhook: (id: string) =>
+    request<any>(`/operations/webhooks/${id}/replay`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  canonicalEvents: () => request<any>('/operations/canonical-events').then(unwrapList),
+  agentRuns: () => request<any>('/operations/agent-runs').then(unwrapList),
 };
 
 // ── Health ────────────────────────────────────────────────

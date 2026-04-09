@@ -136,9 +136,20 @@ Fraud signals to evaluate:
         try {
           db.prepare(`
             INSERT OR IGNORE INTO approval_requests
-              (id, tenant_id, case_id, type, reason, status, requested_by, created_at)
-            VALUES (?, ?, ?, 'block_customer', ?, 'pending', 'fraud-detector', ?)
-          `).run(randomUUID(), tenantId, caseId, blockReason ?? 'Fraud detected', now);
+              (id, case_id, tenant_id, workspace_id, requested_by, requested_by_type,
+               action_type, action_payload, risk_level, evidence_package, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'fraud-detector', 'agent', 'block_customer', ?, ?, ?, 'pending', ?, ?)
+          `).run(
+            randomUUID(),
+            caseId,
+            tenantId,
+            workspaceId,
+            JSON.stringify({ reason: blockReason ?? 'Fraud detected', recommendation }),
+            fraudRisk === 'critical' ? 'critical' : 'high',
+            JSON.stringify({ fraudRisk, signals, confidence, agentRunId: runId }),
+            now,
+            now,
+          );
         } catch { /* non-critical */ }
       }
     }

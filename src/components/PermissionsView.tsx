@@ -10,7 +10,7 @@ import {
   ToolAccessLevel,
   AgentPermissionConfig,
 } from '../agentPermissionsConfig';
-import { cloneJson, ensureArray, ensureBoolean, ensureNumber, ensureRecord, mergeProfile } from './aiStudioProfileUtils';
+import { cloneJson, ensureArray, ensureBoolean, ensureNumber, ensureRecord, mergeProfile, mergeRecord } from './aiStudioProfileUtils';
 
 type PermissionProfileState = AgentPermissionConfig & {
   actionPermissions: Record<string, PermissionState>;
@@ -35,19 +35,19 @@ function createPermissionProfile(base: AgentPermissionConfig, persisted?: Record
   const merged = mergeProfile(base, persisted);
   return {
     ...merged,
-    actionPermissions: ensureRecord<PermissionState>(persisted?.actionPermissions),
-    toolAccess: ensureRecord<ToolAccessLevel>(persisted?.toolAccess),
-    conditionalRules: ensureRecord<string[]>(persisted?.conditionalRules),
-    approvalAssignments: ensureRecord<string>(persisted?.approvalAssignments),
-    approvalEscalationHours: ensureRecord<number>(persisted?.approvalEscalationHours),
-    defaultApprover: typeof persisted?.defaultApprover === 'string' ? persisted.defaultApprover : 'Tier 2 Support Team',
+    actionPermissions: mergeRecord<PermissionState>(ensureRecord(base.actionPermissions), persisted?.actionPermissions),
+    toolAccess: mergeRecord<ToolAccessLevel>(ensureRecord(base.toolAccess), persisted?.toolAccess),
+    conditionalRules: mergeRecord<string[]>(ensureRecord(base.conditionalRules), persisted?.conditionalRules),
+    approvalAssignments: mergeRecord<string>(ensureRecord(base.approvalAssignments), persisted?.approvalAssignments),
+    approvalEscalationHours: mergeRecord<number>(ensureRecord(base.approvalEscalationHours), persisted?.approvalEscalationHours),
+    defaultApprover: typeof persisted?.defaultApprover === 'string' ? persisted.defaultApprover : (base.defaultApprover || 'Tier 2 Support Team'),
     evidenceRequirements: {
-      chatHistory: ensureBoolean(persisted?.evidenceRequirements?.chatHistory, true),
-      orderDetails: ensureBoolean(persisted?.evidenceRequirements?.orderDetails, true),
-      managerNote: ensureBoolean(persisted?.evidenceRequirements?.managerNote, false),
+      chatHistory: ensureBoolean(persisted?.evidenceRequirements?.chatHistory, base.evidenceRequirements?.chatHistory ?? true),
+      orderDetails: ensureBoolean(persisted?.evidenceRequirements?.orderDetails, base.evidenceRequirements?.orderDetails ?? true),
+      managerNote: ensureBoolean(persisted?.evidenceRequirements?.managerNote, base.evidenceRequirements?.managerNote ?? false),
     },
     requestExpirationHours: ensureNumber(persisted?.requestExpirationHours, 48),
-    automaticEscalation: ensureBoolean(persisted?.automaticEscalation, true),
+    automaticEscalation: ensureBoolean(persisted?.automaticEscalation, base.automaticEscalation ?? true),
   };
 }
 

@@ -21,6 +21,17 @@ const formatRelativeTime = (value?: string | null) => {
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
+const formatAbsoluteTime = (value?: string | null) =>
+  value ? new Date(value).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: '2-digit' }) : 'N/A';
+
+const truncateMiddle = (value?: string | null, max = 18) => {
+  if (!value) return 'N/A';
+  if (value.length <= max) return value;
+  const head = Math.ceil((max - 1) / 2);
+  const tail = Math.floor((max - 1) / 2);
+  return `${value.slice(0, head)}…${value.slice(-tail)}`;
+};
+
 const CONVERSATIONS: Conversation[] = [
   {
     id: '1',
@@ -378,7 +389,7 @@ export default function Inbox() {
       assignee: c.assigned_user_id || c.assigned_user_name || undefined,
       contactName: c.customer_name || 'Unknown',
       channel: (c.source_channel as Channel) || 'web_chat',
-      lastMessage: c.ai_diagnosis || c.type || 'New case',
+      lastMessage: c.latest_message_preview || c.ai_diagnosis || c.type || 'New case',
       time: c.created_at ? new Date(c.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-',
       priority: c.priority === 'high' || c.priority === 'urgent' ? 'high' : 'normal',
       tags: Array.isArray(c.tags) ? c.tags : [],
@@ -389,19 +400,23 @@ export default function Inbox() {
       brand: 'Acme Store',
       caseType: c.type || 'General',
       riskLevel: c.risk_level === 'high' || c.risk_level === 'critical' ? 'High' : c.risk_level === 'medium' ? 'Medium' : 'Low',
-      orderStatus: 'N/A',
-      paymentStatus: 'N/A',
-      fulfillmentStatus: 'N/A',
-      refundStatus: 'N/A',
-      approvalStatus: c.approval_state || 'N/A',
-      context: c.ai_diagnosis || '',
+      orderStatus: titleCase(c.system_status_summary?.orders || 'N/A'),
+      paymentStatus: titleCase(c.system_status_summary?.payments || 'N/A'),
+      fulfillmentStatus: titleCase(c.system_status_summary?.fulfillment || 'N/A'),
+      refundStatus: titleCase(c.system_status_summary?.returns || 'N/A'),
+      approvalStatus: titleCase(c.approval_state || 'N/A'),
+      context: c.conflict_summary?.root_cause || c.ai_diagnosis || '',
       assignedTeam: c.assigned_team_name || 'Support',
       lastSync: '1m ago',
-      slaStatus: c.sla_status || 'Waiting',
-      slaTime: c.sla_resolution_deadline || 'N/A',
-      recommendedNextAction: c.ai_recommended_action || '',
-      conflictDetected: c.has_reconciliation_conflicts ? c.conflict_severity : undefined,
-      relatedCases: [],
+      slaStatus: c.sla_status === 'at_risk' ? 'SLA risk' : c.sla_status === 'breached' ? 'Overdue' : c.sla_status === 'on_track' ? 'Waiting' : 'Waiting',
+      slaTime: c.sla_resolution_deadline ? formatRelativeTime(c.sla_resolution_deadline) : 'N/A',
+      recommendedNextAction: c.conflict_summary?.recommended_action || c.ai_recommended_action || '',
+      conflictDetected: c.conflict_summary?.root_cause || (c.has_reconciliation_conflicts ? c.conflict_severity : undefined),
+      relatedCases: c.state_snapshot?.related?.linked_cases?.map((linked: any) => ({
+        id: linked.case_number || linked.id,
+        type: linked.type || 'Case',
+        status: titleCase(linked.status || 'open'),
+      })) || [],
       messages: [],
     };
   };
@@ -412,15 +427,16 @@ export default function Inbox() {
 
   const filteredConversations = conversations.filter(c => c.tab === activeTab);
   const selectedBaseConv = filteredConversations.find(c => c.id === selectedId) || filteredConversations[0];
+  const caseState = selectedInboxView?.state;
   const selectedConv = selectedBaseConv ? {
     ...selectedBaseConv,
-    orderId: selectedInboxView?.state?.identifiers?.order_ids?.[0] || selectedBaseConv.orderId,
-    context: selectedInboxView?.state?.conflict?.root_cause || selectedInboxView?.case?.ai_diagnosis || selectedBaseConv.context,
-    recommendedNextAction: selectedInboxView?.state?.conflict?.recommended_action || selectedBaseConv.recommendedNextAction,
-    conflictDetected: selectedInboxView?.state?.conflict?.root_cause || selectedBaseConv.conflictDetected,
+    orderId: caseState?.related?.orders?.[0]?.external_order_id || caseState?.identifiers?.order_ids?.[0] || selectedBaseConv.orderId,
+    context: caseState?.conflict?.root_cause || selectedInboxView?.case?.ai_diagnosis || selectedBaseConv.context,
+    recommendedNextAction: caseState?.conflict?.recommended_action || selectedBaseConv.recommendedNextAction,
+    conflictDetected: caseState?.conflict?.root_cause || selectedBaseConv.conflictDetected,
     slaStatus: selectedInboxView?.sla?.label || selectedBaseConv.slaStatus,
     slaTime: selectedInboxView?.sla?.time || selectedBaseConv.slaTime,
-    relatedCases: selectedInboxView?.state?.related?.linked_cases?.map((linked: any) => ({
+    relatedCases: caseState?.related?.linked_cases?.map((linked: any) => ({
       id: linked.case_number || linked.id,
       type: linked.type || 'Case',
       status: titleCase(linked.status || 'open'),
@@ -433,6 +449,48 @@ export default function Inbox() {
       time: formatTime(msg.sent_at),
     })) || selectedBaseConv.messages,
   } : undefined;
+
+  const tabItems = [
+    { id: 'unassigned', label: 'Unassigned', count: conversations.filter(c => c.tab === 'unassigned').length },
+    { id: 'assigned', label: 'Assigned to me', count: conversations.filter(c => c.tab === 'assigned').length },
+    { id: 'waiting', label: 'Waiting approval', count: conversations.filter(c => c.tab === 'waiting').length },
+    { id: 'high_risk', label: 'High risk', count: conversations.filter(c => c.tab === 'high_risk').length },
+  ];
+
+  const operationalLinks = (() => {
+    const links: Array<{ label: string; href: string; visible: boolean }> = [];
+    const firstOrder = caseState?.related?.orders?.[0];
+    const firstPayment = caseState?.related?.payments?.[0];
+    const firstReturn = caseState?.related?.returns?.[0];
+
+    links.push({
+      label: 'Order Management System (OMS)',
+      href: firstOrder?.external_order_id ? `https://admin.shopify.com/store/demo/orders/${encodeURIComponent(firstOrder.external_order_id)}` : '#',
+      visible: Boolean(firstOrder || selectedConv?.orderId),
+    });
+    links.push({
+      label: 'Payment Gateway (PSP)',
+      href: firstPayment?.external_payment_id ? `https://dashboard.stripe.com/test/payments/${encodeURIComponent(firstPayment.external_payment_id)}` : '#',
+      visible: Boolean(firstPayment || selectedConv?.paymentStatus !== 'N/A'),
+    });
+    links.push({
+      label: 'Carrier Tracking Portal',
+      href: firstOrder?.tracking_url || '#',
+      visible: Boolean(firstOrder?.tracking_number || firstOrder?.tracking_url || selectedConv?.fulfillmentStatus !== 'N/A'),
+    });
+    links.push({
+      label: 'Return Record (RMS)',
+      href: firstReturn?.external_return_id ? `https://returns.example.local/${encodeURIComponent(firstReturn.external_return_id)}` : '#',
+      visible: Boolean(firstReturn || selectedConv?.refundStatus !== 'N/A'),
+    });
+    links.push({
+      label: 'Warehouse (WMS) Ticket',
+      href: firstOrder?.external_order_id ? `https://wms.example.local/orders/${encodeURIComponent(firstOrder.external_order_id)}` : '#',
+      visible: Boolean(firstOrder || selectedConv?.fulfillmentStatus !== 'N/A'),
+    });
+
+    return links.filter(link => link.visible);
+  })();
 
   useEffect(() => {
     if (filteredConversations.length > 0 && !filteredConversations.find(c => c.id === selectedId)) {
@@ -472,6 +530,7 @@ export default function Inbox() {
       }
       setComposerText('');
       setRefreshKey(key => key + 1);
+      window.setTimeout(() => setRefreshKey(key => key + 1), 900);
     } catch (error) {
       console.error('Inbox action failed:', error);
     } finally {
@@ -537,15 +596,10 @@ export default function Inbox() {
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       {/* Inbox Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-white dark:bg-card-dark rounded-t-xl mx-2 mt-2 border-b border-gray-100 dark:border-gray-700 shadow-card z-10">
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 min-w-0">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Cases</h1>
-          <div className="flex space-x-1">
-            {[
-              { id: 'unassigned', label: 'Unassigned', count: CONVERSATIONS.filter(c => c.tab === 'unassigned').length },
-              { id: 'assigned', label: 'Assigned to me', count: CONVERSATIONS.filter(c => c.tab === 'assigned').length },
-              { id: 'waiting', label: 'Waiting approval', count: CONVERSATIONS.filter(c => c.tab === 'waiting').length },
-              { id: 'high_risk', label: 'High risk', count: CONVERSATIONS.filter(c => c.tab === 'high_risk').length },
-            ].map(tab => (
+          <div className="flex space-x-1 min-w-0 overflow-x-auto custom-scrollbar">
+            {tabItems.map(tab => (
               <span 
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as CaseTab)}
@@ -560,7 +614,7 @@ export default function Inbox() {
             ))}
           </div>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 flex-shrink-0">
           <div className="flex items-center text-gray-500 text-sm mr-2">
             <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
             Online
@@ -634,8 +688,8 @@ export default function Inbox() {
             selectedConv.channel === 'whatsapp' ? 'bg-[#efeae2] dark:bg-[#0b141a]' : 'bg-white dark:bg-card-dark'
           }`}>
           {/* Chat Header */}
-          <div className="h-14 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between px-6 bg-white dark:bg-card-dark">
-            <div className="flex items-center gap-3">
+          <div className="h-14 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-4 px-6 bg-white dark:bg-card-dark">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               {selectedConv.channel === 'email' ? (
                 <div className="w-8 h-8 rounded bg-blue-100 text-blue-700 flex flex-shrink-0 items-center justify-center font-bold text-xs border border-blue-200">TB</div>
               ) : (
@@ -645,17 +699,19 @@ export default function Inbox() {
                   {selectedConv.contactName.split(' ').map(n => n[0]).join('')}
                 </div>
               )}
-              <div>
-                <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  {selectedConv.caseId}: {selectedConv.lastMessage}
-                  <span className="text-xs font-normal text-gray-400">via {selectedConv.channel === 'whatsapp' ? 'WhatsApp' : selectedConv.channel === 'email' ? 'Email' : 'Web Chat'}</span>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 min-w-0">
+                  <span className="truncate min-w-0" title={`${selectedConv.caseId}: ${selectedConv.lastMessage}`}>
+                    {selectedConv.caseId}: {selectedConv.lastMessage}
+                  </span>
+                  <span className="text-xs font-normal text-gray-400 flex-shrink-0">via {selectedConv.channel === 'whatsapp' ? 'WhatsApp' : selectedConv.channel === 'email' ? 'Email' : 'Web Chat'}</span>
                 </h2>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 truncate" title={`${selectedConv.contactName} • ${selectedConv.orderId} • ${selectedConv.brand}`}>
                   {selectedConv.contactName} • {selectedConv.orderId} • {selectedConv.brand}
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-shrink-0">
               {!isRightSidebarOpen && (
                 <button 
                   onClick={() => setIsRightSidebarOpen(true)}
@@ -707,9 +763,9 @@ export default function Inbox() {
                   <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{selectedConv.approvalStatus}</span>
                 </div>
               </div>
-              <div className="flex flex-col items-end">
+              <div className="flex flex-col items-end min-w-0 max-w-[45%]">
                 <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Recommended Action</span>
-                <span className="text-xs font-bold text-secondary">{selectedConv.recommendedNextAction}</span>
+                <span className="text-xs font-bold text-secondary truncate max-w-full" title={selectedConv.recommendedNextAction}>{selectedConv.recommendedNextAction}</span>
               </div>
             </div>
 
@@ -836,6 +892,12 @@ export default function Inbox() {
               <textarea
                 value={composerText}
                 onChange={(event) => setComposerText(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    handleSubmit();
+                  }
+                }}
                 className="w-full bg-transparent border-0 focus:ring-0 text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2"
                 placeholder={composeMode === 'reply' ? `Write your reply to ${selectedConv.contactName}...` : `Write an internal note for ${selectedConv.contactName}...`}
               ></textarea>
@@ -1002,11 +1064,11 @@ export default function Inbox() {
                       <div className="grid grid-cols-2 gap-4 mt-3">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">Case ID</span>
-                          <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedConv.caseId}</span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-white" title={selectedConv.id}>{selectedConv.caseId}</span>
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">Order ID</span>
-                          <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedConv.orderId}</span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-white" title={selectedConv.orderId}>{truncateMiddle(selectedConv.orderId, 22)}</span>
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">Assignee</span>
@@ -1030,7 +1092,15 @@ export default function Inbox() {
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">Last Sync</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedConv.lastSync}</span>
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{formatAbsoluteTime(selectedInboxView?.case?.updated_at) || selectedConv.lastSync}</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Channel</span>
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedConv.channel === 'whatsapp' ? 'WhatsApp' : selectedConv.channel === 'email' ? 'Email' : 'Web Chat'}</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[10px] uppercase tracking-wider text-gray-500">SLA</span>
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedConv.slaStatus} · {selectedConv.slaTime}</span>
                         </div>
                       </div>
                     </div>
@@ -1045,26 +1115,20 @@ export default function Inbox() {
                         <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
                       </button>
                       <div className="space-y-2 mt-2">
-                        <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
-                          Order Management System (OMS)
-                          <span className="material-symbols-outlined text-sm">open_in_new</span>
-                        </a>
-                        <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
-                          Payment Gateway (PSP)
-                          <span className="material-symbols-outlined text-sm">open_in_new</span>
-                        </a>
-                        <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
-                          Carrier Tracking Portal
-                          <span className="material-symbols-outlined text-sm">open_in_new</span>
-                        </a>
-                        <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
-                          Return Record (RMS)
-                          <span className="material-symbols-outlined text-sm">open_in_new</span>
-                        </a>
-                        <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
-                          Warehouse (WMS) Ticket
-                          <span className="material-symbols-outlined text-sm">open_in_new</span>
-                        </a>
+                        {operationalLinks.length > 0 ? operationalLinks.map(link => (
+                          <a
+                            key={link.label}
+                            href={link.href}
+                            target={link.href === '#' ? undefined : '_blank'}
+                            rel="noreferrer"
+                            className="flex items-center justify-between gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all"
+                          >
+                            <span className="truncate">{link.label}</span>
+                            <span className="material-symbols-outlined text-sm flex-shrink-0">open_in_new</span>
+                          </a>
+                        )) : (
+                          <p className="text-xs text-gray-400 italic p-2">No operational links available for this case yet.</p>
+                        )}
                       </div>
                     </div>
 

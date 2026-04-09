@@ -28,6 +28,7 @@ import { randomUUID } from 'crypto';
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
+import { logAudit } from '../../db/utils.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
 
 export const composerTranslatorImpl: AgentImplementation = {
@@ -127,12 +128,30 @@ Rules:
     if (internalNote) {
       try {
         db.prepare(`
-          INSERT INTO case_notes
-            (id, case_id, tenant_id, content, type, created_by, created_at)
-          VALUES (?, ?, ?, ?, 'internal', 'composer-translator', ?)
-        `).run(randomUUID(), caseId, tenantId, internalNote, now);
-      } catch { /* table might not exist yet */ }
+          INSERT INTO internal_notes
+            (id, case_id, content, created_by, created_by_type, created_at, tenant_id)
+          VALUES (?, ?, ?, 'composer-translator', 'system', ?, ?)
+        `).run(randomUUID(), caseId, internalNote, now, tenantId);
+      } catch { /* non-critical */ }
     }
+
+    try {
+      logAudit(db, {
+        tenantId,
+          workspaceId: ctx.workspaceId,
+        actorId: 'composer-translator',
+        actorType: 'system',
+        action: 'DRAFT_COMPOSED',
+        entityType: 'case',
+        entityId: caseId,
+        metadata: {
+          tone,
+          language,
+          policyConstraints,
+          hasInternalNote: Boolean(internalNote),
+        },
+      });
+    } catch { /* non-critical */ }
 
     const costCredits = Math.ceil(tokensUsed / 1000);
 

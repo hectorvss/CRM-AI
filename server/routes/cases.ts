@@ -48,6 +48,104 @@ function computeSlaView(caseRow: any) {
   };
 }
 
+function findConversationForCase(caseRow: any, tenantId: string, workspaceId: string) {
+  const db = getDb();
+
+  if (caseRow.conversation_id) {
+    const linked = db.prepare(`
+      SELECT *
+      FROM conversations
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).get(caseRow.conversation_id, tenantId, workspaceId) as any;
+    if (linked) return linked;
+  }
+
+  const byCase = db.prepare(`
+    SELECT *
+    FROM conversations
+    WHERE case_id = ? AND tenant_id = ? AND workspace_id = ?
+    ORDER BY last_message_at DESC, created_at DESC
+    LIMIT 1
+  `).get(caseRow.id, tenantId, workspaceId) as any;
+  if (byCase) return byCase;
+
+  if (caseRow.customer_id) {
+    const byCustomer = db.prepare(`
+      SELECT *
+      FROM conversations
+      WHERE customer_id = ? AND tenant_id = ? AND workspace_id = ?
+        AND channel = COALESCE(?, channel)
+        AND status NOT IN ('closed', 'resolved')
+      ORDER BY last_message_at DESC, created_at DESC
+      LIMIT 1
+    `).get(caseRow.customer_id, tenantId, workspaceId, caseRow.source_channel || null) as any;
+    if (byCustomer) return byCustomer;
+  }
+
+  return null;
+}
+
+function ensureConversationForCase(caseRow: any, tenantId: string, workspaceId: string) {
+  const db = getDb();
+  const existing = findConversationForCase(caseRow, tenantId, workspaceId);
+  if (existing) {
+    db.prepare(`
+      UPDATE conversations
+      SET case_id = COALESCE(case_id, ?), updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).run(caseRow.id, existing.id, tenantId, workspaceId);
+
+    db.prepare(`
+      UPDATE cases
+      SET conversation_id = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).run(existing.id, caseRow.id, tenantId, workspaceId);
+
+    db.prepare(`
+      UPDATE messages
+      SET case_id = COALESCE(case_id, ?)
+      WHERE conversation_id = ? AND tenant_id = ?
+    `).run(caseRow.id, existing.id, tenantId);
+
+    return existing;
+  }
+
+  const now = new Date().toISOString();
+  const conversationId = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO conversations (
+      id, case_id, customer_id, channel, status, subject, external_thread_id,
+      first_message_at, last_message_at, created_at, updated_at, tenant_id, workspace_id
+    )
+    VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    conversationId,
+    caseRow.id,
+    caseRow.customer_id || null,
+    caseRow.source_channel || 'web_chat',
+    null,
+    caseRow.source_entity_id || null,
+    now,
+    now,
+    now,
+    now,
+    tenantId,
+    workspaceId,
+  );
+
+  db.prepare(`
+    UPDATE cases
+    SET conversation_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+  `).run(conversationId, caseRow.id, tenantId, workspaceId);
+
+  return db.prepare(`
+    SELECT *
+    FROM conversations
+    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+  `).get(conversationId, tenantId, workspaceId);
+}
+
 function buildInboxView(caseId: string, tenantId: string, workspaceId: string) {
   const db = getDb();
   const caseRow = db.prepare(`
@@ -60,13 +158,7 @@ function buildInboxView(caseId: string, tenantId: string, workspaceId: string) {
 
   const parsedCase = parseRow(caseRow) as any;
   const state = getCaseCanonicalState(caseId, tenantId, workspaceId);
-  const conversation = parsedCase.conversation_id
-    ? db.prepare(`
-        SELECT *
-        FROM conversations
-        WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-      `).get(parsedCase.conversation_id, tenantId, workspaceId)
-    : null;
+  const conversation = findConversationForCase(parsedCase, tenantId, workspaceId);
 
   const parsedConversation = conversation ? parseRow(conversation) : null;
   const messages = parsedConversation
@@ -380,29 +472,63 @@ router.post('/:id/reply', (req: MultiTenantRequest, res: Response) => {
     }
 
     const caseRow = db.prepare(`
-      SELECT id, case_number, conversation_id, source_channel
+      SELECT id, case_number, conversation_id, source_channel, source_entity_id, customer_id
       FROM cases
       WHERE id = ? AND tenant_id = ? AND workspace_id = ?
     `).get(req.params.id, req.tenantId, req.workspaceId) as any;
 
     if (!caseRow) return res.status(404).json({ error: 'Case not found' });
-    if (!caseRow.conversation_id) return res.status(400).json({ error: 'Case has no active conversation' });
-
-    const conversation = db.prepare(`
-      SELECT id, channel
-      FROM conversations
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).get(caseRow.conversation_id, req.tenantId, req.workspaceId) as any;
+    const conversation = ensureConversationForCase(caseRow, req.tenantId!, req.workspaceId!) as any;
 
     if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+    const now = new Date().toISOString();
+    const queuedMessageId = crypto.randomUUID();
+    const channel = conversation.channel || caseRow.source_channel || 'web_chat';
+
+    db.prepare(`
+      INSERT INTO messages (
+        id, conversation_id, case_id, customer_id, type, direction, sender_id, sender_name,
+        content, content_type, channel, external_message_id, draft_reply_id,
+        sent_at, created_at, tenant_id
+      )
+      VALUES (?, ?, ?, ?, 'agent', 'outbound', ?, ?, ?, 'text', ?, ?, ?, ?, ?, ?)
+    `).run(
+      queuedMessageId,
+      conversation.id,
+      req.params.id,
+      caseRow.customer_id || null,
+      req.userId || 'user_local',
+      'Alex Morgan',
+      String(content).trim(),
+      channel,
+      `queued_${queuedMessageId}`,
+      draft_reply_id || null,
+      now,
+      now,
+      req.tenantId,
+    );
+
+    db.prepare(`
+      UPDATE conversations
+      SET last_message_at = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).run(now, conversation.id, req.tenantId, req.workspaceId);
+
+    db.prepare(`
+      UPDATE cases
+      SET last_activity_at = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).run(now, req.params.id, req.tenantId, req.workspaceId);
 
     enqueue(
       JobType.SEND_MESSAGE,
       {
         caseId: req.params.id,
         conversationId: conversation.id,
-        channel: conversation.channel || caseRow.source_channel || 'web_chat',
+        channel,
         content: String(content).trim(),
+        queuedMessageId,
         draftReplyId: draft_reply_id || undefined,
       },
       {
@@ -422,12 +548,13 @@ router.post('/:id/reply', (req: MultiTenantRequest, res: Response) => {
       entityId: req.params.id,
       metadata: {
         conversationId: conversation.id,
-        channel: conversation.channel,
+        channel,
+        queuedMessageId,
         draftReplyId: draft_reply_id || null,
       },
     });
 
-    res.status(202).json({ success: true, queued: true });
+    res.status(202).json({ success: true, queued: true, message_id: queuedMessageId });
   } catch (error) {
     console.error('Error queueing reply:', error);
     res.status(500).json({ error: 'Internal server error' });

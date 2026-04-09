@@ -1,56 +1,14 @@
-/**
- * server/pipeline/draftReply.ts
- *
- * Draft Reply generator — Phase 5.
- *
- * Handles DRAFT_REPLY jobs. Uses Gemini + the full Context Window to generate
- * a polished, on-brand customer reply draft that the agent can review and send
- * (or edit) via the inbox copilot.
- *
- * The draft is:
- *  - Written in the same language as the customer's last message
- *  - Tone-matched (professional by default, or as specified in payload)
- *  - Policy-aware (references knowledge_articles relevant to the case type)
- *  - Conflict-aware (if conflicts exist, acknowledges delay without detail)
- *
- * Output: writes a draft_replies row with status='pending_review'.
- * An existing pending draft for the same case is replaced so the inbox always
- * shows the most up-to-date suggestion.
- */
-
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { randomUUID }         from 'crypto';
-import { withGeminiRetry }    from '../ai/geminiRetry.js';
-import { getDb }              from '../db/client.js';
-import { config }             from '../config.js';
-import { registerHandler }    from '../queue/handlers/index.js';
-import { JobType }            from '../queue/types.js';
-import { logger }             from '../utils/logger.js';
+import { randomUUID } from 'crypto';
+import { withGeminiRetry } from '../ai/geminiRetry.js';
+import { getDb } from '../db/client.js';
+import { config } from '../config.js';
+import { registerHandler } from '../queue/handlers/index.js';
+import { JobType } from '../queue/types.js';
+import { logger } from '../utils/logger.js';
 import { buildContextWindow } from './contextWindow.js';
+import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
 import type { DraftReplyPayload, JobContext } from '../queue/types.js';
-
-// ── Knowledge article lookup ───────────────────────────────────────────────────
-
-function fetchRelevantPolicies(caseType: string, tenantId: string): string {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT title, content FROM knowledge_articles
-    WHERE tenant_id = ?
-      AND (title LIKE ? OR title LIKE ? OR content LIKE ?)
-      AND status = 'published'
-    LIMIT 3
-  `).all(
-    tenantId,
-    `%${caseType.replace(/_/g, ' ')}%`,
-    `%refund%`,
-    `%${caseType.split('_')[0]}%`,
-  ) as any[];
-
-  if (rows.length === 0) return '';
-  return rows.map(r => `### ${r.title}\n${r.content}`).join('\n\n');
-}
-
-// ── Gemini draft generation ───────────────────────────────────────────────────
 
 async function generateDraft(
   contextStr: string,
@@ -58,11 +16,11 @@ async function generateDraft(
   tone: string,
   hasConflicts: boolean,
 ): Promise<{ draft: string; confidence: number }> {
-  const ai    = new GoogleGenerativeAI(config.ai.geminiApiKey);
+  const ai = new GoogleGenerativeAI(config.ai.geminiApiKey);
   const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
 
   const conflictNote = hasConflicts
-    ? 'NOTE: There are active system conflicts. Do NOT mention refund amounts or delivery dates until resolved. Acknowledge the delay empathetically.'
+    ? 'NOTE: There are active system conflicts. Do not mention final refund amounts or delivery dates until reconciled. Acknowledge the delay empathetically.'
     : '';
 
   const prompt = `
@@ -79,7 +37,7 @@ ${conflictNote}
 INSTRUCTIONS:
 - Write ONLY the reply body. No subject line, no metadata.
 - Match the language of the customer's last message.
-- Be concise (3–5 sentences max for simple issues; up to 8 for complex ones).
+- Be concise (3-5 sentences max for simple issues; up to 8 for complex ones).
 - Do not invent facts. If you are unsure, say you are looking into it.
 - End with a clear next step or ask if there's anything else.
 - Tone: ${tone}
@@ -107,23 +65,18 @@ Reply:
   }
 }
 
-// ── Main handler ───────────────────────────────────────────────────────────────
-
-async function handleDraftReply(
-  payload: DraftReplyPayload,
-  ctx: JobContext
-): Promise<void> {
+async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Promise<void> {
   const log = logger.child({
-    jobId:   ctx.jobId,
-    caseId:  payload.caseId,
+    jobId: ctx.jobId,
+    caseId: payload.caseId,
     traceId: ctx.traceId,
   });
 
-  const db       = getDb();
+  const db = getDb();
   const tenantId = ctx.tenantId ?? 'org_default';
-  const tone     = payload.tone ?? 'professional';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const tone = payload.tone ?? 'professional';
 
-  // ── 1. Load case ──────────────────────────────────────────────────────────
   const caseRow = db.prepare('SELECT * FROM cases WHERE id = ?').get(payload.caseId) as any;
   if (!caseRow) {
     log.warn('Case not found for draft reply');
@@ -135,25 +88,50 @@ async function handleDraftReply(
     return;
   }
 
-  // ── 2. Find conversation ──────────────────────────────────────────────────
-  const conv = db.prepare('SELECT id FROM conversations WHERE case_id = ? LIMIT 1').get(payload.caseId) as any;
-  if (!conv) {
+  const conversation = db.prepare('SELECT id FROM conversations WHERE case_id = ? LIMIT 1').get(payload.caseId) as any;
+  if (!conversation) {
     log.debug('No conversation linked to case, skipping draft');
     return;
   }
 
-  // ── 3. Build context + fetch policies ─────────────────────────────────────
   log.info('Generating draft reply', { tone });
 
   const contextWindow = buildContextWindow(payload.caseId, tenantId);
-  const contextStr    = contextWindow.toPromptString();
-  const policies      = fetchRelevantPolicies(caseRow.type, tenantId);
-  const hasConflicts  = caseRow.has_reconciliation_conflicts === 1;
+  const composerAgent = db.prepare(`
+    SELECT av.knowledge_profile
+    FROM agents a
+    LEFT JOIN agent_versions av ON a.current_version_id = av.id
+    WHERE a.slug = 'composer-translator' AND a.tenant_id = ? AND a.is_active = 1
+    LIMIT 1
+  `).get(tenantId) as any;
 
-  // ── 4. Generate draft ─────────────────────────────────────────────────────
-  const { draft, confidence } = await generateDraft(contextStr, policies, tone, hasConflicts);
+  const knowledgeProfile = composerAgent?.knowledge_profile
+    ? JSON.parse(composerAgent.knowledge_profile)
+    : {};
 
-  // ── 5. Upsert draft_replies (replace existing pending draft) ─────────────
+  const knowledgeBundle = resolveAgentKnowledgeBundle({
+    tenantId,
+    workspaceId,
+    knowledgeProfile,
+    caseContext: {
+      type: contextWindow.case.type,
+      intent: contextWindow.case.intent,
+      tags: contextWindow.case.tags,
+      customerSegment: contextWindow.customer?.segment ?? null,
+      conflictDomains: contextWindow.conflicts.map((conflict) => conflict.domain),
+      latestMessage: contextWindow.messages.at(-1)?.content ?? null,
+    },
+  });
+
+  const { draft, confidence } = await generateDraft(
+    contextWindow.toPromptString(),
+    knowledgeBundle.promptContext,
+    tone,
+    caseRow.has_reconciliation_conflicts === 1,
+  );
+
+  const citations = JSON.stringify(knowledgeBundle.citations);
+  const hasPolicies = knowledgeBundle.citations.length > 0 ? 1 : 0;
   const existingDraft = db.prepare(`
     SELECT id FROM draft_replies
     WHERE case_id = ? AND status = 'pending_review'
@@ -163,17 +141,19 @@ async function handleDraftReply(
   if (existingDraft) {
     db.prepare(`
       UPDATE draft_replies SET
-        content       = ?,
-        confidence    = ?,
-        tone          = ?,
-        has_policies  = ?,
-        updated_at    = CURRENT_TIMESTAMP
+        content = ?,
+        confidence = ?,
+        tone = ?,
+        has_policies = ?,
+        citations = ?,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       draft,
       confidence,
       tone,
-      policies.length > 0 ? 1 : 0,
+      hasPolicies,
+      citations,
       existingDraft.id,
     );
     log.info('Draft reply updated', { draftId: existingDraft.id });
@@ -181,30 +161,29 @@ async function handleDraftReply(
     const draftId = randomUUID();
     db.prepare(`
       INSERT INTO draft_replies (
-        id, case_id, conversation_id,
-        content, generated_by, tone, confidence, has_policies,
-        status, tenant_id
-      ) VALUES (?, ?, ?, ?, 'draft_reply_agent', ?, ?, ?, 'pending_review', ?)
+        id, case_id, conversation_id, content, generated_by, tone,
+        confidence, has_policies, citations, status, tenant_id
+      ) VALUES (?, ?, ?, ?, 'draft_reply_agent', ?, ?, ?, ?, 'pending_review', ?)
     `).run(
       draftId,
       payload.caseId,
-      conv.id,
+      conversation.id,
       draft,
       tone,
       confidence,
-      policies.length > 0 ? 1 : 0,
+      hasPolicies,
+      citations,
       tenantId,
     );
     log.info('Draft reply created', { draftId });
   }
 
-  // ── 6. Update case copilot readiness ──────────────────────────────────────
   db.prepare(`
-    UPDATE cases SET updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    UPDATE cases
+    SET updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
   `).run(payload.caseId);
 }
-
-// ── Register ──────────────────────────────────────────────────────────────────
 
 registerHandler(JobType.DRAFT_REPLY, handleDraftReply);
 

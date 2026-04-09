@@ -38,7 +38,7 @@ export const qaCheckImpl: AgentImplementation = {
     const plan = db.prepare(`
       SELECT * FROM execution_plans
       WHERE case_id = ? AND status IN ('draft', 'approved', 'pending_approval')
-      ORDER BY created_at DESC LIMIT 1
+      ORDER BY generated_at DESC LIMIT 1
     `).get(caseId) as any;
 
     const policyText = knowledgeBundle.promptContext || 'No accessible policies found for this agent. Apply standard best practices and escalate uncertainty.';
@@ -46,7 +46,7 @@ export const qaCheckImpl: AgentImplementation = {
     // ── Build prompt ──────────────────────────────────────────────────────
     const contextStr = contextWindow.toPromptString();
     const planStr = plan
-      ? `Proposed execution plan: ${JSON.stringify(JSON.parse(plan.plan_steps ?? '[]'), null, 2)}`
+      ? `Proposed execution plan: ${JSON.stringify(JSON.parse(plan.steps ?? '[]'), null, 2)}`
       : 'No execution plan yet — assess the case context for policy compliance.';
 
     const prompt = `You are a QA and compliance specialist reviewing a CRM support case resolution.
@@ -135,8 +135,8 @@ Approval is required if:
     if (plan && requiresApproval && plan.status === 'draft') {
       const now = new Date().toISOString();
       db.prepare(`
-        UPDATE execution_plans SET status = 'pending_approval', updated_at = ? WHERE id = ?
-      `).run(now, plan.id);
+        UPDATE execution_plans SET status = 'pending_approval' WHERE id = ?
+      `).run(plan.id);
 
       // Create approval request if one doesn't exist
       const existingApproval = db.prepare(

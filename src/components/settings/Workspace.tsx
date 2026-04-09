@@ -1,26 +1,42 @@
 import React from 'react';
 import { useApi } from '../../api/hooks';
 import { workspacesApi } from '../../api/client';
+import { iamApi } from '../../api/client';
+
+const fallbackWorkspace = {
+  id: 'workspace-local',
+  name: 'CRM AI Workspace',
+  slug: 'crm-ai',
+};
 
 export default function WorkspaceTab() {
   const { data: workspaces, loading, error } = useApi<any[]>(workspacesApi.list);
+  const { data: me } = useApi(() => iamApi.me(), [], null as any);
 
   if (loading) {
     return <div className="p-6 text-sm text-gray-500">Loading workspace data...</div>;
   }
 
-  if (error || !workspaces || workspaces.length === 0) {
-    return <div className="p-6 text-sm text-red-500">Error loading workspace data or no workspace found.</div>;
-  }
-
-  const workspace = workspaces[0];
+  const workspace = workspaces?.[0]
+    || me?.workspace
+    || me?.membership?.workspace
+    || me?.workspaces?.[0]
+    || fallbackWorkspace;
+  const showFallbackNotice = Boolean(error) || !workspaces || workspaces.length === 0;
 
   return (
     <div className="space-y-8">
       {/* Workspace Profile */}
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Workspace Profile</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Workspace Profile</h2>
+            {showFallbackNotice && (
+              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 rounded-full px-2 py-0.5 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-900/30">
+                Showing local defaults
+              </span>
+            )}
+          </div>
           <span className="material-symbols-outlined text-gray-400">domain</span>
         </div>
         <div className="p-6 space-y-6">
@@ -45,7 +61,7 @@ export default function WorkspaceTab() {
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Workspace Name</label>
               <input 
                 type="text" 
-                defaultValue={workspace.name}
+                defaultValue={workspace?.name || fallbackWorkspace.name}
                 className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
               />
             </div>
@@ -55,7 +71,7 @@ export default function WorkspaceTab() {
                 <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500 text-sm">https://</span>
                 <input 
                   type="text" 
-                  defaultValue={workspace.slug + ".helpdesk.com"}
+                  defaultValue={`${workspace?.slug || fallbackWorkspace.slug}.helpdesk.com`}
                   className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-r-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                 />
               </div>
@@ -130,6 +146,11 @@ export default function WorkspaceTab() {
               </div>
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wider bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-lg">Closed</span>
             </div>
+            {showFallbackNotice && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                Workspace data is not available yet, so the form is seeded with safe local defaults.
+              </p>
+            )}
           </div>
         </div>
       </section>

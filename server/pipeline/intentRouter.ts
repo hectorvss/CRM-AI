@@ -287,6 +287,26 @@ async function handleIntentRoute(
     returnIds:         event.canonical_entity_type === 'return'  && localEntityId ? [localEntityId] : [],
   });
 
+  if (normalizedPayload.conversationId) {
+    db.prepare(`
+      UPDATE conversations
+      SET case_id = COALESCE(case_id, ?), updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).run(caseResult.id, normalizedPayload.conversationId, tenantId, workspaceId);
+
+    db.prepare(`
+      UPDATE cases
+      SET conversation_id = COALESCE(conversation_id, ?), updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+    `).run(normalizedPayload.conversationId, caseResult.id, tenantId, workspaceId);
+
+    db.prepare(`
+      UPDATE messages
+      SET case_id = COALESCE(case_id, ?)
+      WHERE conversation_id = ? AND tenant_id = ?
+    `).run(caseResult.id, normalizedPayload.conversationId, tenantId);
+  }
+
   // ── 8. Update case with AI classification fields ─────────────────────────
   db.prepare(`
     UPDATE cases SET
@@ -312,9 +332,11 @@ async function handleIntentRoute(
 
   // ── 10. Store suggested reply draft if we have one ───────────────────────
   if (classification.suggestedReply && caseResult.isNew) {
-    const convRow = db.prepare(
-      'SELECT id FROM conversations WHERE case_id = ? LIMIT 1'
-    ).get(caseResult.id) as any;
+    const convRow = normalizedPayload.conversationId
+      ? { id: normalizedPayload.conversationId }
+      : db.prepare(
+          'SELECT id FROM conversations WHERE case_id = ? LIMIT 1'
+        ).get(caseResult.id) as any;
 
     if (convRow) {
       const { randomUUID } = await import('crypto');

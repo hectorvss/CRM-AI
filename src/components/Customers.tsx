@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { customersApi } from '../api/client';
 import { useApi } from '../api/hooks';
@@ -49,6 +49,73 @@ interface Customer {
       actionType: 'resolve' | 'retry' | 'approval' | 'workflow' | 'log';
       context: string;
     }[];
+  };
+}
+
+type ApiLinkedIdentity = {
+  system?: string | null;
+  external_id?: string | null;
+};
+
+type ApiReconciliationDomain = {
+  domain?: string | null;
+  systems?: { name?: string | null; value?: string | null }[] | null;
+  age?: string | null;
+  severity?: 'high' | 'medium' | 'low' | string | null;
+  sourceOfTruth?: string | null;
+  writebackStatus?: Customer['reconciliation'] extends infer R
+    ? R extends { domains: Array<infer D> }
+      ? D extends { writebackStatus: infer S }
+        ? S
+        : never
+      : never
+    : never;
+  action?: string | null;
+  actionType?: 'resolve' | 'retry' | 'approval' | 'workflow' | 'log' | string | null;
+  context?: string | null;
+};
+
+const defaultReconciliation = {
+  status: 'Healthy' as const,
+  mismatches: 0,
+  lastChecked: 'N/A',
+  domains: [],
+};
+
+function normalizeSource(name?: string | null, externalId?: string | null) {
+  const safeName = name?.trim() || 'Unknown';
+  return {
+    name: safeName,
+    icon: buildInitialsAvatar(safeName),
+    externalId: externalId || undefined,
+  };
+}
+
+function normalizeReconciliation(raw?: any): NonNullable<Customer['reconciliation']> {
+  const domains = Array.isArray(raw?.domains)
+    ? raw.domains.map((domain: ApiReconciliationDomain) => ({
+        domain: domain.domain || 'Unknown domain',
+        systems: Array.isArray(domain.systems)
+          ? domain.systems.map((system) => ({
+              name: system?.name || 'Unknown',
+              value: system?.value || 'N/A',
+            }))
+          : [],
+        age: domain.age || 'N/A',
+        severity: domain.severity === 'high' ? 'High' : domain.severity === 'medium' ? 'Medium' : 'Low',
+        sourceOfTruth: domain.sourceOfTruth || 'System',
+        writebackStatus: (domain.writebackStatus as any) || 'Pending writeback',
+        action: domain.action || 'Review required',
+        actionType: (domain.actionType as any) || 'log',
+        context: domain.context || 'No additional context provided.',
+      }))
+    : [];
+
+  return {
+    status: raw?.status === 'Blocked' ? 'Blocked' : raw?.status === 'Warning' ? 'Warning' : raw?.status === 'Conflict' ? 'Conflict' : 'Healthy',
+    mismatches: Number(raw?.mismatches) || 0,
+    lastChecked: raw?.lastChecked || raw?.last_checked || 'N/A',
+    domains,
   };
 }
 
@@ -185,11 +252,18 @@ export default function Customers() {
     const email = c.canonical_email || c.email || '';
     const ltv = c.lifetime_value ?? c.ltv ?? 0;
     const segment = c.segment || 'regular';
+    const linkedIdentities = Array.isArray(c.linked_identities) ? c.linked_identities as ApiLinkedIdentity[] : [];
+    const canonicalSystems = Array.isArray(c.canonical_systems) ? c.canonical_systems : [];
+    const sources = linkedIdentities.length > 0
+      ? linkedIdentities.map(identity => normalizeSource(identity.system, identity.external_id))
+      : canonicalSystems.length > 0
+        ? canonicalSystems.map((system: any) => normalizeSource(system.system || system.name || system, system.external_id || system.externalId))
+        : [normalizeSource(c.company || name)];
     return {
       id: c.id,
       name,
       email,
-      avatar: c.avatar || (name ? name.substring(0, 2).toUpperCase() : 'UN'),
+      avatar: c.avatar || buildInitialsAvatar(name),
       role: c.role || 'Customer',
       company: c.company || 'Personal',
       location: c.location || 'N/A',
@@ -197,28 +271,49 @@ export default function Customers() {
       since: c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
       segment: (segment === 'vip' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
       ltv: `$${Number(ltv).toLocaleString()}`,
-      orders: c.total_orders || 0,
-      openCases: c.open_cases || 0,
-      csat: c.csat_score || 0,
-      health: c.risk_level === 'high' || c.risk_level === 'critical' ? 'At Risk' : c.risk_level === 'medium' ? 'Good' : 'Excellent',
+      orders: Array.isArray(c.orders) ? c.orders : [],
+      openTickets: Number(c.open_cases || 0),
+      aiImpact: {
+        resolved: Number(c.ai_impact?.resolved ?? c.ai_resolved ?? 0),
+        approvals: Number(c.ai_impact?.approvals ?? c.ai_approvals ?? 0) || undefined,
+        escalated: Number(c.ai_impact?.escalated ?? c.ai_escalated ?? 0) || undefined,
+      },
       topIssue: c.top_issue || 'N/A',
-      risk: c.risk_level === 'high' || c.risk_level === 'critical' ? 'High Risk' : undefined,
+      risk: c.risk_level === 'high' || c.risk_level === 'critical'
+        ? 'Churn Risk'
+        : c.risk_level === 'medium'
+          ? 'Watchlist'
+          : 'Healthy',
       badges: Array.isArray(c.badges) ? c.badges : [],
       orders_list: [],
       cases: [],
       activity: [],
-      sources: (c.linked_identities || []).map((li: any) => ({
-        system: li.system, externalId: li.external_id,
-      })),
+      sources,
       plan: c.plan || 'Standard',
       nextRenewal: c.next_renewal || 'N/A',
-      reconciliation: c.reconciliation || null,
+      reconciliation: normalizeReconciliation(c.reconciliation),
     };
   };
 
-  const customers: typeof mockCustomers = (apiCustomers && apiCustomers.length > 0)
-    ? apiCustomers.map(mapApiCustomer) as any
-    : mockCustomers;
+  const customers: Customer[] = useMemo(() => {
+    if (apiCustomers && apiCustomers.length > 0) {
+      return apiCustomers.map(mapApiCustomer);
+    }
+    return mockCustomers.map(customer => ({
+      ...customer,
+      sources: customer.sources.map(source => ({
+        name: source.name || 'Unknown',
+        icon: source.icon || buildInitialsAvatar(source.name || customer.name),
+      })),
+      orders: Array.isArray(customer.orders) ? customer.orders : [],
+      aiImpact: {
+        resolved: Number(customer.aiImpact?.resolved || 0),
+        approvals: Number(customer.aiImpact?.approvals || 0) || undefined,
+        escalated: Number(customer.aiImpact?.escalated || 0) || undefined,
+      },
+      reconciliation: normalizeReconciliation(customer.reconciliation),
+    }));
+  }, [apiCustomers]);
 
   const selectedCustomer = React.useMemo(() => {
     const fallbackCustomer = customers.find(c => c.id === selectedCustomerId) || null;
@@ -267,10 +362,7 @@ export default function Customers() {
       topIssue: unresolvedConflicts[0]?.conflict_type || fallbackCustomer?.topIssue || 'N/A',
       risk: customer.risk_level === 'high' || customer.risk_level === 'critical' ? 'Churn Risk' : (fallbackCustomer?.risk || 'Healthy'),
       sources: linkedIdentities.length > 0
-        ? linkedIdentities.map((identity: any) => ({
-            name: identity.system,
-            icon: 'https://www.svgrepo.com/show/532295/asterisk.svg',
-          }))
+        ? linkedIdentities.map((identity: any) => normalizeSource(identity.system, identity.external_id))
         : (fallbackCustomer?.sources || []),
       plan: fallbackCustomer?.plan || 'Standard',
       ltv: `$${Number(apiSelectedState.metrics?.lifetime_value || customer.lifetime_value || 0).toLocaleString()}`,

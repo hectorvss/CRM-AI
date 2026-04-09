@@ -9,51 +9,21 @@ import type { GraphBranch } from './TreeGraph';
 type RightTab = 'details' | 'copilot';
 type ResolveTab = 'overview' | 'identifiers' | 'policy' | 'execution';
 
-const MOCK_CASES_DATA: Record<string, any> = {
-  '1': {
-    rootData: { orderId: 'ORD-001', customerName: 'John Doe', riskLevel: 'Low Risk', status: 'Open' },
-    branches: [],
-    copilot: { summary: 'Case 1', rootCause: 'Unknown', conflict: 'None', recommendation: 'Pending', actionText: 'View Details', reply: '' },
-  },
-};
-
 function formatStatus(value?: string | null) {
   if (!value) return 'N/A';
   return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
 }
 
-function graphStatus(value?: string) {
-  if (value === 'critical' || value === 'blocked') return 'critical' as const;
-  if (value === 'warning' || value === 'pending') return 'warning' as const;
-  return 'healthy' as const;
+function branchStatusMap(status: string): 'healthy' | 'warning' | 'critical' {
+  if (status === 'critical' || status === 'blocked') return 'critical';
+  if (status === 'warning' || status === 'pending') return 'warning';
+  return 'healthy';
 }
 
-function iconForBranch(key: string) {
-  const iconMap: Record<string, string> = {
-    orders: 'shopping_bag',
-    payments: 'payments',
-    returns: 'assignment_return',
-    fulfillment: 'local_shipping',
-    approvals: 'check_circle',
-    workflows: 'account_tree',
-    knowledge: 'description',
-    integrations: 'hub',
-  };
-  return iconMap[key] || 'widgets';
-}
-
-function pageForBranch(key: string): Page {
-  const pageMap: Record<string, Page> = {
-    orders: 'orders',
-    payments: 'payments',
-    returns: 'returns',
-    fulfillment: 'orders',
-    approvals: 'approvals',
-    workflows: 'workflows',
-    knowledge: 'knowledge',
-    integrations: 'tools_integrations',
-  };
-  return pageMap[key] || 'case_graph';
+function nodeStatusMap(status: string): 'healthy' | 'warning' | 'critical' {
+  if (status === 'critical' || status === 'blocked') return 'critical';
+  if (status === 'warning' || status === 'pending') return 'warning';
+  return 'healthy';
 }
 
 export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page) => void }) {
@@ -62,6 +32,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
   const [graphView, setGraphView] = useState<'tree' | 'timeline' | 'resolve'>('tree');
   const [resolveTab, setResolveTab] = useState<ResolveTab>('overview');
 
+  // ── Fetch case list ──────────────────────────────────────────────
   const { data: apiCases } = useApi(() => casesApi.list(), [], []);
   const cases = useMemo(() => (apiCases || []).map((c: any) => ({
     id: c.id,
@@ -69,9 +40,10 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
     customerName: c.customer_name || c.case_number,
     summary: c.ai_diagnosis || c.conflict_summary?.recommended_action || formatStatus(c.type),
     lastUpdate: c.last_activity_at ? new Date(c.last_activity_at).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-',
+    status: c.status,
     badges: [
       ...(c.conflict_summary?.has_conflict ? ['Conflict'] : []),
-      ...(c.risk_level === 'high' ? ['High Risk'] : []),
+      ...(c.risk_level === 'high' || c.risk_level === 'critical' ? ['High Risk'] : []),
       ...(c.status === 'blocked' ? ['Blocked'] : []),
     ],
   })), [apiCases]);
@@ -80,66 +52,109 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
     if (!selectedId && cases.length > 0) setSelectedId(cases[0].id);
   }, [cases, selectedId]);
 
-  // Fetch case detail from API
-  const { data: apiCaseDetail } = useApi(
-    () => selectedId ? casesApi.get(selectedId) : Promise.resolve(null),
+  // ── Fetch case graph (branches + timeline) ──────────────────────
+  const { data: graphData } = useApi(
+    () => selectedId ? casesApi.graph(selectedId) : Promise.resolve(null),
     [selectedId]
   );
 
-  // Build detail view from API data, falling back to mock
-  const currentCase = useMemo(() => {
-    // Try mock data first (static IDs '1','2','3','4')
-    if (MOCK_CASES_DATA[selectedId]) return MOCK_CASES_DATA[selectedId];
+  // ── Fetch case resolve data ─────────────────────────────────────
+  const { data: resolveData } = useApi(
+    () => selectedId ? casesApi.resolve(selectedId) : Promise.resolve(null),
+    [selectedId]
+  );
 
-    // Build from API detail
-    if (apiCaseDetail) {
-      const c = apiCaseDetail;
-      const orderIds = Array.isArray(c.order_ids) ? c.order_ids : [];
-      const riskLabel = c.risk_level === 'high' || c.risk_level === 'critical' ? 'High Risk Case' : c.risk_level === 'medium' ? 'Medium Risk' : 'Low Risk';
-      const statusLabel = c.has_reconciliation_conflicts ? 'Conflict Detected' : c.status?.replace(/_/g, ' ') || 'Open';
+  // ── Fetch case state ────────────────────────────────────────────
+  const { data: stateData } = useApi(
+    () => selectedId ? casesApi.state(selectedId) : Promise.resolve(null),
+    [selectedId]
+  );
 
-      const branches: GraphBranch[] = [
-        { id: 'orders', label: 'Orders', icon: 'shopping_bag', page: 'orders' as any, status: c.has_reconciliation_conflicts ? 'critical' : 'healthy', nodes: orderIds.map((oid: string, i: number) => ({ id: `o${i}`, label: oid, status: 'healthy' as const, context: 'Order', icon: 'shopping_bag', timestamp: c.created_at })) },
-        { id: 'payments', label: 'Payments', icon: 'payments', page: 'payments' as any, status: c.has_reconciliation_conflicts ? 'critical' : 'healthy', nodes: [{ id: 'p1', label: 'Payment', status: 'healthy' as const, context: c.approval_state || 'N/A', icon: 'payments', timestamp: c.created_at }] },
-        { id: 'returns', label: 'Returns', icon: 'assignment_return', page: 'returns' as any, status: 'healthy', nodes: [{ id: 'r1', label: 'Return', status: 'healthy' as const, context: c.type || 'N/A', icon: 'assignment_return', timestamp: c.created_at }] },
-        { id: 'approvals', label: 'Approvals', icon: 'check_circle', page: 'approvals' as any, status: c.approval_state === 'pending' ? 'warning' : 'healthy', nodes: [{ id: 'a1', label: `Approval: ${c.approval_state || 'N/A'}`, status: c.approval_state === 'pending' ? 'warning' as const : 'healthy' as const, context: c.approval_state || 'N/A', icon: 'check_circle', timestamp: c.created_at }] },
-      ];
+  // ── Map graph API response to TreeGraph branches ────────────────
+  const branches: GraphBranch[] = useMemo(() => {
+    if (!graphData?.branches) return [];
+    const pageMap: Record<string, Page> = {
+      orders: 'orders', payments: 'payments', returns: 'returns',
+      fulfillment: 'orders', approvals: 'approvals', workflows: 'workflows',
+      knowledge: 'knowledge', integrations: 'tools_integrations',
+    };
+    return graphData.branches.map((b: any) => ({
+      id: b.id,
+      label: b.label,
+      icon: b.nodes?.[0]?.icon || iconForBranch(b.id),
+      page: pageMap[b.id] || ('case_graph' as Page),
+      status: branchStatusMap(b.status),
+      nodes: (b.nodes || []).map((n: any) => ({
+        id: n.id,
+        label: n.label,
+        status: nodeStatusMap(n.status),
+        context: n.context || n.value || n.source || '',
+        icon: n.icon || iconForBranch(b.id),
+        timestamp: n.timestamp,
+      })),
+    }));
+  }, [graphData]);
 
+  // ── Timeline data from graph API ────────────────────────────────
+  const timeline = useMemo(() => graphData?.timeline || [], [graphData]);
+
+  // ── Root data from graph API ────────────────────────────────────
+  const rootData = useMemo(() => {
+    if (graphData?.root) {
       return {
-        rootData: {
-          orderId: orderIds[0] || c.case_number || c.id,
-          customerName: c.customer_name || 'Unknown',
-          riskLevel: riskLabel,
-          status: statusLabel,
-        },
-        branches,
-        copilot: {
-          summary: c.ai_diagnosis || `Case ${c.case_number}: ${c.type?.replace(/_/g, ' ')}`,
-          rootCause: c.ai_root_cause || 'Root cause analysis pending.',
-          conflict: c.has_reconciliation_conflicts ? (c.conflict_severity || 'Conflict detected') : 'No conflicts.',
-          recommendation: c.ai_recommended_action || 'Awaiting analysis.',
-          actionText: c.approval_state === 'pending' ? 'Approve Resolution' : 'View Details',
-          reply: '',
-        },
+        orderId: graphData.root.order_id || graphData.root.case_number || '',
+        customerName: graphData.root.customer_name || '',
+        riskLevel: graphData.root.risk_level || 'Low Risk',
+        status: graphData.root.status || 'Open',
       };
     }
+    const selected = cases.find(c => c.id === selectedId);
+    return {
+      orderId: selected?.orderId || '',
+      customerName: selected?.customerName || '',
+      riskLevel: 'Low Risk',
+      status: selected?.status || 'Open',
+    };
+  }, [graphData, cases, selectedId]);
 
-    return MOCK_CASES_DATA['1'];
-  }, [selectedId, apiCaseDetail]);
+  // ── Resolve data ────────────────────────────────────────────────
+  const caseResolve = resolveData || {};
+  const caseState = stateData || {};
 
-  const caseData = currentCase?.rootData || { orderId: '', customerName: '', riskLevel: '', status: '' };
-  const copilotData = currentCase?.copilot || { summary: '', rootCause: '', conflict: '', recommendation: '', actionText: '', reply: '' };
-  const branches = currentCase?.branches || [];
-  const rootData = caseData;
-  const timeline: any[] = [];
-  const caseResolve: any = {};
-  const caseState: any = {};
-  const caseGraph: any = {};
-  const links: any[] = [];
-  const relatedCases: any[] = [];
-  const impactedBranches: any[] = [];
-  const internalNotes: any[] = [];
-  const recommendedActions: any[] = [];
+  // ── Derived detail data ─────────────────────────────────────────
+  const impactedBranches = useMemo(() =>
+    branches.filter(b => b.status === 'critical' || b.status === 'warning'),
+    [branches]
+  );
+
+  const links = useMemo(() => {
+    const refs: any[] = [];
+    if (stateData?.identifiers?.external_refs) {
+      stateData.identifiers.external_refs.forEach((ref: string) => {
+        refs.push({ label: ref, href: '#' });
+      });
+    }
+    return refs;
+  }, [stateData]);
+
+  const relatedCases = useMemo(() =>
+    stateData?.related?.linked_cases || resolveData?.linked_cases || [],
+    [stateData, resolveData]
+  );
+
+  const internalNotes = useMemo(() =>
+    resolveData?.notes || [],
+    [resolveData]
+  );
+
+  // ── Copilot data from state + resolve ───────────────────────────
+  const copilotData = useMemo(() => ({
+    summary: stateData?.case?.ai_diagnosis || caseResolve?.conflict?.summary || 'No AI summary yet.',
+    rootCause: caseResolve?.conflict?.root_cause || stateData?.case?.ai_root_cause || 'Pending analysis.',
+    conflict: caseResolve?.conflict?.title || 'No conflict detected.',
+    conflictSeverity: caseResolve?.conflict?.severity || null,
+    recommendation: caseResolve?.conflict?.recommended_action || stateData?.case?.ai_recommended_action || 'Awaiting recommendation.',
+  }), [stateData, caseResolve]);
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -149,8 +164,12 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Case Graph</h1>
             <div className="flex space-x-1">
               <span className="px-3 py-1 text-sm font-medium rounded-full bg-black text-white">All cases ({cases.length})</span>
-              <span className="px-3 py-1 text-sm font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Active ({cases.length})</span>
-              <span className="px-3 py-1 text-sm font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Resolved (0)</span>
+              <span className="px-3 py-1 text-sm font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                Active ({cases.filter(c => !['resolved', 'closed', 'cancelled'].includes(c.status)).length})
+              </span>
+              <span className="px-3 py-1 text-sm font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                Resolved ({cases.filter(c => c.status === 'resolved' || c.status === 'closed').length})
+              </span>
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -165,8 +184,16 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
         </div>
 
         <div className="flex-1 flex overflow-hidden">
+          {/* ── Left Panel: Case List ────────────────────────────── */}
           <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
             <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
+              {cases.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                  <span className="material-symbols-outlined text-4xl mb-3">inbox</span>
+                  <p className="text-sm font-medium">No cases yet</p>
+                  <p className="text-xs mt-1">Run a demo scenario to generate cases</p>
+                </div>
+              )}
               {cases.map(c => (
                 <div key={c.id} onClick={() => setSelectedId(c.id)} className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${selectedId === c.id ? 'bg-white dark:bg-gray-800 border-secondary shadow-card scale-[1.02] z-10' : 'bg-white dark:bg-card-dark border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 shadow-sm hover:shadow-card'}`}>
                   <div className="flex justify-between items-start mb-1">
@@ -178,7 +205,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                   </div>
                   <p className={`text-sm truncate ${selectedId === c.id ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-600 dark:text-gray-300'}`}>{c.summary}</p>
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {c.badges.map(badge => (
+                    {c.badges.map((badge: string) => (
                       <span key={badge} className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${badge === 'Conflict' || badge === 'High Risk' || badge === 'Blocked' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
                         {badge}
                       </span>
@@ -189,6 +216,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
             </div>
           </div>
 
+          {/* ── Center Panel: Graph / Timeline / Resolve ─────────── */}
           <div className="flex-1 flex flex-col min-w-0 bg-[#F8F9FA] dark:bg-card-dark overflow-hidden relative">
             <div className="absolute top-4 left-6 z-10">
               <div className="flex items-center bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-1 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm">
@@ -203,22 +231,39 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
 
             {graphView === 'tree' ? (
               <div className="flex-1 flex items-center justify-center relative bg-white dark:bg-card-dark">
-                <TreeGraph onNavigate={onPageChange} branches={branches} rootData={rootData} />
+                {branches.length > 0 ? (
+                  <TreeGraph onNavigate={onPageChange} branches={branches} rootData={rootData} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-gray-400">
+                    <span className="material-symbols-outlined text-5xl mb-3">account_tree</span>
+                    <p className="text-sm font-medium">
+                      {selectedId ? 'Loading graph...' : 'Select a case to view its graph'}
+                    </p>
+                  </div>
+                )}
               </div>
             ) : graphView === 'timeline' ? (
               <div className="flex-1 overflow-y-auto custom-scrollbar p-8 pt-20 relative bg-[#F8F9FA] dark:bg-card-dark">
-                <div className="absolute left-[31px] top-24 bottom-6 w-0.5 bg-gray-200 dark:bg-gray-700"></div>
+                {timeline.length > 0 && (
+                  <div className="absolute left-[31px] top-24 bottom-6 w-0.5 bg-gray-200 dark:bg-gray-700"></div>
+                )}
                 <div className="space-y-6">
+                  {timeline.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                      <span className="material-symbols-outlined text-4xl mb-3">timeline</span>
+                      <p className="text-sm font-medium">No timeline events yet</p>
+                    </div>
+                  )}
                   {timeline.map((entry: any) => (
                     <div key={entry.id} className="relative flex items-start group">
-                      <div className={`absolute left-0 w-12 h-12 flex items-center justify-center z-10`}>
+                      <div className="absolute left-0 w-12 h-12 flex items-center justify-center z-10">
                         <div className={`w-4 h-4 rounded-full border-2 border-white dark:border-gray-900 shadow-sm ${entry.severity === 'critical' || entry.severity === 'blocked' ? 'bg-red-500' : entry.severity === 'warning' || entry.severity === 'pending' ? 'bg-orange-400' : 'bg-green-500'}`}></div>
                       </div>
                       <div className="ml-14 flex-1 p-4 rounded-xl border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm">
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined text-lg text-gray-500 dark:text-gray-400">{entry.icon || 'circle'}</span>
-                            <h3 className="font-bold text-gray-900 dark:text-white">{formatStatus(entry.entry_type)}</h3>
+                            <h3 className="font-bold text-gray-900 dark:text-white">{formatStatus(entry.entry_type || entry.type)}</h3>
                           </div>
                           <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{new Date(entry.occurred_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
@@ -238,6 +283,11 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                   <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
                     <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{caseResolve?.conflict?.title || 'Resolve Case'}</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{caseResolve?.conflict?.summary || 'No active blocker registered.'}</p>
+                    {caseResolve?.conflict?.severity && (
+                      <span className={`inline-block mt-2 text-[10px] font-bold uppercase px-2 py-1 rounded border ${caseResolve.conflict.severity === 'critical' ? 'bg-red-50 text-red-700 border-red-200' : caseResolve.conflict.severity === 'warning' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                        {caseResolve.conflict.severity}
+                      </span>
+                    )}
                     <div className="mt-4 flex gap-3 flex-wrap">
                       {(['overview', 'identifiers', 'policy', 'execution'] as ResolveTab[]).map(tab => (
                         <button key={tab} onClick={() => setResolveTab(tab)} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider ${resolveTab === tab ? 'bg-gray-900 dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>{tab}</button>
@@ -245,7 +295,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                     </div>
                   </div>
 
-                  {resolveTab === 'overview' ? (
+                  {resolveTab === 'overview' && (
                     <>
                       <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
                         <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Active Blockers</h3>
@@ -256,7 +306,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                               <div className="text-xs text-gray-500 mt-1">{blocker.summary || blocker.source_of_truth || 'Pending review'}</div>
                             </div>
                           ))}
-                          {!(caseResolve?.blockers || []).length ? <div className="text-sm text-gray-500">No active blockers.</div> : null}
+                          {!(caseResolve?.blockers || []).length && <div className="text-sm text-gray-500">No active blockers.</div>}
                         </div>
                       </div>
                       <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
@@ -268,12 +318,15 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                               <div className="text-sm font-bold text-gray-900 dark:text-white">{state.summary}</div>
                             </div>
                           ))}
+                          {!(caseResolve?.expected_post_resolution_state || []).length && (
+                            <div className="text-sm text-gray-500 col-span-full">Resolution state will be computed after analysis.</div>
+                          )}
                         </div>
                       </div>
                     </>
-                  ) : null}
+                  )}
 
-                  {resolveTab === 'identifiers' ? (
+                  {resolveTab === 'identifiers' && (
                     <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
                       <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Identifiers</h3>
                       <div className="grid grid-cols-2 gap-4">
@@ -281,14 +334,15 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                           <div key={`${item.label}:${index}`} className="p-3 rounded-xl border border-gray-100 dark:border-gray-800">
                             <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">{item.label}</div>
                             <div className="text-sm font-bold text-gray-900 dark:text-white">{item.value}</div>
-                            {item.source ? <div className="text-xs text-gray-500 mt-1">{formatStatus(item.source)}</div> : null}
+                            {item.source && <div className="text-xs text-gray-500 mt-1">{formatStatus(item.source)}</div>}
                           </div>
                         ))}
+                        {!(caseResolve?.identifiers || []).length && <div className="text-sm text-gray-500">No identifiers available.</div>}
                       </div>
                     </div>
-                  ) : null}
+                  )}
 
-                  {resolveTab === 'policy' ? (
+                  {resolveTab === 'policy' && (
                     <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
                       <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Policy View</h3>
                       <div className="space-y-3">
@@ -306,13 +360,16 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                         </div>
                       </div>
                     </div>
-                  ) : null}
+                  )}
 
-                  {resolveTab === 'execution' ? (
+                  {resolveTab === 'execution' && (
                     <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
                       <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Execution Plan</h3>
                       <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
                         Mode: <span className="font-bold text-gray-900 dark:text-white">{formatStatus(caseResolve?.execution?.mode)}</span> · Status: <span className="font-bold text-gray-900 dark:text-white">{formatStatus(caseResolve?.execution?.status)}</span>
+                        {caseResolve?.execution?.requires_approval && (
+                          <span className="ml-3 text-[10px] font-bold uppercase px-2 py-1 rounded border bg-amber-50 text-amber-700 border-amber-200">Requires Approval</span>
+                        )}
                       </div>
                       <div className="space-y-3">
                         {(caseResolve?.execution?.steps || []).map((step: any) => (
@@ -324,14 +381,18 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                             <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded border ${step.status === 'critical' || step.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-200' : step.status === 'warning' || step.status === 'pending' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-green-50 text-green-700 border-green-200'}`}>{formatStatus(step.status)}</span>
                           </div>
                         ))}
+                        {!(caseResolve?.execution?.steps || []).length && (
+                          <div className="text-sm text-gray-500">No execution steps planned yet.</div>
+                        )}
                       </div>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               </div>
             )}
           </div>
 
+          {/* ── Right Panel: Details / Copilot ───────────────────── */}
           <div className="w-80 border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-card-dark flex flex-col">
             <div className="flex items-center justify-between px-6 pt-4 border-b border-gray-100 dark:border-gray-800">
               <div className="flex">
@@ -345,13 +406,15 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                 <div className="p-4 flex flex-col gap-4">
                   <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-2.5 px-3.5 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30">
                     <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Case Intelligence</h4>
-                    <p className="leading-relaxed mb-3">{caseState?.case?.ai_diagnosis || caseResolve?.conflict?.summary || 'No AI summary yet.'}</p>
+                    <p className="leading-relaxed mb-3">{copilotData.summary}</p>
                     <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Root Cause Analysis</h4>
-                    <p className="text-xs mb-3">{caseResolve?.conflict?.root_cause || 'Pending analysis.'}</p>
+                    <p className="text-xs mb-3">{copilotData.rootCause}</p>
                     <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Conflict Detection</h4>
-                    <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-800/30 text-xs text-red-700 dark:text-red-400 mb-3">{caseResolve?.conflict?.title || 'No conflict detected.'}</div>
+                    <div className={`p-2 rounded border text-xs mb-3 ${copilotData.conflict !== 'No conflict detected.' ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800/30 text-red-700 dark:text-red-400' : 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800/30 text-green-700 dark:text-green-400'}`}>
+                      {copilotData.conflict}
+                    </div>
                     <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
-                    <p className="text-xs bg-white/50 dark:bg-black/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic mb-3">{caseResolve?.conflict?.recommended_action || 'Awaiting recommendation.'}</p>
+                    <p className="text-xs bg-white/50 dark:bg-black/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic mb-3">{copilotData.recommendation}</p>
                     <button onClick={() => onPageChange('payments')} className="w-full py-2 bg-secondary text-white rounded-lg text-xs font-bold hover:opacity-90 flex items-center justify-center gap-2">
                       View Impacted Module
                       <span className="material-symbols-outlined text-sm">arrow_forward</span>
@@ -365,7 +428,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                     <div className="grid grid-cols-2 gap-4">
                       <div><span className="text-[10px] uppercase tracking-wider text-gray-500">Order ID</span><div className="text-xs font-bold text-gray-900 dark:text-white">{rootData.orderId}</div></div>
                       <div><span className="text-[10px] uppercase tracking-wider text-gray-500">Customer</span><div className="text-xs font-bold text-gray-900 dark:text-white">{rootData.customerName}</div></div>
-                      <div><span className="text-[10px] uppercase tracking-wider text-gray-500">Status</span><div className="text-xs font-bold text-red-600 dark:text-red-400">{formatStatus(caseGraph?.root?.status || caseState?.case?.status)}</div></div>
+                      <div><span className="text-[10px] uppercase tracking-wider text-gray-500">Status</span><div className="text-xs font-bold text-red-600 dark:text-red-400">{formatStatus(caseState?.case?.status || rootData.status)}</div></div>
                       <div><span className="text-[10px] uppercase tracking-wider text-gray-500">Risk Level</span><div className="text-xs font-bold text-orange-600 dark:text-orange-400">{rootData.riskLevel}</div></div>
                     </div>
                     <div className="mt-4">
@@ -377,7 +440,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                             {branch.label}
                           </span>
                         ))}
-                        {!impactedBranches.length ? <span className="text-xs text-gray-500 italic">No impacted branches</span> : null}
+                        {!impactedBranches.length && <span className="text-xs text-gray-500 italic">No impacted branches</span>}
                       </div>
                     </div>
                   </div>
@@ -394,7 +457,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                           <span className="material-symbols-outlined text-sm">open_in_new</span>
                         </a>
                       ))}
-                      {!links.length ? <p className="text-xs text-gray-500">No integration links observed yet.</p> : null}
+                      {!links.length && <p className="text-xs text-gray-500">No integration links observed yet.</p>}
                     </div>
                   </div>
 
@@ -410,7 +473,7 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                           <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[9px] font-bold rounded uppercase">{formatStatus(item.status)}</span>
                         </div>
                       ))}
-                      {!relatedCases.length ? <p className="text-xs text-gray-500">No linked cases.</p> : null}
+                      {!relatedCases.length && <p className="text-xs text-gray-500">No linked cases.</p>}
                     </div>
                   </div>
 
@@ -422,11 +485,11 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
                           <p className="text-xs text-yellow-900 dark:text-yellow-100 leading-relaxed italic">{note.content}</p>
                           <div className="mt-2 flex justify-between items-center text-[10px] text-yellow-700/70">
                             <span>{note.created_by || 'System'}</span>
-                            <span>{new Date(note.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>{note.created_at ? new Date(note.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                           </div>
                         </div>
                       ))}
-                      {!internalNotes.length ? <p className="text-xs text-gray-500">No internal notes yet.</p> : null}
+                      {!internalNotes.length && <p className="text-xs text-gray-500">No internal notes yet.</p>}
                     </div>
                   </div>
                 </div>
@@ -448,4 +511,13 @@ export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page)
       </div>
     </div>
   );
+}
+
+function iconForBranch(key: string) {
+  const iconMap: Record<string, string> = {
+    orders: 'shopping_bag', payments: 'payments', returns: 'assignment_return',
+    fulfillment: 'local_shipping', approvals: 'check_circle', workflows: 'account_tree',
+    knowledge: 'description', integrations: 'hub',
+  };
+  return iconMap[key] || 'widgets';
 }

@@ -37,19 +37,27 @@ function addColumn(
   definition: string,
 ): void {
   if (!hasColumn(db, table, column)) {
-    const usesCurrentTimestampDefault = /DEFAULT\s*\(\s*CURRENT_TIMESTAMP\s*\)/i.test(definition);
-    const sqliteDefinition = usesCurrentTimestampDefault
-      ? definition
-          .replace(/\s+NOT\s+NULL/ig, '')
-          .replace(/\s+DEFAULT\s*\(\s*CURRENT_TIMESTAMP\s*\)/ig, '')
-          .trim()
-      : definition;
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      logger.debug(`Migration: added ${table}.${column}`);
+    } catch (err: any) {
+      // SQLite cannot add a column whose DEFAULT is an expression such as
+      // CURRENT_TIMESTAMP. In that case we degrade the definition safely,
+      // add the nullable column, and backfill current timestamps so older DBs
+      // can still boot and keep moving.
+      if (String(err?.message || '').includes('non-constant default')) {
+        const relaxedDefinition = definition
+          .replace(/\s+NOT NULL\s+DEFAULT\s+\(CURRENT_TIMESTAMP\)/i, ' TEXT')
+          .replace(/\s+DEFAULT\s+\(CURRENT_TIMESTAMP\)/i, '')
+          .replace(/\s+NOT NULL/i, '');
 
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${sqliteDefinition}`);
-    if (usesCurrentTimestampDefault) {
-      db.prepare(`UPDATE ${table} SET ${column} = CURRENT_TIMESTAMP WHERE ${column} IS NULL`).run();
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}${relaxedDefinition.startsWith(' ') ? '' : ' '}${relaxedDefinition}`);
+        db.prepare(`UPDATE ${table} SET ${column} = CURRENT_TIMESTAMP WHERE ${column} IS NULL`).run();
+        logger.debug(`Migration: added ${table}.${column} with relaxed SQLite-compatible definition`);
+        return;
+      }
+      throw err;
     }
-    logger.debug(`Migration: added ${table}.${column}`);
   }
 }
 
@@ -161,17 +169,68 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
     },
   },
 
-  // ── 2024-01-009: agent_runs — columns expected by runner.ts ─────────────
   {
-    version: '2024-01-009',
+    version: '2026-04-08-001',
     up(db) {
-      addColumn(db, 'agent_runs', 'workspace_id',    `TEXT NOT NULL DEFAULT 'ws_default'`);
-      addColumn(db, 'agent_runs', 'trigger_event',   `TEXT DEFAULT 'case_created'`);
-      addColumn(db, 'agent_runs', 'status',           `TEXT NOT NULL DEFAULT 'running'`);
-      addColumn(db, 'agent_runs', 'summary',          'TEXT');
-      addColumn(db, 'agent_runs', 'output',            'TEXT');
-      addColumn(db, 'agent_runs', 'error_message',    'TEXT');
-      addColumn(db, 'agent_runs', 'finished_at',      'TEXT');
+      const workspace = db.prepare('SELECT id, org_id FROM workspaces LIMIT 1').get() as { id: string; org_id: string } | undefined;
+      if (!workspace) return;
+
+      const businessTables = [
+        'customers',
+        'cases',
+        'case_status_history',
+        'case_links',
+        'conversations',
+        'messages',
+        'draft_replies',
+        'internal_notes',
+        'orders',
+        'order_events',
+        'payments',
+        'returns',
+        'return_events',
+        'reconciliation_issues',
+        'approval_requests',
+        'execution_plans',
+        'tool_action_attempts',
+        'workflow_runs',
+        'knowledge_domains',
+        'knowledge_articles',
+        'connectors',
+        'canonical_events',
+        'agents',
+        'agent_runs',
+        'audit_events',
+        'jobs',
+      ];
+
+      businessTables.forEach(table => {
+        if (!hasTable(db, table) || !hasColumn(db, table, 'tenant_id')) return;
+        db.prepare(`UPDATE ${table} SET tenant_id = ? WHERE tenant_id = 'tenant_default'`).run(workspace.org_id);
+      });
+    },
+  },
+  {
+    version: '2026-04-08-002',
+    up(db) {
+      addColumn(db, 'agents', 'updated_at', `TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)`);
+      db.prepare('UPDATE agents SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL').run();
+    },
+  },
+  {
+    version: '2026-04-08-003',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS case_knowledge_links (
+          id TEXT PRIMARY KEY,
+          case_id TEXT NOT NULL REFERENCES cases(id),
+          article_id TEXT NOT NULL REFERENCES knowledge_articles(id),
+          tenant_id TEXT NOT NULL,
+          relevance_score REAL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+          UNIQUE(case_id, article_id)
+        )
+      `);
     },
   },
   {

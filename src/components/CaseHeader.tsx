@@ -39,22 +39,22 @@ export default function CaseHeader({
 }: CaseHeaderProps) {
   return (
     <div className="w-full">
-      <div className="flex justify-between items-start mb-6">
-        <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-full ${avatarColor} flex items-center justify-center text-white font-bold text-lg`}>
+      <div className="flex justify-between items-start mb-6 gap-4">
+        <div className="flex items-center gap-4 min-w-0 flex-1">
+          <div className={`w-12 h-12 rounded-full ${avatarColor} flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}>
             {initials}
           </div>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">{caseId}: {title}</h1>
-              <span className="text-sm text-gray-400">via {channel}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3 min-w-0">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white truncate" title={`${caseId}: ${title}`}>{caseId}: {title}</h1>
+              <span className="text-sm text-gray-400 flex-shrink-0">via {channel}</span>
             </div>
-            <div className="text-sm text-gray-500 mt-1">
+            <div className="text-sm text-gray-500 mt-1 truncate" title={`${customerName} - ${orderId} - ${brand}`}>
               {customerName} • {orderId} • {brand}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {actions}
           <button className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
             <span className="material-symbols-outlined">check_circle</span>
@@ -69,7 +69,7 @@ export default function CaseHeader({
       </div>
 
       <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 mb-4 flex justify-between items-center">
-        <div className="flex gap-8">
+        <div className="flex gap-8 min-w-0">
           <div>
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Order</div>
             <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{orderStatus}</div>
@@ -91,9 +91,9 @@ export default function CaseHeader({
             <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{approvalStatus}</div>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right min-w-0 max-w-xs">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Recommended Action</div>
-          <div className="text-sm font-bold text-secondary">{recommendedAction}</div>
+          <div className="text-sm font-bold text-secondary truncate" title={recommendedAction}>{recommendedAction}</div>
         </div>
       </div>
 
