@@ -24,6 +24,7 @@
  */
 
 import { getDb }              from '../db/client.js';
+import { logAudit }           from '../db/utils.js';
 import { registerHandler }    from '../queue/handlers/index.js';
 import { JobType }            from '../queue/types.js';
 import { logger }             from '../utils/logger.js';
@@ -164,6 +165,75 @@ async function handleSlaCheck(
     breached: breachedCount,
     atRisk:   atRiskCount,
   });
+
+  // ── Expire stale approval requests (piggyback on SLA sweep) ───────────
+  try {
+    const now = new Date().toISOString();
+    const approvalsToExpire = db.prepare(`
+      SELECT id, case_id, tenant_id, workspace_id, action_type, risk_level, expires_at
+      FROM approval_requests
+      WHERE status = 'pending'
+        AND expires_at IS NOT NULL
+        AND expires_at < ?
+        AND tenant_id = ?
+    `).all(now, tenantId) as any[];
+
+    const expired = db.prepare(`
+      UPDATE approval_requests SET
+        status     = 'expired',
+        updated_at = ?
+      WHERE status = 'pending'
+        AND expires_at IS NOT NULL
+        AND expires_at < ?
+        AND tenant_id = ?
+    `).run(now, now, tenantId);
+
+    if (expired.changes > 0) {
+      log.info('Expired stale approval requests', { count: expired.changes });
+
+      // Reset corresponding cases back from 'pending' approval state
+      db.prepare(`
+        UPDATE cases SET
+          approval_state = 'expired',
+          updated_at     = CURRENT_TIMESTAMP
+        WHERE approval_state = 'pending'
+          AND tenant_id = ?
+          AND active_approval_request_id IN (
+            SELECT id FROM approval_requests
+            WHERE status = 'expired' AND tenant_id = ?
+          )
+      `).run(tenantId, tenantId);
+
+      for (const approval of approvalsToExpire) {
+        try {
+          logAudit(db, {
+            tenantId: approval.tenant_id,
+            workspaceId: approval.workspace_id,
+            actorId: 'sla-monitor',
+            actorType: 'system',
+            action: 'approval.expired',
+            entityType: 'approval_request',
+            entityId: approval.id,
+            oldValue: { status: 'pending' },
+            newValue: { status: 'expired', caseId: approval.case_id },
+            metadata: {
+              actionType: approval.action_type,
+              riskLevel: approval.risk_level,
+              expiresAt: approval.expires_at,
+              source: 'sla_sweep',
+            },
+          });
+        } catch (auditErr: any) {
+          log.warn('Approval expiry audit failed', {
+            approvalId: approval.id,
+            error: auditErr?.message,
+          });
+        }
+      }
+    }
+  } catch (err: any) {
+    log.warn('Approval expiry sweep failed', { error: err?.message });
+  }
 }
 
 // ── Register ──────────────────────────────────────────────────────────────────

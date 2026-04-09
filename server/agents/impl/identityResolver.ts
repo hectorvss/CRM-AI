@@ -74,15 +74,20 @@ export const identityResolverImpl: AgentImplementation = {
     let linksCreated = 0;
     const insertLink = db.prepare(`
       INSERT OR IGNORE INTO linked_identities
-        (id, customer_id, tenant_id, system, external_id, confidence, verified_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (id, customer_id, system, external_id, confidence, verified, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const link of newLinks) {
       try {
         const changes = insertLink.run(
-          randomUUID(), customerId, tenantId,
-          link.system, link.externalId, link.confidence, now, now,
+          randomUUID(),
+          customerId,
+          link.system,
+          link.externalId,
+          link.confidence,
+          1,
+          now,
         );
         if ((changes as any).changes > 0) linksCreated++;
       } catch (err: any) {
