@@ -147,9 +147,10 @@ async function handleChannelIngest(
     );
 
     db.prepare(`
-      INSERT INTO linked_identities (id, customer_id, system, external_id, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(randomUUID(), customerId, identitySystem, msg.senderId, now);
+      INSERT INTO linked_identities (
+        id, customer_id, tenant_id, workspace_id, system, external_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(randomUUID(), customerId, tenantId, workspaceId, identitySystem, msg.senderId, now);
 
     log.info('Created stub customer for new channel sender', {
       customerId,

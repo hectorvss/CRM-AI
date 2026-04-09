@@ -83,10 +83,13 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS linked_identities (
   id TEXT PRIMARY KEY,
   customer_id TEXT NOT NULL REFERENCES customers(id),
+  tenant_id TEXT,
+  workspace_id TEXT,
   system TEXT NOT NULL,
   external_id TEXT NOT NULL,
   confidence REAL DEFAULT 1.0,
   verified INTEGER DEFAULT 0,
+  verified_at TEXT,
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   UNIQUE(system, external_id)
 );
@@ -288,6 +291,10 @@ CREATE TABLE IF NOT EXISTS orders (
   tenant_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
+  fulfillment_status TEXT,
+  tracking_number TEXT,
+  tracking_url TEXT,
+  shipping_address TEXT,
   system_states TEXT NOT NULL DEFAULT '{"canonical":"pending"}',
   total_amount REAL NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'USD',

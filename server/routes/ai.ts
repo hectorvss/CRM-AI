@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { withGeminiRetry } from '../ai/geminiRetry.js';
 import { getDb } from '../db/client.js';
+import { config } from '../config.js';
 import { parseRow } from '../db/utils.js';
 import { extractMultiTenant, type MultiTenantRequest } from '../middleware/multiTenant.js';
 import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
@@ -107,7 +109,7 @@ router.post('/diagnose/:caseId', async (req: MultiTenantRequest, res) => {
     const { caseRow, contextText, caseContext } = buildCaseContext(req.params.caseId, tenantId);
     const knowledgeBundle = buildKnowledgePrompt('qa-policy-check', tenantId, workspaceId, caseContext);
     const ai = getAI();
-    const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
 
     const prompt = `You are an expert AI operations analyst for a support & operations SaaS.
 Analyze the following case and provide a structured diagnosis.
@@ -130,7 +132,10 @@ Provide a JSON response with this exact structure:
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
-    const result = await model.generateContent(prompt);
+    const result = await withGeminiRetry(
+      () => model.generateContent(prompt),
+      { label: 'api.ai.diagnose' },
+    );
     const text = result.response.text().trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
 
     let parsed;
@@ -175,7 +180,7 @@ router.post('/draft/:caseId', async (req: MultiTenantRequest, res) => {
     const { contextText, caseContext } = buildCaseContext(req.params.caseId, tenantId);
     const knowledgeBundle = buildKnowledgePrompt('composer-translator', tenantId, workspaceId, caseContext);
     const ai = getAI();
-    const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
 
     const prompt = `You are an expert customer support agent for an ecommerce operations platform.
 Write a ${tone} reply to the customer based on this case:
@@ -194,7 +199,10 @@ Rules:
 
 Return ONLY the reply text, nothing else.`;
 
-    const result = await model.generateContent(prompt);
+    const result = await withGeminiRetry(
+      () => model.generateContent(prompt),
+      { label: 'api.ai.draft' },
+    );
     const draft = result.response.text().trim();
 
     const db = getDb();
@@ -208,12 +216,13 @@ Return ONLY the reply text, nothing else.`;
           id, case_id, conversation_id, content, generated_by, generated_at,
           status, tenant_id, has_policies, citations
         )
-        VALUES (?, ?, ?, ?, 'gemini-1.5-flash', CURRENT_TIMESTAMP, 'pending_review', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending_review', ?, ?, ?)
       `).run(
         draftId,
         req.params.caseId,
         caseRow.conversation_id,
         draft,
+        config.ai.geminiModel,
         tenantId,
         knowledgeBundle.citations.length > 0 ? 1 : 0,
         JSON.stringify(knowledgeBundle.citations),
@@ -248,7 +257,7 @@ router.post('/policy-check', async (req: MultiTenantRequest, res) => {
     const knowledgeBundle = buildKnowledgePrompt('approval-gatekeeper', tenantId, workspaceId, caseContext);
 
     const ai = getAI();
-    const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
 
     const prompt = `You are a policy compliance checker for a customer support operations platform.
 
@@ -271,7 +280,10 @@ Evaluate if this action is compliant and return JSON:
 
 Return ONLY valid JSON.`;
 
-    const result = await model.generateContent(prompt);
+    const result = await withGeminiRetry(
+      () => model.generateContent(prompt),
+      { label: 'api.ai.policy-check' },
+    );
     const text = result.response.text().trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
     const parsed = JSON.parse(text);
 

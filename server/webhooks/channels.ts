@@ -27,6 +27,7 @@ import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { config }  from '../config.js';
 import { logger }  from '../utils/logger.js';
+import { resolveTenantWorkspaceContext } from '../middleware/multiTenant.js';
 
 // ── WhatsApp (Meta Business API) ──────────────────────────────────────────────
 
@@ -99,6 +100,10 @@ whatsappWebhookRouter.post('/', (req: Request, res: Response) => {
   res.status(200).send('ok');
 
   const db = getDb();
+  const context = resolveTenantWorkspaceContext(
+    req.headers['x-tenant-id'] as string | undefined,
+    req.headers['x-workspace-id'] as string | undefined,
+  );
 
   try {
     const entries: any[] = body?.entry ?? [];
@@ -153,14 +158,14 @@ whatsappWebhookRouter.post('/', (req: Request, res: Response) => {
               event_type, occurred_at,
               canonical_entity_type, canonical_entity_id,
               normalized_payload, dedupe_key,
-              status, tenant_id, workspace_id, created_at, updated_at
-            ) VALUES (?, 'whatsapp', 'customer', ?, 'message.inbound', ?, 'customer', ?, ?, ?, 'received', 'org_default', 'ws_default', ?, ?)
-          `).run(eventId, from, sentAt, from, normalized, dedupeKey, now, now);
+              status, tenant_id, workspace_id, ingested_at, updated_at
+            ) VALUES (?, 'whatsapp', 'customer', ?, 'message.inbound', ?, 'customer', ?, ?, ?, 'received', ?, ?, ?, ?)
+          `).run(eventId, from, sentAt, from, normalized, dedupeKey, context.tenantId, context.workspaceId, now, now);
 
           enqueue(
             JobType.CHANNEL_INGEST,
             { canonicalEventId: eventId, channel: 'whatsapp', rawMessageId: externalMessageId },
-            { tenantId: 'org_default', traceId: eventId, priority: 3 },
+            { tenantId: context.tenantId, workspaceId: context.workspaceId, traceId: eventId, priority: 3 },
           );
 
           logger.info('WhatsApp message enqueued', { from, externalMessageId });
@@ -211,6 +216,10 @@ emailWebhookRouter.post('/', (req: Request, res: Response) => {
   res.status(200).send('ok');
 
   const db = getDb();
+  const context = resolveTenantWorkspaceContext(
+    req.headers['x-tenant-id'] as string | undefined,
+    req.headers['x-workspace-id'] as string | undefined,
+  );
 
   try {
     // Normalise across Postmark / SendGrid
@@ -267,14 +276,14 @@ emailWebhookRouter.post('/', (req: Request, res: Response) => {
         event_type, occurred_at,
         canonical_entity_type, canonical_entity_id,
         normalized_payload, dedupe_key,
-        status, tenant_id, workspace_id, created_at, updated_at
-      ) VALUES (?, 'email', 'customer', ?, 'message.inbound', ?, 'customer', ?, ?, ?, 'received', 'org_default', 'ws_default', ?, ?)
-    `).run(eventId, senderEmail, sentAt, senderEmail, normalized, dedupeKey, now, now);
+        status, tenant_id, workspace_id, ingested_at, updated_at
+      ) VALUES (?, 'email', 'customer', ?, 'message.inbound', ?, 'customer', ?, ?, ?, 'received', ?, ?, ?, ?)
+    `).run(eventId, senderEmail, sentAt, senderEmail, normalized, dedupeKey, context.tenantId, context.workspaceId, now, now);
 
     enqueue(
       JobType.CHANNEL_INGEST,
       { canonicalEventId: eventId, channel: 'email', rawMessageId: externalMessageId },
-      { tenantId: 'org_default', traceId: eventId, priority: 3 },
+      { tenantId: context.tenantId, workspaceId: context.workspaceId, traceId: eventId, priority: 3 },
     );
 
     logger.info('Email message enqueued', { from: senderEmail, subject, externalMessageId });

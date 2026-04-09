@@ -22,6 +22,7 @@
  * }
  */
 
+import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -30,7 +31,7 @@ export const reportGeneratorImpl: AgentImplementation = {
   slug: 'report-generator',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, tenantId, triggerEvent } = ctx;
+    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, triggerEvent } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
 
@@ -45,6 +46,8 @@ export const reportGeneratorImpl: AgentImplementation = {
     }
 
 ${contextStr}
+
+${knowledgeBundle.promptContext ? `ACCESSIBLE KNOWLEDGE AND POLICIES:\n${knowledgeBundle.promptContext}\n` : ''}
 
 Return a JSON object with exactly these fields:
 {
@@ -77,7 +80,10 @@ Focus on:
         },
       });
 
-      const response = await model.generateContent(prompt);
+      const response = await withGeminiRetry(
+        () => model.generateContent(prompt),
+        { label: 'report-generator' },
+      );
       const text = response.response.text();
       tokensUsed = response.response.usageMetadata?.totalTokenCount ?? 0;
       reportOutput = JSON.parse(text);
@@ -126,6 +132,7 @@ Focus on:
         resolutionSummary: resolutionSummary ?? null,
         conflictSummary: conflictSummary ?? null,
         keyInsights,
+        citations: knowledgeBundle.citations,
       },
     };
   },

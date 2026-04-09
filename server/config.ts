@@ -137,7 +137,7 @@ function buildConfig(): Config {
 
     ai: {
       geminiApiKey,
-      geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-1.5-flash'),
+      geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-2.5-pro'),
     },
 
     queue: {

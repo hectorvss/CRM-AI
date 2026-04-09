@@ -66,28 +66,28 @@ const SUPERVISOR_PERMS: PermissionProfile = {
 
 // Reasoning profiles
 const FAST_REASONING: ReasoningProfile = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.1,
   maxOutputTokens: 1024,
   useJsonMode: true,
 };
 
 const BALANCED_REASONING: ReasoningProfile = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.2,
   maxOutputTokens: 2048,
   useJsonMode: true,
 };
 
 const CREATIVE_REASONING: ReasoningProfile = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.4,
   maxOutputTokens: 3072,
   useJsonMode: true,
 };
 
 const THOROUGH_REASONING: ReasoningProfile = {
-  model: 'gemini-1.5-pro',
+  model: 'gemini-2.5-pro',
   temperature: 0.1,
   maxOutputTokens: 4096,
   useJsonMode: true,

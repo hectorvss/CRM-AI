@@ -22,6 +22,7 @@ import { getDb } from '../db/client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildContextWindow } from '../pipeline/contextWindow.js';
+import { resolveAgentKnowledgeBundle, type KnowledgeProfile } from '../services/agentKnowledge.js';
 import { getAgentImpl } from './registry.js';
 import {
   DEFAULT_PERMISSION_PROFILE,
@@ -99,6 +100,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     ...DEFAULT_SAFETY_PROFILE,
     ...safeJson<Partial<SafetyProfile>>(versionRow.safety_profile, {}),
   };
+  const knowledgeProfile = safeJson<KnowledgeProfile>(versionRow.knowledge_profile, {});
 
   // ── Step 4: Build context window ──────────────────────────────────────────
   const contextWindow = buildContextWindow(caseId, tenantId);
@@ -106,6 +108,21 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     logger.warn('Could not build context window for case', { caseId, tenantId });
     return { success: false, error: `Case "${caseId}" not found` };
   }
+
+  const latestMessage = contextWindow.messages[contextWindow.messages.length - 1]?.content ?? null;
+  const knowledgeBundle = resolveAgentKnowledgeBundle({
+    tenantId,
+    workspaceId,
+    knowledgeProfile,
+    caseContext: {
+      type: contextWindow.case.type,
+      intent: contextWindow.case.intent,
+      tags: contextWindow.case.tags,
+      customerSegment: contextWindow.customer?.segment ?? null,
+      conflictDomains: contextWindow.conflicts.map(conflict => conflict.domain),
+      latestMessage,
+    },
+  });
 
   // ── Step 5: Get implementation ────────────────────────────────────────────
   const impl = getAgentImpl(agentSlug);
@@ -138,6 +155,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     reasoning,
     safety,
     contextWindow,
+    knowledgeBundle,
     gemini,
     tenantId,
     workspaceId,

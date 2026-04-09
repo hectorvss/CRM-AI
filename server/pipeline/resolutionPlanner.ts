@@ -33,6 +33,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID }         from 'crypto';
+import { withGeminiRetry }    from '../ai/geminiRetry.js';
 import { getDb }              from '../db/client.js';
 import { config }             from '../config.js';
 import { enqueue }            from '../queue/client.js';
@@ -119,7 +120,10 @@ RESPONSE SCHEMA:
 `.trim();
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withGeminiRetry(
+      () => model.generateContent(prompt),
+      { label: 'resolution.plan' },
+    );
     const text   = result.response.text().trim();
     const json   = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     const parsed = JSON.parse(json) as PlanResult;

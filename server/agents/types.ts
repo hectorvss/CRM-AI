@@ -14,6 +14,7 @@
 
 import type { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ContextWindow } from '../pipeline/contextWindow.js';
+import type { AgentKnowledgeBundle } from '../services/agentKnowledge.js';
 
 // ── Profiles (stored as JSON in agent_versions) ───────────────────────────────
 
@@ -76,7 +77,7 @@ export const DEFAULT_PERMISSION_PROFILE: PermissionProfile = {
 };
 
 export const DEFAULT_REASONING_PROFILE: ReasoningProfile = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.2,
   maxOutputTokens: 2048,
   useJsonMode: true,
@@ -103,6 +104,8 @@ export interface AgentRunContext {
   safety: SafetyProfile;
   /** Pre-built context window for the case */
   contextWindow: ContextWindow;
+  /** Knowledge and policy documents available to this agent run */
+  knowledgeBundle: AgentKnowledgeBundle;
   /** Gemini client configured with the reasoning profile */
   gemini: GoogleGenerativeAI;
   /** Queue/job context */
@@ -167,6 +170,7 @@ export interface AgentVersionRow {
   permission_profile: string | null;  // JSON
   reasoning_profile: string | null;   // JSON
   safety_profile: string | null;      // JSON
+  knowledge_profile: string | null;   // JSON
   published_at: string | null;
   tenant_id: string;
 }

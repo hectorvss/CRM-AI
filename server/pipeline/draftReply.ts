@@ -20,6 +20,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID }         from 'crypto';
+import { withGeminiRetry }    from '../ai/geminiRetry.js';
 import { getDb }              from '../db/client.js';
 import { config }             from '../config.js';
 import { registerHandler }    from '../queue/handlers/index.js';
@@ -87,9 +88,14 @@ Reply:
 `.trim();
 
   try {
-    const result = await model.generateContent(prompt);
-    const draft  = result.response.text().trim();
-    return { draft, confidence: 0.85 };
+    const result = await withGeminiRetry(
+      () => model.generateContent(prompt),
+      { label: 'draft.reply' },
+    );
+    return {
+      draft: result.response.text().trim(),
+      confidence: 0.85,
+    };
   } catch (err) {
     logger.warn('Draft generation failed', {
       error: err instanceof Error ? err.message : String(err),

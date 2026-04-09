@@ -21,6 +21,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -35,7 +36,7 @@ export const triageAgentImpl: AgentImplementation = {
   slug: 'triage-agent',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, tenantId } = ctx;
+    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
 
@@ -45,6 +46,8 @@ export const triageAgentImpl: AgentImplementation = {
     const prompt = `You are a CRM triage specialist. Analyze this support case and classify it.
 
 ${contextStr}
+
+${knowledgeBundle.promptContext ? `ACCESSIBLE KNOWLEDGE AND POLICIES:\n${knowledgeBundle.promptContext}\n` : ''}
 
 Return a JSON object with exactly these fields:
 {
@@ -84,7 +87,10 @@ SLA tiers:
         },
       });
 
-      const response = await model.generateContent(prompt);
+      const response = await withGeminiRetry(
+        () => model.generateContent(prompt),
+        { label: 'triage-agent' },
+      );
       const text = response.response.text();
       tokensUsed = response.response.usageMetadata?.totalTokenCount ?? 0;
       triageOutput = JSON.parse(text);
