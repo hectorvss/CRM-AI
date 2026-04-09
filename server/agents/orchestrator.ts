@@ -16,6 +16,7 @@
 import { getDb } from '../db/client.js';
 import { logger } from '../utils/logger.js';
 import { runAgent } from './runner.js';
+import { broadcastSSE } from '../routes/sse.js';
 import type { JobHandler } from '../queue/types.js';
 import type { AgentTriggerPayload } from '../queue/types.js';
 
@@ -108,6 +109,11 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
     triggerEvent, caseId, slugs: slugsToRun, jobId: ctx.jobId,
   });
 
+  // Broadcast chain start to SSE clients
+  broadcastSSE(resolvedTenantId, 'chain:start', {
+    caseId, triggerEvent, slugs: slugsToRun,
+  });
+
   // ── Check case still exists and is actionable ─────────────────────────────
   const db = getDb();
   const caseRow = db.prepare(
@@ -137,6 +143,10 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
     }
 
     try {
+      broadcastSSE(resolvedTenantId, 'agent:start', {
+        agentSlug: slug, caseId, triggerEvent,
+      });
+
       const result = await runAgent({
         agentSlug: slug,
         caseId,
@@ -147,6 +157,14 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
         extraContext,
       });
 
+      const status = result.success ? 'completed' : 'failed';
+      broadcastSSE(resolvedTenantId, 'agent:finish', {
+        agentSlug: slug, caseId, status,
+        summary: result.summary ?? null,
+        confidence: result.confidence ?? null,
+        error: result.error ?? null,
+      });
+
       if (!result.success) {
         consecutiveFailures++;
         logger.warn('Agent returned failure', { slug, caseId, error: result.error });
@@ -155,9 +173,18 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
       }
     } catch (err: any) {
       consecutiveFailures++;
+      broadcastSSE(resolvedTenantId, 'agent:finish', {
+        agentSlug: slug, caseId, status: 'error',
+        error: err?.message ?? 'Unknown error',
+      });
       logger.error('Agent threw unhandled error', { slug, caseId, error: err?.message });
     }
   }
+
+  broadcastSSE(resolvedTenantId, 'chain:finish', {
+    caseId, triggerEvent, failures: consecutiveFailures,
+    totalAgents: slugsToRun.length,
+  });
 
   logger.info('Orchestrator finished agent chain', {
     triggerEvent, caseId, slugs: slugsToRun,

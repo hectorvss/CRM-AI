@@ -30,7 +30,7 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
   slug: 'workflow-runtime-agent',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, tenantId, triggerEvent, runId } = ctx;
+    const { contextWindow, tenantId, workspaceId, triggerEvent, runId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
     const now = new Date().toISOString();
@@ -64,8 +64,14 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
 
       // ── Handle based on trigger event ──────────────────────────────
       if (triggerEvent === 'conflicts_detected') {
-        // Pause running workflows when conflicts are found
-        if (wf.run_status === 'running') {
+        // Only pause for high/critical severity conflicts; skip low/medium
+        const maxSeverity = (contextWindow.conflicts || []).reduce((max: string, c: any) => {
+            const order = ['low', 'medium', 'high', 'critical'];
+            return order.indexOf(c.severity) > order.indexOf(max) ? c.severity : max;
+          }, 'low');
+        const shouldPause = maxSeverity === 'high' || maxSeverity === 'critical';
+
+        if (wf.run_status === 'running' && shouldPause) {
           try {
             db.prepare('UPDATE workflow_runs SET status = ?, updated_at = ? WHERE id = ?')
               .run('paused', now, wf.run_id);
@@ -73,9 +79,16 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
               workflowId: wf.run_id,
               workflowName: wf.name,
               action: 'pause',
-              detail: 'Paused due to conflicts detected',
+              detail: `Paused due to ${maxSeverity}-severity conflict`,
             });
           } catch { /* non-critical */ }
+        } else if (wf.run_status === 'running' && !shouldPause) {
+          actions.push({
+            workflowId: wf.run_id,
+            workflowName: wf.name,
+            action: 'skip',
+            detail: `Conflict severity ${maxSeverity} — workflow continues`,
+          });
         }
       }
 
@@ -147,11 +160,12 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
       try {
         db.prepare(`
           INSERT INTO audit_events
-            (id, tenant_id, entity_type, entity_id, event_type, description, metadata, created_at)
-          VALUES (?, ?, 'case', ?, ?, ?, ?, ?)
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
         `).run(
-          randomUUID(), tenantId, caseId,
+          randomUUID(), tenantId, workspaceId,
           'workflow_runtime',
+          caseId,
           `Workflow runtime: ${actions.length} action(s) on ${activeWorkflows.length} workflow(s)`,
           JSON.stringify({ actions, trigger: triggerEvent, agentRunId: runId }),
           now,

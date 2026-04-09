@@ -39,6 +39,8 @@ import operationsRouter from './routes/operations.js';
 import executionRouter from './routes/execution.js';
 import sseRouter from './routes/sse.js';
 import demoRouter from './routes/demo.js';
+import policyRouter from './routes/policy.js';
+import reconciliationRouter from './routes/reconciliation.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
@@ -121,6 +123,8 @@ app.use('/api/operations', operationsRouter);
 app.use('/api/execution', executionRouter);
 app.use('/api/sse', sseRouter);
 app.use('/api/demo', demoRouter);
+app.use('/api/policy', policyRouter);
+app.use('/api/reconciliation', reconciliationRouter);
 
 // ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {

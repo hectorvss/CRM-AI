@@ -25,7 +25,7 @@ export const returnsAgentImpl: AgentImplementation = {
   slug: 'returns-agent',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, tenantId, runId } = ctx;
+    const { contextWindow, tenantId, workspaceId, runId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
     const now = new Date().toISOString();
@@ -115,11 +115,12 @@ export const returnsAgentImpl: AgentImplementation = {
       try {
         db.prepare(`
           INSERT INTO audit_events
-            (id, tenant_id, entity_type, entity_id, event_type, description, metadata, created_at)
-          VALUES (?, ?, 'case', ?, ?, ?, ?, ?)
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
         `).run(
-          randomUUID(), tenantId, caseId,
+          randomUUID(), tenantId, workspaceId,
           'returns_lifecycle',
+          caseId,
           `Returns agent: ${actions.length} action(s), ${progressedCount} progressed, ${blockedCount} blocked`,
           JSON.stringify({ actions, agentRunId: runId }),
           now,

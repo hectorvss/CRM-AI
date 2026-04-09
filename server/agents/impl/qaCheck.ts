@@ -30,7 +30,7 @@ export const qaCheckImpl: AgentImplementation = {
   slug: 'qa-policy-check',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId } = ctx;
+    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
 
@@ -119,10 +119,11 @@ Approval is required if:
       try {
         db.prepare(`
           INSERT INTO audit_events
-            (id, tenant_id, entity_type, entity_id, event_type, description, metadata, created_at)
-          VALUES (?, ?, 'case', ?, 'policy_violation_detected', ?, ?, ?)
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', 'policy_violation_detected', 'case', ?, ?, ?, ?)
         `).run(
-          randomUUID(), tenantId, caseId,
+          randomUUID(), tenantId, workspaceId,
+          caseId,
           `${violations.length} policy violation(s) detected`,
           JSON.stringify({ violations, requiresApproval, citations: knowledgeBundle.citations, agentSlug: 'qa-policy-check' }),
           now,

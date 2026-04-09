@@ -19,13 +19,14 @@
 import { randomUUID } from 'crypto';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
+import { integrationRegistry } from '../../integrations/registry.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
 
 export const shopifyConnectorImpl: AgentImplementation = {
   slug: 'shopify-connector',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, tenantId, permissions, runId } = ctx;
+    const { contextWindow, tenantId, workspaceId, permissions, runId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
     const now = new Date().toISOString();
@@ -48,12 +49,33 @@ export const shopifyConnectorImpl: AgentImplementation = {
       };
     }
 
+    // ── Try live Shopify adapter first, fall back to local DB ────────────
+    const shopifyAdapter = integrationRegistry.get('shopify');
+    const useLive = !!shopifyAdapter;
+
     // ── Read & compare order states ──────────────────────────────────────
     const discrepancies: Array<{ orderId: string; field: string; local: string; shopify: string }> = [];
     const synced: string[] = [];
 
     for (const order of orders) {
-      const shopifyState = order.systemStates?.shopify;
+      let shopifyState = order.systemStates?.shopify;
+
+      // If live adapter is available, fetch real state from Shopify
+      if (useLive && order.externalId) {
+        try {
+          const liveOrder = await (shopifyAdapter as any).getOrder(order.externalId);
+          if (liveOrder?.status) {
+            shopifyState = liveOrder.status;
+            // Update system_states with the live value
+            const currentStates = typeof order.systemStates === 'object' ? order.systemStates : {};
+            db.prepare('UPDATE orders SET system_states = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+              .run(JSON.stringify({ ...currentStates, shopify: shopifyState }), now, order.id, tenantId);
+          }
+        } catch (err: any) {
+          logger.warn('Shopify live fetch failed, using cached state', { orderId: order.id, error: err?.message });
+        }
+      }
+
       const localStatus = order.status;
 
       if (shopifyState && shopifyState !== localStatus) {
@@ -90,11 +112,12 @@ export const shopifyConnectorImpl: AgentImplementation = {
       try {
         db.prepare(`
           INSERT INTO audit_events
-            (id, tenant_id, entity_type, entity_id, event_type, description, metadata, created_at)
-          VALUES (?, ?, 'case', ?, ?, ?, ?, ?)
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
         `).run(
-          randomUUID(), tenantId, caseId,
+          randomUUID(), tenantId, workspaceId,
           'shopify_sync_discrepancy',
+          caseId,
           `Shopify connector found ${discrepancies.length} state discrepancy(ies)`,
           JSON.stringify({ discrepancies, agentRunId: runId }),
           now,
@@ -114,12 +137,13 @@ export const shopifyConnectorImpl: AgentImplementation = {
     return {
       success: true,
       confidence: 0.95,
-      summary: `Shopify sync: ${synced.length} order(s) in sync, ${discrepancies.length} discrepancy(ies)`,
+      summary: `Shopify sync: ${synced.length} order(s) in sync, ${discrepancies.length} discrepancy(ies)${useLive ? ' (live)' : ' (cached)'}`,
       output: {
         ordersChecked: orders.length,
         inSync: synced.length,
         discrepancies: discrepancies.length,
         details: discrepancies,
+        mode: useLive ? 'live' : 'cached',
       },
     };
   },

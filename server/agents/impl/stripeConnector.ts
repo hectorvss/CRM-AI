@@ -19,13 +19,14 @@
 import { randomUUID } from 'crypto';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
+import { integrationRegistry } from '../../integrations/registry.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
 
 export const stripeConnectorImpl: AgentImplementation = {
   slug: 'stripe-connector',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, tenantId, permissions, runId } = ctx;
+    const { contextWindow, tenantId, workspaceId, permissions, runId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
     const now = new Date().toISOString();
@@ -48,13 +49,33 @@ export const stripeConnectorImpl: AgentImplementation = {
       };
     }
 
+    // ── Try live Stripe adapter first, fall back to local DB ──────────────
+    const stripeAdapter = integrationRegistry.get('stripe');
+    const useLive = !!stripeAdapter;
+
     // ── Read & compare payment states ────────────────────────────────────
     const discrepancies: Array<{ paymentId: string; field: string; local: string; stripe: string }> = [];
     const activeDisputes: Array<{ paymentId: string; disputeId: string }> = [];
     const synced: string[] = [];
 
     for (const payment of payments) {
-      const stripeState = payment.systemStates?.stripe;
+      let stripeState = payment.systemStates?.stripe;
+
+      // If live adapter is available, fetch real state from Stripe
+      if (useLive && payment.externalId) {
+        try {
+          const livePayment = await (stripeAdapter as any).getPaymentIntent(payment.externalId);
+          if (livePayment?.status) {
+            stripeState = livePayment.status;
+            const currentStates = typeof payment.systemStates === 'object' ? payment.systemStates : {};
+            db.prepare('UPDATE payments SET system_states = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+              .run(JSON.stringify({ ...currentStates, stripe: stripeState }), now, payment.id, tenantId);
+          }
+        } catch (err: any) {
+          logger.warn('Stripe live fetch failed, using cached state', { paymentId: payment.id, error: err?.message });
+        }
+      }
+
       const localStatus = payment.status;
 
       if (stripeState && stripeState !== localStatus) {
@@ -99,11 +120,12 @@ export const stripeConnectorImpl: AgentImplementation = {
       try {
         db.prepare(`
           INSERT INTO audit_events
-            (id, tenant_id, entity_type, entity_id, event_type, description, metadata, created_at)
-          VALUES (?, ?, 'case', ?, ?, ?, ?, ?)
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
         `).run(
-          randomUUID(), tenantId, caseId,
+          randomUUID(), tenantId, workspaceId,
           'stripe_sync_check',
+          caseId,
           `Stripe connector: ${discrepancies.length} discrepancy(ies), ${activeDisputes.length} active dispute(s)`,
           JSON.stringify({ discrepancies, activeDisputes, agentRunId: runId }),
           now,
@@ -116,13 +138,14 @@ export const stripeConnectorImpl: AgentImplementation = {
     return {
       success: true,
       confidence: 0.95,
-      summary: `Stripe sync: ${synced.length} in sync, ${discrepancies.length} discrepancy(ies), ${activeDisputes.length} dispute(s)`,
+      summary: `Stripe sync: ${synced.length} in sync, ${discrepancies.length} discrepancy(ies), ${activeDisputes.length} dispute(s)${useLive ? ' (live)' : ' (cached)'}`,
       output: {
         paymentsChecked: payments.length,
         inSync: synced.length,
         discrepancies: discrepancies.length,
         activeDisputes: activeDisputes.length,
         details: { discrepancies, activeDisputes },
+        mode: useLive ? 'live' : 'cached',
       },
     };
   },
