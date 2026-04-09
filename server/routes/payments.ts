@@ -50,12 +50,12 @@ function enrichPayment(row: any, tenantId: string, workspaceId: string) {
     conflict_detected: parsed.conflict_detected || caseState?.conflict.root_cause || null,
     approval_status: parsed.approval_status || approval?.status || caseState?.case?.approval_state || 'not_required',
     system_states: {
-      oms: systems?.orders.nodes?.[0]?.value || caseState?.case?.status || 'N/A',
-      psp: parsed.status || systems?.payments.nodes?.[0]?.value || 'N/A',
+      oms: systems?.orders?.nodes?.[0]?.value || caseState?.case?.status || 'N/A',
+      psp: parsed.status || systems?.payments?.nodes?.[0]?.value || 'N/A',
       refund: parsed.refund_status || primaryReturn?.refund_status || 'N/A',
       dispute: parsed.dispute_reference ? 'Open' : 'N/A',
       reconciliation: caseState?.conflict.has_conflict ? 'Mismatch' : 'Matched',
-      canonical: systems?.payments.status || 'pending',
+      canonical: systems?.payments?.status || 'pending',
     },
     badges,
     tab: buildPaymentTab({
@@ -173,7 +173,7 @@ function enrichReturn(row: any, tenantId: string, workspaceId: string) {
   const systems = caseState?.systems;
   const primaryPayment = caseState?.related.payments?.[0];
   const approval = caseState?.related.approvals?.[0];
-  const fulfillmentNode = systems?.fulfillment.nodes?.[0];
+  const fulfillmentNode = systems?.fulfillment?.nodes?.[0];
   const badges = compactBadges([
     titleCase(parsed.status),
     parsed.refund_status ? titleCase(parsed.refund_status) : null,
@@ -191,12 +191,12 @@ function enrichReturn(row: any, tenantId: string, workspaceId: string) {
     carrier_status: parsed.carrier_status || (fulfillmentNode?.source === 'Carrier' ? fulfillmentNode.value : 'N/A'),
     inspection_status: parsed.inspection_status || (parsed.status === 'received' ? 'Awaiting inspection' : 'N/A'),
     system_states: {
-      oms: systems?.orders.nodes?.[0]?.value || caseState?.case?.status || 'N/A',
-      returns_platform: parsed.status || systems?.returns.nodes?.[0]?.value || 'N/A',
+      oms: systems?.orders?.nodes?.[0]?.value || caseState?.case?.status || 'N/A',
+      returns_platform: parsed.status || systems?.returns?.nodes?.[0]?.value || 'N/A',
       wms: fulfillmentNode?.source === 'WMS' ? fulfillmentNode.value : 'N/A',
       carrier: parsed.carrier_status || (fulfillmentNode?.source === 'Carrier' ? fulfillmentNode.value : 'N/A'),
-      psp: primaryPayment?.status || systems?.payments.nodes?.[0]?.value || 'N/A',
-      canonical: systems?.returns.status || 'pending',
+      psp: primaryPayment?.status || systems?.payments?.nodes?.[0]?.value || 'N/A',
+      canonical: systems?.returns?.status || 'pending',
     },
     badges,
     tab: buildReturnTab({

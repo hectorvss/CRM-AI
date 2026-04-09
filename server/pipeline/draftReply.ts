@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID } from 'crypto';
+import { withGeminiRetry } from '../ai/geminiRetry.js';
 import { getDb } from '../db/client.js';
 import { config } from '../config.js';
 import { registerHandler } from '../queue/handlers/index.js';
@@ -45,7 +46,10 @@ Reply:
 `.trim();
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withGeminiRetry(
+      () => model.generateContent(prompt),
+      { label: 'draft.reply' },
+    );
     return {
       draft: result.response.text().trim(),
       confidence: 0.85,

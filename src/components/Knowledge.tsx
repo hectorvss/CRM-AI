@@ -93,7 +93,7 @@ export default function Knowledge() {
   const [draftStatus, setDraftStatus] = useState<'Published' | 'Draft'>('Draft');
 
   const { data: apiArticles, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
-  const { data: selectedArticle } = useApi(
+  const { data: selectedArticle, refetch: refetchSelectedArticle } = useApi(
     () => (selectedArticleId ? knowledgeApi.getArticle(selectedArticleId) : Promise.resolve(null)),
     [selectedArticleId],
     null,
@@ -118,15 +118,22 @@ export default function Knowledge() {
   });
 
   const library = (apiArticles && apiArticles.length > 0) ? apiArticles.map(mapApiArticle) : mockLibrary;
+  const selectedMockArticle = selectedArticleId ? mockArticleDetails[selectedArticleId] : null;
+
+  const toArray = <T,>(value: unknown, fallback: T[] = []): T[] => (
+    Array.isArray(value) ? value : fallback
+  );
 
   useEffect(() => {
     if (!editorOpen) return;
 
-    if (editorMode === 'edit' && selectedArticle) {
-      setDraftTitle(selectedArticle.title || '');
-      setDraftContent(selectedArticle.content || '');
-      setDraftType((selectedArticle.type?.toUpperCase?.() || 'ARTICLE') as KnowledgeItem['type']);
-      setDraftStatus(selectedArticle.status === 'published' ? 'Published' : 'Draft');
+    const source = selectedArticle ?? selectedMockArticle;
+
+    if (editorMode === 'edit' && source) {
+      setDraftTitle(source.title || '');
+      setDraftContent(typeof source.content === 'string' ? source.content : '');
+      setDraftType((source.type?.toString?.().toUpperCase?.() || 'ARTICLE') as KnowledgeItem['type']);
+      setDraftStatus(source.status === 'published' ? 'Published' : 'Draft');
       return;
     }
 
@@ -136,27 +143,42 @@ export default function Knowledge() {
       setDraftType('ARTICLE');
       setDraftStatus('Draft');
     }
-  }, [editorMode, editorOpen, selectedArticle]);
+  }, [editorMode, editorOpen, selectedArticle, selectedMockArticle]);
 
   const articleData = selectedArticle
     ? {
+        ...(selectedMockArticle ?? {}),
         id: selectedArticle.id,
-        title: selectedArticle.title,
-        type: (selectedArticle.type || 'article').toUpperCase(),
-        owner: selectedArticle.owner_name || 'Unknown',
-        ownerInitials: (selectedArticle.owner_name || 'UN').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
-        lastUpdated: selectedArticle.updated_at ? new Date(selectedArticle.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-',
-        domain: selectedArticle.domain_name || 'General',
-        scope: selectedArticle.status === 'published' ? 'Published' : 'Draft',
-        reviewOwner: selectedArticle.owner_name || 'Unknown',
-        purpose: selectedArticle.content?.slice(0, 220) || '',
-        content: <p>{selectedArticle.content}</p>,
-        aiCitationPreview: {
-          text: selectedArticle.content?.slice(0, 180) || '',
+        title: selectedArticle.title || selectedMockArticle?.title || 'Untitled',
+        type: ((selectedArticle.type || selectedMockArticle?.type || 'article').toString().toUpperCase()),
+        owner: selectedArticle.owner_name || selectedMockArticle?.owner || 'Unknown',
+        ownerInitials: (selectedArticle.owner_name || selectedMockArticle?.owner || 'UN')
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase(),
+        lastUpdated: selectedArticle.updated_at
+          ? new Date(selectedArticle.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : selectedMockArticle?.lastUpdated || '-',
+        domain: selectedArticle.domain_name || selectedMockArticle?.domain || 'General',
+        scope: selectedArticle.status === 'published' ? 'Published' : (selectedMockArticle?.scope || 'Draft'),
+        reviewOwner: selectedMockArticle?.reviewOwner || selectedArticle.owner_name || 'Unknown',
+        purpose: selectedMockArticle?.purpose || selectedArticle.content?.slice?.(0, 220) || '',
+        content: typeof selectedArticle.content === 'string'
+          ? <p className="whitespace-pre-wrap">{selectedArticle.content}</p>
+          : selectedMockArticle?.content || <p className="whitespace-pre-wrap">{String(selectedArticle.content ?? '')}</p>,
+        aiCitationPreview: selectedMockArticle?.aiCitationPreview ?? {
+          text: selectedArticle.content?.slice?.(0, 180) || '',
           sources: [selectedArticle.title || 'Knowledge article'],
         },
+        aiPerformance: toArray(selectedMockArticle?.aiPerformance, []),
+        linkedWorkflows: toArray(selectedMockArticle?.linkedWorkflows, []),
+        linkedApprovals: toArray(selectedMockArticle?.linkedApprovals, []),
+        linkedModules: toArray(selectedMockArticle?.linkedModules, []),
+        gaps: toArray(selectedMockArticle?.gaps, []),
       }
-    : (selectedArticleId ? mockArticleDetails[selectedArticleId] : null);
+    : selectedMockArticle;
 
   const openCreateEditor = () => {
     setEditorMode('create');
@@ -195,12 +217,14 @@ export default function Knowledge() {
 
     setEditorOpen(false);
     refetch();
+    refetchSelectedArticle();
   };
 
   const handlePublishSelected = async () => {
     if (!selectedArticleId) return;
     await publishArticle.mutate(selectedArticleId);
     refetch();
+    refetchSelectedArticle();
   };
 
   const renderLibrary = () => (

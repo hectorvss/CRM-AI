@@ -32,7 +32,7 @@ import type {
 
 // ── Upsert helpers ────────────────────────────────────────────────────────────
 
-function upsertOrder(order: CanonicalOrder, tenantId: string): string {
+function upsertOrder(order: CanonicalOrder, tenantId: string, workspaceId: string): string {
   const db = getDb();
 
   // Check if we already have a record by external_order_id + source
@@ -54,13 +54,23 @@ function upsertOrder(order: CanonicalOrder, tenantId: string): string {
     db.prepare(`
       UPDATE orders SET
         status         = ?,
+        fulfillment_status = ?,
+        shipping_address = ?,
         system_states  = ?,
         total_amount   = ?,
         currency       = ?,
         last_sync_at   = CURRENT_TIMESTAMP,
         updated_at     = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(order.status, systemStates, order.totalAmount, order.currency, existing.id);
+    `).run(
+      order.status,
+      order.fulfillmentStatus,
+      order.shippingAddress ? JSON.stringify(order.shippingAddress) : null,
+      systemStates,
+      order.totalAmount,
+      order.currency,
+      existing.id,
+    );
 
     return existing.id;
   }
@@ -69,16 +79,21 @@ function upsertOrder(order: CanonicalOrder, tenantId: string): string {
   db.prepare(`
     INSERT INTO orders (
       id, external_order_id, tenant_id, workspace_id,
-      status, system_states, total_amount, currency,
+      status, fulfillment_status, shipping_address, system_states, total_amount, currency,
       order_date, badges, last_sync_at, created_at, updated_at
     ) VALUES (
-      ?, ?, ?, 'ws_default',
       ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
       ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     )
   `).run(
-    id, order.externalId, tenantId,
-    order.status, systemStates, order.totalAmount, order.currency,
+    id, order.externalId, tenantId, workspaceId,
+    order.status,
+    order.fulfillmentStatus,
+    order.shippingAddress ? JSON.stringify(order.shippingAddress) : null,
+    systemStates,
+    order.totalAmount,
+    order.currency,
     order.createdAt, badges,
   );
 
@@ -136,7 +151,7 @@ function upsertPayment(payment: CanonicalPayment, tenantId: string): string {
   return id;
 }
 
-function upsertCustomer(customer: CanonicalCustomer, tenantId: string): string {
+function upsertCustomer(customer: CanonicalCustomer, tenantId: string, workspaceId: string): string {
   const db = getDb();
 
   // First check linked_identities for an existing mapping
@@ -167,12 +182,12 @@ function upsertCustomer(customer: CanonicalCustomer, tenantId: string): string {
       segment, risk_level,
       created_at, updated_at
     ) VALUES (
-      ?, ?, 'ws_default',
+      ?, ?, ?,
       ?, ?,
       'regular', 'low',
       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     )
-  `).run(id, tenantId, customer.email, customer.displayName);
+  `).run(id, tenantId, workspaceId, customer.email, customer.displayName);
 
   db.prepare(`
     INSERT OR IGNORE INTO linked_identities
@@ -233,14 +248,14 @@ async function handleCanonicalize(
         log.warn('Shopify adapter not available, skipping fetch');
       } else if (event.source_entity_type === 'order' && event.source_entity_id !== 'unknown') {
         const order = await shopify.getOrder(event.source_entity_id);
-        localEntityId = upsertOrder(order, tenantId);
+        localEntityId = upsertOrder(order, tenantId, workspaceId);
         log.info('Order upserted', { localEntityId, externalId: order.externalId });
 
         // Also upsert customer if present
         if (order.customerExternalId) {
           try {
             const customer = await shopify.getCustomer(order.customerExternalId);
-            const customerId = upsertCustomer(customer, tenantId);
+            const customerId = upsertCustomer(customer, tenantId, workspaceId);
             // Link order to customer
             db.prepare(
               'UPDATE orders SET customer_id = ? WHERE id = ?'
@@ -252,7 +267,7 @@ async function handleCanonicalize(
 
       } else if (event.source_entity_type === 'customer' && event.source_entity_id !== 'unknown') {
         const customer = await shopify.getCustomer(event.source_entity_id);
-        localEntityId = upsertCustomer(customer, tenantId);
+        localEntityId = upsertCustomer(customer, tenantId, workspaceId);
         log.info('Customer upserted', { localEntityId });
       }
 

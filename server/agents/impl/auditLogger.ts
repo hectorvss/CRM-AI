@@ -28,7 +28,7 @@ export const auditLoggerImpl: AgentImplementation = {
     // ── Collect runs from this trigger chain ──────────────────────────────
     // All runs that started within the last 30 seconds for this case
     const recentRuns = db.prepare(`
-      SELECT agent_id, outcome_status, confidence, tokens_used, started_at, error
+      SELECT agent_id, status, confidence, tokens_used, summary, started_at
       FROM agent_runs
       WHERE case_id = ? AND tenant_id = ?
         AND started_at >= datetime('now', '-30 seconds')
@@ -66,10 +66,10 @@ export const auditLoggerImpl: AgentImplementation = {
           triggerEvent,
           agentsRan: recentRuns.map(r => ({
             agentId: r.agent_id,
-            status: r.outcome_status,
+            status: r.status,
             confidence: r.confidence,
             tokens: r.tokens_used,
-            error: r.error,
+            summary: r.summary,
           })),
           caseSnapshot: snapshot,
           auditRunId: runId,

@@ -1,5 +1,21 @@
+/**
+ * server/agents/impl/workflowRuntimeAgent.ts
+ *
+ * Workflow Runtime Agent — manages internal workflow progression
+ * after reconciliation and execution.
+ *
+ * Advances, pauses, resumes and unblocks internal workflow state
+ * as external execution completes:
+ *   - Checks active workflows for the case
+ *   - Advances workflow steps based on case state changes
+ *   - Pauses workflows when conflicts are detected
+ *   - Resumes workflows when conflicts are resolved
+ *
+ * No Gemini — pure DB state machine logic.
+ */
+
+import { randomUUID } from 'crypto';
 import { getDb } from '../../db/client.js';
-import { logAudit, parseRow } from '../../db/utils.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
 
@@ -10,30 +26,22 @@ interface WorkflowAction {
   detail: string;
 }
 
-function maxConflictSeverity(conflicts: Array<{ severity?: string }>): string {
-  const order = ['low', 'medium', 'high', 'critical'];
-  return conflicts.reduce((max, conflict) => {
-    const severity = String(conflict.severity ?? 'low').toLowerCase();
-    return order.indexOf(severity) > order.indexOf(max) ? severity : max;
-  }, 'low');
-}
-
 export const workflowRuntimeAgentImpl: AgentImplementation = {
   slug: 'workflow-runtime-agent',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, tenantId, triggerEvent, runId } = ctx;
+    const { contextWindow, tenantId, workspaceId, triggerEvent, runId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
     const now = new Date().toISOString();
 
+    // ── 1. Find active workflows for this case ───────────────────────────
     const activeWorkflows = db.prepare(`
-      SELECT wr.id as run_id, wr.workflow_version_id, wr.status as run_status,
-             wr.current_node_id, wr.context as run_context,
-             wd.name, wv.nodes, wv.edges, wv.status as workflow_status
+      SELECT wr.id as run_id, wr.workflow_id, wr.status as run_status,
+             wr.current_step, wr.context as run_context,
+             w.name, w.steps, w.status as workflow_status
       FROM workflow_runs wr
-      JOIN workflow_versions wv ON wr.workflow_version_id = wv.id
-      JOIN workflow_definitions wd ON wv.workflow_id = wd.id
+      JOIN workflows w ON wr.workflow_id = w.id
       WHERE wr.case_id = ? AND wr.tenant_id = ?
         AND wr.status IN ('running', 'paused', 'waiting')
       ORDER BY wr.started_at DESC
@@ -42,124 +50,126 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
     if (activeWorkflows.length === 0) {
       return {
         success: true,
-        confidence: 1,
+        confidence: 1.0,
         summary: 'No active workflows for this case',
-        output: { workflowsChecked: 0, actionCount: 0 },
+        output: { workflowsChecked: 0 },
       };
     }
 
     const actions: WorkflowAction[] = [];
-    const severity = maxConflictSeverity(contextWindow.conflicts);
-    const shouldPauseForConflict = severity === 'high' || severity === 'critical';
 
     for (const wf of activeWorkflows) {
-      const parsed = parseRow<any>(wf);
-      const nodes = Array.isArray(parsed.nodes) ? parsed.nodes : [];
-      const context = parseRow<any>({ context: wf.run_context }).context ?? {};
-      const currentIndex = wf.current_node_id
-        ? nodes.findIndex((node: any) => node.id === wf.current_node_id)
-        : -1;
+      const steps = typeof wf.steps === 'string' ? JSON.parse(wf.steps) : (wf.steps ?? []);
+      const currentStep = wf.current_step ?? 0;
 
-      if (triggerEvent === 'conflicts_detected' && wf.run_status === 'running') {
-        if (shouldPauseForConflict) {
+      // ── Handle based on trigger event ──────────────────────────────
+      if (triggerEvent === 'conflicts_detected') {
+        // Only pause for high/critical severity conflicts; skip low/medium
+        const maxSeverity = (contextWindow.conflicts || []).reduce((max: string, c: any) => {
+            const order = ['low', 'medium', 'high', 'critical'];
+            return order.indexOf(c.severity) > order.indexOf(max) ? c.severity : max;
+          }, 'low');
+        const shouldPause = maxSeverity === 'high' || maxSeverity === 'critical';
+
+        if (wf.run_status === 'running' && shouldPause) {
           try {
-            db.prepare('UPDATE workflow_runs SET status = ?, context = ? WHERE id = ?')
-              .run('paused', JSON.stringify({ ...context, paused_at: now, pause_reason: `${severity}_conflict_detected` }), wf.run_id);
+            db.prepare('UPDATE workflow_runs SET status = ?, updated_at = ? WHERE id = ?')
+              .run('paused', now, wf.run_id);
             actions.push({
               workflowId: wf.run_id,
               workflowName: wf.name,
               action: 'pause',
-              detail: `Paused due to ${severity}-severity conflict`,
+              detail: `Paused due to ${maxSeverity}-severity conflict`,
             });
-          } catch (err: any) {
-            logger.error('Failed to pause workflow', { runId: wf.run_id, error: err?.message });
-          }
-        } else {
+          } catch { /* non-critical */ }
+        } else if (wf.run_status === 'running' && !shouldPause) {
           actions.push({
             workflowId: wf.run_id,
             workflowName: wf.name,
             action: 'skip',
-            detail: `Conflict severity ${severity} does not pause this workflow`,
+            detail: `Conflict severity ${maxSeverity} — workflow continues`,
           });
         }
-        continue;
       }
 
       if (triggerEvent === 'case_resolved') {
+        // Complete any running/paused workflows when case is resolved
         try {
-          db.prepare('UPDATE workflow_runs SET status = ?, ended_at = ?, context = ? WHERE id = ?')
-            .run('completed', now, JSON.stringify({ ...context, completed_at: now, completion_reason: 'case_resolved' }), wf.run_id);
+          db.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?')
+            .run('completed', now, now, wf.run_id);
           actions.push({
             workflowId: wf.run_id,
             workflowName: wf.name,
             action: 'complete',
-            detail: 'Completed because case is resolved',
+            detail: 'Completed — case resolved',
           });
-        } catch (err: any) {
-          logger.error('Failed to complete workflow', { runId: wf.run_id, error: err?.message });
-        }
+        } catch { /* non-critical */ }
         continue;
       }
 
+      // ── Try to advance paused workflows if conflicts are resolved ──
       if (wf.run_status === 'paused' && contextWindow.conflicts.length === 0) {
         try {
-          db.prepare('UPDATE workflow_runs SET status = ?, context = ? WHERE id = ?')
-            .run('running', JSON.stringify({ ...context, resumed_at: now, resume_reason: 'conflicts_cleared' }), wf.run_id);
+          db.prepare('UPDATE workflow_runs SET status = ?, updated_at = ? WHERE id = ?')
+            .run('running', now, wf.run_id);
           actions.push({
             workflowId: wf.run_id,
             workflowName: wf.name,
             action: 'resume',
-            detail: 'Resumed after conflicts cleared',
+            detail: 'Resumed — conflicts resolved',
           });
-        } catch (err: any) {
-          logger.error('Failed to resume workflow', { runId: wf.run_id, error: err?.message });
-        }
+        } catch { /* non-critical */ }
       }
 
-      if (wf.run_status === 'running' && nodes.length > 0 && contextWindow.case.approvalState !== 'pending') {
-        const nextNode = currentIndex >= 0 ? nodes[currentIndex + 1] : nodes[0];
-        if (nextNode) {
+      // ── Advance step if running ────────────────────────────────────
+      if (wf.run_status === 'running' && steps.length > 0 && currentStep < steps.length - 1) {
+        const nextStep = currentStep + 1;
+
+        // Check if current step conditions are met (simple: approval not pending)
+        if (contextWindow.case.approvalState !== 'pending') {
           try {
-            db.prepare('UPDATE workflow_runs SET current_node_id = ?, context = ? WHERE id = ?')
-              .run(nextNode.id, JSON.stringify({ ...context, advanced_at: now, current_node_label: nextNode.label ?? nextNode.id }), wf.run_id);
+            db.prepare('UPDATE workflow_runs SET current_step = ?, updated_at = ? WHERE id = ?')
+              .run(nextStep, now, wf.run_id);
             actions.push({
               workflowId: wf.run_id,
               workflowName: wf.name,
               action: 'advance',
-              detail: `Advanced to node ${nextNode.id}`,
+              detail: `Advanced to step ${nextStep + 1}/${steps.length}`,
             });
-          } catch (err: any) {
-            logger.error('Failed to advance workflow', { runId: wf.run_id, error: err?.message });
-          }
-        } else if (currentIndex >= nodes.length - 1) {
-          try {
-            db.prepare('UPDATE workflow_runs SET status = ?, ended_at = ?, context = ? WHERE id = ?')
-              .run('completed', now, JSON.stringify({ ...context, completed_at: now, completion_reason: 'last_node_reached' }), wf.run_id);
-            actions.push({
-              workflowId: wf.run_id,
-              workflowName: wf.name,
-              action: 'complete',
-              detail: 'Completed after reaching the last node',
-            });
-          } catch (err: any) {
-            logger.error('Failed to finalize workflow', { runId: wf.run_id, error: err?.message });
-          }
+          } catch { /* non-critical */ }
         }
+      }
+
+      // ── Complete if at last step ───────────────────────────────────
+      if (wf.run_status === 'running' && currentStep >= steps.length - 1 && steps.length > 0) {
+        try {
+          db.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?')
+            .run('completed', now, now, wf.run_id);
+          actions.push({
+            workflowId: wf.run_id,
+            workflowName: wf.name,
+            action: 'complete',
+            detail: 'All steps completed',
+          });
+        } catch { /* non-critical */ }
       }
     }
 
+    // ── Log actions ──────────────────────────────────────────────────────
     if (actions.length > 0) {
       try {
-        logAudit(db, {
-          tenantId,
-          workspaceId: ctx.workspaceId,
-          actorId: 'workflow-runtime-agent',
-          actorType: 'system',
-          action: 'WORKFLOW_RUNTIME_UPDATED',
-          entityType: 'case',
-          entityId: caseId,
-          metadata: { actions, trigger: triggerEvent, agentRunId: runId, workflowCount: activeWorkflows.length },
-        });
+        db.prepare(`
+          INSERT INTO audit_events
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
+        `).run(
+          randomUUID(), tenantId, workspaceId,
+          'workflow_runtime',
+          caseId,
+          `Workflow runtime: ${actions.length} action(s) on ${activeWorkflows.length} workflow(s)`,
+          JSON.stringify({ actions, trigger: triggerEvent, agentRunId: runId }),
+          now,
+        );
       } catch (err: any) {
         logger.error('Workflow runtime audit write failed', { error: err?.message });
       }
@@ -172,7 +182,6 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
       output: {
         workflowsChecked: activeWorkflows.length,
         actionCount: actions.length,
-        severity,
         actions,
       },
     };

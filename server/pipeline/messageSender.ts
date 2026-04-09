@@ -162,13 +162,13 @@ async function handleSendMessage(
   const tenantId = ctx.tenantId ?? 'org_default';
 
   // ── 1. Load case + conversation ───────────────────────────────────────────
-  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ?').get(payload.caseId) as any;
+  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ?').get(payload.caseId, tenantId) as any;
   if (!caseRow) {
     log.warn('Case not found for message send');
     return;
   }
 
-  const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(payload.conversationId) as any;
+  const conv = db.prepare('SELECT * FROM conversations WHERE id = ? AND tenant_id = ?').get(payload.conversationId, tenantId) as any;
   if (!conv) {
     log.warn('Conversation not found', { conversationId: payload.conversationId });
     return;
@@ -176,10 +176,10 @@ async function handleSendMessage(
 
   // ── 2. Load customer contact info ─────────────────────────────────────────
   const customer = caseRow.customer_id
-    ? db.prepare('SELECT * FROM customers WHERE id = ?').get(caseRow.customer_id) as any
+    ? db.prepare('SELECT * FROM customers WHERE id = ? AND tenant_id = ?').get(caseRow.customer_id, tenantId) as any
     : null;
 
-  if (!customer) {
+  if (!customer && !caseRow.source_entity_id) {
     log.warn('No customer linked to case, cannot send message');
     return;
   }
@@ -189,19 +189,19 @@ async function handleSendMessage(
 
   switch (channel) {
     case 'email':
-      recipientAddress = customer.email;
+      recipientAddress = customer?.email || customer?.canonical_email || caseRow.source_entity_id;
       break;
     case 'whatsapp':
     case 'sms':
-      recipientAddress = customer.phone;
+      recipientAddress = customer?.phone || caseRow.source_entity_id;
       break;
     case 'web_chat':
-      recipientAddress = customer.id; // session keyed by customer_id
+      recipientAddress = customer?.id || caseRow.source_entity_id; // session keyed by customer_id
       break;
   }
 
   if (!recipientAddress) {
-    log.warn('Customer has no contact address for channel', { channel, customerId: customer.id });
+    log.warn('Customer has no contact address for channel', { channel, customerId: customer?.id ?? caseRow.customer_id ?? null });
     return;
   }
 
@@ -253,28 +253,38 @@ async function handleSendMessage(
   const now = new Date().toISOString();
 
   // ── 4. Persist outbound message ───────────────────────────────────────────
-  const messageId = randomUUID();
-  db.prepare(`
-    INSERT INTO messages (
-      id, conversation_id, case_id, customer_id,
-      direction, channel, content, content_type,
-      external_message_id,
-      draft_reply_id,
-      sent_at, created_at, tenant_id
-    ) VALUES (?, ?, ?, ?, 'outbound', ?, ?, 'text', ?, ?, ?, ?, ?)
-  `).run(
-    messageId,
-    payload.conversationId,
-    payload.caseId,
-    customer.id,
-    channel,
-    payload.content,
-    externalMessageId,
-    payload.draftReplyId ?? null,
-    now,
-    now,
-    tenantId,
-  );
+  const messageId = payload.queuedMessageId ?? randomUUID();
+  if (payload.queuedMessageId) {
+    db.prepare(`
+      UPDATE messages
+      SET external_message_id = ?,
+          sent_at = COALESCE(sent_at, ?),
+          delivered_at = CASE WHEN ? = 1 THEN NULL ELSE COALESCE(delivered_at, ?) END
+      WHERE id = ? AND tenant_id = ?
+    `).run(externalMessageId, now, simulated ? 1 : 0, now, payload.queuedMessageId, tenantId);
+  } else {
+    db.prepare(`
+      INSERT INTO messages (
+        id, conversation_id, case_id, customer_id, type, sender_id, sender_name,
+        direction, channel, content, content_type,
+        external_message_id,
+        draft_reply_id,
+        sent_at, created_at, tenant_id
+      ) VALUES (?, ?, ?, ?, 'agent', 'system_send_message', 'Alex Morgan', 'outbound', ?, ?, 'text', ?, ?, ?, ?, ?)
+    `).run(
+      messageId,
+      payload.conversationId,
+      payload.caseId,
+      customer?.id ?? caseRow.customer_id ?? null,
+      channel,
+      payload.content,
+      externalMessageId,
+      payload.draftReplyId ?? null,
+      now,
+      now,
+      tenantId,
+    );
+  }
 
   // ── 5. Update conversation ────────────────────────────────────────────────
   db.prepare(`
@@ -307,6 +317,7 @@ async function handleSendMessage(
     metadata: {
       conversationId: payload.conversationId,
       draftReplyId: payload.draftReplyId ?? null,
+      queuedMessageId: payload.queuedMessageId ?? null,
       channel,
       externalMessageId,
       simulated,

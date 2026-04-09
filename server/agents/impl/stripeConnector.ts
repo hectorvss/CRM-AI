@@ -64,7 +64,7 @@ export const stripeConnectorImpl: AgentImplementation = {
       // If live adapter is available, fetch real state from Stripe
       if (useLive && payment.externalId) {
         try {
-          const livePayment = await (stripeAdapter as any).getPayment(payment.externalId);
+          const livePayment = await (stripeAdapter as any).getPaymentIntent(payment.externalId);
           if (livePayment?.status) {
             stripeState = livePayment.status;
             const currentStates = typeof payment.systemStates === 'object' ? payment.systemStates : {};
@@ -99,24 +99,16 @@ export const stripeConnectorImpl: AgentImplementation = {
 
       // Check refund amount consistency
       const paymentRow = db.prepare(
-        'SELECT refund_amount FROM payments WHERE id = ? AND tenant_id = ?'
+        'SELECT refund_amount, refund_status FROM payments WHERE id = ? AND tenant_id = ?'
       ).get(payment.id, tenantId) as any;
 
       if (paymentRow && payment.refundAmount > 0) {
         const stripeRefundState = payment.systemStates?.stripe_refund;
-        const latestRefund = db.prepare(`
-          SELECT status FROM refunds
-          WHERE payment_id = ? AND tenant_id = ?
-          ORDER BY created_at DESC
-          LIMIT 1
-        `).get(payment.id, tenantId) as { status: string } | undefined;
-        const localRefundStatus = latestRefund?.status ?? (payment.refundAmount > 0 ? 'pending' : 'none');
-
-        if (stripeRefundState && stripeRefundState !== localRefundStatus) {
+        if (stripeRefundState && stripeRefundState !== paymentRow.refund_status) {
           discrepancies.push({
             paymentId: payment.id,
             field: 'refund_status',
-            local: localRefundStatus,
+            local: paymentRow.refund_status ?? 'null',
             stripe: stripeRefundState,
           });
         }

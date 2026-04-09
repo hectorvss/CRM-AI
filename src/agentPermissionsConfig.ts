@@ -23,6 +23,21 @@ export type AgentPermissionConfig = {
   limits: LimitConfig[];
   globalHardBlocks: string[];
   specificHardBlocks: string[];
+  actionPermissions?: Record<string, PermissionState>;
+  toolAccess?: Record<string, ToolAccessLevel>;
+  conditionalRules?: Record<string, string[]>;
+  approvalAssignments?: Record<string, string>;
+  approvalEscalationHours?: Record<string, number>;
+  defaultApprover?: string;
+  evidenceRequirements?: {
+    customerRecord?: boolean;
+    orderRecord?: boolean;
+    paymentRecord?: boolean;
+    chatHistory?: boolean;
+    orderDetails?: boolean;
+    managerNote?: boolean;
+  };
+  automaticEscalation?: boolean;
 };
 
 const commonCategories = {

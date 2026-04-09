@@ -28,7 +28,7 @@ export const helpdeskAgentImpl: AgentImplementation = {
 
     // ── 1. Sync conversation metadata ────────────────────────────────────
     const conversation = db.prepare(`
-      SELECT id, channel, external_thread_id
+      SELECT id, source_channel, external_thread_id
       FROM conversations WHERE case_id = ? AND tenant_id = ?
       ORDER BY created_at DESC LIMIT 1
     `).get(caseId, tenantId) as any;
@@ -88,24 +88,24 @@ export const helpdeskAgentImpl: AgentImplementation = {
     if (triggerEvent === 'case_created' || triggerEvent === 'message_received') {
       try {
         const noteContent = triggerEvent === 'case_created'
-          ? `Helpdesk sync: New case opened via ${conversation?.channel ?? 'unknown channel'}. ${messageCount} message(s) imported.`
+          ? `Helpdesk sync: New case opened via ${conversation?.source_channel ?? 'unknown channel'}. ${messageCount} message(s) imported.`
           : `Helpdesk sync: New message received. Total ${messageCount} messages in thread.`;
 
         db.prepare(`
-          INSERT INTO internal_notes
-            (id, case_id, content, created_by, created_by_type, created_at, tenant_id)
-          VALUES (?, ?, ?, 'helpdesk-agent', 'agent', ?, ?)
-        `).run(randomUUID(), caseId, noteContent, now, tenantId);
+          INSERT INTO case_notes
+            (id, case_id, tenant_id, content, type, created_by, created_at)
+          VALUES (?, ?, ?, ?, 'internal', 'helpdesk-agent', ?)
+        `).run(randomUUID(), caseId, tenantId, noteContent, now);
       } catch { /* table might not exist yet */ }
     }
 
     return {
       success: true,
       confidence: 1.0,
-      summary: `Helpdesk sync: ${messageCount} msgs, ${uniqueTags.length} auto-tag(s), channel=${conversation?.channel ?? 'unknown'}`,
+      summary: `Helpdesk sync: ${messageCount} msgs, ${uniqueTags.length} auto-tag(s), channel=${conversation?.source_channel ?? 'unknown'}`,
       output: {
         conversationId: conversation?.id ?? null,
-        channel: conversation?.channel ?? null,
+        channel: conversation?.source_channel ?? null,
         messageCount,
         latestInbound,
         latestOutbound,

@@ -35,6 +35,17 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 );
 
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
 CREATE TABLE IF NOT EXISTS teams (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id),
@@ -72,13 +83,37 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS linked_identities (
   id TEXT PRIMARY KEY,
   customer_id TEXT NOT NULL REFERENCES customers(id),
+  tenant_id TEXT,
+  workspace_id TEXT,
   system TEXT NOT NULL,
   external_id TEXT NOT NULL,
   confidence REAL DEFAULT 1.0,
   verified INTEGER DEFAULT 0,
+  verified_at TEXT,
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   UNIQUE(system, external_id)
 );
+
+CREATE TABLE IF NOT EXISTS identity_resolution_queue (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  source_system TEXT NOT NULL,
+  external_id TEXT,
+  normalized_email TEXT,
+  suggested_customer_id TEXT,
+  confidence REAL NOT NULL DEFAULT 0.5,
+  reason TEXT,
+  payload TEXT DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending',
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  resolved_customer_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE INDEX IF NOT EXISTS idx_identity_resolution_queue_scope_status
+  ON identity_resolution_queue(tenant_id, workspace_id, status, created_at DESC);
 
 -- ============================================================
 -- CASES (Root entity)
@@ -256,6 +291,10 @@ CREATE TABLE IF NOT EXISTS orders (
   tenant_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
+  fulfillment_status TEXT,
+  tracking_number TEXT,
+  tracking_url TEXT,
+  shipping_address TEXT,
   system_states TEXT NOT NULL DEFAULT '{"canonical":"pending"}',
   total_amount REAL NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'USD',
@@ -295,6 +334,7 @@ CREATE TABLE IF NOT EXISTS payments (
   order_id TEXT REFERENCES orders(id),
   customer_id TEXT REFERENCES customers(id),
   tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default',
   amount REAL NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'USD',
   payment_method TEXT,
@@ -409,6 +449,15 @@ CREATE TABLE IF NOT EXISTS reconciliation_issues (
   detected_by TEXT
 );
 
+CREATE INDEX IF NOT EXISTS idx_reconciliation_issues_tenant_status_detected
+  ON reconciliation_issues(tenant_id, status, detected_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_reconciliation_issues_tenant_case_status
+  ON reconciliation_issues(tenant_id, case_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_reconciliation_issues_tenant_entity_status
+  ON reconciliation_issues(tenant_id, entity_type, entity_id, status);
+
 CREATE TABLE IF NOT EXISTS system_states (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
@@ -420,6 +469,24 @@ CREATE TABLE IF NOT EXISTS system_states (
   is_stale INTEGER DEFAULT 0,
   tenant_id TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS source_of_truth_rules (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  preferred_system TEXT NOT NULL,
+  fallback_system TEXT,
+  confidence_threshold REAL DEFAULT 0.8,
+  rule_priority INTEGER DEFAULT 100,
+  is_active INTEGER DEFAULT 1,
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_of_truth_rules_scope_entity
+  ON source_of_truth_rules(tenant_id, workspace_id, entity_type);
 
 -- ============================================================
 -- APPROVALS
@@ -613,6 +680,56 @@ CREATE TABLE IF NOT EXISTS policy_rules (
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 );
 
+CREATE TABLE IF NOT EXISTS policy_evaluations (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  action_type TEXT,
+  case_id TEXT,
+  input_context TEXT DEFAULT '{}',
+  evaluated_rules TEXT DEFAULT '[]',
+  matched_rule_id TEXT,
+  decision TEXT NOT NULL,
+  requires_approval INTEGER DEFAULT 0,
+  conflict_detected INTEGER DEFAULT 0,
+  conflicting_rule_ids TEXT DEFAULT '[]',
+  reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE TABLE IF NOT EXISTS canonical_field_decisions (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  field_key TEXT NOT NULL,
+  chosen_system TEXT,
+  chosen_value TEXT,
+  candidates TEXT DEFAULT '{}',
+  reason TEXT,
+  issue_id TEXT REFERENCES reconciliation_issues(id),
+  case_id TEXT REFERENCES cases(id),
+  decided_by TEXT,
+  decided_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE INDEX IF NOT EXISTS idx_policy_rules_tenant_entity_active
+  ON policy_rules(tenant_id, entity_type, is_active, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_policy_evaluations_scope_time
+  ON policy_evaluations(tenant_id, workspace_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_policy_evaluations_conflict
+  ON policy_evaluations(tenant_id, workspace_id, conflict_detected, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_canonical_field_decisions_issue
+  ON canonical_field_decisions(tenant_id, issue_id, decided_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_canonical_field_decisions_entity
+  ON canonical_field_decisions(tenant_id, entity_type, entity_id, field_key, decided_at DESC);
+
 -- ============================================================
 -- INTEGRATIONS & CONNECTORS
 -- ============================================================
@@ -731,18 +848,25 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   id TEXT PRIMARY KEY,
   case_id TEXT REFERENCES cases(id),
   tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default',
   agent_id TEXT NOT NULL REFERENCES agents(id),
   agent_version_id TEXT REFERENCES agent_versions(id),
+  trigger_event TEXT DEFAULT 'case_created',
   trigger_type TEXT DEFAULT 'case_event',
+  status TEXT NOT NULL DEFAULT 'running',
   outcome_status TEXT NOT NULL DEFAULT 'completed',
   confidence REAL,
+  summary TEXT,
+  output TEXT,
   evidence_refs TEXT DEFAULT '[]',
   execution_decision TEXT DEFAULT 'proceed',
   tokens_used INTEGER DEFAULT 0,
   cost_credits REAL DEFAULT 0,
+  error TEXT,
+  error_message TEXT,
   started_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   ended_at TEXT,
-  error TEXT
+  finished_at TEXT
 );
 
 -- ============================================================
@@ -830,6 +954,22 @@ CREATE TABLE IF NOT EXISTS feature_gates (
   plan_ids TEXT NOT NULL DEFAULT '[]',
   workspace_overrides TEXT NOT NULL DEFAULT '[]'
 );
+
+CREATE TABLE IF NOT EXISTS workspace_feature_flags (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  feature_key TEXT NOT NULL,
+  is_enabled INTEGER NOT NULL DEFAULT 0,
+  source TEXT NOT NULL DEFAULT 'workspace_override',
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  UNIQUE(tenant_id, workspace_id, feature_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_feature_flags_scope
+  ON workspace_feature_flags(tenant_id, workspace_id, feature_key);
 
 CREATE TABLE IF NOT EXISTS seats (
   id TEXT PRIMARY KEY,

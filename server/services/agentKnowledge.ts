@@ -145,8 +145,12 @@ function resolveDefaultAccess(profile: KnowledgeProfile): AccessLevel {
     case 'Restricted sensitive access':
       return 'Read summaries only';
     case 'Limited access':
-    default:
       return 'Metadata only';
+    default:
+      // Agents without an explicit AI Studio knowledge profile still need
+      // published company policies as guardrails. AI Studio can later tighten
+      // this to Limited/No access, and the most restrictive rule continues to win.
+      return 'Read raw documents';
   }
 }
 
@@ -255,7 +259,15 @@ function buildPromptContext(documents: KnowledgeArticleView[]): string {
 
 export function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): AgentKnowledgeBundle {
   const db = getDb();
-  const profile = options.knowledgeProfile ?? {};
+  const profile = typeof options.knowledgeProfile === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(options.knowledgeProfile) as KnowledgeProfile;
+        } catch {
+          return {};
+        }
+      })()
+    : options.knowledgeProfile ?? {};
   const signals = buildSignals(options.caseContext);
 
   let query = `

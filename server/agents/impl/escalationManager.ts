@@ -86,7 +86,7 @@ export const escalationManagerImpl: AgentImplementation = {
     const recentFailures = db.prepare(`
       SELECT COUNT(*) as count
       FROM agent_runs
-      WHERE case_id = ? AND tenant_id = ? AND outcome_status = 'failed'
+      WHERE case_id = ? AND tenant_id = ? AND status = 'failed'
         AND started_at >= datetime('now', '-1 hour')
     `).get(caseId, tenantId) as { count: number };
 

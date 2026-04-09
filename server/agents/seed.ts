@@ -66,28 +66,28 @@ const SUPERVISOR_PERMS: PermissionProfile = {
 
 // Reasoning profiles
 const FAST_REASONING: ReasoningProfile = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.1,
   maxOutputTokens: 1024,
   useJsonMode: true,
 };
 
 const BALANCED_REASONING: ReasoningProfile = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.2,
   maxOutputTokens: 2048,
   useJsonMode: true,
 };
 
 const CREATIVE_REASONING: ReasoningProfile = {
-  model: 'gemini-1.5-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.4,
   maxOutputTokens: 3072,
   useJsonMode: true,
 };
 
 const THOROUGH_REASONING: ReasoningProfile = {
-  model: 'gemini-1.5-pro',
+  model: 'gemini-2.5-pro',
   temperature: 0.1,
   maxOutputTokens: 4096,
   useJsonMode: true,
@@ -316,6 +316,42 @@ const AGENTS: AgentDef[] = [
     safety: STANDARD_SAFETY,
   },
 
+  {
+    id: 'agent_workflow_runtime',
+    slug: 'workflow-runtime-agent',
+    name: 'Workflow Runtime Agent',
+    description: 'Manages internal workflow progression after reconciliation and execution.',
+    category: 'resolution',
+    is_system: 1, is_locked: 0,
+    permissions: ANALYSIS_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STANDARD_SAFETY,
+  },
+
+  // ── IDENTITY & CUSTOMER TRUTH ─────────────────────────────────────────────
+  {
+    id: 'agent_identity_mapping',
+    slug: 'identity-mapping-agent',
+    name: 'Identity Mapping Agent',
+    description: 'Resolves entity and identity links across systems.',
+    category: 'ingest',
+    is_system: 1, is_locked: 0,
+    permissions: READ_ONLY_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STANDARD_SAFETY,
+  },
+  {
+    id: 'agent_customer_identity',
+    slug: 'customer-identity-agent',
+    name: 'CRM / Customer Identity Agent',
+    description: 'Provides canonical customer truth from CRM/identity source.',
+    category: 'ingest',
+    is_system: 1, is_locked: 0,
+    permissions: ANALYSIS_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STANDARD_SAFETY,
+  },
+
   // ── COMMUNICATION ──────────────────────────────────────────────────────────
   {
     id: 'agent_draft_reply',
@@ -326,6 +362,28 @@ const AGENTS: AgentDef[] = [
     is_system: 1, is_locked: 0,
     permissions: COMMUNICATION_PERMS,
     reasoning: CREATIVE_REASONING,
+    safety: STRICT_SAFETY,
+  },
+  {
+    id: 'agent_composer',
+    slug: 'composer-translator',
+    name: 'Composer + Translator',
+    description: 'Drafts and localizes internal and customer-facing messages.',
+    category: 'communication',
+    is_system: 1, is_locked: 0,
+    permissions: COMMUNICATION_PERMS,
+    reasoning: CREATIVE_REASONING,
+    safety: STRICT_SAFETY,
+  },
+  {
+    id: 'agent_customer_communication',
+    slug: 'customer-communication-agent',
+    name: 'Customer Communication Agent',
+    description: 'Decides when customer-facing communication should happen based on reconciled state.',
+    category: 'communication',
+    is_system: 1, is_locked: 0,
+    permissions: COMMUNICATION_PERMS,
+    reasoning: BALANCED_REASONING,
     safety: STRICT_SAFETY,
   },
 
@@ -363,6 +421,17 @@ const AGENTS: AgentDef[] = [
     reasoning: FAST_REASONING,
     safety: STANDARD_SAFETY,
   },
+  {
+    id: 'agent_sla_escalation',
+    slug: 'sla-escalation-agent',
+    name: 'SLA & Escalation Agent',
+    description: 'Monitors aging cases, stalled resolutions, delayed approvals, and blocked flows.',
+    category: 'observability',
+    is_system: 1, is_locked: 0,
+    permissions: ANALYSIS_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STANDARD_SAFETY,
+  },
 
   // ── CONNECTORS ─────────────────────────────────────────────────────────────
   {
@@ -387,6 +456,61 @@ const AGENTS: AgentDef[] = [
     reasoning: FAST_REASONING,
     safety: CRITICAL_SAFETY,
   },
+  {
+    id: 'agent_helpdesk',
+    slug: 'helpdesk-agent',
+    name: 'Helpdesk Agent',
+    description: 'Reads/writes tickets, tags, notes, and support metadata in the helpdesk system.',
+    category: 'connectors',
+    is_system: 1, is_locked: 0,
+    permissions: COMMUNICATION_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STANDARD_SAFETY,
+  },
+  {
+    id: 'agent_oms_erp',
+    slug: 'oms-erp-agent',
+    name: 'OMS / ERP Agent',
+    description: 'Handles back-office order/refund/return records in OMS/ERP.',
+    category: 'connectors',
+    is_system: 1, is_locked: 0,
+    permissions: RESOLUTION_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STRICT_SAFETY,
+  },
+  {
+    id: 'agent_returns',
+    slug: 'returns-agent',
+    name: 'Returns Agent',
+    description: 'Handles return lifecycle state, block/unblock logic, label/inspection/restock progression.',
+    category: 'connectors',
+    is_system: 1, is_locked: 0,
+    permissions: RESOLUTION_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STRICT_SAFETY,
+  },
+  {
+    id: 'agent_subscription',
+    slug: 'subscription-agent',
+    name: 'Recharge / Subscription Agent',
+    description: 'Handles subscription/renewal/charge state for subscription commerce.',
+    category: 'connectors',
+    is_system: 1, is_locked: 0,
+    permissions: RESOLUTION_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STRICT_SAFETY,
+  },
+  {
+    id: 'agent_logistics',
+    slug: 'logistics-tracking-agent',
+    name: 'Logistics / Tracking Agent',
+    description: 'Handles shipment/tracking/address-related logistics signals.',
+    category: 'connectors',
+    is_system: 1, is_locked: 0,
+    permissions: READ_ONLY_PERMS,
+    reasoning: FAST_REASONING,
+    safety: STANDARD_SAFETY,
+  },
 ];
 
 // ── Seed function ─────────────────────────────────────────────────────────────
@@ -396,18 +520,6 @@ export function seedAgents(db: Database, tenantId: string): void {
     INSERT OR IGNORE INTO agents
       (id, tenant_id, name, slug, category, is_system, is_locked, is_active, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
-  `);
-
-  const updateAgent = db.prepare(`
-    UPDATE agents SET
-      name      = ?,
-      slug      = ?,
-      category  = ?,
-      is_system = ?,
-      is_locked = ?,
-      is_active = 1,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ?
   `);
 
   const insertVersion = db.prepare(`
@@ -429,15 +541,6 @@ export function seedAgents(db: Database, tenantId: string): void {
       agent.id, tenantId, agent.name, agent.slug,
       agent.category, agent.is_system, agent.is_locked,
       now,
-    );
-    updateAgent.run(
-      agent.name,
-      agent.slug,
-      agent.category,
-      agent.is_system,
-      agent.is_locked,
-      agent.id,
-      tenantId,
     );
 
     const versionId = `${agent.id}_v1`;

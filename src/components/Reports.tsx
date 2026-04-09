@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApi } from '../api/hooks';
-import { operationsApi, reportsApi } from '../api/client';
+import { reportsApi } from '../api/client';
 
 type ReportsTab = 'overview' | 'ai_resume' | 'business_areas' | 'agents' | 'approvals_risk' | 'cost_roi';
 
@@ -59,6 +59,8 @@ const GENERATED_REPORTS = [
   { id: '4', title: 'Weekly Exec Brief', date: 'Oct 14, 2023', time: '09:00 AM', audience: 'Executive / C-Suite', status: 'Archived', severity: 'normal', range: 'Oct 7 - Oct 14' },
 ];
 
+const recommendedActions: any[] = [];
+
 export default function Reports() {
   const [activeTab, setActiveTab] = useState<ReportsTab>('overview');
   const [selectedReportId, setSelectedReportId] = useState('1');
@@ -71,7 +73,6 @@ export default function Reports() {
   const { data: approvalsData } = useApi(() => reportsApi.approvals(period), [period]);
   const { data: costsData } = useApi(() => reportsApi.costs(period), [period]);
   const { data: slaData } = useApi(() => reportsApi.sla(period), [period]);
-  const { data: operationsData } = useApi(() => operationsApi.overview(), []);
 
   const fallbackOverviewKpis = [
     { label: 'AI Resolution Rate', value: '68%', change: '+12%', trend: 'up', sub: 'Improving intent match' },
@@ -84,101 +85,7 @@ export default function Reports() {
     { label: 'CSAT Delta', value: '+0.4', change: '', trend: 'up', sub: 'High user satisfaction' },
   ];
 
-  const operationalOverviewKpis = operationsData ? (() => {
-    const operations = operationsData as any;
-    const queue = (operations.queue || {}) as Record<string, number>;
-    const webhooks = (operations.webhooks || {}) as Record<string, number>;
-    const canonicalEvents = (operations.canonical_events || {}) as Record<string, number>;
-    const integrationHealth = Array.isArray(operations.integrations?.health)
-      ? operations.integrations.health
-      : [];
-    const healthyIntegrations = integrationHealth.filter((item: any) => item.healthy).length;
-    const processedWebhooks = Number(webhooks.processed || 0);
-    const totalWebhooks = Object.values(webhooks).reduce(
-      (sum, count) => sum + Number(count || 0),
-      0,
-    );
-    const linkedCanonical = Number(canonicalEvents.linked || 0);
-    const totalCanonical = Object.values(canonicalEvents).reduce(
-      (sum, count) => sum + Number(count || 0),
-      0,
-    );
-
-    return [
-      {
-        label: 'Queue Pending',
-        value: String(queue.pending || 0),
-        change: operations.worker?.running ? 'Worker online' : 'Worker offline',
-        trend: operations.worker?.running ? 'up' : 'down',
-        sub: `${queue.processing || 0} processing now`,
-      },
-      {
-        label: 'Webhook Throughput',
-        value: formatRatio(processedWebhooks, totalWebhooks || processedWebhooks),
-        change: `${processedWebhooks}/${totalWebhooks || processedWebhooks || 0}`,
-        trend: processedWebhooks > 0 ? 'up' : 'neutral',
-        sub: 'Processed inbound integrations',
-      },
-      {
-        label: 'Canonical Link Rate',
-        value: formatRatio(linkedCanonical, totalCanonical || linkedCanonical),
-        change: `${linkedCanonical}/${totalCanonical || linkedCanonical || 0}`,
-        trend: linkedCanonical > 0 ? 'up' : 'neutral',
-        sub: 'Events linked into cases',
-      },
-      {
-        label: 'Integrations Healthy',
-        value: `${healthyIntegrations}/${integrationHealth.length || 0}`,
-        change: integrationHealth.length ? formatRatio(healthyIntegrations, integrationHealth.length) : '',
-        trend: integrationHealth.length && healthyIntegrations < integrationHealth.length ? 'down' : 'up',
-        sub: 'Registered connector health',
-      },
-    ];
-  })() : [];
-
-  const overviewKpis = overviewData?.kpis?.length
-    ? [...overviewData.kpis.slice(0, 4), ...operationalOverviewKpis].slice(0, 8)
-    : [...fallbackOverviewKpis.slice(0, 4), ...operationalOverviewKpis].slice(0, 8);
-
-  const operationalAlerts = Array.isArray((operationsData as any)?.alerts)
-    ? ((operationsData as any).alerts as string[])
-    : [];
-
-  const recommendedActions = operationalAlerts.length
-    ? operationalAlerts.map((alert) => {
-        if (alert === 'dead_jobs_detected') {
-          return {
-            label: 'Review and retry dead-letter jobs',
-            impact: 'High Impact',
-            effort: 'S',
-            owner: 'Ops',
-            impactColor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-          };
-        }
-        if (alert === 'stale_webhooks_detected') {
-          return {
-            label: 'Replay stale webhook events and verify connector health',
-            impact: 'High Impact',
-            effort: 'M',
-            owner: 'Eng',
-            impactColor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-          };
-        }
-        return {
-          label: 'Inspect recent agent failures in operations',
-          impact: 'Med Impact',
-          effort: 'S',
-          owner: 'AI Team',
-          impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-        };
-      })
-    : [
-        { label: 'Fix Shopify lookup integration errors', impact: 'High Impact', effort: 'M', owner: 'Eng', impactColor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
-        { label: 'Create KB article for annual plan refunds', impact: 'Med Impact', effort: 'S', owner: 'CX', impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-        { label: 'Review SLA breaches in Approvals', impact: 'Med Impact', effort: 'S', owner: 'Ops', impactColor: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-        { label: "Optimize 'Login Issue' intent routing", impact: 'Low Impact', effort: 'L', owner: 'AI Team', impactColor: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
-        { label: 'Update agent guidelines for Order Status', impact: 'Low Impact', effort: 'M', owner: 'CX', impactColor: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
-      ];
+  const overviewKpis = overviewData?.kpis?.length ? overviewData.kpis : fallbackOverviewKpis;
 
   const renderOverview = () => (
     <div className="space-y-8">

@@ -199,7 +199,8 @@ export default function Payments() {
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
-  // Fetch from API, fallback to static
+  // Fetch canonical payment contexts from the backend. Static fixtures are not
+  // used as runtime data so this view stays aligned with Inbox/Case Graph.
   const { data: apiPayments } = useApi(() => paymentsApi.list(), [], []);
 
   const mapApiPayment = (p: any): Payment => ({
@@ -248,7 +249,7 @@ export default function Payments() {
     chargebackAmount: p.chargeback_amount ? `$${p.chargeback_amount}` : undefined,
   });
 
-  const payments = (apiPayments && apiPayments.length > 0) ? apiPayments.map(mapApiPayment) : PAYMENTS;
+  const payments = (apiPayments && apiPayments.length > 0) ? apiPayments.map(mapApiPayment) : [];
 
   const filteredPayments = payments.filter(p => {
     if (activeTab === 'all') return true;
@@ -636,15 +637,15 @@ export default function Payments() {
                       <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
                     </button>
                     <div className="space-y-2 mt-2">
-                      <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
+                      <a href={`https://dashboard.stripe.com/search?query=${encodeURIComponent(selectedPayment.paymentId)}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
                         Payment Gateway (PSP)
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
                       </a>
-                      <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
+                      <a href={`https://oms.example.local/orders/${encodeURIComponent(selectedPayment.orderId)}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
                         Order Management System (OMS)
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
                       </a>
-                      <a href="#" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
+                      <a href={`https://reconcile.example.local/payments/${encodeURIComponent(selectedPayment.paymentId)}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
                         Reconciliation Tool
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
                       </a>
@@ -661,7 +662,17 @@ export default function Payments() {
                       <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
                     </button>
                     <div className="space-y-2 mt-2">
-                      <p className="text-xs text-gray-400 italic p-2">No related cases found.</p>
+                      {selectedPayment.relatedCases.length > 0 ? selectedPayment.relatedCases.map((item) => (
+                        <div key={item.id} className="p-2 rounded border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-xs font-bold text-gray-900 dark:text-white truncate">{item.id}</span>
+                            <span className="text-[10px] text-gray-500 truncate">{item.type}</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-[10px] text-gray-500 flex-shrink-0">{item.status}</span>
+                        </div>
+                      )) : (
+                        <p className="text-xs text-gray-400 italic p-2">No related cases found.</p>
+                      )}
                     </div>
                   </div>
 

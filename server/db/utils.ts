@@ -13,10 +13,6 @@ export const JSON_COLUMNS = [
   'evidence_package', 'context', 'trigger_payload',
   'normalized_payload', 'system_states', 'badges',
   'permission_profile', 'reasoning_profile', 'safety_profile',
-  'knowledge_profile', 'capabilities', 'linked_workflow_ids',
-  'linked_approval_policy_ids', 'nodes', 'edges', 'trigger',
-  'auth_config', 'conditions', 'action_mapping',
-  'approval_mapping', 'escalation_mapping',
 ];
 
 /**

@@ -21,7 +21,6 @@ import { integrationRegistry } from '../integrations/registry.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { logger } from '../utils/logger.js';
-import { resolveTenantWorkspaceContext } from '../middleware/multiTenant.js';
 
 export const shopifyWebhookRouter = Router();
 
@@ -40,10 +39,6 @@ const SUPPORTED_TOPICS = new Set([
 shopifyWebhookRouter.post('/', (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
   const headers = req.headers as Record<string, string>;
-  const context = resolveTenantWorkspaceContext(
-    req.headers['x-tenant-id'] as string | undefined,
-    req.headers['x-workspace-id'] as string | undefined,
-  );
 
   const topic       = headers['x-shopify-topic'];
   const webhookId   = headers['x-shopify-webhook-id'];
@@ -102,8 +97,8 @@ shopifyWebhookRouter.post('/', (req: Request, res: Response) => {
       INSERT INTO webhook_events
         (id, tenant_id, source_system, event_type, raw_payload,
          received_at, status, dedupe_key)
-      VALUES (?, ?, 'shopify', ?, ?, CURRENT_TIMESTAMP, 'received', ?)
-    `).run(eventId, context.tenantId, topic, rawBody, dedupeKey);
+      VALUES (?, 'org_default', 'shopify', ?, ?, CURRENT_TIMESTAMP, 'received', ?)
+    `).run(eventId, topic, rawBody, dedupeKey);
   } catch (err) {
     logger.error('Shopify webhook: failed to persist event', err, { topic });
     // Still respond 200 to avoid Shopify retrying and flooding logs
@@ -121,11 +116,6 @@ shopifyWebhookRouter.post('/', (req: Request, res: Response) => {
       source:         'shopify',
       rawBody,
       headers,
-    }, {
-      tenantId: context.tenantId,
-      workspaceId: context.workspaceId,
-      traceId: eventId,
-      priority: 4,
     });
     logger.info('Shopify webhook enqueued', { eventId, topic, shopDomain });
   } catch (err) {

@@ -89,18 +89,18 @@ export const shopifyConnectorImpl: AgentImplementation = {
         synced.push(order.id);
       }
 
-      // Check fulfillment state from the canonical system state snapshot.
+      // Check fulfillment state from order DB row
       const orderRow = db.prepare(
-        'SELECT status, system_states FROM orders WHERE id = ? AND tenant_id = ?'
+        'SELECT fulfillment_status, tracking_number, tracking_url FROM orders WHERE id = ? AND tenant_id = ?'
       ).get(order.id, tenantId) as any;
 
       if (orderRow) {
         const fulfillmentInSystem = order.systemStates?.fulfillment;
-        if (fulfillmentInSystem && fulfillmentInSystem !== orderRow.status) {
+        if (fulfillmentInSystem && fulfillmentInSystem !== orderRow.fulfillment_status) {
           discrepancies.push({
             orderId: order.id,
             field: 'fulfillment_status',
-            local: orderRow.status ?? 'null',
+            local: orderRow.fulfillment_status ?? 'null',
             shopify: fulfillmentInSystem,
           });
         }

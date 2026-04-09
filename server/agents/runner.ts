@@ -3,9 +3,16 @@
  *
  * Agent execution engine.
  *
- * The runner is the single entrypoint that hydrates runtime context, applies
- * the published control-plane profiles, injects filtered knowledge access, and
- * persists execution telemetry in the schema actually used by this repo.
+ * The runner is the only place that should call agent implementations.
+ * It handles:
+ *   1. Loading the agent + active version from the DB
+ *   2. Merging default profiles with version-level overrides
+ *   3. Permission pre-checks (defense-in-depth)
+ *   4. Building an AgentRunContext with a pre-configured Gemini client
+ *   5. Creating the agent_run row (status=running)
+ *   6. Calling the implementation's execute() method
+ *   7. Persisting the result + updating status
+ *   8. Tracking consecutive failures for circuit-breaking
  */
 
 import { randomUUID } from 'crypto';
@@ -30,41 +37,14 @@ import {
   type AgentVersionRow,
 } from './types.js';
 
+// ── Safe JSON parse helper ────────────────────────────────────────────────────
+
 function safeJson<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
-function loadPublishedVersion(db: any, agentRow: AgentRow): AgentVersionRow | undefined {
-  const byCurrent = agentRow.current_version_id
-    ? db.prepare('SELECT * FROM agent_versions WHERE id = ? AND status = ?')
-        .get(agentRow.current_version_id, 'published') as AgentVersionRow | undefined
-    : undefined;
-
-  if (byCurrent) return byCurrent;
-
-  const latestPublished = db.prepare(`
-    SELECT *
-    FROM agent_versions
-    WHERE agent_id = ? AND status = 'published'
-    ORDER BY version_number DESC, published_at DESC
-    LIMIT 1
-  `).get(agentRow.id) as AgentVersionRow | undefined;
-
-  if (latestPublished && latestPublished.id !== agentRow.current_version_id) {
-    try {
-      db.prepare('UPDATE agents SET current_version_id = ? WHERE id = ?').run(latestPublished.id, agentRow.id);
-    } catch {
-      // Non-critical self-healing failure.
-    }
-  }
-
-  return latestPublished;
-}
+// ── Main runner function ──────────────────────────────────────────────────────
 
 export interface RunAgentOptions {
   agentSlug: string;
@@ -78,11 +58,7 @@ export interface RunAgentOptions {
 
 export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   const {
-    agentSlug,
-    caseId,
-    tenantId,
-    workspaceId,
-    triggerEvent,
+    agentSlug, caseId, tenantId, workspaceId, triggerEvent,
     traceId = randomUUID(),
     extraContext = {},
   } = opts;
@@ -90,6 +66,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   const db = getDb();
   const runId = randomUUID();
 
+  // ── Step 1: Load agent ────────────────────────────────────────────────────
   const agentRow = db.prepare(
     'SELECT * FROM agents WHERE slug = ? AND tenant_id = ? AND is_active = 1'
   ).get(agentSlug, tenantId) as AgentRow | undefined;
@@ -99,12 +76,18 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     return { success: false, error: `Agent "${agentSlug}" not found or inactive` };
   }
 
-  const versionRow = loadPublishedVersion(db, agentRow);
+  // ── Step 2: Load active version ───────────────────────────────────────────
+  const versionRow = agentRow.current_version_id
+    ? db.prepare('SELECT * FROM agent_versions WHERE id = ? AND status = ?')
+        .get(agentRow.current_version_id, 'published') as AgentVersionRow | undefined
+    : undefined;
+
   if (!versionRow) {
     logger.warn('No published version for agent', { agentSlug, agentId: agentRow.id });
     return { success: false, error: `Agent "${agentSlug}" has no published version` };
   }
 
+  // ── Step 3: Merge profiles ────────────────────────────────────────────────
   const permissions: PermissionProfile = {
     ...DEFAULT_PERMISSION_PROFILE,
     ...safeJson<Partial<PermissionProfile>>(versionRow.permission_profile, {}),
@@ -117,14 +100,16 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     ...DEFAULT_SAFETY_PROFILE,
     ...safeJson<Partial<SafetyProfile>>(versionRow.safety_profile, {}),
   };
-  const knowledgeProfile: KnowledgeProfile = safeJson<KnowledgeProfile>(versionRow.knowledge_profile, {});
+  const knowledgeProfile = safeJson<KnowledgeProfile>(versionRow.knowledge_profile, {});
 
+  // ── Step 4: Build context window ──────────────────────────────────────────
   const contextWindow = buildContextWindow(caseId, tenantId);
   if (!contextWindow) {
     logger.warn('Could not build context window for case', { caseId, tenantId });
     return { success: false, error: `Case "${caseId}" not found` };
   }
 
+  const latestMessage = contextWindow.messages[contextWindow.messages.length - 1]?.content ?? null;
   const knowledgeBundle = resolveAgentKnowledgeBundle({
     tenantId,
     workspaceId,
@@ -134,44 +119,43 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
       intent: contextWindow.case.intent,
       tags: contextWindow.case.tags,
       customerSegment: contextWindow.customer?.segment ?? null,
-      conflictDomains: contextWindow.conflicts.map((conflict) => conflict.domain),
-      latestMessage: contextWindow.messages.at(-1)?.content ?? null,
+      conflictDomains: contextWindow.conflicts.map(conflict => conflict.domain),
+      latestMessage,
     },
   });
 
+  // ── Step 5: Get implementation ────────────────────────────────────────────
   const impl = getAgentImpl(agentSlug);
 
+  // ── Step 6: Create agent_run row ──────────────────────────────────────────
   const startedAt = new Date().toISOString();
   try {
     db.prepare(`
       INSERT INTO agent_runs
-        (id, agent_id, agent_version_id, case_id, tenant_id,
-         trigger_type, outcome_status, started_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'running', ?)
+        (id, agent_id, agent_version_id, case_id, tenant_id, workspace_id,
+         trigger_event, status, started_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?)
     `).run(
-      runId,
-      agentRow.id,
-      versionRow.id,
-      caseId,
-      tenantId,
-      triggerEvent,
-      startedAt,
+      runId, agentRow.id, versionRow.id, caseId, tenantId, workspaceId,
+      triggerEvent, startedAt,
     );
   } catch (err) {
     logger.error('Failed to create agent_run row', { err, agentSlug, caseId });
+    // Continue anyway — don't block execution on DB issues
   }
 
+  // ── Step 7: Build Gemini client ───────────────────────────────────────────
   const gemini = new GoogleGenerativeAI(config.ai.geminiApiKey);
 
+  // ── Step 8: Build run context ─────────────────────────────────────────────
   const ctx: AgentRunContext = {
     runId,
     agent: agentRow,
     permissions,
     reasoning,
     safety,
-    knowledgeProfile,
-    knowledgeBundle,
     contextWindow,
+    knowledgeBundle,
     gemini,
     tenantId,
     workspaceId,
@@ -180,6 +164,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     extraContext,
   };
 
+  // ── Step 9: Execute ───────────────────────────────────────────────────────
   let result: AgentResult;
   try {
     logger.info('Agent execution starting', { agentSlug, runId, caseId, triggerEvent });
@@ -192,28 +177,23 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     logger.error('Agent execution threw', { agentSlug, runId, error: err?.message });
   }
 
+  // ── Step 10: Persist result ───────────────────────────────────────────────
   const finishedAt = new Date().toISOString();
-  const outcomeStatus = result.success ? 'completed' : 'failed';
+  const status = result.success ? 'completed' : 'failed';
 
   try {
-    const evidenceRefs = result.output
-      ? JSON.stringify(result.output)
-      : result.summary
-        ? JSON.stringify([{ summary: result.summary }])
-        : null;
-
     db.prepare(`
       UPDATE agent_runs SET
-        outcome_status = ?, confidence = ?, tokens_used = ?, cost_credits = ?,
-        evidence_refs = ?, execution_decision = ?, error = ?, ended_at = ?
+        status = ?, confidence = ?, tokens_used = ?, cost_credits = ?,
+        summary = ?, output = ?, error_message = ?, finished_at = ?
       WHERE id = ?
     `).run(
-      outcomeStatus,
+      status,
       result.confidence ?? null,
       result.tokensUsed ?? null,
       result.costCredits ?? null,
-      evidenceRefs,
-      result.success ? 'proceed' : 'blocked',
+      result.summary ?? null,
+      result.output ? JSON.stringify(result.output) : null,
       result.error ?? null,
       finishedAt,
       runId,
@@ -222,41 +202,25 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     logger.error('Failed to update agent_run row', { err, runId });
   }
 
+  // ── Step 11: Update credit ledger ─────────────────────────────────────────
   if (result.costCredits && result.costCredits > 0) {
     try {
-      const previousBalance = (db.prepare(`
-        SELECT balance_after
-        FROM credit_ledger
-        WHERE org_id = ?
-        ORDER BY occurred_at DESC
-        LIMIT 1
-      `).get(tenantId) as { balance_after: number } | undefined)?.balance_after ?? 0;
-
-      const balanceAfter = previousBalance - result.costCredits;
-
       db.prepare(`
         INSERT INTO credit_ledger
           (id, org_id, tenant_id, entry_type, amount, reason, reference_id, balance_after, occurred_at)
-        VALUES (?, ?, ?, 'debit', ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'debit', ?, ?, ?, 0, ?)
       `).run(
-        randomUUID(),
-        tenantId,
-        tenantId,
+        randomUUID(), tenantId, tenantId,
         result.costCredits,
         `Agent run: ${agentSlug}`,
         runId,
-        balanceAfter,
         finishedAt,
       );
-    } catch {
-      // Non-critical billing telemetry failure.
-    }
+    } catch { /* non-critical */ }
   }
 
   logger.info('Agent execution finished', {
-    agentSlug,
-    runId,
-    outcomeStatus,
+    agentSlug, runId, status,
     confidence: result.confidence,
     tokens: result.tokensUsed,
   });

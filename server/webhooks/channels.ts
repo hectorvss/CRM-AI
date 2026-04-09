@@ -158,7 +158,7 @@ whatsappWebhookRouter.post('/', (req: Request, res: Response) => {
               event_type, occurred_at,
               canonical_entity_type, canonical_entity_id,
               normalized_payload, dedupe_key,
-              status, tenant_id, workspace_id, created_at, updated_at
+              status, tenant_id, workspace_id, ingested_at, updated_at
             ) VALUES (?, 'whatsapp', 'customer', ?, 'message.inbound', ?, 'customer', ?, ?, ?, 'received', ?, ?, ?, ?)
           `).run(eventId, from, sentAt, from, normalized, dedupeKey, context.tenantId, context.workspaceId, now, now);
 
@@ -276,7 +276,7 @@ emailWebhookRouter.post('/', (req: Request, res: Response) => {
         event_type, occurred_at,
         canonical_entity_type, canonical_entity_id,
         normalized_payload, dedupe_key,
-        status, tenant_id, workspace_id, created_at, updated_at
+        status, tenant_id, workspace_id, ingested_at, updated_at
       ) VALUES (?, 'email', 'customer', ?, 'message.inbound', ?, 'customer', ?, ?, ?, 'received', ?, ?, ?, ?)
     `).run(eventId, senderEmail, sentAt, senderEmail, normalized, dedupeKey, context.tenantId, context.workspaceId, now, now);
 

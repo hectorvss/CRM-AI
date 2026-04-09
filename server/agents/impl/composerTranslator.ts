@@ -25,6 +25,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
 import { logAudit } from '../../db/utils.js';
@@ -34,7 +35,7 @@ export const composerTranslatorImpl: AgentImplementation = {
   slug: 'composer-translator',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, tenantId, triggerEvent } = ctx;
+    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, triggerEvent } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
 
@@ -54,6 +55,8 @@ export const composerTranslatorImpl: AgentImplementation = {
 Draft a ${isResolution ? 'resolution confirmation' : hasConflicts ? 'conflict update' : 'professional reply'} for this case.
 
 ${contextStr}
+
+${knowledgeBundle.promptContext ? `ACCESSIBLE KNOWLEDGE AND POLICIES:\n${knowledgeBundle.promptContext}\n` : ''}
 
 Customer name: ${customerName}
 Latest message: "${messageText.slice(0, 500)}"
@@ -90,7 +93,10 @@ Rules:
         },
       });
 
-      const response = await model.generateContent(prompt);
+      const response = await withGeminiRetry(
+        () => model.generateContent(prompt),
+        { label: 'composer-translator' },
+      );
       const text = response.response.text();
       tokensUsed = response.response.usageMetadata?.totalTokenCount ?? 0;
       output = JSON.parse(text);

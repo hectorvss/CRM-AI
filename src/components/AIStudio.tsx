@@ -317,6 +317,8 @@ export default function AIStudio() {
   const [selectedConnection, setSelectedConnection] = useState<string>('Supervisor');
   const [expandedConnection, setExpandedConnection] = useState<string | null>(null);
   const [configTab, setConfigTab] = useState<'Overview' | 'Configure' | 'Test' | 'Logs'>('Configure');
+  const [agentSearch, setAgentSearch] = useState('');
+  const [agentListFilter, setAgentListFilter] = useState<'All' | 'Needs setup' | 'Enabled' | 'Disabled'>('All');
 
   const { data: apiAgents, refetch: refetchAgents } = useApi(agentsApi.list);
 
@@ -333,31 +335,36 @@ export default function AIStudio() {
   const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Connections', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
 
   // Map API agents into the categories structure for rendering
-  const mappedCategories = apiAgents && apiAgents.length > 0
-    ? [...new Set(apiAgents.map((a: any) => a.category))].map(cat => ({
-        title: String(cat).toUpperCase().replace(/_/g, ' '),
-        agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => ({
-          id: a.id,
-          slug: a.slug,
-          name: a.name,
-          desc: a.description || a.slug,
-          icon: a.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
-          iconColor: a.iconColor || CATEGORY_COLORS[a.category] || 'text-indigo-600',
-          active: !!a.is_active,
-          locked: !!a.is_locked,
-          purpose: a.purpose || a.reasoning_profile?.systemInstruction || a.description || a.slug,
-          triggers: a.triggers?.length ? a.triggers : ['System defined triggers'],
-          dependencies: a.dependencies?.length ? a.dependencies : ['Core routing', 'Context Window'],
-          ioLogic: a.ioLogic || { input: 'Canonical event', output: 'Approved action or Routing' },
-          metrics: a.metrics || {},
-          permissionProfile: a.permission_profile,
-          reasoningProfile: a.reasoning_profile,
-          safetyProfile: a.safety_profile,
+  const mappedCategories = useMemo(() => (
+    apiAgents && apiAgents.length > 0
+      ? [...new Set(apiAgents.map((a: any) => a.category))].map(cat => ({
+          title: String(cat).toUpperCase().replace(/_/g, ' '),
+          agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => ({
+            id: a.id,
+            slug: a.slug,
+            name: a.name,
+            desc: a.description || a.slug,
+            icon: a.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
+            iconColor: a.iconColor || CATEGORY_COLORS[a.category] || 'text-indigo-600',
+            active: !!a.is_active,
+            locked: !!a.is_locked,
+            purpose: a.purpose || a.reasoning_profile?.systemInstruction || a.description || a.slug,
+            triggers: a.triggers?.length ? a.triggers : ['System defined triggers'],
+            dependencies: a.dependencies?.length ? a.dependencies : ['Core routing', 'Context Window'],
+            ioLogic: a.ioLogic || { input: 'Canonical event', output: 'Approved action or Routing' },
+            metrics: a.metrics || {},
+            permissionProfile: a.permission_profile,
+            reasoningProfile: a.reasoning_profile,
+            safetyProfile: a.safety_profile,
+          }))
         }))
-      }))
-    : originalCategories;
+      : originalCategories
+  ), [apiAgents]);
 
-  const activeAgentData = mappedCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || mappedCategories[0]?.agents?.[0];
+  const activeAgentData = useMemo(
+    () => mappedCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || mappedCategories[0]?.agents?.[0],
+    [mappedCategories, selectedAgent],
+  );
   const selectedAgentId = activeAgentData?.id;
 
   useEffect(() => {
@@ -408,17 +415,20 @@ export default function AIStudio() {
     };
   }, [effectivePolicy, policyDraft]);
 
+  const currentPolicyBundle = useMemo(() => ({
+    ...(policyDraft?.bundle || {}),
+    permission_profile: activeAgentData?.permissionProfile || policyDraft?.bundle?.permission_profile || {},
+    reasoning_profile: activeAgentData?.reasoningProfile || policyDraft?.bundle?.reasoning_profile || {},
+    safety_profile: activeAgentData?.safetyProfile || policyDraft?.bundle?.safety_profile || {},
+    knowledge_profile: activeAgentData?.knowledgeProfile || policyDraft?.bundle?.knowledge_profile || {},
+    rollout_policy: policyDraft?.bundle?.rollout_policy || { rollout_percentage: runtimeSummary.rollout },
+  }), [activeAgentData, policyDraft?.bundle, runtimeSummary.rollout]);
+
   const handleSaveDraft = async () => {
-    if (!selectedAgentId || !activeAgentData) return;
+    if (!selectedAgentId) return;
     await updateDraft.mutate({
       id: selectedAgentId,
-      body: {
-        permission_profile: activeAgentData.permissionProfile || {},
-        reasoning_profile: activeAgentData.reasoningProfile || {},
-        safety_profile: activeAgentData.safetyProfile || {},
-        knowledge_profile: policyDraft?.bundle?.knowledge_profile || {},
-        rollout_policy: { rollout_percentage: runtimeSummary.rollout },
-      },
+      body: currentPolicyBundle,
     });
     refetchDraft();
     refetchEffective();
@@ -778,15 +788,18 @@ export default function AIStudio() {
                     <input 
                       type="text" 
                       placeholder="Search agents..." 
+                      value={agentSearch}
+                      onChange={(e) => setAgentSearch(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     />
                   </div>
                   <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
-                    {['All', 'Needs setup', 'Enabled', 'Disabled'].map(filter => (
+                    {(['All', 'Needs setup', 'Enabled', 'Disabled'] as const).map(filter => (
                       <button 
                         key={filter}
+                        onClick={() => setAgentListFilter(filter)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                          filter === 'All' 
+                          agentListFilter === filter 
                             ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm' 
                             : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                         }`}
@@ -802,7 +815,20 @@ export default function AIStudio() {
                   <div key={catIdx} className="space-y-4">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{category.title}</h3>
                     <div className="space-y-3">
-                      {category.agents.map((agent, agentIdx) => (
+                      {category.agents
+                        .filter(agent => {
+                          const query = agentSearch.trim().toLowerCase();
+                          const matchesSearch = !query || agent.name.toLowerCase().includes(query) || agent.desc.toLowerCase().includes(query);
+                          const matchesFilter = agentListFilter === 'All'
+                            ? true
+                            : agentListFilter === 'Needs setup'
+                              ? !agent.active
+                              : agentListFilter === 'Enabled'
+                                ? agent.active
+                                : !agent.active;
+                          return matchesSearch && matchesFilter;
+                        })
+                        .map((agent, agentIdx) => (
                         <div 
                           key={agentIdx} 
                           onClick={() => {

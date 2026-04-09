@@ -239,7 +239,7 @@ router.get('/canonical-events', (req: MultiTenantRequest, res) => {
       FROM canonical_events
       WHERE tenant_id = ?
         AND workspace_id = ?
-      ORDER BY occurred_at DESC, created_at DESC
+      ORDER BY occurred_at DESC, ingested_at DESC
       LIMIT 100
     `).all(req.tenantId, req.workspaceId);
 

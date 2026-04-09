@@ -187,7 +187,7 @@ async function handleWebhookProcess(
         event_type, event_category, occurred_at,
         normalized_payload, status
       ) VALUES (
-        ?, ?, ?, ?,
+        ?, ?, 'org_default', 'ws_default',
         ?, ?, ?,
         ?, ?, ?,
         ?, 'received'
@@ -195,8 +195,6 @@ async function handleWebhookProcess(
     `).run(
       canonicalEventId,
       canonicalDedupeKey,
-      ctx.tenantId ?? webhookRow.tenant_id ?? 'org_default',
-      ctx.workspaceId ?? 'ws_default',
       payload.source,
       extraction.entityType,
       extraction.entityId ?? 'unknown',

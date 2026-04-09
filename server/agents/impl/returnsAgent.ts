@@ -46,10 +46,9 @@ export const returnsAgentImpl: AgentImplementation = {
 
     for (const ret of returns) {
       const returnRow = db.prepare(`
-        SELECT r.*, p.refund_amount, p.amount as payment_amount
+        SELECT r.*, p.refund_status, p.refund_amount, p.amount as payment_amount
         FROM returns r
-        LEFT JOIN refunds rf ON r.linked_refund_id = rf.id
-        LEFT JOIN payments p ON rf.payment_id = p.id
+        LEFT JOIN payments p ON r.payment_id = p.id
         WHERE r.id = ? AND r.tenant_id = ?
       `).get(ret.id, tenantId) as any;
 
@@ -57,7 +56,7 @@ export const returnsAgentImpl: AgentImplementation = {
 
       const currentStatus = returnRow.status ?? ret.status;
       const inspectionStatus = returnRow.inspection_status ?? ret.inspectionStatus;
-      const refundStatus = returnRow.refund_status ?? ret.refundStatus;
+      const refundStatus = returnRow.refund_status;
       const carrierStatus = ret.carrierStatus;
 
       // ── State machine progression ──────────────────────────────────

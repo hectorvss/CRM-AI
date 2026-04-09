@@ -21,7 +21,6 @@ import { integrationRegistry } from '../integrations/registry.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { logger } from '../utils/logger.js';
-import { resolveTenantWorkspaceContext } from '../middleware/multiTenant.js';
 
 export const stripeWebhookRouter = Router();
 
@@ -44,10 +43,6 @@ const SUPPORTED_EVENT_TYPES = new Set([
 stripeWebhookRouter.post('/', (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
   const headers = req.headers as Record<string, string>;
-  const context = resolveTenantWorkspaceContext(
-    req.headers['x-tenant-id'] as string | undefined,
-    req.headers['x-workspace-id'] as string | undefined,
-  );
 
   // ── 1. Signature verification ──────────────────────────────────────────────
   const adapter = integrationRegistry.get('stripe');
@@ -114,8 +109,8 @@ stripeWebhookRouter.post('/', (req: Request, res: Response) => {
       INSERT INTO webhook_events
         (id, tenant_id, source_system, event_type, raw_payload,
          received_at, status, dedupe_key)
-      VALUES (?, ?, 'stripe', ?, ?, CURRENT_TIMESTAMP, 'received', ?)
-    `).run(eventId, context.tenantId, eventType, rawBody, dedupeKey);
+      VALUES (?, 'org_default', 'stripe', ?, ?, CURRENT_TIMESTAMP, 'received', ?)
+    `).run(eventId, eventType, rawBody, dedupeKey);
   } catch (err) {
     logger.error('Stripe webhook: failed to persist event', err, { eventType });
     res.status(200).send('ok');
@@ -132,11 +127,6 @@ stripeWebhookRouter.post('/', (req: Request, res: Response) => {
       source:         'stripe',
       rawBody,
       headers,
-    }, {
-      tenantId: context.tenantId,
-      workspaceId: context.workspaceId,
-      traceId: eventId,
-      priority: 4,
     });
     logger.info('Stripe webhook enqueued', { eventId, stripeEventId, eventType });
   } catch (err) {

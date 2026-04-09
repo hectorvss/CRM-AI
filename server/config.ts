@@ -105,9 +105,12 @@ function optionalInt(key: string, defaultValue: number): number {
 function buildConfig(): Config {
   const env = optionalEnv('NODE_ENV', 'development') as Config['env'];
 
-  // GEMINI_API_KEY is the only hard requirement right now.
-  // Shopify / Stripe keys are optional — they become required in Phase 1.
-  const geminiApiKey = requireEnv('GEMINI_API_KEY');
+  // Gemini is optional for local product demos: when it is missing, the API
+  // still boots and AI routes can return deterministic canonical-state fallbacks.
+  const geminiApiKey = optionalEnv('GEMINI_API_KEY', '');
+  if (!geminiApiKey) {
+    console.warn('GEMINI_API_KEY is not set. AI endpoints will use safe local fallbacks where available.');
+  }
 
   const shopifyDomain = process.env.SHOPIFY_SHOP_DOMAIN;
   const shopifyToken  = process.env.SHOPIFY_ADMIN_API_TOKEN;
@@ -137,7 +140,7 @@ function buildConfig(): Config {
 
     ai: {
       geminiApiKey,
-      geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-1.5-flash'),
+      geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-2.5-pro'),
     },
 
     queue: {

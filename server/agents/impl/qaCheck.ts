@@ -21,6 +21,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -29,7 +30,7 @@ export const qaCheckImpl: AgentImplementation = {
   slug: 'qa-policy-check',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, tenantId, workspaceId } = ctx;
+    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
 
@@ -40,16 +41,7 @@ export const qaCheckImpl: AgentImplementation = {
       ORDER BY generated_at DESC LIMIT 1
     `).get(caseId) as any;
 
-    // ── Fetch relevant knowledge articles ─────────────────────────────────
-    const articles = db.prepare(`
-      SELECT title, content FROM knowledge_articles
-      WHERE tenant_id = ? AND status = 'published'
-      ORDER BY citation_count DESC LIMIT 5
-    `).all(tenantId) as Array<{ title: string; content: string }>;
-
-    const policyText = articles.length > 0
-      ? articles.map(a => `## ${a.title}\n${a.content}`).join('\n\n')
-      : 'No specific policies found. Apply standard best practices.';
+    const policyText = knowledgeBundle.promptContext || 'No accessible policies found for this agent. Apply standard best practices and escalate uncertainty.';
 
     // ── Build prompt ──────────────────────────────────────────────────────
     const contextStr = contextWindow.toPromptString();
@@ -104,7 +96,10 @@ Approval is required if:
         },
       });
 
-      const response = await model.generateContent(prompt);
+      const response = await withGeminiRetry(
+        () => model.generateContent(prompt),
+        { label: 'qa-policy-check' },
+      );
       const text = response.response.text();
       tokensUsed = response.response.usageMetadata?.totalTokenCount ?? 0;
       qaOutput = JSON.parse(text);
@@ -130,7 +125,7 @@ Approval is required if:
           randomUUID(), tenantId, workspaceId,
           caseId,
           `${violations.length} policy violation(s) detected`,
-          JSON.stringify({ violations, requiresApproval, agentSlug: 'qa-policy-check' }),
+          JSON.stringify({ violations, requiresApproval, citations: knowledgeBundle.citations, agentSlug: 'qa-policy-check' }),
           now,
         );
       } catch { /* non-critical */ }
@@ -173,7 +168,7 @@ Approval is required if:
       tokensUsed,
       costCredits,
       summary: `QA check: ${policyCompliant ? 'compliant' : 'violations found'}. ${recommendation}`,
-      output: { policyCompliant, violations, requiresApproval, recommendation },
+      output: { policyCompliant, violations, requiresApproval, recommendation, citations: knowledgeBundle.citations },
     };
   },
 };

@@ -125,6 +125,8 @@ export interface SendMessagePayload {
   conversationId: string;
   channel: 'email' | 'web_chat' | 'whatsapp' | 'sms';
   content: string;
+  /** Message row created immediately by the API for instant inbox feedback. */
+  queuedMessageId?: string;
   /** Reference to the draft_reply that was approved, if any */
   draftReplyId?: string;
 }

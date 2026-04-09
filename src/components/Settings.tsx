@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { ReactNode, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import WorkspaceTab from './settings/Workspace';
 import TeamsRolesTab from './settings/TeamsRoles';
@@ -9,6 +9,12 @@ import DataPrivacyTab from './settings/DataPrivacy';
 import PersonalTab from './settings/Personal';
 
 type SettingsTab = 'workspace' | 'teams_roles' | 'notifications' | 'security_audit' | 'billing_usage' | 'data_privacy' | 'personal';
+
+type TabErrorBoundaryProps = { children: ReactNode; label: string };
+
+function TabErrorBoundary({ children }: TabErrorBoundaryProps) {
+  return <>{children}</>;
+}
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('workspace');
@@ -69,13 +75,15 @@ export default function Settings() {
               transition={{ duration: 0.2 }}
               className="h-full"
             >
-              {activeTab === 'workspace' && <WorkspaceTab />}
-              {activeTab === 'teams_roles' && <TeamsRolesTab />}
-              {activeTab === 'notifications' && <NotificationsTab />}
-              {activeTab === 'security_audit' && <SecurityAuditTab />}
-              {activeTab === 'billing_usage' && <BillingUsageTab />}
-              {activeTab === 'data_privacy' && <DataPrivacyTab />}
-              {activeTab === 'personal' && <PersonalTab />}
+              <TabErrorBoundary label={tabs.find(tab => tab.id === activeTab)?.label || 'Settings tab'}>
+                {activeTab === 'workspace' && <WorkspaceTab />}
+                {activeTab === 'teams_roles' && <TeamsRolesTab />}
+                {activeTab === 'notifications' && <NotificationsTab />}
+                {activeTab === 'security_audit' && <SecurityAuditTab />}
+                {activeTab === 'billing_usage' && <BillingUsageTab />}
+                {activeTab === 'data_privacy' && <DataPrivacyTab />}
+                {activeTab === 'personal' && <PersonalTab />}
+              </TabErrorBoundary>
             </motion.div>
           </AnimatePresence>
         </div>

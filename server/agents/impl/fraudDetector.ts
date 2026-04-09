@@ -20,6 +20,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -28,7 +29,7 @@ export const fraudDetectorImpl: AgentImplementation = {
   slug: 'fraud-detector',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, tenantId, workspaceId, runId } = ctx;
+    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId, runId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
 
@@ -39,6 +40,8 @@ export const fraudDetectorImpl: AgentImplementation = {
 Analyze this support case for fraud indicators.
 
 ${contextStr}
+
+${knowledgeBundle.promptContext ? `ACCESSIBLE KNOWLEDGE AND POLICIES:\n${knowledgeBundle.promptContext}\n` : ''}
 
 Return a JSON object with exactly these fields:
 {
@@ -74,7 +77,10 @@ Fraud signals to evaluate:
         },
       });
 
-      const response = await model.generateContent(prompt);
+      const response = await withGeminiRetry(
+        () => model.generateContent(prompt),
+        { label: 'fraud-detector' },
+      );
       const text = response.response.text();
       tokensUsed = response.response.usageMetadata?.totalTokenCount ?? 0;
       fraudOutput = JSON.parse(text);
@@ -108,7 +114,7 @@ Fraud signals to evaluate:
           `Fraud risk ${fraudRisk}: ${signals.slice(0, 3).join('; ')}`,
           JSON.stringify({
             fraudRisk, signals, confidence, recommendation,
-            requiresBlock, blockReason, agentRunId: runId,
+            requiresBlock, blockReason, citations: knowledgeBundle.citations, agentRunId: runId,
           }),
           now,
         );
@@ -156,7 +162,7 @@ Fraud signals to evaluate:
       tokensUsed,
       costCredits,
       summary: `Fraud assessment: ${fraudRisk} risk — ${signals.length} signal(s) detected`,
-      output: { fraudRisk, signals, recommendation, requiresBlock },
+      output: { fraudRisk, signals, recommendation, requiresBlock, citations: knowledgeBundle.citations },
     };
   },
 };

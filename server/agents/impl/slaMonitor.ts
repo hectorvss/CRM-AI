@@ -29,7 +29,7 @@ export const slaMonitorImpl: AgentImplementation = {
     // ── Fetch SLA deadlines from case ────────────────────────────────────
     const caseRow = db.prepare(`
       SELECT sla_first_response_deadline, sla_resolution_deadline,
-             first_response_at, sla_status, status
+             sla_first_response_met, sla_status, status
       FROM cases WHERE id = ? AND tenant_id = ?
     `).get(caseId, tenantId) as any;
 
@@ -46,7 +46,7 @@ export const slaMonitorImpl: AgentImplementation = {
     let newSlaStatus = 'on_track';
 
     // ── First response check ─────────────────────────────────────────────
-    if (caseRow.sla_first_response_deadline && !caseRow.first_response_at) {
+    if (caseRow.sla_first_response_deadline && !caseRow.sla_first_response_met) {
       const frDeadline = new Date(caseRow.sla_first_response_deadline).getTime();
       const frTimeLeft = frDeadline - nowMs;
       const frHoursLeft = frTimeLeft / 3600000;
