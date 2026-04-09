@@ -35,7 +35,7 @@ export const triageAgentImpl: AgentImplementation = {
   slug: 'triage-agent',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, tenantId, knowledgeBundle } = ctx;
+    const { contextWindow, gemini, reasoning, tenantId, workspaceId } = ctx;
     const caseId = contextWindow.case.id;
     const db = getDb();
 
@@ -45,8 +45,6 @@ export const triageAgentImpl: AgentImplementation = {
     const prompt = `You are a CRM triage specialist. Analyze this support case and classify it.
 
 ${contextStr}
-
-${knowledgeBundle.promptContext ? `RELEVANT KNOWLEDGE:\n${knowledgeBundle.promptContext}\n` : ''}
 
 Return a JSON object with exactly these fields:
 {
@@ -136,10 +134,11 @@ SLA tiers:
       try {
         db.prepare(`
           INSERT INTO audit_events
-            (id, tenant_id, entity_type, entity_id, event_type, description, metadata, created_at)
-          VALUES (?, ?, 'case', ?, 'escalation_required', ?, ?, ?)
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', 'escalation_required', 'case', ?, ?, ?, ?)
         `).run(
-          randomUUID(), tenantId, caseId,
+          randomUUID(), tenantId, workspaceId,
+          caseId,
           escalationReason ?? 'Immediate escalation required by triage agent',
           JSON.stringify({ urgency, severity, agentSlug: 'triage-agent' }),
           now,
@@ -155,7 +154,7 @@ SLA tiers:
       tokensUsed,
       costCredits,
       summary: `Triaged as ${priority}/${severity} (${slaTier}). ${triageReason}`,
-      output: { urgency, severity, priority, slaTier, requiresImmediateEscalation, suggestedTags, citations: knowledgeBundle.citations },
+      output: { urgency, severity, priority, slaTier, requiresImmediateEscalation, suggestedTags },
     };
   },
 };

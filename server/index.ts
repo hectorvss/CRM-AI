@@ -11,7 +11,7 @@ dotenv.config();
 
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { getDb, runMigrations } from './db/client.js';
+import { runMigrations, getDb } from './db/client.js';
 import { seedDatabase } from './db/seed.js';
 import { seedAgents } from './agents/seed.js';
 import { startWorker, stopWorker, workerStatus } from './queue/worker.js';
@@ -35,8 +35,9 @@ import iamRouter from './routes/iam.js';
 import workspacesRouter from './routes/workspaces.js';
 import billingRouter from './routes/billing.js';
 import reportsRouter from './routes/reports.js';
-import executionRouter from './routes/execution.js';
 import operationsRouter from './routes/operations.js';
+import executionRouter from './routes/execution.js';
+import sseRouter from './routes/sse.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
@@ -115,8 +116,9 @@ app.use('/api/iam', iamRouter);
 app.use('/api/workspaces', workspacesRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/reports', reportsRouter);
-app.use('/api/execution', executionRouter);
 app.use('/api/operations', operationsRouter);
+app.use('/api/execution', executionRouter);
+app.use('/api/sse', sseRouter);
 
 // ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {

@@ -2,10 +2,11 @@ import { Router, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { logAudit, parseRow } from '../db/utils.js';
+import { parseRow, logAudit } from '../db/utils.js';
 import { runAgent } from '../agents/runner.js';
 import { triggerAgents } from '../agents/orchestrator.js';
 import { hasAgentImpl, getImplementationMode } from '../agents/registry.js';
+import { getCatalogEntryBySlug } from '../agents/catalog.js';
 import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
 
 const router = Router();
@@ -14,7 +15,7 @@ const router = Router();
 router.use(extractMultiTenant);
 
 function getAgentWithVersion(db: any, agentId: string, tenantId: string) {
-  return db.prepare(`
+  let row = db.prepare(`
     SELECT a.*, av.id as version_id, av.version_number, av.status as version_status,
            av.rollout_percentage, av.permission_profile, av.reasoning_profile,
            av.safety_profile, av.knowledge_profile, av.capabilities, av.published_at
@@ -22,6 +23,21 @@ function getAgentWithVersion(db: any, agentId: string, tenantId: string) {
     LEFT JOIN agent_versions av ON a.current_version_id = av.id
     WHERE a.id = ? AND a.tenant_id = ?
   `).get(agentId, tenantId) as any;
+
+  if (!row) return row;
+
+  if (!row.version_id || row.version_status !== 'published') {
+    const fallback = getLatestAgentVersion(db, agentId, 'published');
+    if (fallback) {
+      try {
+        db.prepare('UPDATE agents SET current_version_id = ?, updated_at = ? WHERE id = ?')
+          .run(fallback.id, new Date().toISOString(), agentId);
+      } catch { /* non-critical */ }
+      row = { ...row, ...fallback, version_id: fallback.id, version_status: fallback.status };
+    }
+  }
+
+  return row;
 }
 
 function getLatestAgentVersion(db: any, agentId: string, status?: string) {
@@ -153,22 +169,33 @@ router.get('/', (req: MultiTenantRequest, res: Response) => {
       `).get(a.id, req.tenantId) as any;
       
       const parsed = parseRow(a);
+      const catalog = getCatalogEntryBySlug(parsed.slug);
       return {
         ...parsed,
+        category: catalog?.category ?? parsed.category,
+        description: catalog?.description ?? parsed.description,
+        icon: catalog?.icon,
+        iconColor: catalog?.iconColor,
+        purpose: catalog?.purpose,
+        triggers: catalog?.triggers ?? [],
+        dependencies: catalog?.dependencies ?? [],
+        ioLogic: catalog?.ioLogic,
         has_registered_impl: hasAgentImpl(parsed.slug),
-        implementation_mode: getImplementationMode(parsed.slug),
-        runtime_kind: parsed.capabilities?.runtime_kind ?? 'unknown',
-        model_tier: parsed.capabilities?.model_tier ?? 'none',
-        sort_order: parsed.capabilities?.sort_order ?? 999,
+        implementation_mode: catalog?.implementationMode ?? getImplementationMode(parsed.slug),
+        runtime_kind: catalog?.runtimeKind ?? parsed.capabilities?.runtime_kind ?? 'unknown',
+        model_tier: catalog?.modelTier ?? parsed.capabilities?.model_tier ?? 'none',
+        sort_order: catalog?.sortOrder ?? parsed.capabilities?.sort_order ?? 999,
         metrics: runs,
       };
     });
 
-    result.sort((left: any, right: any) =>
+    const visibleResult = result.filter((agent: any) => Boolean(getCatalogEntryBySlug(agent.slug)));
+
+    visibleResult.sort((left: any, right: any) =>
       (left.sort_order ?? 999) - (right.sort_order ?? 999) || String(left.name).localeCompare(String(right.name))
     );
 
-    res.json(result);
+    res.json(visibleResult);
   } catch (error) {
     console.error('Error fetching agents:', error);
     res.status(500).json({ error: 'Internal server error' });

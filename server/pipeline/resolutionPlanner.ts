@@ -308,48 +308,55 @@ async function handleResolutionPlan(
   if (approvalRequired) {
     const approvalId = randomUUID();
 
-    db.prepare(`
-      INSERT INTO approval_requests (
-        id, case_id, tenant_id, workspace_id,
-        requested_by, requested_by_type,
-        action_type, action_payload,
-        risk_level, evidence_package,
-        status, execution_plan_id,
-        expires_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'resolution_planner', 'agent', 'execute_resolution_plan', ?, ?, ?, 'pending', ?, ?, ?, ?)
-    `).run(
-      approvalId,
-      payload.caseId,
-      tenantId,
-      workspaceId,
-      JSON.stringify({ planId, reason: approvalReason }),
-      caseRow.risk_level ?? 'medium',
-      JSON.stringify({
-        planSummary:  plan.planSummary,
-        issueCount:   issues.length,
-        stepCount:    plan.steps.length,
-        approvalReason,
-      }),
-      planId,
-      new Date(Date.now() + 24 * 3_600_000).toISOString(),
-      now,
-      now,
-    );
+    // Wrap in transaction so approval_request, plan status, and case state
+    // are either ALL committed or ALL rolled back.
+    const createApproval = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO approval_requests (
+          id, case_id, tenant_id, workspace_id,
+          requested_by, requested_by_type,
+          action_type, action_payload,
+          risk_level, evidence_package,
+          status, execution_plan_id,
+          expires_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'resolution_planner', 'agent', 'execute_resolution_plan', ?, ?, ?, 'pending', ?, ?, ?, ?)
+      `).run(
+        approvalId,
+        payload.caseId,
+        tenantId,
+        workspaceId,
+        JSON.stringify({ planId, reason: approvalReason }),
+        caseRow.risk_level ?? 'medium',
+        JSON.stringify({
+          planSummary:  plan.planSummary,
+          issueCount:   issues.length,
+          stepCount:    plan.steps.length,
+          approvalReason,
+        }),
+        planId,
+        new Date(Date.now() + 24 * 3_600_000).toISOString(),
+        now,
+        now,
+      );
 
-    // Update plan to awaiting_approval
-    db.prepare(`
-      UPDATE execution_plans SET
-        status              = 'awaiting_approval',
-        approval_request_id = ?
-      WHERE id = ?
-    `).run(approvalId, planId);
+      // Update plan to awaiting_approval
+      db.prepare(`
+        UPDATE execution_plans SET
+          status              = 'awaiting_approval',
+          approval_request_id = ?
+        WHERE id = ?
+      `).run(approvalId, planId);
 
-    db.prepare(`
-      UPDATE cases SET
-        approval_state = 'pending',
-        updated_at     = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(payload.caseId);
+      db.prepare(`
+        UPDATE cases SET
+          approval_state            = 'pending',
+          active_approval_request_id = ?,
+          updated_at                = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(approvalId, payload.caseId);
+    });
+
+    createApproval();
 
     log.info('Approval request created', {
       approvalId,
