@@ -35,6 +35,8 @@ import iamRouter from './routes/iam.js';
 import workspacesRouter from './routes/workspaces.js';
 import billingRouter from './routes/billing.js';
 import reportsRouter from './routes/reports.js';
+import operationsRouter from './routes/operations.js';
+import executionRouter from './routes/execution.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
@@ -113,6 +115,8 @@ app.use('/api/iam', iamRouter);
 app.use('/api/workspaces', workspacesRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/operations', operationsRouter);
+app.use('/api/execution', executionRouter);
 
 // ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {

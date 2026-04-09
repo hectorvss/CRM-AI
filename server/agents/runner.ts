@@ -189,10 +189,10 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     try {
       db.prepare(`
         INSERT INTO credit_ledger
-          (id, tenant_id, workspace_id, type, amount, description, reference_id, created_at)
-        VALUES (?, ?, ?, 'debit', ?, ?, ?, ?)
+          (id, org_id, tenant_id, entry_type, amount, reason, reference_id, balance_after, occurred_at)
+        VALUES (?, ?, ?, 'debit', ?, ?, ?, 0, ?)
       `).run(
-        randomUUID(), tenantId, workspaceId,
+        randomUUID(), tenantId, tenantId,
         result.costCredits,
         `Agent run: ${agentSlug}`,
         runId,

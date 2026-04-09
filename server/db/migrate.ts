@@ -144,6 +144,20 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       // no-op — table was created by schema.sql
     },
   },
+
+  // ── 2024-01-009: agent_runs — columns expected by runner.ts ─────────────
+  {
+    version: '2024-01-009',
+    up(db) {
+      addColumn(db, 'agent_runs', 'workspace_id',    `TEXT NOT NULL DEFAULT 'ws_default'`);
+      addColumn(db, 'agent_runs', 'trigger_event',   `TEXT DEFAULT 'case_created'`);
+      addColumn(db, 'agent_runs', 'status',           `TEXT NOT NULL DEFAULT 'running'`);
+      addColumn(db, 'agent_runs', 'summary',          'TEXT');
+      addColumn(db, 'agent_runs', 'output',            'TEXT');
+      addColumn(db, 'agent_runs', 'error_message',    'TEXT');
+      addColumn(db, 'agent_runs', 'finished_at',      'TEXT');
+    },
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────────────

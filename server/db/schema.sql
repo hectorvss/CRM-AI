@@ -731,18 +731,25 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   id TEXT PRIMARY KEY,
   case_id TEXT REFERENCES cases(id),
   tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default',
   agent_id TEXT NOT NULL REFERENCES agents(id),
   agent_version_id TEXT REFERENCES agent_versions(id),
+  trigger_event TEXT DEFAULT 'case_created',
   trigger_type TEXT DEFAULT 'case_event',
+  status TEXT NOT NULL DEFAULT 'running',
   outcome_status TEXT NOT NULL DEFAULT 'completed',
   confidence REAL,
+  summary TEXT,
+  output TEXT,
   evidence_refs TEXT DEFAULT '[]',
   execution_decision TEXT DEFAULT 'proceed',
   tokens_used INTEGER DEFAULT 0,
   cost_credits REAL DEFAULT 0,
+  error TEXT,
+  error_message TEXT,
   started_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   ended_at TEXT,
-  error TEXT
+  finished_at TEXT
 );
 
 -- ============================================================
