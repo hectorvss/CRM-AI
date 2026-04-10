@@ -476,6 +476,31 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       }
     },
   },
+  {
+    version: '2026-04-09-007',
+    up(db) {
+      const workspace = db.prepare('SELECT id FROM workspaces LIMIT 1').get() as { id: string } | undefined;
+      addColumn(db, 'payments', 'workspace_id', `TEXT NOT NULL DEFAULT '${workspace?.id || 'ws_default'}'`);
+      db.prepare('UPDATE payments SET workspace_id = COALESCE(workspace_id, ?)').run(workspace?.id || 'ws_default');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_payments_tenant_workspace ON payments(tenant_id, workspace_id)');
+    },
+  },
+  {
+    version: '2026-04-09-008',
+    up(db) {
+      const workspace = db.prepare('SELECT id FROM workspaces LIMIT 1').get() as { id: string } | undefined;
+      addColumn(db, 'agent_runs', 'workspace_id', `TEXT NOT NULL DEFAULT '${workspace?.id || 'ws_default'}'`);
+      addColumn(db, 'agent_runs', 'trigger_event', `TEXT DEFAULT 'case_created'`);
+      addColumn(db, 'agent_runs', 'status', `TEXT NOT NULL DEFAULT 'running'`);
+      addColumn(db, 'agent_runs', 'summary', 'TEXT');
+      addColumn(db, 'agent_runs', 'output', 'TEXT');
+      addColumn(db, 'agent_runs', 'error_message', 'TEXT');
+      addColumn(db, 'agent_runs', 'finished_at', 'TEXT');
+      db.prepare('UPDATE agent_runs SET workspace_id = COALESCE(workspace_id, ?)').run(workspace?.id || 'ws_default');
+      db.prepare("UPDATE agent_runs SET status = COALESCE(status, outcome_status, 'completed')").run();
+      db.exec('CREATE INDEX IF NOT EXISTS idx_agent_runs_tenant_workspace ON agent_runs(tenant_id, workspace_id)');
+    },
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────────────

@@ -256,6 +256,11 @@ export const aiApi = {
       method: 'POST',
       body: JSON.stringify({ action, context }),
     }),
+  copilot: (caseId: string, question: string, history: Array<{ role: string; content: string }> = []) =>
+    request<any>(`/ai/copilot/${caseId}`, {
+      method: 'POST',
+      body: JSON.stringify({ question, history }),
+    }),
   stats: () => request<any>('/ai/stats'),
 };
 

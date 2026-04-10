@@ -328,7 +328,7 @@ async function handleReconcileCase(
       const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
       // Find associated payment via customer_id + order linkage
       const payment = db.prepare(
-        'SELECT * FROM payments WHERE order_id = ? OR id IN (SELECT unnested FROM json_each(?)) LIMIT 1'
+        'SELECT * FROM payments WHERE order_id = ? OR id IN (SELECT value FROM json_each(?)) LIMIT 1'
       ).get(orderId, caseRow.payment_ids) as any ?? (
         paymentIds.length > 0
           ? db.prepare('SELECT * FROM payments WHERE id = ? LIMIT 1').get(paymentIds[0]) as any

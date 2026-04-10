@@ -240,7 +240,8 @@ export default function Customers() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<CustomerTab>('all_activity');
 
-  // Fetch from API, fallback to mock
+  // Fetch canonical customers from the backend. The visual mock list is kept
+  // only as historical reference data, never as runtime source.
   const { data: apiCustomers } = useApi(() => customersApi.list(), [], []);
   const { data: apiSelectedState } = useApi(
     () => selectedCustomerId ? customersApi.state(selectedCustomerId) : Promise.resolve(null),
@@ -299,20 +300,7 @@ export default function Customers() {
     if (apiCustomers && apiCustomers.length > 0) {
       return apiCustomers.map(mapApiCustomer);
     }
-    return mockCustomers.map(customer => ({
-      ...customer,
-      sources: customer.sources.map(source => ({
-        name: source.name || 'Unknown',
-        icon: source.icon || buildInitialsAvatar(source.name || customer.name),
-      })),
-      orders: Array.isArray(customer.orders) ? customer.orders : [],
-      aiImpact: {
-        resolved: Number(customer.aiImpact?.resolved || 0),
-        approvals: Number(customer.aiImpact?.approvals || 0) || undefined,
-        escalated: Number(customer.aiImpact?.escalated || 0) || undefined,
-      },
-      reconciliation: normalizeReconciliation(customer.reconciliation),
-    }));
+    return [];
   }, [apiCustomers]);
 
   const selectedCustomer = React.useMemo(() => {

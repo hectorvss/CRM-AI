@@ -7,15 +7,31 @@ import { config } from '../config.js';
 import { parseRow } from '../db/utils.js';
 import { extractMultiTenant, type MultiTenantRequest } from '../middleware/multiTenant.js';
 import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
+import { getCaseCanonicalState } from '../services/canonicalState.js';
 
 const router = Router();
 
 router.use(extractMultiTenant);
 
 function getAI() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = config.ai.geminiApiKey;
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
   return new GoogleGenerativeAI(apiKey);
+}
+
+function hasAI() {
+  return Boolean(config.ai.geminiApiKey);
+}
+
+function parseJsonArray(value: any): string[] {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function loadAgentKnowledgeProfile(agentSlug: string, tenantId: string) {
@@ -43,14 +59,28 @@ function buildCaseContext(caseId: string, tenantId: string) {
 
   if (!caseRow) throw new Error('Case not found');
 
-  const conversation = db.prepare('SELECT * FROM conversations WHERE case_id = ? LIMIT 1').get(caseId) as any;
+  const conversation = db.prepare(`
+    SELECT * FROM conversations
+    WHERE (case_id = ? OR id = ?) AND tenant_id = ?
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `).get(caseId, caseRow.conversation_id, tenantId) as any;
   const messages: any[] = conversation
     ? db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY sent_at ASC').all(conversation.id)
     : [];
-  const orderIds = JSON.parse(caseRow.order_ids || '[]');
+  const orderIds = parseJsonArray(caseRow.order_ids);
+  const paymentIds = parseJsonArray(caseRow.payment_ids);
+  const returnIds = parseJsonArray(caseRow.return_ids);
   const orders = orderIds
     .map((id: string) => db.prepare('SELECT * FROM orders WHERE id = ?').get(id))
     .filter(Boolean) as any[];
+  const payments = paymentIds
+    .map((id: string) => db.prepare('SELECT * FROM payments WHERE id = ?').get(id))
+    .filter(Boolean) as any[];
+  const returns = returnIds
+    .map((id: string) => db.prepare('SELECT * FROM returns WHERE id = ?').get(id))
+    .filter(Boolean) as any[];
+  const canonicalState = getCaseCanonicalState(caseId, tenantId, caseRow.workspace_id || 'ws_default');
   const conflicts = db.prepare(`
     SELECT conflict_domain
     FROM reconciliation_issues
@@ -76,6 +106,21 @@ ${orders.map((order: any) => `- ${order.external_order_id}: ${order.status} | $$
   System states: ${order.system_states}
   ${order.conflict_detected ? 'CONFLICT: ' + order.conflict_detected : ''}
   ${order.recommended_action ? 'Recommended: ' + order.recommended_action : ''}`).join('\n')}
+
+PAYMENTS:
+${payments.map((payment: any) => `- ${payment.external_payment_id || payment.id}: ${payment.status} | $${payment.amount} ${payment.currency}
+  PSP: ${payment.psp || 'N/A'} | Refund: ${payment.refund_status || 'N/A'}
+  ${payment.conflict_detected ? 'CONFLICT: ' + payment.conflict_detected : ''}
+  ${payment.recommended_action ? 'Recommended: ' + payment.recommended_action : ''}`).join('\n')}
+
+RETURNS:
+${returns.map((ret: any) => `- ${ret.external_return_id || ret.id}: ${ret.status} | ${ret.return_reason || 'N/A'}
+  Refund: ${ret.refund_status || 'N/A'} | Carrier: ${ret.carrier_status || 'N/A'}
+  ${ret.conflict_detected ? 'CONFLICT: ' + ret.conflict_detected : ''}
+  ${ret.recommended_action ? 'Recommended: ' + ret.recommended_action : ''}`).join('\n')}
+
+CANONICAL CONFLICT:
+${canonicalState?.conflict.has_conflict ? `${canonicalState.conflict.conflict_type || 'conflict'}: ${canonicalState.conflict.root_cause || canonicalState.conflict.recommended_action}` : 'No active canonical conflict'}
 `.trim();
 
   return {
@@ -88,7 +133,23 @@ ${orders.map((order: any) => `- ${order.external_order_id}: ${order.status} | $$
       customerSegment: caseRow.segment ?? null,
       conflictDomains: conflicts.map((item) => item.conflict_domain).filter(Boolean),
       latestMessage: messages.at(-1)?.content ?? null,
+      canonicalState,
     },
+  };
+}
+
+function buildFallbackCopilotAnswer(question: string, contextText: string, canonicalState: any, citations: any[] = []) {
+  const conflict = canonicalState?.conflict;
+  const customerName = canonicalState?.customer?.canonical_name || canonicalState?.case?.customer_name || 'the customer';
+  const orderId = canonicalState?.identifiers?.order_ids?.[0] || canonicalState?.case?.case_number || 'the case';
+  const mainIssue = conflict?.root_cause || conflict?.recommended_action || canonicalState?.case?.ai_diagnosis || 'the case is still being analyzed';
+  const recommended = conflict?.recommended_action || canonicalState?.case?.ai_recommended_action || 'continue reviewing the canonical state before taking action';
+  const evidence = citations.length > 0 ? ` I am applying ${citations.length} accessible knowledge source${citations.length === 1 ? '' : 's'}.` : '';
+
+  return {
+    answer: `For ${customerName}, the canonical state says the key issue on ${orderId} is: ${mainIssue}. Recommended next action: ${recommended}.${evidence}\n\nRegarding your question: "${question}"\n\nI would answer using the current customer/case state, avoid promising an action that is blocked by policy, and escalate if the conflict or approval state requires human review.`,
+    mode: 'fallback',
+    context_excerpt: contextText.slice(0, 1200),
   };
 }
 
@@ -297,6 +358,82 @@ Return ONLY valid JSON.`;
       })),
     });
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/copilot/:caseId', async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const { question, history = [] } = req.body || {};
+    const cleanQuestion = String(question || '').trim();
+
+    if (!cleanQuestion) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+
+    const { contextText, caseContext } = buildCaseContext(req.params.caseId, tenantId);
+    const canonicalState = getCaseCanonicalState(req.params.caseId, tenantId, workspaceId);
+    const knowledgeBundle = buildKnowledgePrompt('composer-translator', tenantId, workspaceId, caseContext);
+
+    if (!hasAI()) {
+      return res.json({
+        ...buildFallbackCopilotAnswer(cleanQuestion, contextText, canonicalState, knowledgeBundle.citations),
+        citations: knowledgeBundle.citations,
+        blocked_documents: knowledgeBundle.blockedDocuments.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          reason: doc.blocked_reason,
+        })),
+      });
+    }
+
+    const ai = getAI();
+    const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
+    const compactHistory = Array.isArray(history)
+      ? history.slice(-8).map((item: any) => `${item.role || 'user'}: ${String(item.content || '').slice(0, 800)}`).join('\n')
+      : '';
+
+    const prompt = `You are CRM AI Copilot inside an ecommerce operations SaaS.
+You answer support operators, not customers directly, unless asked to draft customer-facing copy.
+Use the canonical customer/case state as the source of truth. Respect accessible knowledge policies.
+If an action is blocked by approval/policy/conflict, say that clearly and recommend the safe next step.
+
+CANONICAL CASE CONTEXT:
+${contextText}
+
+${canonicalState ? `FULL CANONICAL STATE JSON:\n${JSON.stringify(canonicalState).slice(0, 14000)}\n` : ''}
+
+${knowledgeBundle.promptContext ? `ACCESSIBLE KNOWLEDGE POLICIES:\n${knowledgeBundle.promptContext}\n` : 'ACCESSIBLE KNOWLEDGE POLICIES:\nNo accessible policies.'}
+
+RECENT COPILOT CHAT:
+${compactHistory || 'No previous Copilot messages in this session.'}
+
+OPERATOR QUESTION:
+${cleanQuestion}
+
+Return a concise, actionable answer in the same language as the operator question.
+Mention the relevant system states and policy/approval blockers when they matter.
+Do not invent SaaS data that is not present in the canonical state.`;
+
+    const result = await withGeminiRetry(
+      () => model.generateContent(prompt),
+      { label: 'api.ai.copilot' },
+    );
+
+    res.json({
+      answer: result.response.text().trim(),
+      mode: 'llm',
+      citations: knowledgeBundle.citations,
+      blocked_documents: knowledgeBundle.blockedDocuments.map((doc) => ({
+        id: doc.id,
+        title: doc.title,
+        reason: doc.blocked_reason,
+      })),
+    });
+  } catch (err: any) {
+    console.error('AI copilot error:', err);
     res.status(500).json({ error: err.message });
   }
 });

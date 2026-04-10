@@ -199,7 +199,8 @@ export default function Payments() {
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
-  // Fetch from API, fallback to static
+  // Fetch canonical payment contexts from the backend. Static fixtures are not
+  // used as runtime data so this view stays aligned with Inbox/Case Graph.
   const { data: apiPayments } = useApi(() => paymentsApi.list(), [], []);
 
   const mapApiPayment = (p: any): Payment => ({
@@ -248,7 +249,7 @@ export default function Payments() {
     chargebackAmount: p.chargeback_amount ? `$${p.chargeback_amount}` : undefined,
   });
 
-  const payments = (apiPayments && apiPayments.length > 0) ? apiPayments.map(mapApiPayment) : PAYMENTS;
+  const payments = (apiPayments && apiPayments.length > 0) ? apiPayments.map(mapApiPayment) : [];
 
   const filteredPayments = payments.filter(p => {
     if (activeTab === 'all') return true;

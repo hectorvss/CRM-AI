@@ -102,7 +102,7 @@ export default function Approvals() {
 
   const { data: apiApprovals, refetch } = useApi(() => approvalsApi.list(), [], []);
   const approvals = useMemo<ApprovalItem[]>(() => {
-    if (!apiApprovals || apiApprovals.length === 0) return mockApprovals;
+    if (!apiApprovals || apiApprovals.length === 0) return [];
     return apiApprovals.map((item: any) => ({
       id: item.id,
       type: formatStatus(item.action_type || 'Approval'),
@@ -189,7 +189,7 @@ export default function Approvals() {
               </div>
 
               <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-background-dark">
-                <div className="p-6">
+                <div className="p-6 xl:pl-[400px]">
                   <CaseHeader
                     caseId={selectedContext?.approval?.case_number || selectedItem.caseId || `CAS-${selectedItem.id}`}
                     title={selectedItem.description}
@@ -356,7 +356,7 @@ export default function Approvals() {
                 </div>
               </div>
 
-              <div className="absolute left-6 top-6 w-[360px]">
+              <div className="hidden xl:block absolute left-6 top-6 w-[360px]">
                 <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card">
                   <div className="px-6 py-4 flex items-center justify-between">
                     <div>

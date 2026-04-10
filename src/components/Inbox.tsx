@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Conversation, Channel, CaseTab } from '../types';
-import { casesApi } from '../api/client';
+import { Conversation, Channel, CaseTab, Message } from '../types';
+import { aiApi, casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 type ComposeMode = 'reply' | 'internal';
+type CopilotMessage = { id: string; role: 'user' | 'assistant'; content: string; time: string };
 
 const formatTime = (value?: string | null) =>
   value ? new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
@@ -373,8 +374,13 @@ export default function Inbox() {
   const [composeMode, setComposeMode] = useState<ComposeMode>('reply');
   const [composerText, setComposerText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [localMessagesByCase, setLocalMessagesByCase] = useState<Record<string, Message[]>>({});
+  const [copilotInput, setCopilotInput] = useState('');
+  const [isCopilotSending, setIsCopilotSending] = useState(false);
+  const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
 
-  // Fetch from API, fallback to CONVERSATIONS static data
+  // Fetch canonical cases from the backend. Static fixtures are no longer used
+  // as runtime data, so every visible case comes from the simulated API/DB flow.
   const { data: apiCases } = useApi(() => casesApi.list(), [refreshKey], []);
   const { data: selectedInboxView } = useApi(
     () => selectedId ? casesApi.inboxView(selectedId) : Promise.resolve(null),
@@ -423,16 +429,26 @@ export default function Inbox() {
 
   const conversations = (apiCases && apiCases.length > 0)
     ? apiCases.map(mapApiCase)
-    : CONVERSATIONS;
+    : [];
 
   const filteredConversations = conversations.filter(c => c.tab === activeTab);
   const selectedBaseConv = filteredConversations.find(c => c.id === selectedId) || filteredConversations[0];
   const caseState = selectedInboxView?.state;
-  const selectedConv = selectedBaseConv ? {
+  const selectedConv = selectedBaseConv ? (() => {
+    const apiMessages = selectedInboxView?.messages?.map((msg: any) => ({
+      id: msg.id,
+      type: msg.type === 'agent' ? 'agent' : msg.type === 'internal' ? 'internal' : msg.type === 'system' ? 'system' : msg.direction === 'outbound' ? 'agent' : 'customer',
+      sender: msg.sender_name || (msg.direction === 'outbound' ? 'Agent' : 'Customer'),
+      content: msg.content,
+      time: formatTime(msg.sent_at),
+    })) || selectedBaseConv.messages || [];
+    const localMessages = localMessagesByCase[selectedBaseConv.id] || [];
+    const knownIds = new Set(apiMessages.map((message: Message) => message.id));
+    return {
     ...selectedBaseConv,
     orderId: caseState?.related?.orders?.[0]?.external_order_id || caseState?.identifiers?.order_ids?.[0] || selectedBaseConv.orderId,
-    context: caseState?.conflict?.root_cause || selectedInboxView?.case?.ai_diagnosis || selectedBaseConv.context,
-    recommendedNextAction: caseState?.conflict?.recommended_action || selectedBaseConv.recommendedNextAction,
+    context: caseState?.conflict?.root_cause || selectedInboxView?.case?.ai_diagnosis || selectedBaseConv.context || 'Canonical analysis pending.',
+    recommendedNextAction: caseState?.conflict?.recommended_action || selectedBaseConv.recommendedNextAction || 'Review canonical state',
     conflictDetected: caseState?.conflict?.root_cause || selectedBaseConv.conflictDetected,
     slaStatus: selectedInboxView?.sla?.label || selectedBaseConv.slaStatus,
     slaTime: selectedInboxView?.sla?.time || selectedBaseConv.slaTime,
@@ -441,14 +457,12 @@ export default function Inbox() {
       type: linked.type || 'Case',
       status: titleCase(linked.status || 'open'),
     })) || selectedBaseConv.relatedCases,
-    messages: selectedInboxView?.messages?.map((msg: any) => ({
-      id: msg.id,
-      type: msg.type === 'agent' ? 'agent' : msg.type === 'internal' ? 'internal' : msg.type === 'system' ? 'system' : msg.direction === 'outbound' ? 'agent' : 'customer',
-      sender: msg.sender_name || (msg.direction === 'outbound' ? 'Agent' : 'Customer'),
-      content: msg.content,
-      time: formatTime(msg.sent_at),
-    })) || selectedBaseConv.messages,
-  } : undefined;
+    messages: [
+      ...apiMessages,
+      ...localMessages.filter(message => !knownIds.has(message.id)),
+    ],
+  };
+  })() : undefined;
 
   const tabItems = [
     { id: 'unassigned', label: 'Unassigned', count: conversations.filter(c => c.tab === 'unassigned').length },
@@ -492,6 +506,8 @@ export default function Inbox() {
     return links.filter(link => link.visible);
   })();
 
+  const copilotMessages = selectedConv ? (copilotMessagesByCase[selectedConv.id] || []) : [];
+
   useEffect(() => {
     if (filteredConversations.length > 0 && !filteredConversations.find(c => c.id === selectedId)) {
       setSelectedId(filteredConversations[0].id);
@@ -523,10 +539,40 @@ export default function Inbox() {
 
     setIsSubmitting(true);
     try {
+      const content = composerText.trim();
       if (composeMode === 'internal') {
-        await casesApi.addInternalNote(selectedConv.id, composerText.trim());
+        const result = await casesApi.addInternalNote(selectedConv.id, content);
+        const message = result?.message;
+        setLocalMessagesByCase(current => ({
+          ...current,
+          [selectedConv.id]: [
+            ...(current[selectedConv.id] || []),
+            {
+              id: message?.id || `local-note-${Date.now()}`,
+              type: 'internal',
+              sender: message?.sender_name || 'Internal Note',
+              content,
+              time: formatTime(message?.sent_at || new Date().toISOString()),
+            },
+          ],
+        }));
       } else {
-        await casesApi.reply(selectedConv.id, composerText.trim(), selectedInboxView?.latest_draft?.id);
+        const result = await casesApi.reply(selectedConv.id, content, selectedInboxView?.latest_draft?.id);
+        const message = result?.message;
+        setLocalMessagesByCase(current => ({
+          ...current,
+          [selectedConv.id]: [
+            ...(current[selectedConv.id] || []),
+            {
+              id: message?.id || result?.message_id || `local-reply-${Date.now()}`,
+              type: 'agent',
+              sender: message?.sender_name || 'Alex Morgan',
+              content,
+              time: formatTime(message?.sent_at || new Date().toISOString()),
+              status: 'sent',
+            },
+          ],
+        }));
       }
       setComposerText('');
       setRefreshKey(key => key + 1);
@@ -535,6 +581,58 @@ export default function Inbox() {
       console.error('Inbox action failed:', error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleCopilotSubmit = async () => {
+    if (!selectedConv || !copilotInput.trim() || isCopilotSending) return;
+
+    const question = copilotInput.trim();
+    const userMessage: CopilotMessage = {
+      id: `copilot-user-${Date.now()}`,
+      role: 'user',
+      content: question,
+      time: formatTime(new Date().toISOString()),
+    };
+    const nextHistory = [...copilotMessages, userMessage];
+    setCopilotMessagesByCase(current => ({
+      ...current,
+      [selectedConv.id]: nextHistory,
+    }));
+    setCopilotInput('');
+    setIsCopilotSending(true);
+
+    try {
+      const result = await aiApi.copilot(
+        selectedConv.id,
+        question,
+        nextHistory.map(message => ({ role: message.role, content: message.content })),
+      );
+      const assistantMessage: CopilotMessage = {
+        id: `copilot-assistant-${Date.now()}`,
+        role: 'assistant',
+        content: result?.answer || 'I could not generate an answer from the current case state.',
+        time: formatTime(new Date().toISOString()),
+      };
+      setCopilotMessagesByCase(current => ({
+        ...current,
+        [selectedConv.id]: [...(current[selectedConv.id] || nextHistory), assistantMessage],
+      }));
+    } catch (error: any) {
+      setCopilotMessagesByCase(current => ({
+        ...current,
+        [selectedConv.id]: [
+          ...(current[selectedConv.id] || nextHistory),
+          {
+            id: `copilot-error-${Date.now()}`,
+            role: 'assistant',
+            content: `Copilot could not answer right now: ${error?.message || 'unknown error'}`,
+            time: formatTime(new Date().toISOString()),
+          },
+        ],
+      }));
+    } finally {
+      setIsCopilotSending(false);
     }
   };
 
@@ -807,7 +905,7 @@ export default function Inbox() {
                           <span className="text-xs font-bold text-yellow-800 dark:text-yellow-500 uppercase tracking-wide">Internal Note • {msg.sender}</span>
                           <span className="text-xs text-yellow-600/70">{msg.time}</span>
                         </div>
-                        <p className="text-sm text-yellow-900 dark:text-yellow-100 leading-relaxed italic">
+                        <p className="text-sm text-yellow-900 dark:text-yellow-100 leading-relaxed italic whitespace-pre-wrap break-words">
                           "{msg.content}"
                         </p>
                       </div>
@@ -833,7 +931,7 @@ export default function Inbox() {
                           AI Assistant
                         </div>
                       )}
-                      {msg.content}
+                      <span className="whitespace-pre-wrap break-words">{msg.content}</span>
                       <span className={`float-right flex items-center gap-1 text-[11px] ml-4 mt-2 ${isRight ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400'}`}>
                         {msg.time} {isRight && <span className="material-symbols-outlined text-[14px] text-blue-500">done_all</span>}
                       </span>
@@ -856,7 +954,7 @@ export default function Inbox() {
                         : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-tl-none"
                     }`}>
                       {isAI && <div className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">AI Suggestion</div>}
-                      <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+                      <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
                         {msg.content}
                       </p>
                     </div>
@@ -1047,6 +1145,32 @@ export default function Inbox() {
                             </div>
                           </div>
                         </div>
+
+                        {copilotMessages.length > 0 && (
+                          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-card overflow-hidden">
+                            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
+                              <span className="material-symbols-outlined text-secondary text-lg">forum</span>
+                              <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500">Copilot Chat</h4>
+                            </div>
+                            <div className="p-3 space-y-3 max-h-72 overflow-y-auto custom-scrollbar">
+                              {copilotMessages.map(message => (
+                                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
+                                    message.role === 'user'
+                                      ? 'bg-gray-900 text-white border-gray-900 rounded-br-sm'
+                                      : 'bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200 border-purple-100 dark:border-purple-800/30 rounded-bl-sm'
+                                  }`}>
+                                    <p className="whitespace-pre-wrap">{message.content}</p>
+                                    <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-white/60' : 'text-gray-400'}`}>{message.time}</span>
+                                  </div>
+                                </div>
+                              ))}
+                              {isCopilotSending && (
+                                <div className="text-xs text-gray-400 px-2 py-1">Copilot is reading the canonical state...</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1196,10 +1320,29 @@ export default function Inbox() {
               <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
                 <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
                   <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
-                  <input className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9" placeholder="Ask a question..." type="text" />
+                  <input
+                    value={copilotInput}
+                    onChange={(event) => setCopilotInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        handleCopilotSubmit();
+                      }
+                    }}
+                    disabled={!selectedConv || isCopilotSending}
+                    className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:opacity-50"
+                    placeholder="Ask Copilot about this case..."
+                    type="text"
+                  />
                   <div className="flex items-center gap-1">
                     <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
-                    <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">arrow_upward</span></button>
+                    <button
+                      onClick={handleCopilotSubmit}
+                      disabled={!copilotInput.trim() || isCopilotSending}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg disabled:opacity-40"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">arrow_upward</span>
+                    </button>
                   </div>
                 </div>
               </div>

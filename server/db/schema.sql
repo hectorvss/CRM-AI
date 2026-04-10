@@ -334,6 +334,7 @@ CREATE TABLE IF NOT EXISTS payments (
   order_id TEXT REFERENCES orders(id),
   customer_id TEXT REFERENCES customers(id),
   tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default',
   amount REAL NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'USD',
   payment_method TEXT,

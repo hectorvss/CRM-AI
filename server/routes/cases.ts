@@ -420,7 +420,9 @@ router.post('/:id/internal-note', (req: MultiTenantRequest, res: Response) => {
       VALUES (?, ?, ?, ?, 'human', ?, ?)
     `).run(noteId, req.params.id, String(content).trim(), req.userId || 'user_local', now, req.tenantId);
 
+    let messageId: string | null = null;
     if (caseRow.conversation_id) {
+      messageId = crypto.randomUUID();
       db.prepare(`
         INSERT INTO messages (
           id, conversation_id, case_id, type, direction, sender_id, sender_name,
@@ -428,7 +430,7 @@ router.post('/:id/internal-note', (req: MultiTenantRequest, res: Response) => {
         )
         VALUES (?, ?, ?, 'internal', 'outbound', ?, ?, ?, 'internal', ?, ?, ?)
       `).run(
-        crypto.randomUUID(),
+        messageId,
         caseRow.conversation_id,
         req.params.id,
         req.userId || 'user_local',
@@ -456,7 +458,19 @@ router.post('/:id/internal-note', (req: MultiTenantRequest, res: Response) => {
       metadata: { noteId },
     });
 
-    res.status(201).json({ success: true, noteId });
+    res.status(201).json({
+      success: true,
+      noteId,
+      message: messageId ? {
+        id: messageId,
+        type: 'internal',
+        direction: 'outbound',
+        sender_name: 'Internal Note',
+        content: String(content).trim(),
+        channel: 'internal',
+        sent_at: now,
+      } : null,
+    });
   } catch (error) {
     console.error('Error creating internal note:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -554,7 +568,28 @@ router.post('/:id/reply', (req: MultiTenantRequest, res: Response) => {
       },
     });
 
-    res.status(202).json({ success: true, queued: true, message_id: queuedMessageId });
+    if (draft_reply_id) {
+      db.prepare(`
+        UPDATE draft_replies
+        SET status = 'sent', sent_at = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND case_id = ? AND tenant_id = ?
+      `).run(now, draft_reply_id, req.params.id, req.tenantId);
+    }
+
+    res.status(202).json({
+      success: true,
+      queued: true,
+      message_id: queuedMessageId,
+      message: {
+        id: queuedMessageId,
+        type: 'agent',
+        direction: 'outbound',
+        sender_name: 'Alex Morgan',
+        content: String(content).trim(),
+        channel,
+        sent_at: now,
+      },
+    });
   } catch (error) {
     console.error('Error queueing reply:', error);
     res.status(500).json({ error: 'Internal server error' });

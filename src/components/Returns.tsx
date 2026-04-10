@@ -259,7 +259,8 @@ export default function Returns() {
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
 
-  // Fetch from API, fallback to static
+  // Fetch canonical return contexts from the backend. Static fixtures are not
+  // used as runtime data so this view stays aligned with Inbox/Case Graph.
   const { data: apiReturns } = useApi(() => returnsApi.list(), [], []);
 
   const mapApiReturn = (r: any): Return => ({
@@ -313,7 +314,7 @@ export default function Returns() {
   });
 
   const returns = useMemo(
-    () => (apiReturns && apiReturns.length > 0) ? apiReturns.map(mapApiReturn) : RETURNS,
+    () => (apiReturns && apiReturns.length > 0) ? apiReturns.map(mapApiReturn) : [],
     [apiReturns],
   );
 
