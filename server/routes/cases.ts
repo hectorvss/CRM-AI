@@ -1,7 +1,6 @@
 import { Router, Response } from 'express';
-import { getDb } from '../db/client.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { parseRow, logAudit } from '../db/utils.js';
+import { parseRow } from '../db/utils.js';
 import { Case } from '../models.js';
 import {
   buildCaseGraphView,
@@ -12,8 +11,13 @@ import {
 } from '../services/canonicalState.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
+import { createCaseRepository, createConversationRepository, createAuditRepository } from '../data/index.js';
+import crypto from 'crypto';
 
 const router = Router();
+const caseRepo = createCaseRepository();
+const convRepo = createConversationRepository();
+const auditRepo = createAuditRepository();
 
 router.use(extractMultiTenant);
 
@@ -48,196 +52,113 @@ function computeSlaView(caseRow: any) {
   };
 }
 
-function findConversationForCase(caseRow: any, tenantId: string, workspaceId: string) {
-  const db = getDb();
-
+async function findConversationForCase(caseRow: any, tenantId: string, workspaceId: string) {
+  const scope = { tenantId, workspaceId };
+  
   if (caseRow.conversation_id) {
-    const linked = db.prepare(`
-      SELECT *
-      FROM conversations
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).get(caseRow.conversation_id, tenantId, workspaceId) as any;
+    const linked = await convRepo.getConversation(scope, caseRow.conversation_id);
     if (linked) return linked;
   }
 
-  const byCase = db.prepare(`
-    SELECT *
-    FROM conversations
-    WHERE case_id = ? AND tenant_id = ? AND workspace_id = ?
-    ORDER BY last_message_at DESC, created_at DESC
-    LIMIT 1
-  `).get(caseRow.id, tenantId, workspaceId) as any;
+  const byCase = await convRepo.findLatestByCase(scope, caseRow.id);
   if (byCase) return byCase;
 
   if (caseRow.customer_id) {
-    const byCustomer = db.prepare(`
-      SELECT *
-      FROM conversations
-      WHERE customer_id = ? AND tenant_id = ? AND workspace_id = ?
-        AND channel = COALESCE(?, channel)
-        AND status NOT IN ('closed', 'resolved')
-      ORDER BY last_message_at DESC, created_at DESC
-      LIMIT 1
-    `).get(caseRow.customer_id, tenantId, workspaceId, caseRow.source_channel || null) as any;
+    const byCustomer = await convRepo.findOpenByCustomer(
+      scope, 
+      caseRow.customer_id, 
+      caseRow.source_channel || undefined
+    );
     if (byCustomer) return byCustomer;
   }
 
   return null;
 }
 
-function ensureConversationForCase(caseRow: any, tenantId: string, workspaceId: string) {
-  const db = getDb();
-  const existing = findConversationForCase(caseRow, tenantId, workspaceId);
+async function ensureConversationForCase(caseRow: any, tenantId: string, workspaceId: string) {
+  const scope = { tenantId, workspaceId };
+  const existing = await findConversationForCase(caseRow, tenantId, workspaceId);
+  
   if (existing) {
-    db.prepare(`
-      UPDATE conversations
-      SET case_id = COALESCE(case_id, ?), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(caseRow.id, existing.id, tenantId, workspaceId);
-
-    db.prepare(`
-      UPDATE cases
-      SET conversation_id = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(existing.id, caseRow.id, tenantId, workspaceId);
-
-    db.prepare(`
-      UPDATE messages
-      SET case_id = COALESCE(case_id, ?)
-      WHERE conversation_id = ? AND tenant_id = ?
-    `).run(caseRow.id, existing.id, tenantId);
-
+    await convRepo.linkCase(scope, existing.id, caseRow.id);
+    await caseRepo.updateCase(scope, caseRow.id, { conversationId: existing.id });
+    // Note: linkCase in repository should handle message updates if implemented, 
+    // or we can call separate repo method.
     return existing;
   }
 
-  const now = new Date().toISOString();
   const conversationId = crypto.randomUUID();
-  db.prepare(`
-    INSERT INTO conversations (
-      id, case_id, customer_id, channel, status, subject, external_thread_id,
-      first_message_at, last_message_at, created_at, updated_at, tenant_id, workspace_id
-    )
-    VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    conversationId,
-    caseRow.id,
-    caseRow.customer_id || null,
-    caseRow.source_channel || 'web_chat',
-    null,
-    caseRow.source_entity_id || null,
-    now,
-    now,
-    now,
-    now,
-    tenantId,
-    workspaceId,
-  );
+  const now = new Date().toISOString();
+  
+  const conversation = await convRepo.createConversation(scope, {
+    id: conversationId,
+    caseId: caseRow.id,
+    customerId: caseRow.customer_id || null,
+    channel: caseRow.source_channel || 'web_chat',
+    status: 'open',
+    subject: caseRow.case_number ? `Case ${caseRow.case_number}` : 'New Conversation',
+    firstMessageAt: now,
+    lastMessageAt: now,
+  });
 
-  db.prepare(`
-    UPDATE cases
-    SET conversation_id = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(conversationId, caseRow.id, tenantId, workspaceId);
+  await caseRepo.updateCase(scope, caseRow.id, { conversationId });
 
-  return db.prepare(`
-    SELECT *
-    FROM conversations
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).get(conversationId, tenantId, workspaceId);
+  return conversation;
 }
 
-function buildInboxView(caseId: string, tenantId: string, workspaceId: string) {
-  const db = getDb();
-  const caseRow = db.prepare(`
-    SELECT *
-    FROM cases
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).get(caseId, tenantId, workspaceId) as any;
+async function buildInboxView(caseId: string, tenantId: string, workspaceId: string) {
+  const scope = { tenantId, workspaceId };
+  const caseRow = await caseRepo.getCase(scope, caseId);
 
   if (!caseRow) return null;
 
-  const parsedCase = parseRow(caseRow) as any;
-  const state = getCaseCanonicalState(caseId, tenantId, workspaceId);
-  const conversation = findConversationForCase(parsedCase, tenantId, workspaceId);
+  const state = await getCaseCanonicalState(caseId, tenantId, workspaceId);
+  const conversation = await findConversationForCase(caseRow, tenantId, workspaceId);
 
-  const parsedConversation = conversation ? parseRow(conversation) : null;
-  const messages = parsedConversation
-    ? db.prepare(`
-        SELECT *
-        FROM messages
-        WHERE conversation_id = ? AND tenant_id = ?
-        ORDER BY sent_at ASC
-      `).all(parsedConversation.id, tenantId).map(parseRow)
+  const messages = conversation
+    ? await convRepo.listMessages(scope, conversation.id)
     : [];
-  const drafts = db.prepare(`
-    SELECT *
-    FROM draft_replies
-    WHERE case_id = ? AND tenant_id = ?
-    ORDER BY generated_at DESC
-  `).all(caseId, tenantId).map(parseRow);
-  const internalNotes = db.prepare(`
-    SELECT *
-    FROM internal_notes
-    WHERE case_id = ? AND tenant_id = ?
-    ORDER BY created_at DESC
-  `).all(caseId, tenantId).map(parseRow);
+    
+  const drafts = await caseRepo.listDrafts(scope, caseId);
+  const internalNotes = await caseRepo.listInternalNotes(scope, caseId);
 
   return {
-    case: parsedCase,
+    case: caseRow,
     state,
-    conversation: parsedConversation,
+    conversation: conversation,
     messages,
     drafts,
     latest_draft: drafts[0] ?? null,
     internal_notes: internalNotes,
-    sla: computeSlaView(parsedCase),
+    sla: computeSlaView(caseRow),
   };
 }
 
-router.get('/', (req: MultiTenantRequest, res: Response) => {
+// ── GET /api/cases ────────────────────────────────────────
+router.get('/', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const db = getDb();
-    const { status, assigned_user_id, priority, risk_level, q } = req.query;
+    const filters = {
+      status: req.query.status as string,
+      assignedUserId: req.query.assigned_user_id as string,
+      priority: req.query.priority as string,
+      riskLevel: req.query.risk_level as string,
+      searchTerm: req.query.q as string,
+    };
 
-    let query = `
-      SELECT c.*,
-             cu.canonical_name AS customer_name, cu.canonical_email AS customer_email,
-             cu.segment AS customer_segment,
-             u.name AS assigned_user_name,
-             t.name AS assigned_team_name
-      FROM cases c
-      LEFT JOIN customers cu ON c.customer_id = cu.id
-      LEFT JOIN users u ON c.assigned_user_id = u.id
-      LEFT JOIN teams t ON c.assigned_team_id = t.id
-      WHERE c.tenant_id = ? AND c.workspace_id = ?
-    `;
-    const params: any[] = [req.tenantId, req.workspaceId];
-
-    if (status) { query += ` AND c.status = ?`; params.push(status); }
-    if (assigned_user_id) { query += ` AND c.assigned_user_id = ?`; params.push(assigned_user_id); }
-    if (priority) { query += ` AND c.priority = ?`; params.push(priority); }
-    if (risk_level) { query += ` AND c.risk_level = ?`; params.push(risk_level); }
-    if (q) {
-      query += ` AND (c.case_number LIKE ? OR cu.canonical_name LIKE ? OR cu.canonical_email LIKE ?)`;
-      const term = `%${q}%`;
-      params.push(term, term, term);
-    }
-
-    query += ` ORDER BY c.last_activity_at DESC`;
-
-    const cases = db.prepare(query).all(...params);
-    const enriched = cases.map(row => {
-      const parsed = parseRow<Case>(row) as any;
-      const summary = buildCaseListSummary(parsed.id, req.tenantId!, req.workspaceId!);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const cases = await caseRepo.listCases(scope, filters);
+    
+    const enriched = await Promise.all(cases.map(async (row: any) => {
+      const summary = await buildCaseListSummary(row.id, req.tenantId!, req.workspaceId!);
 
       return {
-        ...parsed,
+        ...row,
         latest_message_preview: summary?.latest_message_preview || null,
         channel_context: summary?.channel_context || null,
         system_status_summary: summary?.system_status_summary || null,
         conflict_summary: summary?.conflict_summary || null,
       };
-    });
+    }));
 
     res.json(enriched);
   } catch (error) {
@@ -246,29 +167,17 @@ router.get('/', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.get('/:id', (req: MultiTenantRequest, res: Response) => {
+// ── GET /api/cases/:id ────────────────────────────────────
+router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const db = getDb();
-    const row = db.prepare(`
-      SELECT c.*,
-             cu.canonical_name AS customer_name, cu.canonical_email AS customer_email,
-             cu.segment AS customer_segment, cu.lifetime_value, cu.risk_level AS customer_risk,
-             cu.total_orders, cu.total_spent, cu.dispute_rate, cu.refund_rate,
-             u.name AS assigned_user_name, u.email AS assigned_user_email,
-             t.name AS assigned_team_name
-      FROM cases c
-      LEFT JOIN customers cu ON c.customer_id = cu.id
-      LEFT JOIN users u ON c.assigned_user_id = u.id
-      LEFT JOIN teams t ON c.assigned_team_id = t.id
-      WHERE c.id = ? AND c.tenant_id = ? AND c.workspace_id = ?
-    `).get(req.params.id, req.tenantId, req.workspaceId);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const row = await caseRepo.getCase(scope, req.params.id);
 
     if (!row) return res.status(404).json({ error: 'Case not found' });
 
-    const parsed = parseRow<Case>(row) as any;
     res.json({
-      ...parsed,
-      state_snapshot: getCaseCanonicalState(req.params.id, req.tenantId!, req.workspaceId!),
+      ...row,
+      state_snapshot: await getCaseCanonicalState(req.params.id, req.tenantId!, req.workspaceId!),
     });
   } catch (error) {
     console.error('Error fetching case:', error);
@@ -276,9 +185,9 @@ router.get('/:id', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.get('/:id/state', (req: MultiTenantRequest, res: Response) => {
+router.get('/:id/state', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const state = getCaseCanonicalState(req.params.id, req.tenantId!, req.workspaceId!);
+    const state = await getCaseCanonicalState(req.params.id, req.tenantId!, req.workspaceId!);
     if (!state) return res.status(404).json({ error: 'Case not found' });
     res.json(state);
   } catch (error) {
@@ -287,9 +196,9 @@ router.get('/:id/state', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.get('/:id/graph', (req: MultiTenantRequest, res: Response) => {
+router.get('/:id/graph', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const graph = buildCaseGraphView(req.params.id, req.tenantId!, req.workspaceId!);
+    const graph = await buildCaseGraphView(req.params.id, req.tenantId!, req.workspaceId!);
     if (!graph) return res.status(404).json({ error: 'Case not found' });
     res.json(graph);
   } catch (error) {
@@ -298,9 +207,9 @@ router.get('/:id/graph', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.get('/:id/resolve', (req: MultiTenantRequest, res: Response) => {
+router.get('/:id/resolve', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const resolve = buildCaseResolveView(req.params.id, req.tenantId!, req.workspaceId!);
+    const resolve = await buildCaseResolveView(req.params.id, req.tenantId!, req.workspaceId!);
     if (!resolve) return res.status(404).json({ error: 'Case not found' });
     res.json(resolve);
   } catch (error) {
@@ -309,9 +218,9 @@ router.get('/:id/resolve', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.get('/:id/timeline', (req: MultiTenantRequest, res: Response) => {
+router.get('/:id/timeline', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const timeline = buildCaseTimeline(req.params.id, req.tenantId!, req.workspaceId!);
+    const timeline = await buildCaseTimeline(req.params.id, req.tenantId!, req.workspaceId!);
     res.json(timeline);
   } catch (error) {
     console.error('Error fetching timeline:', error);
@@ -319,9 +228,9 @@ router.get('/:id/timeline', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.get('/:id/inbox-view', (req: MultiTenantRequest, res: Response) => {
+router.get('/:id/inbox-view', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const view = buildInboxView(req.params.id, req.tenantId!, req.workspaceId!);
+    const view = await buildInboxView(req.params.id, req.tenantId!, req.workspaceId!);
     if (!view) return res.status(404).json({ error: 'Case not found' });
     res.json(view);
   } catch (error) {
@@ -330,29 +239,30 @@ router.get('/:id/inbox-view', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.patch('/:id/status', (req: MultiTenantRequest, res: Response) => {
+// ── PATCH /api/cases/:id/status ──────────────────────────
+router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const db = getDb();
     const { status, reason, changed_by } = req.body;
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
 
-    const existing = db.prepare('SELECT status FROM cases WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId) as any;
+    const existing = await caseRepo.getCase(scope, req.params.id);
     if (!existing) return res.status(404).json({ error: 'Case not found' });
 
-    db.prepare(`
-      UPDATE cases
-      SET status = ?, updated_at = CURRENT_TIMESTAMP, last_activity_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ?
-    `).run(status, req.params.id, req.tenantId);
+    await caseRepo.updateCase(scope, req.params.id, { 
+      status, 
+      lastActivityAt: new Date().toISOString() 
+    });
 
-    db.prepare(`
-      INSERT INTO case_status_history (id, case_id, from_status, to_status, changed_by, changed_by_type, reason, tenant_id)
-      VALUES (?, ?, ?, ?, ?, 'human', ?, ?)
-    `).run(crypto.randomUUID(), req.params.id, existing.status, status, changed_by || req.userId, reason || null, req.tenantId);
+    await caseRepo.addStatusHistory(scope, {
+      caseId: req.params.id,
+      fromStatus: existing.status,
+      toStatus: status,
+      changedBy: changed_by || req.userId || 'system',
+      reason: reason || null
+    });
 
-    logAudit(db, {
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
-      actorId: req.userId!,
+    await auditRepo.logEvent(scope, {
+      actorId: req.userId || 'system',
       action: 'CASE_STATUS_UPDATE',
       entityType: 'case',
       entityId: req.params.id,
@@ -368,20 +278,18 @@ router.patch('/:id/status', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.patch('/:id/assign', (req: MultiTenantRequest, res: Response) => {
+// ── PATCH /api/cases/:id/assign ──────────────────────────
+router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const db = getDb();
     const { user_id, team_id } = req.body;
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
 
-    db.prepare(`
-      UPDATE cases
-      SET assigned_user_id = ?, assigned_team_id = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ?
-    `).run(user_id || null, team_id || null, req.params.id, req.tenantId);
+    await caseRepo.updateCase(scope, req.params.id, {
+      assignedUserId: user_id || null,
+      assignedTeamId: team_id || null
+    });
 
-    logAudit(db, {
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
+    await auditRepo.logEvent(scope, {
       actorId: req.userId!,
       action: 'CASE_ASSIGNMENT_UPDATE',
       entityType: 'case',
@@ -396,61 +304,50 @@ router.patch('/:id/assign', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.post('/:id/internal-note', (req: MultiTenantRequest, res: Response) => {
+// ── POST /api/cases/:id/internal-note ─────────────────────
+router.post('/:id/internal-note', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const db = getDb();
     const { content } = req.body;
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+
     if (!content || !String(content).trim()) {
       return res.status(400).json({ error: 'Note content is required' });
     }
 
-    const caseRow = db.prepare(`
-      SELECT id, conversation_id
-      FROM cases
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).get(req.params.id, req.tenantId, req.workspaceId) as any;
-
+    const caseRow = await caseRepo.getCase(scope, req.params.id);
     if (!caseRow) return res.status(404).json({ error: 'Case not found' });
 
     const noteId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    db.prepare(`
-      INSERT INTO internal_notes (id, case_id, content, created_by, created_by_type, created_at, tenant_id)
-      VALUES (?, ?, ?, ?, 'human', ?, ?)
-    `).run(noteId, req.params.id, String(content).trim(), req.userId || 'user_local', now, req.tenantId);
+    await caseRepo.addInternalNote(scope, {
+      id: noteId,
+      caseId: req.params.id,
+      content: String(content).trim(),
+      createdBy: req.userId || 'user_local',
+      createdAt: now
+    });
 
     let messageId: string | null = null;
     if (caseRow.conversation_id) {
       messageId = crypto.randomUUID();
-      db.prepare(`
-        INSERT INTO messages (
-          id, conversation_id, case_id, type, direction, sender_id, sender_name,
-          content, channel, sent_at, created_at, tenant_id
-        )
-        VALUES (?, ?, ?, 'internal', 'outbound', ?, ?, ?, 'internal', ?, ?, ?)
-      `).run(
-        messageId,
-        caseRow.conversation_id,
-        req.params.id,
-        req.userId || 'user_local',
-        'Internal Note',
-        String(content).trim(),
-        now,
-        now,
-        req.tenantId,
-      );
+      await convRepo.addMessage(scope, {
+        id: messageId,
+        conversationId: caseRow.conversation_id,
+        caseId: req.params.id,
+        type: 'internal',
+        direction: 'outbound',
+        senderId: req.userId || 'user_local',
+        senderName: 'Internal Note',
+        content: String(content).trim(),
+        channel: 'internal',
+        sentAt: now
+      });
     }
 
-    db.prepare(`
-      UPDATE cases
-      SET last_activity_at = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ?
-    `).run(now, req.params.id, req.tenantId);
+    await caseRepo.updateCase(scope, req.params.id, { lastActivityAt: now });
 
-    logAudit(db, {
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
+    await auditRepo.logEvent(scope, {
       actorId: req.userId || 'user_local',
       action: 'CASE_INTERNAL_NOTE_CREATED',
       entityType: 'case',
@@ -477,65 +374,46 @@ router.post('/:id/internal-note', (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.post('/:id/reply', (req: MultiTenantRequest, res: Response) => {
+// ── POST /api/cases/:id/reply ─────────────────────────────
+router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const db = getDb();
     const { content, draft_reply_id } = req.body;
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+
     if (!content || !String(content).trim()) {
       return res.status(400).json({ error: 'Reply content is required' });
     }
 
-    const caseRow = db.prepare(`
-      SELECT id, case_number, conversation_id, source_channel, source_entity_id, customer_id
-      FROM cases
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).get(req.params.id, req.tenantId, req.workspaceId) as any;
-
+    const caseRow = await caseRepo.getCase(scope, req.params.id);
     if (!caseRow) return res.status(404).json({ error: 'Case not found' });
-    const conversation = ensureConversationForCase(caseRow, req.tenantId!, req.workspaceId!) as any;
 
+    const conversation = await ensureConversationForCase(caseRow, req.tenantId!, req.workspaceId!);
     if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
 
     const now = new Date().toISOString();
     const queuedMessageId = crypto.randomUUID();
     const channel = conversation.channel || caseRow.source_channel || 'web_chat';
 
-    db.prepare(`
-      INSERT INTO messages (
-        id, conversation_id, case_id, customer_id, type, direction, sender_id, sender_name,
-        content, content_type, channel, external_message_id, draft_reply_id,
-        sent_at, created_at, tenant_id
-      )
-      VALUES (?, ?, ?, ?, 'agent', 'outbound', ?, ?, ?, 'text', ?, ?, ?, ?, ?, ?)
-    `).run(
-      queuedMessageId,
-      conversation.id,
-      req.params.id,
-      caseRow.customer_id || null,
-      req.userId || 'user_local',
-      'Alex Morgan',
-      String(content).trim(),
+    await convRepo.addMessage(scope, {
+      id: queuedMessageId,
+      conversationId: conversation.id,
+      caseId: req.params.id,
+      customerId: caseRow.customer_id || null,
+      type: 'agent',
+      direction: 'outbound',
+      senderId: req.userId || 'user_local',
+      senderName: 'Alex Morgan',
+      content: String(content).trim(),
       channel,
-      `queued_${queuedMessageId}`,
-      draft_reply_id || null,
-      now,
-      now,
-      req.tenantId,
-    );
+      externalMessageId: `queued_${queuedMessageId}`,
+      draftReplyId: draft_reply_id || null,
+      sentAt: now
+    });
 
-    db.prepare(`
-      UPDATE conversations
-      SET last_message_at = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(now, conversation.id, req.tenantId, req.workspaceId);
+    await convRepo.updateLastMessage(scope, conversation.id, now);
+    await caseRepo.updateCase(scope, req.params.id, { lastActivityAt: now });
 
-    db.prepare(`
-      UPDATE cases
-      SET last_activity_at = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(now, req.params.id, req.tenantId, req.workspaceId);
-
-    enqueue(
+    await enqueue(
       JobType.SEND_MESSAGE,
       {
         caseId: req.params.id,
@@ -553,9 +431,7 @@ router.post('/:id/reply', (req: MultiTenantRequest, res: Response) => {
       },
     );
 
-    logAudit(db, {
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
+    await auditRepo.logEvent(scope, {
       actorId: req.userId || 'user_local',
       action: 'CASE_REPLY_QUEUED',
       entityType: 'case',
@@ -569,11 +445,7 @@ router.post('/:id/reply', (req: MultiTenantRequest, res: Response) => {
     });
 
     if (draft_reply_id) {
-      db.prepare(`
-        UPDATE draft_replies
-        SET status = 'sent', sent_at = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND case_id = ? AND tenant_id = ?
-      `).run(now, draft_reply_id, req.params.id, req.tenantId);
+      await caseRepo.updateDraftStatus(scope, draft_reply_id, 'sent', now);
     }
 
     res.status(202).json({

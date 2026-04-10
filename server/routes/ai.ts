@@ -2,14 +2,16 @@ import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
-import { getDb } from '../db/client.js';
 import { config } from '../config.js';
-import { parseRow } from '../db/utils.js';
 import { extractMultiTenant, type MultiTenantRequest } from '../middleware/multiTenant.js';
 import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
 import { getCaseCanonicalState } from '../services/canonicalState.js';
+import { createAIRepository, createKnowledgeRepository } from '../data/index.js';
+import { sendError } from '../http/errors.js';
 
 const router = Router();
+const aiRepo = createAIRepository();
+const knowledgeRepo = createKnowledgeRepository();
 
 router.use(extractMultiTenant);
 
@@ -23,87 +25,28 @@ function hasAI() {
   return Boolean(config.ai.geminiApiKey);
 }
 
-function parseJsonArray(value: any): string[] {
-  if (Array.isArray(value)) return value;
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
+async function buildCaseContext(caseId: string, scope: { tenantId: string; workspaceId: string }) {
+  const data = await aiRepo.getCaseContextData(scope, caseId);
+  if (!data) throw new Error('Case not found');
 
-function loadAgentKnowledgeProfile(agentSlug: string, tenantId: string) {
-  const db = getDb();
-  const row = db.prepare(`
-    SELECT av.knowledge_profile
-    FROM agents a
-    LEFT JOIN agent_versions av ON a.current_version_id = av.id
-    WHERE a.slug = ? AND a.tenant_id = ? AND a.is_active = 1
-    LIMIT 1
-  `).get(agentSlug, tenantId) as any;
-
-  return row?.knowledge_profile ? JSON.parse(row.knowledge_profile) : {};
-}
-
-function buildCaseContext(caseId: string, tenantId: string) {
-  const db = getDb();
-  const caseRow = db.prepare(`
-    SELECT c.*, cu.canonical_name, cu.canonical_email, cu.segment, cu.lifetime_value,
-           cu.dispute_rate, cu.refund_rate
-    FROM cases c
-    LEFT JOIN customers cu ON c.customer_id = cu.id
-    WHERE c.id = ? AND c.tenant_id = ?
-  `).get(caseId, tenantId) as any;
-
-  if (!caseRow) throw new Error('Case not found');
-
-  const conversation = db.prepare(`
-    SELECT * FROM conversations
-    WHERE (case_id = ? OR id = ?) AND tenant_id = ?
-    ORDER BY updated_at DESC
-    LIMIT 1
-  `).get(caseId, caseRow.conversation_id, tenantId) as any;
-  const messages: any[] = conversation
-    ? db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY sent_at ASC').all(conversation.id)
-    : [];
-  const orderIds = parseJsonArray(caseRow.order_ids);
-  const paymentIds = parseJsonArray(caseRow.payment_ids);
-  const returnIds = parseJsonArray(caseRow.return_ids);
-  const orders = orderIds
-    .map((id: string) => db.prepare('SELECT * FROM orders WHERE id = ?').get(id))
-    .filter(Boolean) as any[];
-  const payments = paymentIds
-    .map((id: string) => db.prepare('SELECT * FROM payments WHERE id = ?').get(id))
-    .filter(Boolean) as any[];
-  const returns = returnIds
-    .map((id: string) => db.prepare('SELECT * FROM returns WHERE id = ?').get(id))
-    .filter(Boolean) as any[];
-  const canonicalState = getCaseCanonicalState(caseId, tenantId, caseRow.workspace_id || 'ws_default');
-  const conflicts = db.prepare(`
-    SELECT conflict_domain
-    FROM reconciliation_issues
-    WHERE case_id = ? AND tenant_id = ?
-    ORDER BY id DESC
-    LIMIT 10
-  `).all(caseId, tenantId) as Array<{ conflict_domain: string }>;
+  const { caseRow, customer, messages, orders, payments, returns, conflicts } = data;
+  const canonicalState = getCaseCanonicalState(caseId, scope.tenantId, scope.workspaceId);
 
   const contextText = `
 CASE: ${caseRow.case_number} | Type: ${caseRow.type} | Status: ${caseRow.status}
 Priority: ${caseRow.priority} | Risk: ${caseRow.risk_level} | SLA: ${caseRow.sla_status}
 Approval State: ${caseRow.approval_state}
 
-CUSTOMER: ${caseRow.canonical_name} (${caseRow.canonical_email})
-Segment: ${caseRow.segment} | LTV: $${caseRow.lifetime_value ?? 'N/A'}
-Dispute rate: ${caseRow.dispute_rate} | Refund rate: ${caseRow.refund_rate}
+CUSTOMER: ${customer.canonical_name} (${customer.canonical_email})
+Segment: ${customer.segment} | LTV: $${customer.lifetime_value ?? 'N/A'}
+Dispute rate: ${customer.dispute_rate} | Refund rate: ${customer.refund_rate}
 
 CONVERSATION (${messages.length} messages):
 ${messages.map((message: any) => `[${message.type.toUpperCase()}] ${message.sender_name || message.type}: ${message.content}`).join('\n')}
 
 ORDERS:
 ${orders.map((order: any) => `- ${order.external_order_id}: ${order.status} | $${order.total_amount} ${order.currency}
-  System states: ${order.system_states}
+  System states: ${JSON.stringify(order.system_states)}
   ${order.conflict_detected ? 'CONFLICT: ' + order.conflict_detected : ''}
   ${order.recommended_action ? 'Recommended: ' + order.recommended_action : ''}`).join('\n')}
 
@@ -124,14 +67,14 @@ ${canonicalState?.conflict.has_conflict ? `${canonicalState.conflict.conflict_ty
 `.trim();
 
   return {
-    caseRow: parseRow(caseRow) as any,
+    caseRow,
     contextText,
     caseContext: {
       type: caseRow.type,
       intent: caseRow.intent,
-      tags: parseRow(caseRow).tags ?? [],
-      customerSegment: caseRow.segment ?? null,
-      conflictDomains: conflicts.map((item) => item.conflict_domain).filter(Boolean),
+      tags: caseRow.tags ?? [],
+      customerSegment: customer.segment ?? null,
+      conflictDomains: conflicts.map((item: any) => item.conflict_domain).filter(Boolean),
       latestMessage: messages.at(-1)?.content ?? null,
       canonicalState,
     },
@@ -153,11 +96,11 @@ function buildFallbackCopilotAnswer(question: string, contextText: string, canon
   };
 }
 
-function buildKnowledgePrompt(agentSlug: string, tenantId: string, workspaceId: string, caseContext: any) {
-  const knowledgeProfile = loadAgentKnowledgeProfile(agentSlug, tenantId);
+async function buildKnowledgePrompt(agentSlug: string, scope: { tenantId: string; workspaceId: string }, caseContext: any) {
+  const knowledgeProfile = await aiRepo.getAgentKnowledgeProfile(scope, agentSlug);
   return resolveAgentKnowledgeBundle({
-    tenantId,
-    workspaceId,
+    tenantId: scope.tenantId,
+    workspaceId: scope.workspaceId,
     knowledgeProfile,
     caseContext,
   });
@@ -165,10 +108,14 @@ function buildKnowledgePrompt(agentSlug: string, tenantId: string, workspaceId: 
 
 router.post('/diagnose/:caseId', async (req: MultiTenantRequest, res) => {
   try {
-    const tenantId = req.tenantId!;
-    const workspaceId = req.workspaceId!;
-    const { caseRow, contextText, caseContext } = buildCaseContext(req.params.caseId, tenantId);
-    const knowledgeBundle = buildKnowledgePrompt('qa-policy-check', tenantId, workspaceId, caseContext);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const { caseRow, contextText, caseContext } = await buildCaseContext(req.params.caseId, scope);
+    const knowledgeBundle = await buildKnowledgePrompt('qa-policy-check', scope, caseContext);
+    
+    if (!hasAI()) {
+       return res.status(400).json({ error: 'AI disabled' });
+    }
+
     const ai = getAI();
     const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
 
@@ -206,21 +153,10 @@ Return ONLY valid JSON, no markdown or explanation.`;
       return res.status(500).json({ error: 'AI response parse failed', raw: text });
     }
 
-    const db = getDb();
-    db.prepare(`
-      UPDATE cases SET
-        ai_diagnosis = ?, ai_root_cause = ?, ai_confidence = ?, ai_recommended_action = ?,
-        ai_evidence_refs = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ?
-    `).run(
-      parsed.summary,
-      parsed.root_cause,
-      parsed.confidence,
-      parsed.recommended_action,
-      JSON.stringify(knowledgeBundle.citations),
-      req.params.caseId,
-      tenantId,
-    );
+    await aiRepo.updateCaseAIFields(scope, req.params.caseId, {
+      ...parsed,
+      citations: knowledgeBundle.citations
+    });
 
     res.json({
       ...parsed,
@@ -235,11 +171,15 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
 router.post('/draft/:caseId', async (req: MultiTenantRequest, res) => {
   try {
-    const tenantId = req.tenantId!;
-    const workspaceId = req.workspaceId!;
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
     const { tone = 'professional', additional_context = '' } = req.body;
-    const { contextText, caseContext } = buildCaseContext(req.params.caseId, tenantId);
-    const knowledgeBundle = buildKnowledgePrompt('composer-translator', tenantId, workspaceId, caseContext);
+    const { contextText, caseContext } = await buildCaseContext(req.params.caseId, scope);
+    const knowledgeBundle = await buildKnowledgePrompt('composer-translator', scope, caseContext);
+    
+    if (!hasAI()) {
+       return res.status(400).json({ error: 'AI disabled' });
+    }
+
     const ai = getAI();
     const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
 
@@ -266,28 +206,16 @@ Return ONLY the reply text, nothing else.`;
     );
     const draft = result.response.text().trim();
 
-    const db = getDb();
-    const caseRow = db.prepare('SELECT conversation_id FROM cases WHERE id = ? AND tenant_id = ?')
-      .get(req.params.caseId, tenantId) as any;
-
-    if (caseRow?.conversation_id) {
-      const draftId = randomUUID();
-      db.prepare(`
-        INSERT INTO draft_replies (
-          id, case_id, conversation_id, content, generated_by, generated_at,
-          status, tenant_id, has_policies, citations
-        )
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending_review', ?, ?, ?)
-      `).run(
-        draftId,
-        req.params.caseId,
-        caseRow.conversation_id,
-        draft,
-        config.ai.geminiModel,
-        tenantId,
-        knowledgeBundle.citations.length > 0 ? 1 : 0,
-        JSON.stringify(knowledgeBundle.citations),
-      );
+    const caseData = await buildCaseContext(req.params.caseId, scope);
+    if (caseData.caseRow?.conversation_id) {
+        await aiRepo.createDraftReply(scope, {
+            caseId: req.params.caseId,
+            conversationId: caseData.caseRow.conversation_id,
+            content: draft,
+            model: config.ai.geminiModel,
+            hasPolicies: knowledgeBundle.citations.length > 0,
+            citations: knowledgeBundle.citations
+        });
     }
 
     res.json({ draft, citations: knowledgeBundle.citations });
@@ -299,11 +227,10 @@ Return ONLY the reply text, nothing else.`;
 
 router.post('/policy-check', async (req: MultiTenantRequest, res) => {
   try {
-    const tenantId = req.tenantId!;
-    const workspaceId = req.workspaceId!;
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
     const { action, context: actionContext } = req.body;
-    const db = getDb();
-    const policies = db.prepare('SELECT * FROM policy_rules WHERE tenant_id = ? AND is_active = 1').all(tenantId) as any[];
+    
+    const policies = await knowledgeRepo.listPolicies(scope);
 
     const caseId = String(actionContext?.caseId ?? '');
     const fallbackContext = {
@@ -314,8 +241,12 @@ router.post('/policy-check', async (req: MultiTenantRequest, res) => {
       conflictDomains: Array.isArray(actionContext?.conflictDomains) ? actionContext.conflictDomains : [],
       latestMessage: actionContext?.latestMessage ?? null,
     };
-    const caseContext = caseId ? buildCaseContext(caseId, tenantId).caseContext : fallbackContext;
-    const knowledgeBundle = buildKnowledgePrompt('approval-gatekeeper', tenantId, workspaceId, caseContext);
+    const { caseContext } = caseId ? await buildCaseContext(caseId, scope) : { caseContext: fallbackContext };
+    const knowledgeBundle = await buildKnowledgePrompt('approval-gatekeeper', scope, caseContext);
+
+    if (!hasAI()) {
+       return res.status(400).json({ error: 'AI disabled' });
+    }
 
     const ai = getAI();
     const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
@@ -364,8 +295,7 @@ Return ONLY valid JSON.`;
 
 router.post('/copilot/:caseId', async (req: MultiTenantRequest, res) => {
   try {
-    const tenantId = req.tenantId!;
-    const workspaceId = req.workspaceId!;
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
     const { question, history = [] } = req.body || {};
     const cleanQuestion = String(question || '').trim();
 
@@ -373,9 +303,9 @@ router.post('/copilot/:caseId', async (req: MultiTenantRequest, res) => {
       return res.status(400).json({ error: 'Question is required' });
     }
 
-    const { contextText, caseContext } = buildCaseContext(req.params.caseId, tenantId);
-    const canonicalState = getCaseCanonicalState(req.params.caseId, tenantId, workspaceId);
-    const knowledgeBundle = buildKnowledgePrompt('composer-translator', tenantId, workspaceId, caseContext);
+    const { contextText, caseContext } = await buildCaseContext(req.params.caseId, scope);
+    const canonicalState = getCaseCanonicalState(req.params.caseId, scope.tenantId, scope.workspaceId);
+    const knowledgeBundle = await buildKnowledgePrompt('composer-translator', scope, caseContext);
 
     if (!hasAI()) {
       return res.json({
@@ -438,20 +368,15 @@ Do not invent SaaS data that is not present in the canonical state.`;
   }
 });
 
-router.get('/stats', (req: MultiTenantRequest, res) => {
-  const db = getDb();
-  const tenantId = req.tenantId!;
-  const totalRuns = db.prepare('SELECT COUNT(*) as c FROM agent_runs WHERE tenant_id = ?').get(tenantId) as any;
-  const resolvedByAI = db.prepare(`SELECT COUNT(*) as c FROM cases WHERE tenant_id = ? AND resolved_by LIKE 'agent%'`).get(tenantId) as any;
-  const totalCases = db.prepare('SELECT COUNT(*) as c FROM cases WHERE tenant_id = ?').get(tenantId) as any;
-  const pendingApprovals = db.prepare(`SELECT COUNT(*) as c FROM approval_requests WHERE tenant_id = ? AND status='pending'`).get(tenantId) as any;
-
-  res.json({
-    total_agent_runs: totalRuns.c,
-    ai_resolution_rate: totalCases.c > 0 ? Math.round((resolvedByAI.c / totalCases.c) * 100) : 0,
-    pending_approvals: pendingApprovals.c,
-    total_cases: totalCases.c,
-  });
+router.get('/stats', async (req: MultiTenantRequest, res) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const stats = await aiRepo.getStats(scope);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching AI stats:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
 });
 
 export default router;

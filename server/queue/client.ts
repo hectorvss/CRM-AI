@@ -1,52 +1,31 @@
 /**
  * server/queue/client.ts
  *
- * Public API for enqueueing jobs. This is the only file the rest of the
- * server needs to import when it wants to schedule async work.
- *
- * Under the hood jobs are persisted to the `jobs` SQLite table so they
- * survive server restarts and are never lost if the process crashes between
- * the time a job is created and when it is picked up by the worker.
- *
- * Usage:
- *   import { enqueue } from '../queue/client.js';
- *   import { JobType } from '../queue/types.js';
- *
- *   await enqueue(JobType.WEBHOOK_PROCESS, {
- *     webhookEventId: 'wh_123',
- *     source: 'shopify',
- *     rawBody: '...',
- *     headers: {},
- *   });
+ * Public API for enqueueing jobs. Refactored to use JobRepository (Provider-agnostic).
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { QueueError } from '../errors.js';
+import { createJobRepository } from '../data/index.js';
 import type {
   JobType,
   JobPayloadMap,
   EnqueueOptions,
-  JobRow,
 } from './types.js';
 
-// ── Enqueue ───────────────────────────────────────────────────────────────────
+const jobRepo = createJobRepository();
 
 /**
- * Persists a job to the database. The worker will pick it up as soon as a
- * slot is available (respecting `delayMs` and `priority`).
- *
+ * Persists a job via the repository.
  * Returns the new job's ID.
  */
-export function enqueue<T extends JobType>(
+export async function enqueue<T extends JobType>(
   type: T,
   payload: JobPayloadMap[T],
   options: EnqueueOptions = {}
-): string {
-  const db = getDb();
-
+): Promise<string> {
   const id          = randomUUID();
   const priority    = options.priority    ?? 10;
   const maxAttempts = options.maxAttempts ?? config.queue.defaultMaxAttempts;
@@ -55,29 +34,20 @@ export function enqueue<T extends JobType>(
   const traceId     = options.traceId     ?? randomUUID();
   const delayMs     = options.delayMs     ?? 0;
 
-  // run_at = now + delay
   const runAt = new Date(Date.now() + delayMs).toISOString();
 
   try {
-    db.prepare(`
-      INSERT INTO jobs
-        (id, type, payload, status, priority, attempts, max_attempts,
-         run_at, started_at, finished_at, error, created_at,
-         tenant_id, workspace_id, trace_id)
-      VALUES
-        (?, ?, ?, 'pending', ?, 0, ?, ?, NULL, NULL, NULL,
-         CURRENT_TIMESTAMP, ?, ?, ?)
-    `).run(
+    await jobRepo.enqueue({
       id,
       type,
-      JSON.stringify(payload),
+      payload,
       priority,
       maxAttempts,
       runAt,
       tenantId,
       workspaceId,
       traceId,
-    );
+    });
   } catch (err) {
     throw new QueueError(`Failed to enqueue job of type "${type}"`, {
       type,
@@ -89,57 +59,36 @@ export function enqueue<T extends JobType>(
   return id;
 }
 
-// ── Convenience helpers ───────────────────────────────────────────────────────
-
-/** Enqueue a delayed job (shorthand for passing delayMs in options) */
-export function enqueueDelayed<T extends JobType>(
+/** Enqueue a delayed job */
+export async function enqueueDelayed<T extends JobType>(
   type: T,
   payload: JobPayloadMap[T],
   delayMs: number,
   options: Omit<EnqueueOptions, 'delayMs'> = {}
-): string {
+): Promise<string> {
   return enqueue(type, payload, { ...options, delayMs });
 }
 
-/** Enqueue a high-priority job (priority = 1, processed before default) */
-export function enqueueUrgent<T extends JobType>(
+/** Enqueue a high-priority job */
+export async function enqueueUrgent<T extends JobType>(
   type: T,
   payload: JobPayloadMap[T],
   options: Omit<EnqueueOptions, 'priority'> = {}
-): string {
+): Promise<string> {
   return enqueue(type, payload, { ...options, priority: 1 });
 }
 
-// ── Job query helpers (used by worker and admin routes) ───────────────────────
-
 /** Fetch a single job row by ID */
-export function getJob(id: string): JobRow | null {
-  const db = getDb();
-  const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
-  return (row as JobRow) ?? null;
+export async function getJob(id: string): Promise<any> {
+  return jobRepo.getJob(id);
 }
 
-/** Count jobs by status (for health/dashboard endpoints) */
-export function countJobs(): Record<string, number> {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT status, COUNT(*) as count FROM jobs GROUP BY status
-  `).all() as Array<{ status: string; count: number }>;
-
-  return rows.reduce<Record<string, number>>((acc, row) => {
-    acc[row.status] = row.count;
-    return acc;
-  }, {});
+/** Count jobs by status */
+export async function countJobs(): Promise<Record<string, number>> {
+  return jobRepo.countJobs();
 }
 
-/** Manually re-enqueue a dead job for one more attempt */
-export function retryDeadJob(id: string): boolean {
-  const db = getDb();
-  const result = db.prepare(`
-    UPDATE jobs
-    SET status = 'pending', attempts = 0, error = NULL,
-        run_at = CURRENT_TIMESTAMP, finished_at = NULL
-    WHERE id = ? AND status = 'dead'
-  `).run(id);
-  return result.changes > 0;
+/** Manually re-enqueue a dead job */
+export async function retryDeadJob(id: string): Promise<boolean> {
+  return jobRepo.retryDeadJob(id);
 }

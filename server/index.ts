@@ -18,6 +18,7 @@ import { startWorker, stopWorker, workerStatus } from './queue/worker.js';
 import { countJobs } from './queue/client.js';
 import { startScheduledJobs, stopScheduledJobs } from './queue/scheduledJobs.js';
 import { bootstrapIntegrations, integrationRegistry } from './integrations/registry.js';
+import { assertDatabaseProviderReady, getDatabaseConnectivityStatus, getDatabaseProviderStatus } from './db/provider.js';
 
 import casesRouter from './routes/cases.js';
 import conversationsRouter from './routes/conversations.js';
@@ -44,7 +45,7 @@ import reconciliationRouter from './routes/reconciliation.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
-// ── Register job handlers (must import to trigger side-effect registration) ──
+// ── Register job handlers ──
 import './queue/handlers/webhookProcess.js';
 import './pipeline/canonicalizer.js';
 import './pipeline/channelIngest.js';
@@ -58,9 +59,6 @@ import './pipeline/draftReply.js';
 import './pipeline/messageSender.js';
 import './pipeline/slaMonitor.js';
 
-// ── Agent engine (registers AGENT_TRIGGER handler via queue/handlers/index.ts) ──
-// Importing orchestrator ensures the agentTriggerHandler is available
-// to the worker without needing a separate registration call.
 import './agents/orchestrator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,13 +66,19 @@ const DATA_DIR = path.join(__dirname, '../data');
 
 mkdirSync(DATA_DIR, { recursive: true });
 
-// ── Database ──────────────────────────────────────────────
-runMigrations();
-seedAgents(getDb(), 'org_default');
-seedDatabase();
+// ── Database Readiness ────────────────────────────────────
+assertDatabaseProviderReady();
+
+// ── Database Initialization ───────────────────────────────
+if (config.db.provider === 'sqlite') {
+  runMigrations();
+  seedAgents(getDb(), 'org_default');
+  seedDatabase();
+} else {
+  logger.info('Running in Supabase mode — Skipping local SQLite migrations and seeding.');
+}
 
 // ── Integrations ──────────────────────────────────────────
-// Non-blocking: adapters that fail to init are logged but don't crash startup
 bootstrapIntegrations().catch(err => {
   logger.error('Integration bootstrap error', err);
 });
@@ -84,18 +88,14 @@ const app = express();
 
 app.use(cors({ origin: config.server.corsOrigins, credentials: true }));
 
-// ⚠️  Webhooks MUST be mounted BEFORE express.json() so that the raw body
-//     bytes are available for HMAC signature verification.
-//     The webhook router uses its own express.raw() middleware internally.
 app.use('/webhooks', webhookRouter);
-
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Multi-tenant context
 app.use('/api', extractMultiTenant);
 
-// Request logger (replaces raw console.log)
+// Request logger
 app.use((req, _res, next) => {
   logger.debug(`${req.method} ${req.path}`);
   next();
@@ -126,16 +126,18 @@ app.use('/api/demo', demoRouter);
 app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
 
-// ── Health check (enhanced) ───────────────────────────────
+// ── Health check ─────────────────────────────────────────
 app.get('/api/health', async (_req, res) => {
   const integrationHealth = await integrationRegistry.healthCheck();
-  const queueCounts       = countJobs();
+  const queueCounts       = await countJobs();
   const worker            = workerStatus();
+  const databaseStatus    = await getDatabaseConnectivityStatus();
 
   res.json({
     status:    'ok',
     timestamp: new Date().toISOString(),
     version:   '1.0.0',
+    database:  databaseStatus,
     worker: {
       running:  worker.running,
       inFlight: worker.inFlight,
@@ -153,29 +155,20 @@ const server = app.listen(config.server.port, () => {
   logger.info('CRM AI API server started', {
     port:         config.server.port,
     env:          config.env,
+    database:     getDatabaseProviderStatus(),
     integrations: integrationRegistry.registeredSystems(),
   });
 });
 
-// Start the background job worker
 startWorker();
-
-// Start recurring maintenance jobs (SLA sweeps, reconciliation sweeps)
 startScheduledJobs();
 
 // ── Graceful shutdown ─────────────────────────────────────
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received — shutting down gracefully`);
-
-  // Stop accepting new HTTP requests
   server.close();
-
-  // Stop scheduled job intervals first
   stopScheduledJobs();
-
-  // Wait for in-flight queue jobs to finish (max 30 s)
   await stopWorker();
-
   logger.info('Shutdown complete');
   process.exit(0);
 }

@@ -1,46 +1,44 @@
 import { Router } from 'express';
-import { getDb } from '../db/client.js';
 import { sendError } from '../http/errors.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
-import { parseRow } from '../db/utils.js';
-import { createHash, randomBytes } from 'crypto';
+import { createIAMRepository } from '../data/index.js';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 
 const router = Router();
+const iamRepo = createIAMRepository();
+
 router.use(extractMultiTenant);
 
 // POST /api/iam/sessions/login
-router.post('/sessions/login', (req: MultiTenantRequest, res) => {
+router.post('/sessions/login', async (req: MultiTenantRequest, res) => {
   const { email, workspace_id, tenant_id } = req.body as { email?: string; workspace_id?: string; tenant_id?: string };
   if (!email || !workspace_id || !tenant_id) {
     return sendError(res, 400, 'INVALID_LOGIN_PAYLOAD', 'email, tenant_id and workspace_id are required');
   }
 
   try {
-    const db = getDb();
-    const user = db.prepare('SELECT id, email, name FROM users WHERE email = ? LIMIT 1').get(email) as any;
+    const user = await iamRepo.getUserByEmail(email);
     if (!user) return sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
 
-    const member = db.prepare(`
-      SELECT id, role_id, status
-      FROM members
-      WHERE user_id = ? AND tenant_id = ? AND workspace_id = ?
-      LIMIT 1
-    `).get(user.id, tenant_id, workspace_id) as any;
-
+    const member = await iamRepo.getMember(user.id, tenant_id, workspace_id);
     if (!member || member.status === 'suspended') {
       return sendError(res, 403, 'MEMBERSHIP_NOT_ALLOWED', 'User is not active in this workspace');
     }
 
     const token = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(token).digest('hex');
-    const sessionId = crypto.randomUUID();
+    const sessionId = randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
 
-    db.prepare(`
-      INSERT INTO user_sessions (
-        id, user_id, tenant_id, workspace_id, token_hash, expires_at
-      ) VALUES (?, ?, ?, ?, ?, datetime('now', '+7 days'))
-    `).run(sessionId, user.id, tenant_id, workspace_id, tokenHash);
+    await iamRepo.createSession({
+      id: sessionId,
+      userId: user.id,
+      tenantId: tenant_id,
+      workspaceId: workspace_id,
+      tokenHash,
+      expiresAt
+    });
 
     res.status(201).json({
       session_id: sessionId,
@@ -58,23 +56,18 @@ router.post('/sessions/login', (req: MultiTenantRequest, res) => {
 });
 
 // POST /api/iam/sessions/logout
-router.post('/sessions/logout', (req: MultiTenantRequest, res) => {
+router.post('/sessions/logout', async (req: MultiTenantRequest, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
     return sendError(res, 400, 'MISSING_BEARER_TOKEN', 'Bearer token is required');
   }
 
   try {
-    const db = getDb();
     const rawToken = authHeader.slice(7).trim();
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    const result = db.prepare(`
-      UPDATE user_sessions
-      SET revoked_at = CURRENT_TIMESTAMP
-      WHERE token_hash = ? AND revoked_at IS NULL
-    `).run(tokenHash);
+    const ok = await iamRepo.revokeSession(tokenHash);
 
-    if (!result.changes) {
+    if (!ok) {
       return sendError(res, 404, 'SESSION_NOT_FOUND', 'Session not found or already revoked');
     }
 
@@ -86,27 +79,20 @@ router.post('/sessions/logout', (req: MultiTenantRequest, res) => {
 });
 
 // Get current user profile
-router.get('/me', requirePermission('settings.read'), (req: MultiTenantRequest, res) => {
+router.get('/me', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
   const userId = req.userId || 'user_alex';
 
   try {
-    const db = getDb();
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    const user = await iamRepo.getUserById(userId);
     if (!user) {
       return sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
     }
     
-    // Get user's members/workspaces
-    const members = db.prepare(`
-      SELECT m.*, w.name as workspace_name, w.slug as workspace_slug 
-      FROM members m 
-      JOIN workspaces w ON m.workspace_id = w.id 
-      WHERE m.user_id = ?
-    `).all(userId);
+    const memberships = await iamRepo.listUserMemberships(userId);
 
     res.json({
-      ...(user as Record<string, any>),
-      memberships: members,
+      ...user,
+      memberships,
       context: {
         tenant_id: req.tenantId,
         workspace_id: req.workspaceId,
@@ -121,22 +107,13 @@ router.get('/me', requirePermission('settings.read'), (req: MultiTenantRequest, 
 });
 
 // List users for Tenant/Workspace
-router.get('/users', requirePermission('members.read'), (req: MultiTenantRequest, res) => {
+router.get('/users', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
   }
-  const tenantId = req.tenantId;
-  const workspaceId = req.workspaceId;
   
   try {
-    const db = getDb();
-    const users = db.prepare(`
-      SELECT u.id, u.email, u.name, u.role, u.avatar_url, u.created_at, m.status, m.workspace_id, m.role_id
-      FROM users u
-      LEFT JOIN members m ON u.id = m.user_id
-      WHERE m.tenant_id = ? AND m.workspace_id = ?
-    `).all(tenantId, workspaceId);
-    
+    const users = await iamRepo.listWorkspaceUsers(req.tenantId, req.workspaceId);
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -145,28 +122,14 @@ router.get('/users', requirePermission('members.read'), (req: MultiTenantRequest
 });
 
 // List workspace roles
-router.get('/roles', requirePermission('members.read'), (req: MultiTenantRequest, res) => {
+router.get('/roles', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
   }
 
   try {
-    const db = getDb();
-    const roles = db.prepare(`
-      SELECT * FROM roles
-      WHERE tenant_id = ? AND workspace_id = ?
-      ORDER BY is_system DESC, name ASC
-    `).all(req.tenantId, req.workspaceId);
-
-    const normalized = roles.map((r: any) => {
-      const parsed = parseRow(r) as any;
-      const permissionCount = db.prepare(
-        'SELECT COUNT(*) as c FROM role_permissions WHERE role_id = ?'
-      ).get(r.id) as any;
-      return { ...parsed, permission_count: permissionCount.c };
-    });
-
-    res.json(normalized);
+    const roles = await iamRepo.listRoles(req.tenantId, req.workspaceId);
+    res.json(roles);
   } catch (error) {
     console.error('Error fetching roles:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
@@ -174,7 +137,7 @@ router.get('/roles', requirePermission('members.read'), (req: MultiTenantRequest
 });
 
 // Create custom role
-router.post('/roles', requirePermission('settings.write'), (req: MultiTenantRequest, res) => {
+router.post('/roles', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId || !req.userId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace/user context is missing');
   }
@@ -183,32 +146,24 @@ router.post('/roles', requirePermission('settings.write'), (req: MultiTenantRequ
   if (!name || typeof name !== 'string') {
     return sendError(res, 400, 'INVALID_ROLE_NAME', 'Role name is required');
   }
-  if (permissions && !Array.isArray(permissions)) {
-    return sendError(res, 400, 'INVALID_ROLE_PERMISSIONS', 'Permissions must be an array of strings');
-  }
 
   try {
-    const db = getDb();
-    const existing = db.prepare(
-      'SELECT id FROM roles WHERE tenant_id = ? AND workspace_id = ? AND name = ? LIMIT 1'
-    ).get(req.tenantId, req.workspaceId, name) as any;
+    const existing = await iamRepo.getRoleByName(name, req.tenantId, req.workspaceId);
     if (existing) {
       return sendError(res, 409, 'ROLE_ALREADY_EXISTS', 'A role with this name already exists');
     }
 
-    const roleId = crypto.randomUUID();
-    const rolePermissions = (permissions || []).filter((p): p is string => typeof p === 'string');
+    const roleId = randomUUID();
+    const rolePermissions = Array.isArray(permissions) ? permissions.filter(p => typeof p === 'string') : [];
 
-    db.prepare(`
-      INSERT INTO roles (id, workspace_id, name, permissions, is_system, tenant_id)
-      VALUES (?, ?, ?, ?, 0, ?)
-    `).run(roleId, req.workspaceId, name, JSON.stringify(rolePermissions), req.tenantId);
-
-    const insertRolePerm = db.prepare(`
-      INSERT OR IGNORE INTO role_permissions (role_id, permission_key)
-      VALUES (?, ?)
-    `);
-    rolePermissions.forEach((permissionKey) => insertRolePerm.run(roleId, permissionKey));
+    await iamRepo.createRole({
+      id: roleId,
+      workspaceId: req.workspaceId,
+      name,
+      permissions: rolePermissions,
+      isSystem: 0,
+      tenantId: req.tenantId
+    });
 
     res.status(201).json({ id: roleId, name, permissions: rolePermissions });
   } catch (error) {
@@ -218,45 +173,28 @@ router.post('/roles', requirePermission('settings.write'), (req: MultiTenantRequ
 });
 
 // Update role permissions
-router.patch('/roles/:id', requirePermission('settings.write'), (req: MultiTenantRequest, res) => {
+router.patch('/roles/:id', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
   }
 
   const { name, permissions } = req.body as { name?: string; permissions?: string[] };
-  if (permissions && !Array.isArray(permissions)) {
-    return sendError(res, 400, 'INVALID_ROLE_PERMISSIONS', 'Permissions must be an array of strings');
-  }
 
   try {
-    const db = getDb();
-    const role = db.prepare(
-      'SELECT * FROM roles WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
-    ).get(req.params.id, req.tenantId, req.workspaceId) as any;
-
+    const role = await iamRepo.getRoleById(req.params.id, req.tenantId, req.workspaceId);
     if (!role) return sendError(res, 404, 'ROLE_NOT_FOUND', 'Role not found');
+    
     if (role.is_system === 1 && name && name !== role.name) {
       return sendError(res, 400, 'SYSTEM_ROLE_RENAME_FORBIDDEN', 'System roles cannot be renamed');
     }
 
-    const newName = name && typeof name === 'string' ? name : role.name;
-    const rolePermissions =
-      Array.isArray(permissions) ? permissions.filter((p): p is string => typeof p === 'string') : parseRow(role).permissions || [];
+    const updates: any = {};
+    if (name) updates.name = name;
+    if (permissions) updates.permissions = permissions;
 
-    db.prepare('UPDATE roles SET name = ?, permissions = ? WHERE id = ?').run(
-      newName,
-      JSON.stringify(rolePermissions),
-      req.params.id
-    );
+    await iamRepo.updateRole(req.params.id, updates);
 
-    db.prepare('DELETE FROM role_permissions WHERE role_id = ?').run(req.params.id);
-    const insertRolePerm = db.prepare(`
-      INSERT OR IGNORE INTO role_permissions (role_id, permission_key)
-      VALUES (?, ?)
-    `);
-    rolePermissions.forEach((permissionKey) => insertRolePerm.run(req.params.id, permissionKey));
-
-    res.json({ id: req.params.id, name: newName, permissions: rolePermissions });
+    res.json({ id: req.params.id, name: updates.name || role.name, permissions: updates.permissions || role.permissions });
   } catch (error) {
     console.error('Error updating role:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
@@ -264,22 +202,13 @@ router.patch('/roles/:id', requirePermission('settings.write'), (req: MultiTenan
 });
 
 // List workspace members
-router.get('/members', requirePermission('members.read'), (req: MultiTenantRequest, res) => {
+router.get('/members', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
   }
 
   try {
-    const db = getDb();
-    const members = db.prepare(`
-      SELECT m.*, u.email, u.name, u.avatar_url, r.name as role_name
-      FROM members m
-      JOIN users u ON u.id = m.user_id
-      LEFT JOIN roles r ON r.id = m.role_id
-      WHERE m.tenant_id = ? AND m.workspace_id = ?
-      ORDER BY m.joined_at DESC
-    `).all(req.tenantId, req.workspaceId);
-
+    const members = await iamRepo.listWorkspaceMembers(req.tenantId, req.workspaceId);
     res.json(members);
   } catch (error) {
     console.error('Error fetching members:', error);
@@ -288,7 +217,7 @@ router.get('/members', requirePermission('members.read'), (req: MultiTenantReque
 });
 
 // Invite/add member
-router.post('/members/invite', requirePermission('members.invite'), (req: MultiTenantRequest, res) => {
+router.post('/members/invite', requirePermission('members.invite'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
   }
@@ -299,41 +228,37 @@ router.post('/members/invite', requirePermission('members.invite'), (req: MultiT
   }
 
   try {
-    const db = getDb();
-    const role = db.prepare(
-      'SELECT id FROM roles WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
-    ).get(role_id, req.tenantId, req.workspaceId) as any;
+    const role = await iamRepo.getRoleById(role_id, req.tenantId, req.workspaceId);
     if (!role) return sendError(res, 404, 'ROLE_NOT_FOUND', 'Role not found');
 
-    const existingUser = db.prepare('SELECT * FROM users WHERE email = ? LIMIT 1').get(email) as any;
-    const userId = existingUser?.id || crypto.randomUUID();
-
-    if (!existingUser) {
-      db.prepare(`
-        INSERT INTO users (id, email, name, role, is_system)
-        VALUES (?, ?, ?, ?, 0)
-      `).run(userId, email, name || email.split('@')[0], 'agent');
+    let user = await iamRepo.getUserByEmail(email);
+    if (!user) {
+      const userId = randomUUID();
+      await iamRepo.createUser({
+        id: userId,
+        email,
+        name: name || email.split('@')[0],
+      });
+      user = { id: userId };
     }
 
-    const existingMember = db.prepare(
-      'SELECT id, status FROM members WHERE user_id = ? AND workspace_id = ? AND tenant_id = ?'
-    ).get(userId, req.workspaceId, req.tenantId) as any;
-
+    const existingMember = await iamRepo.getMember(user.id, req.tenantId, req.workspaceId);
     if (existingMember) {
-      db.prepare(`
-        UPDATE members SET role_id = ?, status = 'active'
-        WHERE id = ?
-      `).run(role_id, existingMember.id);
-      return res.json({ id: existingMember.id, user_id: userId, role_id, status: 'active', reactivated: true });
+      await iamRepo.updateMember(existingMember.id, { roleId: role_id, status: 'active' });
+      return res.json({ id: existingMember.id, user_id: user.id, role_id, status: 'active', reactivated: true });
     }
 
-    const memberId = crypto.randomUUID();
-    db.prepare(`
-      INSERT INTO members (id, user_id, workspace_id, role_id, status, tenant_id)
-      VALUES (?, ?, ?, ?, 'invited', ?)
-    `).run(memberId, userId, req.workspaceId, role_id, req.tenantId);
+    const memberId = randomUUID();
+    await iamRepo.createMember({
+      id: memberId,
+      userId: user.id,
+      workspaceId: req.workspaceId,
+      roleId: role_id,
+      status: 'invited',
+      tenantId: req.tenantId
+    });
 
-    res.status(201).json({ id: memberId, user_id: userId, role_id, status: 'invited' });
+    res.status(201).json({ id: memberId, user_id: user.id, role_id, status: 'invited' });
   } catch (error) {
     console.error('Error inviting member:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
@@ -341,36 +266,27 @@ router.post('/members/invite', requirePermission('members.invite'), (req: MultiT
 });
 
 // Update member status or role
-router.patch('/members/:id', requirePermission('members.remove'), (req: MultiTenantRequest, res) => {
+router.patch('/members/:id', requirePermission('members.remove'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
   }
 
-  const { status, role_id } = req.body as { status?: 'active' | 'invited' | 'suspended'; role_id?: string };
-  if (!status && !role_id) {
-    return sendError(res, 400, 'INVALID_MEMBER_UPDATE', 'At least one field is required: status or role_id');
-  }
-
+  const { status, role_id } = req.body as { status?: string; role_id?: string };
+  
   try {
-    const db = getDb();
-    const member = db.prepare(
-      'SELECT * FROM members WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
-    ).get(req.params.id, req.tenantId, req.workspaceId) as any;
+    const member = await iamRepo.getMemberById(req.params.id, req.tenantId, req.workspaceId);
     if (!member) return sendError(res, 404, 'MEMBER_NOT_FOUND', 'Member not found');
 
-    let nextRoleId = member.role_id;
+    const updates: any = {};
+    if (status) updates.status = status;
     if (role_id) {
-      const role = db.prepare(
-        'SELECT id FROM roles WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
-      ).get(role_id, req.tenantId, req.workspaceId) as any;
-      if (!role) return sendError(res, 404, 'ROLE_NOT_FOUND', 'Role not found');
-      nextRoleId = role_id;
+        const role = await iamRepo.getRoleById(role_id, req.tenantId, req.workspaceId);
+        if (!role) return sendError(res, 404, 'ROLE_NOT_FOUND', 'Role not found');
+        updates.roleId = role_id;
     }
 
-    const nextStatus = status || member.status;
-    db.prepare('UPDATE members SET status = ?, role_id = ? WHERE id = ?').run(nextStatus, nextRoleId, req.params.id);
-
-    res.json({ id: req.params.id, status: nextStatus, role_id: nextRoleId });
+    await iamRepo.updateMember(req.params.id, updates);
+    res.json({ id: req.params.id, status: updates.status || member.status, role_id: updates.roleId || member.role_id });
   } catch (error) {
     console.error('Error updating member:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
