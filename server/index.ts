@@ -151,29 +151,36 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────
-const server = app.listen(config.server.port, () => {
-  logger.info('CRM AI API server started', {
-    port:         config.server.port,
-    env:          config.env,
-    database:     getDatabaseProviderStatus(),
-    integrations: integrationRegistry.registeredSystems(),
-  });
-});
+const isServerlessRuntime = Boolean(process.env.VERCEL);
+let server: ReturnType<typeof app.listen> | null = null;
 
-startWorker();
-startScheduledJobs();
+if (!isServerlessRuntime) {
+  server = app.listen(config.server.port, () => {
+    logger.info('CRM AI API server started', {
+      port:         config.server.port,
+      env:          config.env,
+      database:     getDatabaseProviderStatus(),
+      integrations: integrationRegistry.registeredSystems(),
+    });
+  });
+
+  startWorker();
+  startScheduledJobs();
+}
 
 // ── Graceful shutdown ─────────────────────────────────────
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received — shutting down gracefully`);
-  server.close();
+  server?.close();
   stopScheduledJobs();
   await stopWorker();
   logger.info('Shutdown complete');
   process.exit(0);
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+if (!isServerlessRuntime) {
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
 
 export default app;
