@@ -304,7 +304,7 @@ export default function Payments() {
                 <span 
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as PaymentTab)}
-                  className={`px-3 py-1 text-sm font-medium rounded-full cursor-pointer transition-colors ${
+                  className={`px-3 py-1 text-sm font-medium rounded-md cursor-pointer transition-colors ${
                     activeTab === tab.id 
                       ? 'bg-blue-600 text-white' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -317,7 +317,7 @@ export default function Payments() {
           </div>
           <div className="flex items-center space-x-3">
             <div className="flex items-center text-gray-500 text-sm mr-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+              <span className="w-2 h-2 rounded-md bg-green-500 mr-2"></span>
               Sync Active
             </div>
             <button className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
@@ -476,7 +476,7 @@ export default function Payments() {
                   <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">Risk Analysis</span>
                     <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-2 h-2 rounded-full ${selectedPayment.riskLevel === 'Low' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <div className={`w-2 h-2 rounded-md ${selectedPayment.riskLevel === 'Low' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                       <span className="text-sm font-bold text-gray-900 dark:text-white">{selectedPayment.riskLevel} Risk</span>
                     </div>
                     <p className="text-[10px] text-gray-500 leading-relaxed">Based on PSP fraud signals and reconciliation status.</p>
@@ -511,7 +511,7 @@ export default function Payments() {
                           {idx !== selectedPayment.timeline.length - 1 && (
                             <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
                           )}
-                          <div className={`w-6 h-6 rounded-full border-2 border-white dark:border-gray-900 z-10 flex items-center justify-center ${
+                          <div className={`w-6 h-6 rounded-md border-2 border-white dark:border-gray-900 z-10 flex items-center justify-center ${
                             idx === selectedPayment.timeline.length - 1 ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-400'
                           }`}>
                             <span className="material-symbols-outlined text-[14px]">{getEventIcon(event.content)}</span>
@@ -590,7 +590,7 @@ export default function Payments() {
                 <div className="p-4 flex flex-col gap-4">
                   {/* Copilot Case Summary */}
                   <div className="flex gap-2">
-                    <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-md bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5">
                       <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
                     </div>
                     <div className="flex flex-col gap-2 max-w-[85%] w-full">

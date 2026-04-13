@@ -369,12 +369,6 @@ export default function Inbox() {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<CaseTab>('assigned');
   const [selectedId, setSelectedId] = useState<string>('');
-  
-  useEffect(() => {
-    if (!selectedId && apiCases && apiCases.length > 0) {
-      setSelectedId(apiCases[0].id);
-    }
-  }, [apiCases, selectedId]);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [composeMode, setComposeMode] = useState<ComposeMode>('reply');
@@ -392,6 +386,12 @@ export default function Inbox() {
     () => selectedId ? casesApi.inboxView(selectedId) : Promise.resolve(null),
     [selectedId, refreshKey]
   );
+
+  useEffect(() => {
+    if (!selectedId && apiCases && apiCases.length > 0) {
+      setSelectedId(apiCases[0].id);
+    }
+  }, [apiCases, selectedId]);
 
   const mapApiCase = (c: any): Conversation => {
     const orderIds = Array.isArray(c.order_ids) ? c.order_ids : [];
