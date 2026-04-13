@@ -368,7 +368,13 @@ const CONVERSATIONS: Conversation[] = [
 export default function Inbox() {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<CaseTab>('assigned');
-  const [selectedId, setSelectedId] = useState<string>('1');
+  const [selectedId, setSelectedId] = useState<string>('');
+  
+  useEffect(() => {
+    if (!selectedId && apiCases && apiCases.length > 0) {
+      setSelectedId(apiCases[0].id);
+    }
+  }, [apiCases, selectedId]);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [composeMode, setComposeMode] = useState<ComposeMode>('reply');

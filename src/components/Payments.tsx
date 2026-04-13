@@ -306,7 +306,7 @@ export default function Payments() {
                   onClick={() => setActiveTab(tab.id as PaymentTab)}
                   className={`px-3 py-1 text-sm font-medium rounded-full cursor-pointer transition-colors ${
                     activeTab === tab.id 
-                      ? 'bg-black text-white' 
+                      ? 'bg-blue-600 text-white' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                 >
@@ -329,7 +329,7 @@ export default function Payments() {
         {/* Main Content Area: Three Panes */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Pane: List */}
-          <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
+          <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-blue-600/5">
             <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
               {filteredPayments.length === 0 && (
                 <div className="p-4 text-sm text-gray-500 dark:text-gray-400">
@@ -405,7 +405,7 @@ export default function Payments() {
                       className="px-4 py-2 text-sm font-bold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                       {refundMutation.loading ? 'Issuing...' : 'Issue Refund'}
                     </button>
-                    <button disabled title="Coming soon" className="px-4 py-2 text-sm font-bold text-white bg-black rounded-lg opacity-40 cursor-not-allowed transition-colors">
+                    <button disabled title="Coming soon" className="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg opacity-40 cursor-not-allowed transition-colors">
                       Reconcile
                     </button>
                     {!isRightSidebarOpen && (
@@ -604,7 +604,7 @@ export default function Payments() {
                         </div>
 
                         <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
-                        <p className="text-xs bg-white/50 dark:bg-black/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic">
+                        <p className="text-xs bg-white/50 dark:bg-blue-600/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic">
                           {selectedPayment.recommendedNextAction || "Monitor payment reconciliation."}
                         </p>
                       </div>
