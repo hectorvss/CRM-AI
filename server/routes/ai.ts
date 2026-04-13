@@ -30,7 +30,7 @@ async function buildCaseContext(caseId: string, scope: { tenantId: string; works
   if (!data) throw new Error('Case not found');
 
   const { caseRow, customer, messages, orders, payments, returns, conflicts } = data;
-  const canonicalState = getCaseCanonicalState(caseId, scope.tenantId, scope.workspaceId);
+  const canonicalState = await getCaseCanonicalState(caseId, scope.tenantId, scope.workspaceId);
 
   const contextText = `
 CASE: ${caseRow.case_number} | Type: ${caseRow.type} | Status: ${caseRow.status}
@@ -304,7 +304,7 @@ router.post('/copilot/:caseId', async (req: MultiTenantRequest, res) => {
     }
 
     const { contextText, caseContext } = await buildCaseContext(req.params.caseId, scope);
-    const canonicalState = getCaseCanonicalState(req.params.caseId, scope.tenantId, scope.workspaceId);
+    const canonicalState = await getCaseCanonicalState(req.params.caseId, scope.tenantId, scope.workspaceId);
     const knowledgeBundle = await buildKnowledgePrompt('composer-translator', scope, caseContext);
 
     if (!hasAI()) {

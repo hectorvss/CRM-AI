@@ -12,7 +12,8 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
+import { createCaseRepository } from '../data/cases.js';
+import { createCanonicalRepository } from '../data/canonical.js';
 import { logger } from '../utils/logger.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -55,68 +56,35 @@ const ALWAYS_NEW_TYPES = new Set(['fraud_alert', 'chargeback']);
 
 // ── Case number generator ───────────────────────────────────────────────────
 
-function nextCaseNumber(tenantId: string): string {
-  const db = getDb();
-  const row = db.prepare(`
-    SELECT case_number FROM cases
-    WHERE tenant_id = ?
-    ORDER BY created_at DESC
-    LIMIT 1
-  `).get(tenantId) as any;
-
-  if (!row) return 'CS-0001';
-
-  const match = row.case_number.match(/^CS-(\d+)$/);
-  if (!match) return 'CS-0001';
-
-  const next = parseInt(match[1], 10) + 1;
-  return `CS-${String(next).padStart(4, '0')}`;
-}
-
-// ── Find open duplicate ─────────────────────────────────────────────────────
-
-function findOpenCase(
+async function findOpenCase(
   tenantId: string,
   customerId: string | null,
   type: string
-): string | null {
+): Promise<string | null> {
   if (!customerId || ALWAYS_NEW_TYPES.has(type)) return null;
 
-  const db       = getDb();
-  const since    = new Date(Date.now() - DEDUP_WINDOW_HOURS * 3_600_000).toISOString();
+  const caseRepo = createCaseRepository();
+  const scope = { tenantId, workspaceId: '' }; // WorkspaceId not strictly needed for dedup if we check tenant-wide
 
-  const row = db.prepare(`
-    SELECT id FROM cases
-    WHERE tenant_id  = ?
-      AND customer_id = ?
-      AND type        = ?
-      AND status NOT IN ('resolved', 'closed', 'cancelled')
-      AND created_at >= ?
-    ORDER BY created_at DESC
-    LIMIT 1
-  `).get(tenantId, customerId, type, since) as any;
-
-  return row?.id ?? null;
+  return caseRepo.findOpenCase(scope, customerId, type, DEDUP_WINDOW_HOURS);
 }
 
 // ── Create case ─────────────────────────────────────────────────────────────
 
-export function getOrCreateCase(input: CreateCaseInput): CaseRecord {
-  const db = getDb();
+export async function getOrCreateCase(input: CreateCaseInput): Promise<CaseRecord> {
+  const caseRepo = createCaseRepository();
+  const canonicalRepo = createCanonicalRepository();
+  const scope = { tenantId: input.tenantId, workspaceId: input.workspaceId };
 
   // Deduplicate
-  const existingId = findOpenCase(input.tenantId, input.customerId, input.type);
+  const existingId = await findOpenCase(input.tenantId, input.customerId, input.type);
   if (existingId) {
     // Update last_activity_at to signal new activity on existing case
-    db.prepare(`
-      UPDATE cases SET last_activity_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(existingId);
+    await caseRepo.update(scope, existingId, { last_activity_at: new Date().toISOString() });
 
     // Link canonical event if provided
     if (input.canonicalEventId) {
-      db.prepare(`
-        UPDATE canonical_events SET case_id = ? WHERE id = ?
-      `).run(existingId, input.canonicalEventId);
+      await canonicalRepo.updateEvent(scope, input.canonicalEventId, { case_id: existingId });
     }
 
     logger.debug('Reusing existing open case', {
@@ -125,69 +93,49 @@ export function getOrCreateCase(input: CreateCaseInput): CaseRecord {
       customerId: input.customerId,
     });
 
-    const row = db.prepare('SELECT case_number FROM cases WHERE id = ?').get(existingId) as any;
+    const row = await caseRepo.get(scope, existingId);
     return { id: existingId, caseNumber: row.case_number, isNew: false };
   }
 
   // Create new
   const id         = randomUUID();
-  const caseNumber = nextCaseNumber(input.tenantId);
+  const caseNumber = await caseRepo.getNextCaseNumber(scope);
   const now        = new Date().toISOString();
 
   // SLA deadlines: first response 4h, resolution 24h (defaults, overridden by policy later)
   const slaFirstResponse = new Date(Date.now() + 4  * 3_600_000).toISOString();
   const slaResolution    = new Date(Date.now() + 24 * 3_600_000).toISOString();
 
-  db.prepare(`
-    INSERT INTO cases (
-      id, case_number, tenant_id, workspace_id,
-      source_system, source_channel, source_entity_id,
-      type, sub_type, intent, intent_confidence,
-      status, priority, severity, risk_level, risk_score,
-      customer_id, conversation_id,
-      order_ids, payment_ids, return_ids, tags,
-      sla_first_response_deadline, sla_resolution_deadline, sla_status,
-      approval_state, execution_state, resolution_state,
-      has_reconciliation_conflicts,
-      created_at, updated_at, last_activity_at
-    ) VALUES (
-      ?, ?, ?, ?,
-      ?, ?, ?,
-      ?, ?, ?, ?,
-      'new', ?, 'S3', ?, 0,
-      ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, 'on_track',
-      'not_required', 'idle', 'unresolved',
-      0,
-      ?, ?, ?
-    )
-  `).run(
-    id, caseNumber, input.tenantId, input.workspaceId,
-    input.sourceSystem ?? 'webhook', input.channel ?? 'unknown', input.sourceEntityId ?? null,
-    input.type, input.subType ?? null, input.intent ?? null, input.intentConfidence ?? null,
-    input.priority ?? 'normal', input.riskLevel ?? 'low',
-    input.customerId, input.conversationId ?? null,
-    JSON.stringify(input.orderIds   ?? []),
-    JSON.stringify(input.paymentIds ?? []),
-    JSON.stringify(input.returnIds  ?? []),
-    JSON.stringify(input.tags       ?? []),
-    slaFirstResponse, slaResolution,
-    now, now, now,
-  );
+  const caseData = {
+    id, case_number: caseNumber, tenant_id: input.tenantId, workspace_id: input.workspaceId,
+    source_system: input.sourceSystem ?? 'webhook', source_channel: input.channel ?? 'unknown', source_entity_id: input.sourceEntityId ?? null,
+    type: input.type, sub_type: input.subType ?? null, intent: input.intent ?? null, intent_confidence: input.intentConfidence ?? null,
+    status: 'new', priority: input.priority ?? 'normal', severity: 'S3', risk_level: input.riskLevel ?? 'low', risk_score: 0,
+    customer_id: input.customerId, conversation_id: input.conversationId ?? null,
+    order_ids: input.orderIds   ?? [],
+    payment_ids: input.paymentIds ?? [],
+    return_ids: input.returnIds  ?? [],
+    tags: input.tags       ?? [],
+    sla_first_response_deadline: slaFirstResponse, sla_resolution_deadline: slaResolution, sla_status: 'on_track',
+    approval_state: 'not_required', execution_state: 'idle', resolution_state: 'unresolved',
+    has_reconciliation_conflicts: 0,
+    created_at: now, updated_at: now, last_activity_at: now
+  };
+
+  await caseRepo.createCase(scope, caseData);
 
   // Status history entry
-  db.prepare(`
-    INSERT INTO case_status_history
-      (id, case_id, from_status, to_status, changed_by, changed_by_type, reason, tenant_id)
-    VALUES (?, ?, NULL, 'new', 'system', 'system', 'Case created by pipeline', ?)
-  `).run(randomUUID(), id, input.tenantId);
+  await caseRepo.addStatusHistory(scope, {
+    caseId: id,
+    fromStatus: null,
+    toStatus: 'new',
+    changedBy: 'system',
+    reason: 'Case created by pipeline'
+  });
 
   // Link canonical event
   if (input.canonicalEventId) {
-    db.prepare(`
-      UPDATE canonical_events SET case_id = ?, status = 'case_created' WHERE id = ?
-    `).run(id, input.canonicalEventId);
+    await canonicalRepo.updateEvent(scope, input.canonicalEventId, { case_id: id, status: 'case_created' });
   }
 
   logger.info('Case created', {
@@ -204,20 +152,23 @@ export function getOrCreateCase(input: CreateCaseInput): CaseRecord {
 /**
  * Attach an order/payment/return ID to an existing case (idempotent).
  */
-export function linkEntityToCase(
+export async function linkEntityToCase(
   caseId: string,
+  tenantId: string,
+  workspaceId: string,
   entityType: 'order' | 'payment' | 'return',
   entityId: string
-): void {
-  const db  = getDb();
-  const col = `${entityType}_ids`;
-  const row = db.prepare(`SELECT ${col} FROM cases WHERE id = ?`).get(caseId) as any;
-  if (!row) return;
+): Promise<void> {
+  const caseRepo = createCaseRepository();
+  const scope = { tenantId, workspaceId };
+  
+  const caseRow = await caseRepo.get(scope, caseId);
+  if (!caseRow) return;
 
-  const existing: string[] = JSON.parse(row[col] || '[]');
+  const col = `${entityType}_ids`;
+  const existing: string[] = Array.isArray(caseRow[col]) ? caseRow[col] : JSON.parse(caseRow[col] || '[]');
   if (existing.includes(entityId)) return;
 
   existing.push(entityId);
-  db.prepare(`UPDATE cases SET ${col} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    .run(JSON.stringify(existing), caseId);
+  await caseRepo.update(scope, caseId, { [col]: existing });
 }

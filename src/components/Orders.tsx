@@ -397,6 +397,15 @@ export default function Orders() {
       );
     }
     
+  const handleCancelOrder = async (id: string) => {
+    try {
+      await ordersApi.cancel(id, 'User requested cancellation via UI');
+      alert('Cancellation request sent');
+    } catch (e) {
+      alert('Failed to cancel order');
+    }
+  };
+
     if (activeTab === 'refunds') {
       return (
         o.refundStatus !== 'N/A' && o.refundStatus !== 'Not issued' ||

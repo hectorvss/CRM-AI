@@ -7,6 +7,11 @@
  * a clear message so the problem is obvious before any request is served.
  */
 
+import dotenv from 'dotenv';
+// Load environment variables immediately so they are available for buildConfig
+dotenv.config({ path: '.env.local' });
+dotenv.config();
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Config {

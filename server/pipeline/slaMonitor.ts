@@ -23,8 +23,8 @@
  * which is done by the startup schedule (see scheduledJobs.ts).
  */
 
-import { getDb }              from '../db/client.js';
-import { logAudit }           from '../db/utils.js';
+import { createCaseRepository } from '../data/cases.js';
+import { createOperationsRepository } from '../data/operations.js';
 import { registerHandler }    from '../queue/handlers/index.js';
 import { JobType }            from '../queue/types.js';
 import { logger }             from '../utils/logger.js';
@@ -86,7 +86,7 @@ function escalatePriority(current: string): string {
   return current; // already urgent
 }
 
-async function checkCase(caseRow: any, db: any): Promise<void> {
+async function checkCase(caseRow: any, caseRepo: any): Promise<void> {
   const log = logger.child({ caseId: caseRow.id });
   const eval_ = evaluateSla(caseRow);
 
@@ -111,13 +111,11 @@ async function checkCase(caseRow: any, db: any): Promise<void> {
     });
   }
 
-  db.prepare(`
-    UPDATE cases SET
-      sla_status = ?,
-      priority   = COALESCE(?, priority),
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(eval_.slaStatus, updates.priority ?? null, caseRow.id);
+  const scope = { tenantId: caseRow.tenant_id, workspaceId: caseRow.workspace_id };
+  await caseRepo.update(scope, caseRow.id, {
+    sla_status: eval_.slaStatus,
+    priority: updates.priority ?? caseRow.priority
+  });
 }
 
 async function handleSlaCheck(
@@ -125,29 +123,26 @@ async function handleSlaCheck(
   ctx: JobContext
 ): Promise<void> {
   const log = logger.child({ jobId: ctx.jobId, traceId: ctx.traceId });
-  const db  = getDb();
+  const caseRepo = createCaseRepository();
+  const opsRepo = createOperationsRepository();
+
   const tenantId = ctx.tenantId ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const scope = { tenantId, workspaceId };
 
   if (payload.caseId) {
-    const caseRow = db.prepare('SELECT * FROM cases WHERE id = ?').get(payload.caseId) as any;
-    if (caseRow) await checkCase(caseRow, db);
+    const caseRow = await caseRepo.get(scope, payload.caseId);
+    if (caseRow) await checkCase(caseRow, caseRepo);
     return;
   }
 
   // Sweep all open cases for this tenant
-  const openCases = db.prepare(`
-    SELECT * FROM cases
-    WHERE tenant_id = ?
-      AND status NOT IN ('resolved', 'closed', 'cancelled')
-      AND (sla_first_response_deadline IS NOT NULL OR sla_resolution_deadline IS NOT NULL)
-    ORDER BY last_activity_at DESC
-    LIMIT 200
-  `).all(tenantId) as any[];
+  const openCases = await caseRepo.listOpenCasesWithSLA(scope, 200);
 
   log.info('SLA sweep', { caseCount: openCases.length });
 
   for (const c of openCases) {
-    await checkCase(c, db);
+    await checkCase(c, caseRepo);
   }
 
   const breachedCount = openCases.filter(c => {
@@ -169,46 +164,18 @@ async function handleSlaCheck(
   // ── Expire stale approval requests (piggyback on SLA sweep) ───────────
   try {
     const now = new Date().toISOString();
-    const approvalsToExpire = db.prepare(`
-      SELECT id, case_id, tenant_id, workspace_id, action_type, risk_level, expires_at
-      FROM approval_requests
-      WHERE status = 'pending'
-        AND expires_at IS NOT NULL
-        AND expires_at < ?
-        AND tenant_id = ?
-    `).all(now, tenantId) as any[];
+    const approvalsToExpire = await caseRepo.listExpiredApprovals(scope, now);
 
-    const expired = db.prepare(`
-      UPDATE approval_requests SET
-        status     = 'expired',
-        updated_at = ?
-      WHERE status = 'pending'
-        AND expires_at IS NOT NULL
-        AND expires_at < ?
-        AND tenant_id = ?
-    `).run(now, now, tenantId);
-
-    if (expired.changes > 0) {
-      log.info('Expired stale approval requests', { count: expired.changes });
+    if (approvalsToExpire.length > 0) {
+      const result = await caseRepo.expireApprovals(scope, now);
+      log.info('Expired stale approval requests', { count: result.changes });
 
       // Reset corresponding cases back from 'pending' approval state
-      db.prepare(`
-        UPDATE cases SET
-          approval_state = 'expired',
-          updated_at     = CURRENT_TIMESTAMP
-        WHERE approval_state = 'pending'
-          AND tenant_id = ?
-          AND active_approval_request_id IN (
-            SELECT id FROM approval_requests
-            WHERE status = 'expired' AND tenant_id = ?
-          )
-      `).run(tenantId, tenantId);
+      await caseRepo.updateCasesForExpiredApprovals(scope);
 
       for (const approval of approvalsToExpire) {
         try {
-          logAudit(db, {
-            tenantId: approval.tenant_id,
-            workspaceId: approval.workspace_id,
+          await opsRepo.logAudit({ tenantId: approval.tenant_id, workspaceId: approval.workspace_id }, {
             actorId: 'sla-monitor',
             actorType: 'system',
             action: 'approval.expired',

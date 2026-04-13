@@ -1,4 +1,4 @@
-/**
+﻿/**
  * CRM AI — API Client
  * All frontend ↔ backend communication goes through this module.
  */
@@ -12,7 +12,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `API error ${res.status}`);
+    throw new Error(err.message || err.error || `API error ${res.status}`);
   }
   return res.json();
 }
@@ -92,6 +92,11 @@ export const ordersApi = {
   },
   get: (id: string) => request<any>(`/orders/${id}`),
   context: (id: string) => request<any>(`/orders/${id}/context`),
+  cancel: (id: string, reason: string) =>
+    request<any>(`/orders/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
 };
 
 // ── Payments ─────────────────────────────────────────────
@@ -102,6 +107,11 @@ export const paymentsApi = {
   },
   get: (id: string) => request<any>(`/payments/${id}`),
   context: (id: string) => request<any>(`/payments/${id}/context`),
+  refund: (id: string, payload: { amount?: number; reason?: string }) =>
+    request<any>(`/payments/${id}/refund`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
 
 // ── Returns ──────────────────────────────────────────────

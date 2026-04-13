@@ -16,7 +16,7 @@
 
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
+import { createIntegrationRepository } from '../data/integrations.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
@@ -40,7 +40,7 @@ const SUPPORTED_EVENT_TYPES = new Set([
   'invoice.payment_succeeded',
 ]);
 
-stripeWebhookRouter.post('/', (req: Request, res: Response) => {
+stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
   const headers = req.headers as Record<string, string>;
 
@@ -89,47 +89,47 @@ stripeWebhookRouter.post('/', (req: Request, res: Response) => {
 
   // ── 4. Deduplication ───────────────────────────────────────────────────────
   const dedupeKey = `stripe_${stripeEventId}`;
-  const db        = getDb();
-
-  const existing = db.prepare(
-    'SELECT id FROM webhook_events WHERE dedupe_key = ?'
-  ).get(dedupeKey);
-
-  if (existing) {
-    logger.debug('Stripe webhook: duplicate, ignoring', { stripeEventId, eventType });
-    res.status(200).send('ok');
-    return;
-  }
-
-  // ── 5. Persist raw event ───────────────────────────────────────────────────
-  const eventId = randomUUID();
+  const integrationRepo = createIntegrationRepository();
 
   try {
-    db.prepare(`
-      INSERT INTO webhook_events
-        (id, tenant_id, source_system, event_type, raw_payload,
-         received_at, status, dedupe_key)
-      VALUES (?, 'org_default', 'stripe', ?, ?, CURRENT_TIMESTAMP, 'received', ?)
-    `).run(eventId, eventType, rawBody, dedupeKey);
-  } catch (err) {
-    logger.error('Stripe webhook: failed to persist event', err, { eventType });
-    res.status(200).send('ok');
-    return;
-  }
+    const existing = await integrationRepo.getWebhookEventByDedupeKey(dedupeKey);
 
-  // ── 6. Respond immediately ─────────────────────────────────────────────────
-  res.status(200).send('ok');
+    if (existing) {
+      logger.debug('Stripe webhook: duplicate, ignoring', { stripeEventId, eventType });
+      res.status(200).send('ok');
+      return;
+    }
 
-  // ── 7. Enqueue for background processing ──────────────────────────────────
-  try {
-    enqueue(JobType.WEBHOOK_PROCESS, {
-      webhookEventId: eventId,
-      source:         'stripe',
-      rawBody,
-      headers,
+    // ── 5. Persist raw event ───────────────────────────────────────────────────
+    const eventId = randomUUID();
+
+    await integrationRepo.createWebhookEvent({
+      id: eventId,
+      tenantId: 'org_default',
+      sourceSystem: 'stripe',
+      eventType,
+      rawPayload: rawBody,
+      status: 'received',
+      dedupeKey
     });
-    logger.info('Stripe webhook enqueued', { eventId, stripeEventId, eventType });
-  } catch (err) {
-    logger.error('Stripe webhook: failed to enqueue job', err, { eventId, eventType });
+
+    // ── 6. Respond immediately ─────────────────────────────────────────────────
+    res.status(200).send('ok');
+
+    // ── 7. Enqueue for background processing ──────────────────────────────────
+    try {
+      enqueue(JobType.WEBHOOK_PROCESS, {
+        webhookEventId: eventId,
+        source:         'stripe',
+        rawBody,
+        headers,
+      });
+      logger.info('Stripe webhook enqueued', { eventId, stripeEventId, eventType });
+    } catch (err) {
+      logger.error('Stripe webhook: failed to enqueue job', err, { eventId, eventType });
+    }
+  } catch (error) {
+    logger.error('Stripe webhook: failed to process at root', error, { stripeEventId });
+    res.status(200).send('ok'); // Still 200 to Stripe
   }
 });

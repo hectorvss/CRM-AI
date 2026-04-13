@@ -21,7 +21,7 @@ async function recalcCaseConflictState(tenantId: string, workspaceId: string, ca
   const openIssues = issues.filter(i => ['open', 'in_progress', 'escalated'].includes(i.status));
   
   const hasOpen = openIssues.length > 0;
-  await caseRepo.update(caseId, { tenantId, workspaceId }, {
+  await caseRepo.update({ tenantId, workspaceId }, caseId, {
     has_reconciliation_conflicts: hasOpen ? 1 : 0,
     updated_at: new Date().toISOString()
   });
@@ -111,10 +111,8 @@ async function resolveIssueBySourceOfTruth(params: {
   if (issue.case_id) await recalcCaseConflictState(tenantId, workspaceId, issue.case_id);
 
   const auditRepo = createAuditRepository();
-  await auditRepo.logAudit({
-    tenantId,
-    workspaceId,
-    actorId: userId,
+  await auditRepo.logEvent({ tenantId, workspaceId }, {
+        actorId: userId,
     action: 'RECONCILIATION_AUTO_APPLIED',
     entityType: 'reconciliation_issue',
     entityId: issue.id,
@@ -221,10 +219,8 @@ router.patch('/issues/:id/status', requirePermission('cases.write'), async (req:
     }
 
     const auditRepo = createAuditRepository();
-    await auditRepo.logAudit({
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
-      actorId: req.userId || 'system',
+    await auditRepo.logEvent({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
+        actorId: req.userId || 'system',
       action: 'RECONCILIATION_ISSUE_STATUS_CHANGED',
       entityType: 'reconciliation_issue',
       entityId: req.params.id,

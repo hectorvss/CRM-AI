@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Payment, PaymentTab, OrderTimelineEvent } from '../types';
 import { paymentsApi } from '../api/client';
-import { useApi } from '../api/hooks';
+import { useApi, useMutation } from '../api/hooks';
 
 type RightTab = 'details' | 'copilot';
 
@@ -198,10 +198,14 @@ export default function Payments() {
   const [activeTab, setActiveTab] = useState<PaymentTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   // Fetch canonical payment contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
-  const { data: apiPayments } = useApi(() => paymentsApi.list(), [], []);
+  const { data: apiPayments, refetch } = useApi(() => paymentsApi.list(), [], []);
+  const refundMutation = useMutation<{ id: string; amount?: number; reason: string }, any>(
+    ({ id, amount, reason }) => paymentsApi.refund(id, { amount, reason }),
+  );
 
   const mapApiPayment = (p: any): Payment => ({
     id: p.id,
@@ -264,6 +268,24 @@ export default function Payments() {
     }
   }, [activeTab, filteredPayments, selectedId]);
 
+  const handleRefund = async (payment: Payment) => {
+    setActionMessage(null);
+    const numericAmount = Number(payment.amount.replace(/[^0-9.]/g, ''));
+    const result = await refundMutation.mutate({
+      id: payment.id,
+      amount: Number.isFinite(numericAmount) ? numericAmount : undefined,
+      reason: 'Refund issued from Payments workspace',
+    });
+
+    if (!result) {
+      setActionMessage(refundMutation.error || 'Refund failed. Please try again.');
+      return;
+    }
+
+    setActionMessage(result.message || 'Refund request persisted.');
+    refetch();
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
@@ -309,6 +331,11 @@ export default function Payments() {
           {/* Left Pane: List */}
           <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
             <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
+              {filteredPayments.length === 0 && (
+                <div className="p-4 text-sm text-gray-500 dark:text-gray-400">
+                  No payments found for this filter.
+                </div>
+              )}
               {filteredPayments.map((pay) => (
                 <div
                   key={pay.id}
@@ -372,7 +399,13 @@ export default function Payments() {
                     <button className="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                       View in {selectedPayment.psp}
                     </button>
-                    <button className="px-4 py-2 text-sm font-bold text-white bg-black rounded-lg hover:opacity-90 transition-colors">
+                    <button 
+                      onClick={() => handleRefund(selectedPayment)}
+                      disabled={refundMutation.loading}
+                      className="px-4 py-2 text-sm font-bold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                      {refundMutation.loading ? 'Issuing...' : 'Issue Refund'}
+                    </button>
+                    <button disabled title="Coming soon" className="px-4 py-2 text-sm font-bold text-white bg-black rounded-lg opacity-40 cursor-not-allowed transition-colors">
                       Reconcile
                     </button>
                     {!isRightSidebarOpen && (
@@ -386,6 +419,12 @@ export default function Payments() {
                     )}
                   </div>
                 </div>
+
+                {actionMessage && (
+                  <div className="p-3 text-sm rounded-xl border border-blue-100 bg-blue-50 text-blue-700">
+                    {actionMessage}
+                  </div>
+                )}
 
                 {/* Conflict Alert if any */}
                 {selectedPayment.conflictDetected && (
@@ -493,6 +532,14 @@ export default function Payments() {
                 </div>
               </div>
             )}
+            {!selectedPayment && (
+              <div className="flex-1 flex items-center justify-center px-8 py-12">
+                <div className="max-w-sm text-center">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No payments found for this filter.</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Load demo payments or switch to another tab to continue.</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Pane: Copilot/Details */}
@@ -535,7 +582,11 @@ export default function Payments() {
 
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              {rightTab === 'copilot' ? (
+              {!selectedPayment ? (
+                <div className="p-4 text-sm text-gray-500 dark:text-gray-400">
+                  Copilot is disabled until a payment is selected.
+                </div>
+              ) : rightTab === 'copilot' ? (
                 <div className="p-4 flex flex-col gap-4">
                   {/* Copilot Case Summary */}
                   <div className="flex gap-2">
@@ -705,7 +756,7 @@ export default function Payments() {
             <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
               <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
                 <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
-                <input className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9" placeholder="Ask a question..." type="text" />
+                <input disabled={!selectedPayment} className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:cursor-not-allowed" placeholder={selectedPayment ? 'Ask a question...' : 'Select a payment first'} type="text" />
                 <div className="flex items-center gap-1">
                   <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
                   <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">arrow_upward</span></button>

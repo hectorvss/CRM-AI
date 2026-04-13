@@ -19,7 +19,8 @@
  */
 
 import { randomUUID }         from 'crypto';
-import { getDb }              from '../db/client.js';
+import { createCaseRepository } from '../data/cases.js';
+import { createCommerceRepository } from '../data/commerce.js';
 import { registerHandler }    from '../queue/handlers/index.js';
 import { JobType }            from '../queue/types.js';
 import { logger }             from '../utils/logger.js';
@@ -35,16 +36,19 @@ async function handleResolutionRollback(
     traceId:         ctx.traceId,
   });
 
-  const db       = getDb();
+  const caseRepo = createCaseRepository();
+  const commerceRepo = createCommerceRepository();
   const tenantId = ctx.tenantId ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const scope = { tenantId, workspaceId };
 
-  const plan = db.prepare('SELECT * FROM execution_plans WHERE id = ?').get(payload.executionPlanId) as any;
+  const plan = await caseRepo.getExecutionPlan(scope, payload.executionPlanId);
   if (!plan) {
     log.warn('Execution plan not found for rollback');
     return;
   }
 
-  const steps: any[] = JSON.parse(plan.steps || '[]');
+  const steps: any[] = typeof plan.steps === 'string' ? JSON.parse(plan.steps) : (plan.steps || []);
 
   // Only roll back completed steps in reverse order
   const completedSteps = steps
@@ -59,7 +63,7 @@ async function handleResolutionRollback(
 
   for (const step of completedSteps) {
     try {
-      await rollbackStep(step, plan.case_id, tenantId, db);
+      await rollbackStep(step, plan.case_id, scope, caseRepo, commerceRepo);
       log.info('Step rolled back', { stepId: step.id, action: step.action });
     } catch (err) {
       log.error('Rollback step failed', {
@@ -72,29 +76,23 @@ async function handleResolutionRollback(
   }
 
   // Mark plan as rolled_back
-  db.prepare(`UPDATE execution_plans SET status = 'rolled_back' WHERE id = ?`).run(plan.id);
+  await caseRepo.updateExecutionPlan(scope, plan.id, { status: 'rolled_back' });
 
   // Flag case for urgent manual review
-  db.prepare(`
-    UPDATE cases SET
-      priority        = 'urgent',
-      execution_state = 'rolled_back',
-      updated_at      = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(plan.case_id);
+  await caseRepo.update(scope, plan.case_id, {
+    priority: 'urgent',
+    execution_state: 'rolled_back'
+  });
 
   // Record status history
-  db.prepare(`
-    INSERT INTO case_status_history
-      (id, case_id, from_status, to_status, changed_by, changed_by_type, reason, tenant_id)
-    SELECT ?, id, status, status, 'resolution_rollback', 'system', ?, ?
-    FROM cases WHERE id = ?
-  `).run(
-    randomUUID(),
-    `Rollback triggered: ${payload.reason}`,
-    tenantId,
-    plan.case_id,
-  );
+  const currentCase = await caseRepo.get(scope, plan.case_id);
+  await caseRepo.addStatusHistory(scope, {
+    caseId: plan.case_id,
+    fromStatus: currentCase?.status,
+    toStatus: currentCase?.status,
+    changedBy: 'resolution_rollback',
+    reason: `Rollback triggered: ${payload.reason}`
+  });
 
   log.warn('Rollback complete — case escalated to urgent', {
     caseId: plan.case_id,
@@ -102,45 +100,33 @@ async function handleResolutionRollback(
   });
 }
 
-async function rollbackStep(step: any, caseId: string, tenantId: string, db: any): Promise<void> {
+async function rollbackStep(step: any, caseId: string, scope: any, caseRepo: any, commerceRepo: any): Promise<void> {
   switch (`${step.tool}/${step.action}`) {
 
     case 'internal/update_case_status': {
       // Re-apply the previous status from history
-      const prevHistory = db.prepare(`
-        SELECT from_status FROM case_status_history
-        WHERE case_id = ? AND changed_by = 'resolution_executor'
-        ORDER BY rowid DESC LIMIT 1
-      `).get(caseId) as any;
-
-      const restoreStatus = prevHistory?.from_status ?? 'open';
-      db.prepare('UPDATE cases SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(restoreStatus, caseId);
+      const restoreStatus = await caseRepo.getPreviousStatusFromHistory(scope, caseId, 'resolution_executor') || 'open';
+      await caseRepo.update(scope, caseId, { status: restoreStatus });
       break;
     }
 
     case 'internal/close_reconciliation': {
       // Re-open all reconciliation issues that were closed by this plan
-      db.prepare(`
-        UPDATE reconciliation_issues
-        SET status = 'open', resolved_at = NULL
-        WHERE case_id = ? AND resolved_at IS NOT NULL
-      `).run(caseId);
-      db.prepare('UPDATE cases SET has_reconciliation_conflicts = 1 WHERE id = ?').run(caseId);
+      await caseRepo.reopenReconciliationIssues(scope, caseId);
       break;
     }
 
     case 'internal/flag_for_review': {
       // Undo the priority escalation (restore to 'normal')
-      db.prepare('UPDATE cases SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run('normal', caseId);
+      await caseRepo.update(scope, caseId, { priority: 'normal' });
       break;
     }
 
     case 'shopify/update_order_status': {
       // Restore order status from before this step — best-effort
-      db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run('pending', step.params?.order_id ?? '');
+      if (step.params?.order_id) {
+        await commerceRepo.updateOrder(scope, step.params.order_id, { status: 'pending' });
+      }
       break;
     }
 

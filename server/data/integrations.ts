@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
 import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
@@ -12,17 +13,25 @@ export interface IntegrationRepository {
   getConnector(scope: IntegrationScope, id: string): Promise<any>;
   listCapabilities(scope: IntegrationScope, connectorId: string): Promise<any[]>;
   listRecentWebhooks(scope: IntegrationScope, connectorId: string, limit?: number): Promise<any[]>;
+  getWebhookEventByDedupeKey(dedupeKey: string): Promise<any>;
   createWebhookEvent(data: {
     id: string;
-    connectorId: string;
-    eventType: string;
-    rawBody: string;
-    headers?: string;
-    status: string;
     tenantId: string;
+    sourceSystem: string;
+    eventType: string;
+    rawPayload: string;
+    status: string;
+    dedupeKey: string;
+    connectorId?: string;
   }): Promise<void>;
   getWebhookEvent(id: string): Promise<any>;
   updateWebhookEventStatus(id: string, status: string, canonicalEventId?: string): Promise<void>;
+  
+  // Canonical Events
+  getCanonicalEvent(id: string): Promise<any>;
+  updateCanonicalEvent(id: string, updates: any): Promise<void>;
+  createCanonicalEvent(data: any): Promise<void>;
+  getCanonicalEventByDedupeKey(dedupeKey: string): Promise<any>;
 }
 
 async function listConnectorsSupabase(scope: IntegrationScope) {
@@ -58,79 +67,51 @@ function listConnectorsSqlite(scope: IntegrationScope) {
   });
 }
 
-async function getConnectorSupabase(scope: IntegrationScope, id: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('connectors')
-    .select('*')
-    .eq('id', id)
-    .eq('tenant_id', scope.tenantId)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
-}
-
-function getConnectorSqlite(scope: IntegrationScope, id: string) {
-  const db = getDb();
-  return parseRow(db.prepare('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
-}
-
-async function listCapabilitiesSupabase(scope: IntegrationScope, connectorId: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('connector_capabilities')
-    .select('*')
-    .eq('connector_id', connectorId);
-  if (error) throw error;
-  return data || [];
-}
-
-function listCapabilitiesSqlite(scope: IntegrationScope, connectorId: string) {
-  const db = getDb();
-  return db.prepare('SELECT * FROM connector_capabilities WHERE connector_id = ?').all(connectorId).map(parseRow);
-}
-
-async function listRecentWebhooksSupabase(scope: IntegrationScope, connectorId: string, limit = 50) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('webhook_events')
-    .select('*')
-    .eq('connector_id', connectorId)
-    .order('received_at', { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return data || [];
-}
-
-function listRecentWebhooksSqlite(scope: IntegrationScope, connectorId: string, limit = 50) {
-  const db = getDb();
-  return db.prepare('SELECT * FROM webhook_events WHERE connector_id = ? ORDER BY received_at DESC LIMIT ?').all(connectorId, limit).map(parseRow);
-}
-
 export function createIntegrationRepository(): IntegrationRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
       listConnectors: listConnectorsSupabase,
-      getConnector: getConnectorSupabase,
-      listCapabilities: listCapabilitiesSupabase,
-      listRecentWebhooks: listRecentWebhooksSupabase,
+      getConnector: async (scope, id) => {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase.from('connectors').select('*').eq('id', id).eq('tenant_id', scope.tenantId).maybeSingle();
+        if (error) throw error;
+        return data;
+      },
+      listCapabilities: async (scope, connectorId) => {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase.from('connector_capabilities').select('*').eq('connector_id', connectorId);
+        if (error) throw error;
+        return data || [];
+      },
+      listRecentWebhooks: async (scope, connectorId, limit) => {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase.from('webhook_events').select('*').eq('connector_id', connectorId).order('received_at', { ascending: false }).limit(limit ?? 50);
+        if (error) throw error;
+        return data || [];
+      },
+      getWebhookEventByDedupeKey: async (dedupeKey) => {
+        const supabase = getSupabaseAdmin();
+        const { data } = await supabase.from('webhook_events').select('*').eq('dedupe_key', dedupeKey).maybeSingle();
+        return data;
+      },
       createWebhookEvent: async (data) => {
         const supabase = getSupabaseAdmin();
         const { error } = await supabase.from('webhook_events').insert({
           id: data.id,
           connector_id: data.connectorId,
+          source_system: data.sourceSystem,
           event_type: data.eventType,
-          raw_body: data.rawBody,
-          headers: data.headers ? JSON.parse(data.headers) : {},
+          raw_payload: data.rawPayload,
           status: data.status,
           tenant_id: data.tenantId,
+          dedupe_key: data.dedupeKey,
           received_at: new Date().toISOString()
         });
         if (error) throw error;
       },
       getWebhookEvent: async (id) => {
         const supabase = getSupabaseAdmin();
-        const { data } = await supabase.from('webhook_events').select('*').eq('id', id).single();
+        const { data } = await supabase.from('webhook_events').select('*').eq('id', id).maybeSingle();
         return data;
       },
       updateWebhookEventStatus: async (id, status, canonicalEventId) => {
@@ -139,21 +120,60 @@ export function createIntegrationRepository(): IntegrationRepository {
         if (canonicalEventId) update.canonical_event_id = canonicalEventId;
         const { error } = await supabase.from('webhook_events').update(update).eq('id', id);
         if (error) throw error;
+      },
+      getCanonicalEvent: async (id) => {
+        const supabase = getSupabaseAdmin();
+        const { data } = await supabase.from('canonical_events').select('*').eq('id', id).maybeSingle();
+        return data;
+      },
+      updateCanonicalEvent: async (id, updates) => {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from('canonical_events').update(updates).eq('id', id);
+        if (error) throw error;
+      },
+      createCanonicalEvent: async (data) => {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from('canonical_events').insert({
+          ...data,
+          id: data.id || randomUUID(),
+          status: data.status || 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+      },
+      getCanonicalEventByDedupeKey: async (dedupeKey) => {
+        const supabase = getSupabaseAdmin();
+        const { data } = await supabase.from('canonical_events').select('*').eq('dedupe_key', dedupeKey).maybeSingle();
+        return data;
       }
     };
   }
 
   return {
     listConnectors: async (scope) => listConnectorsSqlite(scope),
-    getConnector: async (scope, id) => getConnectorSqlite(scope, id),
-    listCapabilities: async (scope, connectorId) => listCapabilitiesSqlite(scope, connectorId),
-    listRecentWebhooks: async (scope, connectorId, limit) => listRecentWebhooksSqlite(scope, connectorId, limit),
+    getConnector: async (scope, id) => {
+      const db = getDb();
+      return parseRow(db.prepare('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
+    },
+    listCapabilities: async (scope, connectorId) => {
+      const db = getDb();
+      return db.prepare('SELECT * FROM connector_capabilities WHERE connector_id = ?').all(connectorId).map(parseRow);
+    },
+    listRecentWebhooks: async (scope, connectorId, limit) => {
+      const db = getDb();
+      return db.prepare('SELECT * FROM webhook_events WHERE connector_id = ? ORDER BY received_at DESC LIMIT ?').all(connectorId, limit ?? 50).map(parseRow);
+    },
+    getWebhookEventByDedupeKey: async (dedupeKey) => {
+      const db = getDb();
+      return parseRow(db.prepare('SELECT * FROM webhook_events WHERE dedupe_key = ?').get(dedupeKey));
+    },
     createWebhookEvent: async (data) => {
       const db = getDb();
       db.prepare(`
-        INSERT INTO webhook_events (id, connector_id, event_type, raw_body, headers, status, tenant_id, received_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(data.id, data.connectorId, data.eventType, data.rawBody, data.headers || '{}', data.status, data.tenantId);
+        INSERT INTO webhook_events (id, tenant_id, source_system, event_type, raw_payload, status, dedupe_key, connector_id, received_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(data.id, data.tenantId, data.sourceSystem, data.eventType, data.rawPayload, data.status, data.dedupeKey, data.connectorId || null);
     },
     getWebhookEvent: async (id) => {
       const db = getDb();
@@ -170,6 +190,37 @@ export function createIntegrationRepository(): IntegrationRepository {
           UPDATE webhook_events SET status = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?
         `).run(status, id);
       }
+    },
+    getCanonicalEvent: async (id) => {
+      const db = getDb();
+      return parseRow(db.prepare('SELECT * FROM canonical_events WHERE id = ?').get(id));
+    },
+    updateCanonicalEvent: async (id, updates) => {
+      const db = getDb();
+      const fields = Object.keys(updates);
+      const setClause = fields.map(f => `${f} = ?`).join(', ');
+      const values = fields.map(f => {
+        const val = updates[f];
+        return (val && typeof val === 'object') ? JSON.stringify(val) : val;
+      });
+      db.prepare(`UPDATE canonical_events SET ${setClause} WHERE id = ?`).run(...values, id);
+    },
+    createCanonicalEvent: async (data) => {
+      const db = getDb();
+      const fields = Object.keys(data);
+      const placeholders = fields.map(() => '?').join(', ');
+      const values = fields.map(f => {
+        const val = data[f];
+        return (val && typeof val === 'object') ? JSON.stringify(val) : val;
+      });
+      db.prepare(`
+        INSERT INTO canonical_events (${fields.join(', ')}, status, created_at, updated_at)
+        VALUES (${placeholders}, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(...values, data.status || 'pending');
+    },
+    getCanonicalEventByDedupeKey: async (dedupeKey) => {
+      const db = getDb();
+      return parseRow(db.prepare('SELECT * FROM canonical_events WHERE dedupe_key = ?').get(dedupeKey));
     }
   };
 }

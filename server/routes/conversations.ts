@@ -15,7 +15,7 @@ router.use(extractMultiTenant);
 router.get('/by-case/:caseId', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const conv = await convRepo.findLatestByCase(scope, req.params.caseId);
+    const conv = await convRepo.getByCase(scope, req.params.caseId);
 
     if (!conv) return res.status(404).json({ error: 'No conversation found for this case' });
 
@@ -32,7 +32,7 @@ router.get('/by-case/:caseId', async (req: MultiTenantRequest, res: Response) =>
 router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const conv = await convRepo.getConversation(scope, req.params.id);
+    const conv = await convRepo.get(scope, req.params.id);
 
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     res.json(conv);
@@ -58,7 +58,7 @@ router.get('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
 router.post('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const conv = await convRepo.getConversation(scope, req.params.id);
+    const conv = await convRepo.get(scope, req.params.id);
 
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
@@ -66,8 +66,7 @@ router.post('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
     const messageId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    await convRepo.addMessage(scope, {
-      id: messageId,
+    await convRepo.appendMessage(scope, {
       conversationId: req.params.id,
       caseId: conv.caseId,
       type: type || 'agent',
@@ -79,7 +78,7 @@ router.post('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
     });
 
     if (conv.caseId) {
-      await caseRepo.updateCase(scope, conv.caseId, { 
+      await caseRepo.update(scope, conv.caseId, { 
         lastActivityAt: now 
       });
     }

@@ -7,19 +7,11 @@
  * object. This is the "global state" that the Inbox copilot, AI diagnosis,
  * and all agents read from. It is built on demand and never stored — always
  * derived fresh from the DB so it reflects the latest state.
- *
- * Usage:
- *   import { buildContextWindow } from '../pipeline/contextWindow.js';
- *   const ctx = buildContextWindow(caseId, tenantId);
- *   // ctx.customer, ctx.orders, ctx.payments, ctx.copilot, ctx.conflicts …
- *
- * The context window is also serialised to a compact string for Gemini prompts
- * via contextWindow.toPromptString().
  */
 
-import { getDb } from '../db/client.js';
+import { createCaseRepository } from '../data/cases.js';
 
-// ── Output types ──────────────────────────────────────────────────────────────
+// ── Output types ─────────────────────────────────────────────────────────────
 
 export interface CWCustomer {
   id:           string;
@@ -114,13 +106,13 @@ export interface CWCase {
 }
 
 export interface CWCopilot {
-  summary:         string;
-  rootCause:       string | null;
-  recommendation:  string | null;
-  draftReply:      string | null;
-  conflictCount:   number;
+  summary:        string;
+  rootCause:      string | null;
+  recommendation: string | null;
+  draftReply:     string | null;
+  conflictCount:  number;
   requiresApproval: boolean;
-  confidence:      number | null;
+  confidence:     number | null;
 }
 
 export interface ContextWindow {
@@ -132,30 +124,27 @@ export interface ContextWindow {
   messages:  CWMessage[];
   conflicts: CWConflict[];
   copilot:   CWCopilot;
-  /** ISO timestamp of when this window was built */
   builtAt:   string;
-  /** Compact string representation for use in Gemini prompts */
   toPromptString(): string;
 }
 
-// ── Safe JSON parse ───────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-function safeJson<T>(raw: string | null, fallback: T): T {
+function safeJson<T>(raw: any, fallback: T): T {
   if (!raw) return fallback;
+  if (typeof raw === 'object') return raw as T;
   try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
-export function buildContextWindow(caseId: string, tenantId: string): ContextWindow | null {
-  const db = getDb();
+export async function buildContextWindow(caseId: string, tenantId: string): Promise<ContextWindow | null> {
+  const caseRepo = createCaseRepository();
+  const bundle = await caseRepo.getBundle({ tenantId, workspaceId: 'ws_default' }, caseId);
 
-  // ── Case ─────────────────────────────────────────────────────────────────
-  const caseRow = db.prepare(`
-    SELECT * FROM cases WHERE id = ? AND tenant_id = ?
-  `).get(caseId, tenantId) as any;
+  if (!bundle) return null;
 
-  if (!caseRow) return null;
+  const caseRow = bundle.case;
 
   const cwCase: CWCase = {
     id:            caseRow.id,
@@ -182,125 +171,87 @@ export function buildContextWindow(caseId: string, tenantId: string): ContextWin
   // ── Customer ──────────────────────────────────────────────────────────────
   let cwCustomer: CWCustomer | null = null;
 
-  if (caseRow.customer_id) {
-    const custRow = db.prepare('SELECT * FROM customers WHERE id = ?').get(caseRow.customer_id) as any;
-    if (custRow) {
-      const linkedIds = db.prepare(
-        'SELECT system, external_id FROM linked_identities WHERE customer_id = ?'
-      ).all(caseRow.customer_id) as Array<{ system: string; external_id: string }>;
-
-      cwCustomer = {
-        id:          custRow.id,
-        name:        custRow.canonical_name,
-        email:       custRow.canonical_email,
-        segment:     custRow.segment,
-        riskLevel:   custRow.risk_level,
-        ltv:         custRow.lifetime_value ?? 0,
-        totalOrders: custRow.total_orders   ?? 0,
-        disputeRate: custRow.dispute_rate   ?? 0,
-        refundRate:  custRow.refund_rate    ?? 0,
-        chargebacks: custRow.chargeback_count ?? 0,
-        linkedIds:   linkedIds.map(r => ({ system: r.system, externalId: r.external_id })),
-      };
-    }
+  if (bundle.customer) {
+    cwCustomer = {
+      id:          bundle.customer.id,
+      name:        bundle.customer.canonical_name,
+      email:       bundle.customer.canonical_email,
+      segment:     bundle.customer.segment,
+      riskLevel:   bundle.customer.risk_level,
+      ltv:         bundle.customer.lifetime_value ?? 0,
+      totalOrders: bundle.customer.total_orders   ?? 0,
+      disputeRate: bundle.customer.dispute_rate   ?? 0,
+      refundRate:  bundle.customer.refund_rate    ?? 0,
+      chargebacks: bundle.customer.chargeback_count ?? 0,
+      linkedIds:   (bundle.linked_identities ?? []).map((r: any) => ({ system: r.system, externalId: r.external_id })),
+    };
   }
 
   // ── Orders ────────────────────────────────────────────────────────────────
-  const orderIds: string[] = safeJson<string[]>(caseRow.order_ids, []);
-  const cwOrders: CWOrder[] = orderIds
-    .map(oid => db.prepare('SELECT * FROM orders WHERE id = ?').get(oid) as any)
-    .filter(Boolean)
-    .map(o => ({
-      id:             o.id,
-      externalId:     o.external_order_id,
-      status:         o.status,
-      amount:         o.total_amount,
-      currency:       o.currency,
-      systemStates:   safeJson<Record<string, string>>(o.system_states, {}),
-      hasConflict:    !!o.has_conflict,
-      conflictDomain: o.conflict_domain,
-      conflictDetail: o.conflict_detected,
-      recommendation: o.recommended_action,
-      createdAt:      o.created_at,
-    }));
-
-  // ── Payments ──────────────────────────────────────────────────────────────
-  const paymentIds: string[] = safeJson<string[]>(caseRow.payment_ids, []);
-  const cwPayments: CWPayment[] = paymentIds
-    .map(pid => db.prepare('SELECT * FROM payments WHERE id = ?').get(pid) as any)
-    .filter(Boolean)
-    .map(p => ({
-      id:           p.id,
-      externalId:   p.external_payment_id,
-      status:       p.status,
-      amount:       p.amount,
-      currency:     p.currency,
-      psp:          p.psp,
-      refundAmount: p.refund_amount ?? 0,
-      disputeId:    p.dispute_id,
-      systemStates: safeJson<Record<string, string>>(p.system_states, {}),
-      hasConflict:  !!p.conflict_detected,
-    }));
-
-  // ── Returns ───────────────────────────────────────────────────────────────
-  const returnIds: string[] = safeJson<string[]>(caseRow.return_ids, []);
-  const cwReturns: CWReturn[] = returnIds
-    .map(rid => db.prepare('SELECT * FROM returns WHERE id = ?').get(rid) as any)
-    .filter(Boolean)
-    .map(r => ({
-      id:               r.id,
-      externalId:       r.external_return_id,
-      status:           r.status,
-      inspectionStatus: r.inspection_status,
-      refundStatus:     r.refund_status,
-      carrierStatus:    r.carrier_status,
-      systemStates:     safeJson<Record<string, string>>(r.system_states, {}),
-    }));
-
-  // ── Messages ──────────────────────────────────────────────────────────────
-  let cwMessages: CWMessage[] = [];
-  if (caseRow.conversation_id) {
-    const msgs = db.prepare(`
-      SELECT * FROM messages
-      WHERE conversation_id = ?
-      ORDER BY sent_at ASC
-      LIMIT 50
-    `).all(caseRow.conversation_id) as any[];
-
-    cwMessages = msgs.map(m => ({
-      id:        m.id,
-      type:      m.type,
-      sender:    m.sender_name,
-      content:   m.content,
-      sentAt:    m.sent_at,
-      sentiment: m.sentiment,
-    }));
-  }
-
-  // ── Reconciliation conflicts ──────────────────────────────────────────────
-  const conflictRows = db.prepare(`
-    SELECT * FROM reconciliation_issues
-    WHERE case_id = ? AND status = 'open'
-    ORDER BY detected_at DESC
-  `).all(caseId) as any[];
-
-  const cwConflicts: CWConflict[] = conflictRows.map(r => ({
-    id:                 r.id,
-    domain:             r.conflict_domain,
-    severity:           r.severity,
-    conflictingSystems: safeJson<string[]>(r.conflicting_systems, []),
-    expectedState:      r.expected_state,
-    actualStates:       safeJson<Record<string, string>>(r.actual_states, {}),
-    sourceOfTruth:      r.source_of_truth_system,
+  const cwOrders: CWOrder[] = (bundle.orders ?? []).map((o: any) => ({
+    id:             o.id,
+    externalId:     o.external_order_id,
+    status:         o.status,
+    amount:         o.total_amount,
+    currency:       o.currency,
+    systemStates:   safeJson<Record<string, string>>(o.system_states, {}),
+    hasConflict:    !!o.has_conflict,
+    conflictDomain: o.conflict_domain,
+    conflictDetail: o.conflict_detected,
+    recommendation: o.recommended_action,
+    createdAt:      o.created_at,
   }));
 
+  // ── Payments ──────────────────────────────────────────────────────────────
+  const cwPayments: CWPayment[] = (bundle.payments ?? []).map((p: any) => ({
+    id:           p.id,
+    externalId:   p.external_payment_id,
+    status:       p.status,
+    amount:       p.amount,
+    currency:     p.currency,
+    psp:          p.psp,
+    refundAmount: p.refund_amount ?? 0,
+    disputeId:    p.dispute_id,
+    systemStates: safeJson<Record<string, string>>(p.system_states, {}),
+    hasConflict:  !!p.conflict_detected,
+  }));
+
+  // ── Returns ───────────────────────────────────────────────────────────────
+  const cwReturns: CWReturn[] = (bundle.returns ?? []).map((r: any) => ({
+    id:               r.id,
+    externalId:       r.external_return_id,
+    status:           r.status,
+    inspectionStatus: r.inspection_status,
+    refundStatus:     r.refund_status,
+    carrierStatus:    r.carrier_status,
+    systemStates:     safeJson<Record<string, string>>(r.system_states, {}),
+  }));
+
+  // ── Messages ──────────────────────────────────────────────────────────────
+  const cwMessages: CWMessage[] = (bundle.messages ?? []).slice(0, 50).map((m: any) => ({
+    id:        m.id,
+    type:      m.type,
+    sender:    m.sender_name,
+    content:   m.content,
+    sentAt:    m.sent_at,
+    sentiment: m.sentiment,
+  }));
+
+  // ── Reconciliation conflicts ──────────────────────────────────────────────
+  const cwConflicts: CWConflict[] = (bundle.reconciliation_issues ?? [])
+    .filter((r: any) => r.status === 'open')
+    .map((r: any) => ({
+      id:                 r.id,
+      domain:             r.conflict_domain,
+      severity:           r.severity,
+      conflictingSystems: safeJson<string[]>(r.conflicting_systems, []),
+      expectedState:      r.expected_state,
+      actualStates:       safeJson<Record<string, string>>(r.actual_states, {}),
+      sourceOfTruth:      r.source_of_truth_system,
+    }));
+
   // ── Draft reply ───────────────────────────────────────────────────────────
-  const draftRow = db.prepare(`
-    SELECT content FROM draft_replies
-    WHERE case_id = ? AND status = 'pending_review'
-    ORDER BY generated_at DESC
-    LIMIT 1
-  `).get(caseId) as any;
+  const draftReply = (bundle.drafts ?? [])[0]?.content ?? null;
 
   // ── Build copilot summary ─────────────────────────────────────────────────
   const conflictCount   = cwConflicts.length;
@@ -313,7 +264,7 @@ export function buildContextWindow(caseId: string, tenantId: string): ContextWin
     summary,
     rootCause:       caseRow.ai_root_cause,
     recommendation:  caseRow.ai_recommended_action,
-    draftReply:      draftRow?.content ?? null,
+    draftReply,
     conflictCount,
     requiresApproval,
     confidence:      caseRow.ai_confidence,
@@ -338,7 +289,7 @@ export function buildContextWindow(caseId: string, tenantId: string): ContextWin
   };
 }
 
-// ── Auto summary (before AI diagnosis runs) ───────────────────────────────────
+// ── Auto summary (before AI diagnosis runs) ──────────────────────────────────
 
 function buildAutoSummary(
   c: CWCase,
@@ -373,7 +324,7 @@ function buildAutoSummary(
   return parts.join(' | ');
 }
 
-// ── Prompt string serialiser ──────────────────────────────────────────────────
+// ── Prompt string serialiser ────────────────────────────────────────────────
 
 function buildPromptString(ctx: Omit<ContextWindow, 'toPromptString' | 'builtAt'>): string {
   const lines: string[] = [];

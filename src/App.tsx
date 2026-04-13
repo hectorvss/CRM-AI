@@ -16,6 +16,7 @@ import Orders from './components/Orders';
 import Returns from './components/Returns';
 import Payments from './components/Payments';
 import CaseGraph from './components/CaseGraph';
+import PageErrorBoundary from './components/PageErrorBoundary';
 import { Page } from './types';
 
 export default function App() {
@@ -31,22 +32,24 @@ export default function App() {
         onToggle={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
       />
       <main className="flex-1 flex flex-col h-full min-w-0 relative">
-        {currentPage === 'inbox' && <Inbox />}
-        {currentPage === 'home' && <Home />}
-        {currentPage === 'ai_studio' && <AIStudio />}
-        {currentPage === 'workflows' && <Workflows />}
-        {currentPage === 'approvals' && <Approvals />}
-        {currentPage === 'knowledge' && <Knowledge />}
-        {currentPage === 'customers' && <Customers />}
-        {currentPage === 'tools_integrations' && <ToolsIntegrations />}
-        {currentPage === 'reports' && <Reports />}
-        {currentPage === 'settings' && <Settings />}
-        {currentPage === 'upgrade' && <Upgrade />}
-        {currentPage === 'profile' && <Profile />}
-        {currentPage === 'orders' && <Orders />}
-        {currentPage === 'returns' && <Returns />}
-        {currentPage === 'payments' && <Payments />}
-        {currentPage === 'case_graph' && <CaseGraph onPageChange={setCurrentPage} />}
+        <PageErrorBoundary page={currentPage}>
+          {currentPage === 'inbox' && <Inbox />}
+          {currentPage === 'home' && <Home />}
+          {currentPage === 'ai_studio' && <AIStudio />}
+          {currentPage === 'workflows' && <Workflows />}
+          {currentPage === 'approvals' && <Approvals />}
+          {currentPage === 'knowledge' && <Knowledge />}
+          {currentPage === 'customers' && <Customers />}
+          {currentPage === 'tools_integrations' && <ToolsIntegrations />}
+          {currentPage === 'reports' && <Reports />}
+          {currentPage === 'settings' && <Settings />}
+          {currentPage === 'upgrade' && <Upgrade />}
+          {currentPage === 'profile' && <Profile />}
+          {currentPage === 'orders' && <Orders />}
+          {currentPage === 'returns' && <Returns />}
+          {currentPage === 'payments' && <Payments />}
+          {currentPage === 'case_graph' && <CaseGraph onPageChange={setCurrentPage} />}
+        </PageErrorBoundary>
       </main>
     </div>
   );

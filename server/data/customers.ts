@@ -106,7 +106,14 @@ function buildCustomerState(detail: any) {
 function enrichCustomerRows(rows: any[], detailByCustomerId: Map<string, any>) {
   return rows.map((row: any) => {
     const detail = detailByCustomerId.get(row.id);
-    const state = detail ? buildCustomerState(detail) : null;
+    const state = detail ? buildCustomerState({
+      customer: detail,
+      cases: detail.cases ?? [],
+      orders: detail.orders ?? [],
+      payments: detail.payments ?? [],
+      returns: detail.returns ?? [],
+      linked_identities: detail.linked_identities ?? [],
+    }) : null;
     return {
       ...row,
       open_cases: state?.metrics.open_cases ?? 0,
@@ -274,9 +281,13 @@ function getCustomerStateSqlite(scope: CustomerScope, customerId: string) {
 
 export interface CustomerRepository {
   list(scope: CustomerScope, filters: CustomerFilters): Promise<any[]>;
-  getDetail(scope: CustomerScope, customerId: string): Promise<any | null>;
-  getState(scope: CustomerScope, customerId: string): Promise<any | null>;
+  get(scope: CustomerScope, id: string): Promise<any | null>;
+  getDetail(scope: CustomerScope, id: string): Promise<any | null>;
+  getState(scope: CustomerScope, id: string): Promise<any | null>;
   upsertCustomer(scope: CustomerScope, customer: any): Promise<string>;
+  getIdentity(scope: CustomerScope, system: string, externalId: string): Promise<any | null>;
+  createStub(scope: CustomerScope, data: any): Promise<string>;
+  update(scope: CustomerScope, id: string, updates: any): Promise<void>;
 }
 
 export function createCustomerRepository(): CustomerRepository {
@@ -284,7 +295,53 @@ export function createCustomerRepository(): CustomerRepository {
     return {
       list: listCustomersSupabase,
       getDetail: getCustomerDetailSupabase,
+      get: async (scope, id) => {
+        const supabase = getSupabaseAdmin();
+        const { data } = await supabase.from('customers').select('*').eq('id', id).eq('tenant_id', scope.tenantId).maybeSingle();
+        return data;
+      },
       getState: getCustomerStateSupabase,
+      getIdentity: async (scope, system, externalId) => {
+        const supabase = getSupabaseAdmin();
+        const { data } = await supabase.from('linked_identities').select('*').eq('system', system).eq('external_id', externalId).maybeSingle();
+        return data;
+      },
+      createStub: async (scope, data) => {
+        const supabase = getSupabaseAdmin();
+        const id = data.id || crypto.randomUUID();
+        const now = new Date().toISOString();
+        await supabase.from('customers').insert({
+          id,
+          tenant_id: scope.tenantId,
+          workspace_id: scope.workspaceId,
+          canonical_name: data.canonicalName,
+          canonical_email: data.canonicalEmail,
+          email: data.email,
+          phone: data.phone,
+          segment: data.segment || 'standard',
+          risk_level: data.riskLevel || 'low',
+          lifetime_value: 0,
+          total_orders: 0,
+          created_at: now,
+          updated_at: now
+        });
+        
+        await supabase.from('linked_identities').insert({
+          id: crypto.randomUUID(),
+          customer_id: id,
+          tenant_id: scope.tenantId,
+          workspace_id: scope.workspaceId,
+          system: data.identitySystem,
+          external_id: data.identityExternalId,
+          created_at: now
+        });
+        return id;
+      },
+      update: async (scope, id, updates) => {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from('customers').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+        if (error) throw error;
+      },
       upsertCustomer: async (scope, customer) => {
         const supabase = getSupabaseAdmin();
         const { data: linked } = await supabase
@@ -333,7 +390,43 @@ export function createCustomerRepository(): CustomerRepository {
   return {
     list: async (scope, filters) => listCustomersSqlite(scope, filters),
     getDetail: async (scope, customerId) => getCustomerDetailSqlite(scope, customerId),
+    get: async (scope, id) => {
+      const db = getDb();
+      return parseRow(db.prepare('SELECT * FROM customers WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
+    },
     getState: async (scope, customerId) => getCustomerStateSqlite(scope, customerId),
+    getIdentity: async (scope, system, externalId) => {
+      const db = getDb();
+      return parseRow(db.prepare('SELECT * FROM linked_identities WHERE system = ? AND external_id = ?').get(system, externalId));
+    },
+    createStub: async (scope, data) => {
+      const db = getDb();
+      const id = data.id || crypto.randomUUID();
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO customers (
+          id, canonical_name, canonical_email, email, phone,
+          segment, risk_level, lifetime_value, total_orders,
+          workspace_id, tenant_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+      `).run(
+        id, data.canonicalName, data.canonicalEmail, data.email, data.phone,
+        data.segment || 'standard', data.riskLevel || 'low',
+        scope.workspaceId, scope.tenantId, now, now
+      );
+      
+      db.prepare(`
+        INSERT INTO linked_identities (id, customer_id, tenant_id, workspace_id, system, external_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(crypto.randomUUID(), id, scope.tenantId, scope.workspaceId, data.identitySystem, data.identityExternalId, now);
+      return id;
+    },
+    update: async (scope, id, updates) => {
+      const db = getDb();
+      const fields = Object.keys(updates);
+      const setClause = fields.map(f => `${f} = ?`).join(', ');
+      db.prepare(`UPDATE customers SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...Object.values(updates), id);
+    },
     upsertCustomer: async (scope, customer) => {
       const db = getDb();
       const linked = db.prepare('SELECT customer_id FROM linked_identities WHERE system = ? AND external_id = ?').get(customer.source, customer.externalId) as any;

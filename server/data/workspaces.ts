@@ -155,7 +155,7 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
       .eq('tenant_id', tenantId)
       .eq('workspace_id', workspaceId);
     
-    const overrideByKey = new Map((overrides || []).map((o: any) => [o.feature_key, o]));
+    const overrideByKey = new Map<string, any>((overrides || []).map((o: any) => [o.feature_key, o]));
 
     return (gates || []).map((gate: any) => {
       const planIds = Array.isArray(gate.plan_ids) ? gate.plan_ids : [];

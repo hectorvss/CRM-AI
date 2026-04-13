@@ -269,7 +269,7 @@ async function handleIntentRoute(
   const riskLevel = HIGH_RISK_INTENTS.has(intent)     ? 'high'  : 'low';
 
   // ── 7. Create or find case ───────────────────────────────────────────────
-  const caseResult = getOrCreateCase({
+  const caseResult = await getOrCreateCase({
     tenantId,
     workspaceId,
     customerId,
@@ -326,7 +326,7 @@ async function handleIntentRoute(
   if (localEntityId) {
     const eType = event.canonical_entity_type as 'order' | 'payment' | 'return';
     if (['order', 'payment', 'return'].includes(eType)) {
-      linkEntityToCase(caseResult.id, eType, localEntityId);
+      await linkEntityToCase(caseResult.id, tenantId, workspaceId, eType, localEntityId);
     }
   }
 
@@ -372,14 +372,14 @@ async function handleIntentRoute(
 
   // ── 12. Enqueue downstream jobs ───────────────────────────────────────────
   // Reconciliation: detect cross-system conflicts
-  enqueue(
+  await enqueue(
     JobType.RECONCILE_CASE,
     { caseId: caseResult.id },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 5 }
   );
 
   // Draft reply: generate a full AI-assisted draft for the inbox copilot
-  enqueue(
+  await enqueue(
     JobType.DRAFT_REPLY,
     { caseId: caseResult.id },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 8 }
@@ -387,7 +387,7 @@ async function handleIntentRoute(
 
   // Agent engine: fire the appropriate agent chain
   const agentTrigger = caseResult.isNew ? 'case_created' : 'message_received';
-  triggerAgents(agentTrigger, caseResult.id, {
+  await triggerAgents(agentTrigger, caseResult.id, {
     tenantId, workspaceId, traceId: ctx.traceId, priority: 7,
   });
 

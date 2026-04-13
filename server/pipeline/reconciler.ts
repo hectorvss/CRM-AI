@@ -29,7 +29,9 @@
  */
 
 import { randomUUID }    from 'crypto';
-import { getDb }         from '../db/client.js';
+import { createCommerceRepository } from '../data/commerce.js';
+import { createCaseRepository } from '../data/cases.js';
+import { createCustomerRepository } from '../data/customers.js';
 import { enqueue }       from '../queue/client.js';
 import { triggerAgents } from '../agents/orchestrator.js';
 import { JobType }       from '../queue/types.js';
@@ -81,8 +83,7 @@ function comparePayment(order: any, payment: any): ConflictResult[] {
   }
 
   // Status mismatch: derive expected payment status from order.status
-  // (orders.status is our canonical field; system_states.shopify.financial_status is raw Shopify)
-  const systemStates: Record<string, any> = JSON.parse(order.system_states || '{}');
+  const systemStates = parseSystemStates(order);
   const orderFinancial = systemStates.shopify?.financial_status ?? order.status ?? '';
   const paymentStatus  = payment.status ?? '';
 
@@ -92,7 +93,6 @@ function comparePayment(order: any, payment: any): ConflictResult[] {
     refunded:            ['refunded'],
     partially_fulfilled: ['partially_refunded'],
     cancelled:           ['canceled', 'cancelled', 'voided'],
-    // raw Shopify financial_status values (when available)
     paid:               ['succeeded', 'captured'],
     partially_refunded: ['partially_refunded'],
     voided:             ['canceled', 'cancelled', 'voided'],
@@ -137,147 +137,111 @@ function comparePayment(order: any, payment: any): ConflictResult[] {
   return conflicts;
 }
 
-// ── Fulfillment comparator ─────────────────────────────────────────────────────
+function parseSystemStates(entity: any): any {
+  if (!entity || !entity.system_states) return {};
+  if (typeof entity.system_states === 'object') return entity.system_states;
+  try {
+    return JSON.parse(entity.system_states);
+  } catch {
+    return {};
+  }
+}
+
+// ── Comparators ──────────────────────────────────────────────────────────────
 
 function compareFulfillment(order: any): ConflictResult[] {
   const conflicts: ConflictResult[] = [];
   if (!order) return conflicts;
 
-  const systemStates: Record<string, any> = JSON.parse(order.system_states || '{}');
+  const systemStates = parseSystemStates(order);
+  const shopifyStatus = systemStates.shopify?.fulfillment_status ?? null;
+  const internalStatus = order.status ?? null;
 
-  const shopifyStatus   = systemStates.shopify?.fulfillment_status ?? null;
-  const internalStatus  = order.status ?? null;
-
-  // Order marked as fulfilled in Shopify but not in local DB
   if (shopifyStatus === 'fulfilled' && internalStatus !== 'fulfilled') {
     conflicts.push({
-      entityType:         'order',
-      entityId:           order.id,
-      conflictDomain:     'fulfillment',
-      severity:           'medium',
+      entityType: 'order',
+      entityId: order.id,
+      conflictDomain: 'fulfillment',
+      severity: 'medium',
       conflictingSystems: ['shopify', 'internal'],
-      expectedState:      `Order status should be 'fulfilled' to match Shopify`,
-      actualStates: {
-        shopify_fulfillment_status: shopifyStatus,
-        internal_status:            internalStatus,
-      },
+      expectedState: "Order status should be 'fulfilled' to match Shopify",
+      actualStates: { shopify_fulfillment_status: shopifyStatus, internal_status: internalStatus },
       sourceOfTruth: 'shopify',
-      detectedBy:    'fulfillment_status_comparator',
+      detectedBy: 'fulfillment_status_comparator',
     });
   }
 
-  // Tracking number missing on fulfilled order
-  // Check system_states for a tracking_number stored by the canonicalizer
   const trackingNumber = systemStates.shopify?.tracking_number ?? systemStates.canonical?.tracking_number ?? null;
   if (shopifyStatus === 'fulfilled' && !trackingNumber) {
     conflicts.push({
-      entityType:         'order',
-      entityId:           order.id,
-      conflictDomain:     'fulfillment',
-      severity:           'low',
+      entityType: 'order',
+      entityId: order.id,
+      conflictDomain: 'fulfillment',
+      severity: 'low',
       conflictingSystems: ['shopify'],
-      expectedState:      'Fulfilled order should have a tracking number in system_states',
-      actualStates: {
-        tracking_number: null,
-        shopify_status:  shopifyStatus,
-      },
+      expectedState: 'Fulfilled order should have a tracking number',
+      actualStates: { tracking_number: null, shopify_status: shopifyStatus },
       sourceOfTruth: 'shopify',
-      detectedBy:    'tracking_number_checker',
+      detectedBy: 'tracking_number_checker',
     });
   }
 
   return conflicts;
 }
-
-// ── Returns comparator ─────────────────────────────────────────────────────────
 
 function compareReturn(ret: any, payment: any | null): ConflictResult[] {
   const conflicts: ConflictResult[] = [];
   if (!ret) return conflicts;
 
-  const returnStatus  = ret.status ?? '';
-  const refundAmount  = parseFloat(payment?.refund_amount ?? '0');
-  const returnValue   = parseFloat(ret.return_value ?? '0');  // schema column is return_value
+  const refundAmount = parseFloat(payment?.refund_amount ?? '0');
+  const returnValue = parseFloat(ret.return_value ?? '0');
 
-  // Return approved but no refund issued
-  if (returnStatus === 'approved' && refundAmount < 0.01 && returnValue > 0) {
+  if (ret.status === 'approved' && refundAmount < 0.01 && returnValue > 0) {
     conflicts.push({
-      entityType:         'return',
-      entityId:           ret.id,
-      conflictDomain:     'returns',
-      severity:           'high',
+      entityType: 'return',
+      entityId: ret.id,
+      conflictDomain: 'returns',
+      severity: 'high',
       conflictingSystems: ['shopify', 'stripe'],
-      expectedState:      `A refund of ~${returnValue} ${ret.currency ?? 'USD'} should have been issued for approved return`,
-      actualStates: {
-        return_status:       returnStatus,
-        stripe_refund_amount: refundAmount,
-        return_value:        returnValue,
-      },
+      expectedState: `A refund of ~${returnValue} ${ret.currency ?? 'USD'} should have been issued`,
+      actualStates: { return_status: ret.status, stripe_refund_amount: refundAmount, return_value: returnValue },
       sourceOfTruth: 'shopify',
-      detectedBy:    'return_refund_comparator',
-    });
-  }
-
-  // Refund issued but return not marked as completed
-  if (refundAmount > 0 && !['completed', 'closed', 'refunded'].includes(returnStatus)) {
-    conflicts.push({
-      entityType:         'return',
-      entityId:           ret.id,
-      conflictDomain:     'returns',
-      severity:           'low',
-      conflictingSystems: ['shopify', 'stripe'],
-      expectedState:      `Return status should be 'completed' since a refund was issued`,
-      actualStates: {
-        return_status:        returnStatus,
-        stripe_refund_amount: refundAmount,
-      },
-      sourceOfTruth: 'stripe',
-      detectedBy:    'return_status_sync_checker',
+      detectedBy: 'return_refund_comparator',
     });
   }
 
   return conflicts;
 }
 
-// ── Identity comparator ────────────────────────────────────────────────────────
-
 function compareIdentity(customer: any, linkedIds: any[]): ConflictResult[] {
   const conflicts: ConflictResult[] = [];
   if (!customer) return conflicts;
 
-  // Customer has no linked identities — orphaned record
   if (!linkedIds || linkedIds.length === 0) {
     conflicts.push({
-      entityType:         'customer',
-      entityId:           customer.id,
-      conflictDomain:     'identity',
-      severity:           'low',
+      entityType: 'customer',
+      entityId: customer.id,
+      conflictDomain: 'identity',
+      severity: 'low',
       conflictingSystems: ['internal'],
-      expectedState:      'Customer should be linked to at least one external system',
-      actualStates: {
-        linked_systems: [],
-      },
+      expectedState: 'Customer should be linked to at least one system',
+      actualStates: { linked_systems: [] },
       sourceOfTruth: 'internal',
-      detectedBy:    'identity_linker',
+      detectedBy: 'identity_linker',
     });
   }
 
-  // High-risk customer with no risk flag set on case
   if (customer.risk_level === 'high' || customer.risk_level === 'critical') {
     conflicts.push({
-      entityType:         'customer',
-      entityId:           customer.id,
-      conflictDomain:     'identity',
-      severity:           'high',
+      entityType: 'customer',
+      entityId: customer.id,
+      conflictDomain: 'identity',
+      severity: 'high',
       conflictingSystems: ['internal'],
-      expectedState:      'High-risk customer — case requires elevated review',
-      actualStates: {
-        customer_risk_level: customer.risk_level,
-        lifetime_value:      customer.lifetime_value,
-        total_orders:        customer.total_orders,
-      },
+      expectedState: 'High-risk customer warning',
+      actualStates: { risk_level: customer.risk_level },
       sourceOfTruth: 'internal',
-      detectedBy:    'risk_flag_checker',
+      detectedBy: 'risk_flag_checker',
     });
   }
 
@@ -291,204 +255,108 @@ async function handleReconcileCase(
   ctx: JobContext
 ): Promise<void> {
   const log = logger.child({
-    jobId:   ctx.jobId,
-    caseId:  payload.caseId,
+    jobId: ctx.jobId,
+    caseId: payload.caseId,
     traceId: ctx.traceId,
   });
 
-  const db       = getDb();
-  const tenantId = ctx.tenantId ?? 'org_default';
+  const commerceRepo = createCommerceRepository();
+  const caseRepo = createCaseRepository();
+  const customerRepo = createCustomerRepository();
+  
+  const scope = { tenantId: ctx.tenantId || 'org_default', workspaceId: ctx.workspaceId || 'ws_default' };
 
-  // ── 1. Load case ──────────────────────────────────────────────────────────
-  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ?').get(payload.caseId) as any;
-  if (!caseRow) {
-    log.warn('Case not found for reconciliation');
+  // ── 1. Load case bundle ──────────────────────────────────────────────────
+  const bundle = await caseRepo.getBundle(scope, payload.caseId);
+  if (!bundle) {
+    log.warn('Case bundle not found for reconciliation');
     return;
   }
 
+  const caseRow = bundle.case;
   if (['resolved', 'closed', 'cancelled'].includes(caseRow.status)) {
     log.debug('Case is closed, skipping reconciliation');
     return;
   }
 
   log.info('Starting reconciliation', { caseType: caseRow.type, domains: payload.domains ?? 'all' });
-
   const domains = new Set(payload.domains ?? ['payment', 'fulfillment', 'returns', 'identity']);
-
-  // ── 2. Load linked entities ───────────────────────────────────────────────
-  const orderIds:   string[] = JSON.parse(caseRow.order_ids   || '[]');
-  const paymentIds: string[] = JSON.parse(caseRow.payment_ids || '[]');
-  const returnIds:  string[] = JSON.parse(caseRow.return_ids  || '[]');
-
   const allConflicts: ConflictResult[] = [];
 
-  // ── 3. Payment domain ─────────────────────────────────────────────────────
+  // ── 2. Run domain-specific checks ─────────────────────────────────────────
   if (domains.has('payment')) {
-    for (const orderId of orderIds) {
-      const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
-      // Find associated payment via customer_id + order linkage
-      const payment = db.prepare(
-        'SELECT * FROM payments WHERE order_id = ? OR id IN (SELECT value FROM json_each(?)) LIMIT 1'
-      ).get(orderId, caseRow.payment_ids) as any ?? (
-        paymentIds.length > 0
-          ? db.prepare('SELECT * FROM payments WHERE id = ? LIMIT 1').get(paymentIds[0]) as any
-          : null
-      );
-
+    for (const order of bundle.orders) {
+      const payment = bundle.payments.find(p => p.order_id === order.id) || bundle.payments[0];
       allConflicts.push(...comparePayment(order, payment));
-    }
-
-    // Payments without orders
-    for (const paymentId of paymentIds) {
-      if (orderIds.length === 0) {
-        const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(paymentId) as any;
-        allConflicts.push(...comparePayment(null, payment));
-      }
     }
   }
 
-  // ── 4. Fulfillment domain ─────────────────────────────────────────────────
   if (domains.has('fulfillment')) {
-    for (const orderId of orderIds) {
-      const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+    for (const order of bundle.orders) {
       allConflicts.push(...compareFulfillment(order));
     }
   }
 
-  // ── 5. Returns domain ─────────────────────────────────────────────────────
   if (domains.has('returns')) {
-    for (const returnId of returnIds) {
-      const ret = db.prepare('SELECT * FROM returns WHERE id = ?').get(returnId) as any;
-      const payment = paymentIds.length > 0
-        ? db.prepare('SELECT * FROM payments WHERE id = ? LIMIT 1').get(paymentIds[0]) as any
-        : null;
+    for (const ret of bundle.returns) {
+      const payment = bundle.payments[0];
       allConflicts.push(...compareReturn(ret, payment));
     }
   }
 
-  // ── 6. Identity domain ────────────────────────────────────────────────────
   if (domains.has('identity') && caseRow.customer_id) {
-    const customer   = db.prepare('SELECT * FROM customers WHERE id = ?').get(caseRow.customer_id) as any;
-    const linkedIds  = db.prepare('SELECT * FROM linked_identities WHERE customer_id = ?').all(caseRow.customer_id) as any[];
-    allConflicts.push(...compareIdentity(customer, linkedIds));
+    allConflicts.push(...compareIdentity(bundle.customer, bundle.linked_identities));
   }
 
-  // ── 7. Persist conflicts in a transaction ─────────────────────────────────
+  // ── 3. Persist conflicts ──────────────────────────────────────────────────
   const newIssueIds: string[] = [];
 
-  const persist = db.transaction(() => {
-    for (const conflict of allConflicts) {
-      // Idempotency: match on (case_id, entity_id, conflict_domain, status=open)
-      const existing = db.prepare(`
-        SELECT id FROM reconciliation_issues
-        WHERE case_id        = ?
-          AND entity_id      = ?
-          AND conflict_domain = ?
-          AND status          = 'open'
-        LIMIT 1
-      `).get(payload.caseId, conflict.entityId, conflict.conflictDomain) as any;
-
-      if (existing) {
-        // Update the existing issue with fresh state data
-        db.prepare(`
-          UPDATE reconciliation_issues SET
-            severity           = ?,
-            actual_states      = ?,
-            detected_at        = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(
-          conflict.severity,
-          JSON.stringify(conflict.actualStates),
-          existing.id,
-        );
-        newIssueIds.push(existing.id);
-        log.debug('Updated existing reconciliation issue', { issueId: existing.id, domain: conflict.conflictDomain });
-      } else {
-        const issueId = randomUUID();
-        db.prepare(`
-          INSERT INTO reconciliation_issues (
-            id, case_id, tenant_id,
-            entity_type, entity_id, conflict_domain,
-            severity, status,
-            conflicting_systems, expected_state, actual_states,
-            source_of_truth_system, detected_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
-        `).run(
-          issueId,
-          payload.caseId,
-          tenantId,
-          conflict.entityType,
-          conflict.entityId,
-          conflict.conflictDomain,
-          conflict.severity,
-          JSON.stringify(conflict.conflictingSystems),
-          conflict.expectedState,
-          JSON.stringify(conflict.actualStates),
-          conflict.sourceOfTruth,
-          conflict.detectedBy,
-        );
-
-        newIssueIds.push(issueId);
-
-        // Flag the entity itself
-        flagEntity(db, conflict.entityType, conflict.entityId, conflict.conflictDomain);
-
-        log.info('New reconciliation issue created', {
-          issueId,
-          domain:   conflict.conflictDomain,
-          severity: conflict.severity,
-          entity:   `${conflict.entityType}:${conflict.entityId}`,
-        });
-      }
-    }
-
-    // ── 8. Update case conflict summary ──────────────────────────────────
-    const openIssues = db.prepare(`
-      SELECT severity FROM reconciliation_issues
-      WHERE case_id = ? AND status = 'open'
-    `).all(payload.caseId) as any[];
-
-    const hasConflicts = openIssues.length > 0;
-    const topSeverity  = worstSeverity(openIssues.map(i => i.severity));
-
-    db.prepare(`
-      UPDATE cases SET
-        has_reconciliation_conflicts = ?,
-        conflict_severity            = ?,
-        updated_at                   = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(hasConflicts ? 1 : 0, topSeverity ?? null, payload.caseId);
-  });
-
-  persist();
-
-  log.info('Reconciliation complete', {
-    conflicts:  allConflicts.length,
-    newIssues:  newIssueIds.length,
-  });
-
-  // Alert on critical/high conflicts
-  const criticalConflicts = allConflicts.filter(c => c.severity === 'critical' || c.severity === 'high');
-  if (criticalConflicts.length > 0) {
-    log.warn('High-severity conflicts detected', {
-      count:   criticalConflicts.length,
-      domains: [...new Set(criticalConflicts.map(c => c.conflictDomain))],
+  for (const conflict of allConflicts) {
+    const issueId = await caseRepo.upsertReconciliationIssue(scope, {
+      id: randomUUID(),
+      case_id: payload.caseId,
+      tenant_id: scope.tenantId,
+      entity_type: conflict.entityType,
+      entity_id: conflict.entityId,
+      conflict_domain: conflict.conflictDomain,
+      severity: conflict.severity,
+      status: 'open',
+      conflicting_systems: conflict.conflictingSystems,
+      expected_state: conflict.expectedState,
+      actual_states: conflict.actualStates,
+      source_of_truth_system: conflict.sourceOfTruth,
+      detected_by: conflict.detectedBy,
     });
+
+    newIssueIds.push(issueId);
+
+    // Flag the entity itself
+    await commerceRepo.flagEntityConflict(scope, conflict.entityType, conflict.entityId, `Conflict in ${conflict.conflictDomain} domain`);
   }
 
-  // ── 9. Enqueue resolution planning if there are open issues ─────────────
+  // ── 4. Update case conflict summary ──────────────────────────────────────
+  const openIssues = await caseRepo.getOpenReconciliationIssues(scope, payload.caseId);
+  const hasConflicts = openIssues.length > 0;
+  const topSeverity = worstSeverity(openIssues.map(i => i.severity));
+
+  await caseRepo.updateConflictState(scope, payload.caseId, hasConflicts, topSeverity);
+
+  log.info('Reconciliation complete', {
+    conflicts: allConflicts.length,
+    newIssues: newIssueIds.length,
+  });
+
+  // ── 5. Enqueue resolution planning if needed ──────────────────────────────
   if (newIssueIds.length > 0) {
     enqueue(
       JobType.RESOLUTION_PLAN,
       { caseId: payload.caseId, reconciliationIssueIds: newIssueIds },
-      { tenantId, workspaceId: ctx.workspaceId ?? 'ws_default', traceId: ctx.traceId, priority: 6 },
+      { tenantId: scope.tenantId, workspaceId: scope.workspaceId, traceId: ctx.traceId, priority: 6 },
     );
-    log.debug('Enqueued RESOLUTION_PLAN', { issueCount: newIssueIds.length });
 
-    // Fire agent chain for conflict analysis
     triggerAgents('conflicts_detected', payload.caseId, {
-      tenantId,
-      workspaceId: ctx.workspaceId ?? 'ws_default',
+      tenantId: scope.tenantId,
+      workspaceId: scope.workspaceId,
       traceId: ctx.traceId,
       priority: 7,
       context: { issueIds: newIssueIds },
@@ -496,29 +364,9 @@ async function handleReconcileCase(
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function flagEntity(db: any, entityType: string, entityId: string, domain: string): void {
-  const conflictText = `Conflict in ${domain} domain`;
-  if (entityType === 'order') {
-    db.prepare(`
-      UPDATE orders SET has_conflict = 1, conflict_detected = ? WHERE id = ?
-    `).run(conflictText, entityId);
-  } else if (entityType === 'payment') {
-    db.prepare(`
-      UPDATE payments SET has_conflict = 1, conflict_detected = ? WHERE id = ?
-    `).run(conflictText, entityId);
-  } else if (entityType === 'return') {
-    db.prepare(`
-      UPDATE returns SET has_conflict = 1, conflict_detected = ? WHERE id = ?
-    `).run(conflictText, entityId);
-  }
-}
-
-const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
-
 function worstSeverity(severities: string[]): string | null {
   if (severities.length === 0) return null;
+  const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
   return severities.reduce((worst, s) =>
     (SEVERITY_RANK[s] ?? 0) > (SEVERITY_RANK[worst] ?? 0) ? s : worst
   );

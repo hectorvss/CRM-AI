@@ -195,14 +195,31 @@ class SupabaseWorkflowRepository implements WorkflowRepository {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('workflow_definitions')
-      .select('*, workflow_versions!workflow_definitions_current_version_id_fkey(status, version_number, trigger, nodes, edges)')
+      .select('*')
       .eq('tenant_id', tenantId)
       .eq('workspace_id', workspaceId)
       .order('updated_at', { ascending: false });
     
     if (error) throw error;
-    return (data || []).map(d => {
-      const v = d.workflow_versions;
+
+    const currentVersionIds = (data || [])
+      .map((definition: any) => definition.current_version_id)
+      .filter(Boolean);
+    const versionsById = new Map<string, any>();
+
+    if (currentVersionIds.length > 0) {
+      const { data: versions, error: versionsError } = await supabase
+        .from('workflow_versions')
+        .select('id, status, version_number, trigger, nodes, edges')
+        .in('id', currentVersionIds);
+      if (versionsError) throw versionsError;
+      for (const version of versions || []) {
+        versionsById.set(version.id, version);
+      }
+    }
+
+    return (data || []).map((d: any) => {
+      const v = d.current_version_id ? versionsById.get(d.current_version_id) : null;
       return {
         ...d,
         version_status: v?.status,

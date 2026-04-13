@@ -39,6 +39,13 @@ export async function pingSupabase(): Promise<{ ok: boolean; error?: string | nu
 
   try {
     const client = getSupabaseAdmin();
+    console.log('--- SUPABASE TABLE CHECK START ---');
+    const { data: ws, error: wsErr } = await client.from('workspaces').select('id').limit(1);
+    console.log('Workspaces check:', { count: ws?.length, error: wsErr?.message });
+    const { data: cust, error: custErr } = await client.from('customers').select('id').limit(1);
+    console.log('Customers check:', { count: cust?.length, error: custErr?.message });
+    console.log('--- SUPABASE TABLE CHECK END ---');
+
     const { error } = await client.from('workspaces').select('id').limit(1);
     if (error) {
       return { ok: false, error: error.message };

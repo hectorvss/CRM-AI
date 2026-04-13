@@ -16,7 +16,7 @@
 
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
+import { createIntegrationRepository } from '../data/integrations.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
@@ -36,7 +36,7 @@ const SUPPORTED_TOPICS = new Set([
   'customers/create',
 ]);
 
-shopifyWebhookRouter.post('/', (req: Request, res: Response) => {
+shopifyWebhookRouter.post('/', async (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
   const headers = req.headers as Record<string, string>;
 
@@ -77,49 +77,48 @@ shopifyWebhookRouter.post('/', (req: Request, res: Response) => {
 
   // ── 3. Deduplication ───────────────────────────────────────────────────────
   const dedupeKey = webhookId ?? `shopify_${topic}_${Date.now()}`;
-  const db        = getDb();
-
-  const existing = db.prepare(
-    'SELECT id FROM webhook_events WHERE dedupe_key = ?'
-  ).get(dedupeKey);
-
-  if (existing) {
-    logger.debug('Shopify webhook: duplicate, ignoring', { dedupeKey, topic });
-    res.status(200).send('ok');
-    return;
-  }
-
-  // ── 4. Persist raw event ───────────────────────────────────────────────────
-  const eventId = randomUUID();
+  const integrationRepo = createIntegrationRepository();
 
   try {
-    db.prepare(`
-      INSERT INTO webhook_events
-        (id, tenant_id, source_system, event_type, raw_payload,
-         received_at, status, dedupe_key)
-      VALUES (?, 'org_default', 'shopify', ?, ?, CURRENT_TIMESTAMP, 'received', ?)
-    `).run(eventId, topic, rawBody, dedupeKey);
-  } catch (err) {
-    logger.error('Shopify webhook: failed to persist event', err, { topic });
-    // Still respond 200 to avoid Shopify retrying and flooding logs
-    res.status(200).send('ok');
-    return;
-  }
+    const existing = await integrationRepo.getWebhookEventByDedupeKey(dedupeKey);
 
-  // ── 5. Respond immediately ─────────────────────────────────────────────────
-  res.status(200).send('ok');
+    if (existing) {
+      logger.debug('Shopify webhook: duplicate, ignoring', { dedupeKey, topic });
+      res.status(200).send('ok');
+      return;
+    }
 
-  // ── 6. Enqueue for background processing ──────────────────────────────────
-  try {
-    enqueue(JobType.WEBHOOK_PROCESS, {
-      webhookEventId: eventId,
-      source:         'shopify',
-      rawBody,
-      headers,
+    // ── 4. Persist raw event ───────────────────────────────────────────────────
+    const eventId = randomUUID();
+
+    await integrationRepo.createWebhookEvent({
+      id: eventId,
+      tenantId: 'org_default',
+      sourceSystem: 'shopify',
+      eventType: topic,
+      rawPayload: rawBody,
+      status: 'received',
+      dedupeKey
     });
-    logger.info('Shopify webhook enqueued', { eventId, topic, shopDomain });
-  } catch (err) {
-    logger.error('Shopify webhook: failed to enqueue job', err, { eventId, topic });
-    // Event is persisted — a recovery sweep can re-enqueue it later
+
+    // ── 5. Respond immediately ─────────────────────────────────────────────────
+    res.status(200).send('ok');
+
+    // ── 6. Enqueue for background processing ──────────────────────────────────
+    try {
+      enqueue(JobType.WEBHOOK_PROCESS, {
+        webhookEventId: eventId,
+        source:         'shopify',
+        rawBody,
+        headers,
+      });
+      logger.info('Shopify webhook enqueued', { eventId, topic, shopDomain });
+    } catch (err) {
+      logger.error('Shopify webhook: failed to enqueue job', err, { eventId, topic });
+      // Event is persisted — a recovery sweep can re-enqueue it later
+    }
+  } catch (error) {
+    logger.error('Shopify webhook: failed to process at root', error, { topic });
+    res.status(200).send('ok'); // Acknowledge to Shopify anyway
   }
 });

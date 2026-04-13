@@ -96,7 +96,11 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
 
   log.info('Generating draft reply', { tone });
 
-  const contextWindow = buildContextWindow(payload.caseId, tenantId);
+  const contextWindow = await buildContextWindow(payload.caseId, tenantId);
+  if (!contextWindow) {
+    log.warn('No context window available for draft reply');
+    return;
+  }
   const composerAgent = db.prepare(`
     SELECT av.knowledge_profile
     FROM agents a

@@ -16,7 +16,8 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../../db/client.js';
+import { createIntegrationRepository } from '../../data/integrations.js';
+import { createCanonicalRepository } from '../../data/canonical.js';
 import { enqueue } from '../client.js';
 import { JobType } from '../types.js';
 import { logger } from '../../utils/logger.js';
@@ -110,12 +111,11 @@ async function handleWebhookProcess(
     traceId:        ctx.traceId,
   });
 
-  const db = getDb();
+  const integrationRepo = createIntegrationRepository();
+  const canonicalRepo   = createCanonicalRepository();
 
   // ── 1. Load raw webhook event ────────────────────────────────────────────
-  const webhookRow = db.prepare(
-    'SELECT * FROM webhook_events WHERE id = ?'
-  ).get(payload.webhookEventId) as any;
+  const webhookRow = await integrationRepo.getWebhookEvent(payload.webhookEventId);
 
   if (!webhookRow) {
     log.warn('Webhook event not found in DB — may have been deleted');
@@ -130,12 +130,10 @@ async function handleWebhookProcess(
   // ── 2. Parse payload ─────────────────────────────────────────────────────
   let parsedBody: Record<string, any>;
   try {
-    parsedBody = JSON.parse(payload.rawBody);
+    parsedBody = JSON.parse(webhookRow.raw_payload || payload.rawBody);
   } catch {
-    log.warn('Webhook has invalid JSON body — marking as processed to avoid loop');
-    db.prepare(
-      "UPDATE webhook_events SET status = 'failed', processed_at = CURRENT_TIMESTAMP WHERE id = ?"
-    ).run(payload.webhookEventId);
+    log.warn('Webhook has invalid JSON body — marking as failed to avoid loop');
+    await integrationRepo.updateWebhookEventStatus(payload.webhookEventId, 'failed');
     return;
   }
 
@@ -169,10 +167,9 @@ async function handleWebhookProcess(
     `${payload.source}:${topic}:${extraction.entityId ?? randomUUID()}`;
 
   let canonicalEventId: string;
+  const scope = { tenantId: ctx.tenantId || 'org_default', workspaceId: ctx.workspaceId || 'ws_default' };
 
-  const existing = db.prepare(
-    'SELECT id FROM canonical_events WHERE dedupe_key = ?'
-  ).get(canonicalDedupeKey) as any;
+  const existing = await canonicalRepo.getEventByDedupeKey(scope, canonicalDedupeKey);
 
   if (existing) {
     canonicalEventId = existing.id;
@@ -180,35 +177,24 @@ async function handleWebhookProcess(
   } else {
     canonicalEventId = randomUUID();
 
-    db.prepare(`
-      INSERT INTO canonical_events (
-        id, dedupe_key, tenant_id, workspace_id,
-        source_system, source_entity_type, source_entity_id,
-        event_type, event_category, occurred_at,
-        normalized_payload, status
-      ) VALUES (
-        ?, ?, 'org_default', 'ws_default',
-        ?, ?, ?,
-        ?, ?, ?,
-        ?, 'received'
-      )
-    `).run(
-      canonicalEventId,
-      canonicalDedupeKey,
-      payload.source,
-      extraction.entityType,
-      extraction.entityId ?? 'unknown',
-      topic,
-      extraction.eventCategory,
+    await canonicalRepo.createEvent(scope, {
+      id: canonicalEventId,
+      dedupeKey: canonicalDedupeKey,
+      sourceSystem: payload.source,
+      sourceEntityType: extraction.entityType,
+      sourceEntityId: extraction.entityId || 'unknown',
+      eventType: topic,
+      eventCategory: extraction.eventCategory,
       occurredAt,
-      JSON.stringify({
+      normalizedPayload: JSON.stringify({
         rawEventId:  payload.webhookEventId,
         source:      payload.source,
         topic,
         entityType:  extraction.entityType,
         entityId:    extraction.entityId,
       }),
-    );
+      status: 'received'
+    });
 
     log.info('Canonical event created', {
       canonicalEventId,
@@ -219,12 +205,7 @@ async function handleWebhookProcess(
   }
 
   // ── 6. Mark webhook_event as processed ───────────────────────────────────
-  db.prepare(`
-    UPDATE webhook_events
-    SET status = 'processed', processed_at = CURRENT_TIMESTAMP,
-        canonical_event_id = ?
-    WHERE id = ?
-  `).run(canonicalEventId, payload.webhookEventId);
+  await integrationRepo.updateWebhookEventStatus(payload.webhookEventId, 'processed', canonicalEventId);
 
   // ── 7. Enqueue CANONICALIZE job ───────────────────────────────────────────
   enqueue(

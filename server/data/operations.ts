@@ -20,6 +20,16 @@ export interface OperationsRepository {
   updateWebhookStatus(scope: OperationsScope, id: string, status: string): Promise<void>;
   listCanonicalEvents(scope: OperationsScope, limit?: number): Promise<any[]>;
   listAgentRuns(scope: OperationsScope, limit?: number): Promise<any[]>;
+  logAudit(scope: OperationsScope, params: {
+    actorId: string;
+    actorType?: 'human' | 'system';
+    action: string;
+    entityType?: string;
+    entityId?: string;
+    oldValue?: any;
+    newValue?: any;
+    metadata?: any;
+  }): Promise<void>;
 }
 
 async function getOverviewSupabase(scope: OperationsScope) {
@@ -254,6 +264,24 @@ export function createOperationsRepository(): OperationsRepository {
       updateWebhookStatus: updateWebhookStatusSupabase,
       listCanonicalEvents: listCanonicalEventsSupabase,
       listAgentRuns: listAgentRunsSupabase,
+      logAudit: async (scope, params) => {
+        const supabase = getSupabaseAdmin();
+        const id = crypto.randomUUID();
+        const { error } = await supabase.from('audit_events').insert({
+          id,
+          tenant_id: scope.tenantId,
+          workspace_id: scope.workspaceId,
+          actor_id: params.actorId,
+          actor_type: params.actorType ?? 'human',
+          action: params.action,
+          entity_type: params.entityType,
+          entity_id: params.entityId,
+          old_value: params.oldValue,
+          new_value: params.newValue,
+          metadata: params.metadata ?? {}
+        });
+        if (error) throw error;
+      }
     };
   }
 
@@ -267,5 +295,19 @@ export function createOperationsRepository(): OperationsRepository {
     updateWebhookStatus: async (scope, id, status) => updateWebhookStatusSqlite(scope, id, status),
     listCanonicalEvents: async (scope, limit) => listCanonicalEventsSqlite(scope, limit),
     listAgentRuns: async (scope, limit) => listAgentRunsSqlite(scope, limit),
+    logAudit: async (scope, params) => {
+      const db = getDb();
+      const id = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO audit_events 
+        (id, tenant_id, workspace_id, actor_id, actor_type, action, entity_type, entity_id, old_value, new_value, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, scope.tenantId, scope.workspaceId, params.actorId, params.actorType ?? 'human', params.action, params.entityType, params.entityId,
+        params.oldValue ? JSON.stringify(params.oldValue) : null,
+        params.newValue ? JSON.stringify(params.newValue) : null,
+        params.metadata ? JSON.stringify(params.metadata) : '{}'
+      );
+    }
   };
 }

@@ -16,7 +16,9 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
+import { createCommerceRepository } from '../data/commerce.js';
+import { createCustomerRepository } from '../data/customers.js';
+import { createCanonicalRepository } from '../data/canonical.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
@@ -30,174 +32,6 @@ import type {
   CanonicalFulfillment,
 } from '../integrations/types.js';
 
-// ── Upsert helpers ────────────────────────────────────────────────────────────
-
-function upsertOrder(order: CanonicalOrder, tenantId: string, workspaceId: string): string {
-  const db = getDb();
-
-  // Check if we already have a record by external_order_id + source
-  const existing = db.prepare(`
-    SELECT id FROM orders
-    WHERE external_order_id = ? AND tenant_id = ?
-  `).get(order.externalId, tenantId) as any;
-
-  const systemStates = JSON.stringify({
-    canonical:   order.status,
-    [order.source]: order.status,
-  });
-
-  const badges = JSON.stringify(
-    order.tags.filter(t => ['high_risk', 'vip', 'dispute'].includes(t))
-  );
-
-  if (existing) {
-    db.prepare(`
-      UPDATE orders SET
-        status         = ?,
-        fulfillment_status = ?,
-        shipping_address = ?,
-        system_states  = ?,
-        total_amount   = ?,
-        currency       = ?,
-        last_sync_at   = CURRENT_TIMESTAMP,
-        updated_at     = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(
-      order.status,
-      order.fulfillmentStatus,
-      order.shippingAddress ? JSON.stringify(order.shippingAddress) : null,
-      systemStates,
-      order.totalAmount,
-      order.currency,
-      existing.id,
-    );
-
-    return existing.id;
-  }
-
-  const id = randomUUID();
-  db.prepare(`
-    INSERT INTO orders (
-      id, external_order_id, tenant_id, workspace_id,
-      status, fulfillment_status, shipping_address, system_states, total_amount, currency,
-      order_date, badges, last_sync_at, created_at, updated_at
-    ) VALUES (
-      ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?,
-      ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    )
-  `).run(
-    id, order.externalId, tenantId, workspaceId,
-    order.status,
-    order.fulfillmentStatus,
-    order.shippingAddress ? JSON.stringify(order.shippingAddress) : null,
-    systemStates,
-    order.totalAmount,
-    order.currency,
-    order.createdAt, badges,
-  );
-
-  return id;
-}
-
-function upsertPayment(payment: CanonicalPayment, tenantId: string): string {
-  const db = getDb();
-
-  const existing = db.prepare(`
-    SELECT id FROM payments
-    WHERE external_payment_id = ? AND tenant_id = ?
-  `).get(payment.externalId, tenantId) as any;
-
-  const systemStates = JSON.stringify({
-    canonical:      payment.status,
-    [payment.source]: payment.status,
-  });
-
-  if (existing) {
-    db.prepare(`
-      UPDATE payments SET
-        status         = ?,
-        system_states  = ?,
-        refund_amount  = ?,
-        updated_at     = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(payment.status, systemStates, payment.amountRefunded, existing.id);
-
-    return existing.id;
-  }
-
-  const id = randomUUID();
-  db.prepare(`
-    INSERT INTO payments (
-      id, external_payment_id, tenant_id,
-      amount, currency, payment_method, psp,
-      status, system_states,
-      refund_amount, dispute_id,
-      created_at, updated_at
-    ) VALUES (
-      ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?,
-      ?, ?,
-      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    )
-  `).run(
-    id, payment.externalId, tenantId,
-    payment.amount, payment.currency, payment.paymentMethod ?? 'card', payment.source,
-    payment.status, systemStates,
-    payment.amountRefunded, payment.disputeId,
-  );
-
-  return id;
-}
-
-function upsertCustomer(customer: CanonicalCustomer, tenantId: string, workspaceId: string): string {
-  const db = getDb();
-
-  // First check linked_identities for an existing mapping
-  const linked = db.prepare(`
-    SELECT customer_id FROM linked_identities
-    WHERE system = ? AND external_id = ?
-  `).get(customer.source, customer.externalId) as any;
-
-  if (linked) {
-    // Update canonical fields
-    db.prepare(`
-      UPDATE customers SET
-        canonical_name  = COALESCE(?, canonical_name),
-        canonical_email = COALESCE(?, canonical_email),
-        updated_at      = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(customer.displayName, customer.email, linked.customer_id);
-
-    return linked.customer_id;
-  }
-
-  // No existing mapping — create new customer + linked identity
-  const id = randomUUID();
-  db.prepare(`
-    INSERT INTO customers (
-      id, tenant_id, workspace_id,
-      canonical_email, canonical_name,
-      segment, risk_level,
-      created_at, updated_at
-    ) VALUES (
-      ?, ?, ?,
-      ?, ?,
-      'regular', 'low',
-      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    )
-  `).run(id, tenantId, workspaceId, customer.email, customer.displayName);
-
-  db.prepare(`
-    INSERT OR IGNORE INTO linked_identities
-      (id, customer_id, system, external_id, confidence, verified)
-    VALUES (?, ?, ?, ?, 1.0, 1)
-  `).run(randomUUID(), id, customer.source, customer.externalId);
-
-  return id;
-}
-
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 async function handleCanonicalize(
@@ -210,12 +44,13 @@ async function handleCanonicalize(
     traceId:         ctx.traceId,
   });
 
-  const db = getDb();
+  const commerceRepo  = createCommerceRepository();
+  const customerRepo  = createCustomerRepository();
+  const canonicalRepo = createCanonicalRepository();
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
-  const event = db.prepare(
-    'SELECT * FROM canonical_events WHERE id = ?'
-  ).get(payload.canonicalEventId) as any;
+  const scope = { tenantId: ctx.tenantId || 'org_default', workspaceId: ctx.workspaceId || 'ws_default' };
+  const event = await canonicalRepo.getEventById(scope, payload.canonicalEventId);
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -248,18 +83,16 @@ async function handleCanonicalize(
         log.warn('Shopify adapter not available, skipping fetch');
       } else if (event.source_entity_type === 'order' && event.source_entity_id !== 'unknown') {
         const order = await shopify.getOrder(event.source_entity_id);
-        localEntityId = upsertOrder(order, tenantId, workspaceId);
+        localEntityId = await commerceRepo.upsertOrder(scope, order);
         log.info('Order upserted', { localEntityId, externalId: order.externalId });
 
         // Also upsert customer if present
         if (order.customerExternalId) {
           try {
             const customer = await shopify.getCustomer(order.customerExternalId);
-            const customerId = upsertCustomer(customer, tenantId, workspaceId);
+            const customerId = await customerRepo.upsertCustomer(scope, customer);
             // Link order to customer
-            db.prepare(
-              'UPDATE orders SET customer_id = ? WHERE id = ?'
-            ).run(customerId, localEntityId);
+            await commerceRepo.updateOrder(scope, localEntityId, { customer_id: customerId });
           } catch {
             // Non-fatal: customer fetch failed
           }
@@ -267,7 +100,7 @@ async function handleCanonicalize(
 
       } else if (event.source_entity_type === 'customer' && event.source_entity_id !== 'unknown') {
         const customer = await shopify.getCustomer(event.source_entity_id);
-        localEntityId = upsertCustomer(customer, tenantId, workspaceId);
+        localEntityId = await customerRepo.upsertCustomer(scope, customer);
         log.info('Customer upserted', { localEntityId });
       }
 
@@ -281,7 +114,7 @@ async function handleCanonicalize(
         event.source_entity_id !== 'unknown'
       ) {
         const payment = await stripe.getPayment(event.source_entity_id);
-        localEntityId = upsertPayment(payment, tenantId);
+        localEntityId = await commerceRepo.upsertPayment(scope, payment);
         log.info('Payment upserted', { localEntityId, externalId: payment.externalId });
       }
     }
@@ -294,18 +127,11 @@ async function handleCanonicalize(
   }
 
   // ── 3. Update canonical_event ────────────────────────────────────────────
-  db.prepare(`
-    UPDATE canonical_events
-    SET status               = 'canonicalized',
-        canonical_entity_type = ?,
-        canonical_entity_id  = ?,
-        processed_at         = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(
-    event.source_entity_type,
-    localEntityId ?? event.source_entity_id,
-    payload.canonicalEventId,
-  );
+  await canonicalRepo.updateEventStatus(scope, payload.canonicalEventId, {
+    status:               'canonicalized',
+    canonical_entity_type: event.source_entity_type,
+    canonical_entity_id:   localEntityId ?? event.source_entity_id,
+  });
 
   // ── 4. Enqueue INTENT_ROUTE ──────────────────────────────────────────────
   enqueue(

@@ -13,7 +13,7 @@
  * Gemini is only used inside the individual agent implementations.
  */
 
-import { getDb } from '../db/client.js';
+import { createCaseRepository } from '../data/cases.js';
 import { logger } from '../utils/logger.js';
 import { runAgent } from './runner.js';
 import { broadcastSSE } from '../routes/sse.js';
@@ -57,7 +57,7 @@ const ROUTING_TABLE: Record<TriggerEvent, string[]> = {
 
   conflicts_detected: [
     'shopify-connector',            // read latest Shopify state
-    'stripe-connector',             // read latest Stripe state
+    'stripe-connector',             // read latest Shopify state
     'oms-erp-agent',                // verify back-office consistency
     'returns-agent',                // check return lifecycle state
     'subscription-agent',           // check subscription state if relevant
@@ -115,10 +115,8 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
   });
 
   // ── Check case still exists and is actionable ─────────────────────────────
-  const db = getDb();
-  const caseRow = db.prepare(
-    'SELECT id, status, tenant_id FROM cases WHERE id = ? AND tenant_id = ?'
-  ).get(caseId, resolvedTenantId) as { id: string; status: string; tenant_id: string } | undefined;
+  const caseRepo = createCaseRepository();
+  const caseRow = await caseRepo.get({ tenantId: resolvedTenantId, workspaceId: resolvedWorkspaceId }, caseId);
 
   if (!caseRow) {
     logger.warn('Case not found for AGENT_TRIGGER — skipping', { caseId, tenantId: resolvedTenantId });

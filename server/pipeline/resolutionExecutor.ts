@@ -29,7 +29,10 @@
  */
 
 import { randomUUID }            from 'crypto';
-import { getDb }                 from '../db/client.js';
+import { createCaseRepository } from '../data/cases.js';
+import { createResolutionRepository } from '../data/resolution.js';
+import { createReconciliationRepository } from '../data/reconciliation.js';
+import { createCommerceRepository } from '../data/commerce.js';
 import { integrationRegistry }   from '../integrations/registry.js';
 import { enqueue }               from '../queue/client.js';
 import { triggerAgents }         from '../agents/orchestrator.js';
@@ -91,31 +94,26 @@ async function executeStep(step: any, ctx: StepContext): Promise<{ success: bool
       }
 
       case 'shopify/update_order_status': {
-        const db = getDb();
-        db.prepare(`
-          UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-        `).run(params.status, params.order_id);
+        const commerceRepo = createCommerceRepository();
+        await commerceRepo.updateOrder(ctx, params.order_id, { status: params.status });
         return { success: true, response: { updated: true } };
       }
 
       // ── Internal actions ────────────────────────────────────────────────
       case 'internal/update_case_status': {
-        const db  = getDb();
-        const now = new Date().toISOString();
-        db.prepare(`
-          UPDATE cases SET
-            status          = ?,
-            resolution_state = 'resolved',
-            updated_at       = ?
-          WHERE id = ?
-        `).run(params.status ?? 'resolved', now, ctx.caseId);
+        const caseRepo = createCaseRepository();
+        await caseRepo.update(ctx, ctx.caseId, {
+          status:          params.status ?? 'resolved',
+          resolution_state: 'resolved',
+        });
 
-        db.prepare(`
-          INSERT INTO case_status_history
-            (id, case_id, from_status, to_status, changed_by, changed_by_type, reason, tenant_id)
-          SELECT ?, id, status, ?, 'resolution_executor', 'system', ?, ?
-          FROM cases WHERE id = ?
-        `).run(randomUUID(), params.status ?? 'resolved', params.resolution_note ?? 'Resolved by automation', ctx.tenantId, ctx.caseId);
+        await caseRepo.addStatusHistory(ctx, {
+          caseId:          ctx.caseId,
+          fromStatus:      'unknown',
+          toStatus:        params.status ?? 'resolved',
+          changedBy:       'resolution_executor',
+          reason:          params.resolution_note ?? 'Resolved by automation',
+        });
 
         return { success: true, response: { status: params.status } };
       }
@@ -135,13 +133,10 @@ async function executeStep(step: any, ctx: StepContext): Promise<{ success: bool
       }
 
       case 'internal/flag_for_review': {
-        const db = getDb();
-        db.prepare(`
-          UPDATE cases SET
-            priority   = 'high',
-            updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(ctx.caseId);
+        const caseRepo = createCaseRepository();
+        await caseRepo.update(ctx, ctx.caseId, {
+          priority: 'high',
+        });
         logger.warn('Case flagged for manual review by executor', {
           caseId: ctx.caseId,
           reason: params.reason,
@@ -150,16 +145,21 @@ async function executeStep(step: any, ctx: StepContext): Promise<{ success: bool
       }
 
       case 'internal/close_reconciliation': {
-        const db  = getDb();
-        const now = new Date().toISOString();
-        db.prepare(`
-          UPDATE reconciliation_issues
-          SET status = 'resolved', resolved_at = ?
-          WHERE case_id = ? AND status = 'open'
-        `).run(now, ctx.caseId);
-        db.prepare(`
-          UPDATE cases SET has_reconciliation_conflicts = 0 WHERE id = ?
-        `).run(ctx.caseId);
+        const reconciliationRepo = createReconciliationRepository();
+        const caseRepo = createCaseRepository();
+        
+        // This is a bit specific, might need a specialized method in ReconciliationRepository if it grows
+        // For now, updateIssue is by ID. We might need updateIssuesByCase.
+        // Let's assume the repository has listIssues.
+        const issues = await reconciliationRepo.listIssues(ctx, { case_id: ctx.caseId, status: 'open' });
+        for (const issue of issues) {
+          await reconciliationRepo.updateIssue(ctx, issue.id, {
+            status: 'resolved',
+            resolved_at: new Date().toISOString(),
+          });
+        }
+        
+        await caseRepo.update(ctx, ctx.caseId, { has_reconciliation_conflicts: 0 });
         return { success: true, response: { resolved: true } };
       }
 
@@ -188,12 +188,14 @@ async function handleResolutionExecute(
     traceId:        ctx.traceId,
   });
 
-  const db          = getDb();
-  const tenantId    = ctx.tenantId    ?? 'org_default';
-  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const resolutionRepo = createResolutionRepository();
+  const caseRepo = createCaseRepository();
+  const reconciliationRepo = createReconciliationRepository();
+  
+  const scope = { tenantId: ctx.tenantId || 'org_default', workspaceId: ctx.workspaceId || 'ws_default' };
 
   // ── 1. Load plan ──────────────────────────────────────────────────────────
-  const plan = db.prepare('SELECT * FROM execution_plans WHERE id = ?').get(payload.executionPlanId) as any;
+  const plan = await resolutionRepo.getPlan(scope, payload.executionPlanId);
   if (!plan) {
     log.warn('Execution plan not found');
     return;
@@ -204,25 +206,22 @@ async function handleResolutionExecute(
     return;
   }
 
-  const steps: any[] = JSON.parse(plan.steps || '[]');
+  const steps: any[] = plan.steps || [];
   if (steps.length === 0) {
     log.info('Plan has no steps, marking complete');
-    db.prepare('UPDATE execution_plans SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run('completed', plan.id);
+    await resolutionRepo.updatePlan(scope, plan.id, { status: 'completed', completed_at: new Date().toISOString() });
     return;
   }
 
   const stepCtx: StepContext = {
     caseId:      plan.case_id,
-    tenantId,
-    workspaceId,
+    tenantId:    scope.tenantId,
+    workspaceId: scope.workspaceId,
     traceId:     ctx.traceId,
   };
 
   // ── 2. Mark plan as running ───────────────────────────────────────────────
-  db.prepare(`
-    UPDATE execution_plans SET status = 'running', started_at = CURRENT_TIMESTAMP WHERE id = ?
-  `).run(plan.id);
+  await resolutionRepo.updatePlan(scope, plan.id, { status: 'running', started_at: new Date().toISOString() });
 
   log.info('Executing resolution plan', { stepCount: steps.length, mode: payload.mode });
 
@@ -239,9 +238,7 @@ async function handleResolutionExecute(
 
     // Check idempotency: was this step already attempted successfully?
     const idempotencyKey = `plan_${plan.id}_step_${step.id}`;
-    const priorAttempt = db.prepare(`
-      SELECT status FROM tool_action_attempts WHERE idempotency_key = ? LIMIT 1
-    `).get(idempotencyKey) as any;
+    const priorAttempt = await resolutionRepo.getAttemptByIdempotencyKey(scope, idempotencyKey);
 
     if (priorAttempt?.status === 'success') {
       log.debug('Step idempotency check: already succeeded', { stepId: step.id });
@@ -260,42 +257,31 @@ async function handleResolutionExecute(
     const startedAt = new Date().toISOString();
 
     // Record attempt start
-    db.prepare(`
-      INSERT INTO tool_action_attempts (
-        id, execution_plan_id, step_id, tenant_id,
-        tool, action, params, idempotency_key,
-        status, request_payload, started_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)
-    `).run(
-      attemptId, plan.id, step.id, tenantId,
-      step.tool, step.action,
-      JSON.stringify(step.params),
-      idempotencyKey,
-      JSON.stringify(step.params),
-      startedAt,
-    );
+    await resolutionRepo.createActionAttempt(scope, {
+      id: attemptId,
+      execution_plan_id: plan.id,
+      step_id: step.id,
+      tool: step.tool,
+      action: step.action,
+      params: step.params,
+      idempotency_key: idempotencyKey,
+      status: 'running',
+      request_payload: step.params,
+      started_at: startedAt,
+    });
 
     const result = await executeStep(step, stepCtx);
     const endedAt = new Date().toISOString();
     const durationMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
 
     // Update attempt record
-    db.prepare(`
-      UPDATE tool_action_attempts SET
-        status           = ?,
-        response_payload = ?,
-        error_message    = ?,
-        ended_at         = ?,
-        duration_ms      = ?
-      WHERE id = ?
-    `).run(
-      result.success ? 'success' : 'failed',
-      JSON.stringify(result.response),
-      result.error ?? null,
-      endedAt,
-      durationMs,
-      attemptId,
-    );
+    await resolutionRepo.updateActionAttempt(scope, attemptId, {
+      status:           result.success ? 'success' : 'failed',
+      response_payload: result.response,
+      error_message:    result.error ?? null,
+      ended_at:         endedAt,
+      duration_ms:      durationMs,
+    });
 
     if (result.success) {
       steps[i] = { ...step, status: 'done' };
@@ -313,56 +299,46 @@ async function handleResolutionExecute(
   }
 
   // ── 4. Persist updated step statuses ─────────────────────────────────────
-  db.prepare('UPDATE execution_plans SET steps = ? WHERE id = ?')
-    .run(JSON.stringify(steps), plan.id);
+  await resolutionRepo.updatePlan(scope, plan.id, { steps });
 
   if (failedStepIndex === -1) {
     // All steps succeeded
-    db.prepare(`
-      UPDATE execution_plans SET
-        status       = 'completed',
-        completed_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(plan.id);
+    await resolutionRepo.updatePlan(scope, plan.id, {
+      status:       'completed',
+      completed_at: new Date().toISOString(),
+    });
 
-    db.prepare(`
-      UPDATE cases SET
-        resolution_state = 'resolved',
-        execution_state  = 'completed',
-        updated_at       = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(plan.case_id);
+    await caseRepo.update(scope, plan.case_id, {
+      resolution_state: 'resolved',
+      execution_state:  'completed',
+    });
 
     log.info('Execution plan completed successfully');
 
     // Close all open reconciliation issues
-    db.prepare(`
-      UPDATE reconciliation_issues
-      SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP
-      WHERE case_id = ? AND status = 'open'
-    `).run(plan.case_id);
+    const issues = await reconciliationRepo.listIssues(scope, { case_id: plan.case_id, status: 'open' });
+    for (const issue of issues) {
+      await reconciliationRepo.updateIssue(scope, issue.id, {
+        status: 'resolved',
+        resolved_at: new Date().toISOString(),
+      });
+    }
 
-    db.prepare(`
-      UPDATE cases SET has_reconciliation_conflicts = 0 WHERE id = ?
-    `).run(plan.case_id);
+    await caseRepo.update(scope, plan.case_id, { has_reconciliation_conflicts: 0 });
 
     // Fire agent chain: QA check + report generation + audit log on resolution
     triggerAgents('case_resolved', plan.case_id, {
-      tenantId,
-      workspaceId,
-      traceId: ctx.traceId,
-      priority: 8,
+      tenantId:     scope.tenantId,
+      workspaceId:  scope.workspaceId,
+      traceId:      ctx.traceId,
+      priority:     8,
     });
 
   } else {
     // A step failed
-    db.prepare(`
-      UPDATE execution_plans SET status = 'failed' WHERE id = ?
-    `).run(plan.id);
+    await resolutionRepo.updatePlan(scope, plan.id, { status: 'failed' });
 
-    db.prepare(`
-      UPDATE cases SET execution_state = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(plan.case_id);
+    await caseRepo.update(scope, plan.case_id, { execution_state: 'failed' });
 
     // Can we roll back? Only if all completed steps are rollbackable
     const completedSteps = steps.slice(0, failedStepIndex).filter(s => s.status === 'done');
@@ -372,13 +348,12 @@ async function handleResolutionExecute(
       enqueue(
         JobType.RESOLUTION_ROLLBACK,
         { executionPlanId: plan.id, reason: `Step ${steps[failedStepIndex].action} failed` },
-        { tenantId, workspaceId, traceId: ctx.traceId, priority: 2 },
+        { tenantId: scope.tenantId, workspaceId: scope.workspaceId, traceId: ctx.traceId, priority: 2 },
       );
       log.info('Enqueued RESOLUTION_ROLLBACK', { completedSteps: completedSteps.length });
     } else {
       // Flag for manual review
-      db.prepare('UPDATE cases SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run('urgent', plan.case_id);
+      await caseRepo.update(scope, plan.case_id, { priority: 'urgent' });
       log.warn('Execution failed and rollback not possible — case flagged as urgent');
     }
   }

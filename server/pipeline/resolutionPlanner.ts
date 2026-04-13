@@ -261,7 +261,11 @@ async function handleResolutionPlan(
   log.info('Generating resolution plan', { issueCount: issues.length });
 
   // ── 3. Build context for Gemini ───────────────────────────────────────────
-  const contextWindow = buildContextWindow(payload.caseId, tenantId);
+  const contextWindow = await buildContextWindow(payload.caseId, tenantId);
+  if (!contextWindow) {
+    log.warn('No context window available for resolution planning');
+    return;
+  }
   const contextStr    = contextWindow.toPromptString();
 
   const issuesSummary = issues.map(i =>
@@ -373,7 +377,7 @@ async function handleResolutionPlan(
       UPDATE execution_plans SET status = 'approved' WHERE id = ?
     `).run(planId);
 
-    enqueue(
+    await enqueue(
       JobType.RESOLUTION_EXECUTE,
       { executionPlanId: planId, mode: 'ai' },
       { tenantId, workspaceId, traceId: ctx.traceId, priority: 7 },

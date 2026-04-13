@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { getSupabaseStatus, isSupabaseConfigured, pingSupabase } from './supabase.js';
+import { logger } from '../utils/logger.js';
 
 export type DatabaseProvider = 'sqlite' | 'supabase';
 
@@ -31,7 +32,9 @@ export function assertDatabaseProviderReady() {
 
 export async function getDatabaseConnectivityStatus() {
   if (config.db.provider === 'supabase') {
+    logger.info('Pinging Supabase...');
     const ping = await pingSupabase();
+    logger.info('Supabase ping result', { ping });
     return {
       provider: 'supabase' as const,
       ...getSupabaseStatus(),

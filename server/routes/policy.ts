@@ -130,10 +130,8 @@ router.post('/evaluate', requirePermission('approvals.read'), async (req: MultiT
     );
 
     const auditRepo = createAuditRepository();
-    await auditRepo.logAudit({
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
-      actorId: req.userId || 'system',
+    await auditRepo.logEvent({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
+        actorId: req.userId || 'system',
       action: 'POLICY_EVALUATED',
       entityType: 'policy_evaluation',
       entityId: evaluationId,
@@ -249,16 +247,14 @@ router.post('/evaluate-and-route', requirePermission('cases.write'), async (req:
         expires_at: expiresAt.toISOString(),
       });
 
-      await caseRepo.update(caseId, scope, {
+      await caseRepo.update(scope, caseId, {
         approval_state: 'pending',
         active_approval_request_id: approvalId,
         status: ['new', 'open', 'waiting', 'in_review'].includes(bundle.case.status) ? 'pending_approval' : bundle.case.status,
         updated_at: new Date().toISOString()
       });
 
-      await auditRepo.logAudit({
-        tenantId: req.tenantId!,
-        workspaceId: req.workspaceId!,
+      await auditRepo.logEvent({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
         actorId: req.userId || 'system',
         action: 'POLICY_APPROVAL_REQUEST_CREATED',
         entityType: 'approval_request',
@@ -273,10 +269,8 @@ router.post('/evaluate-and-route', requirePermission('cases.write'), async (req:
       });
     }
 
-    await auditRepo.logAudit({
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
-      actorId: req.userId || 'system',
+    await auditRepo.logEvent({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
+        actorId: req.userId || 'system',
       action: 'POLICY_EVALUATED',
       entityType: 'policy_evaluation',
       entityId: evaluationId,
@@ -350,4 +344,4 @@ export default router;
 
 
 
-export default router;
+
