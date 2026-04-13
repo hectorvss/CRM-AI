@@ -64,16 +64,29 @@ import './agents/orchestrator.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
 
-mkdirSync(DATA_DIR, { recursive: true });
+const isServerlessRuntime = Boolean(process.env.VERCEL);
+
+if (!isServerlessRuntime) {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+  } catch (err) {
+    logger.warn('Failed to create DATA_DIR', { error: err });
+  }
+}
 
 // ── Database Readiness ────────────────────────────────────
-assertDatabaseProviderReady();
+try {
+  assertDatabaseProviderReady();
+} catch (err: any) {
+  logger.error('Database configuration check failed', { error: err.message });
+  if (!isServerlessRuntime) process.exit(1);
+}
 
 // ── Database Initialization ───────────────────────────────
 if (config.db.provider === 'sqlite') {
-  runMigrations();
-  seedAgents(getDb(), 'org_default');
-  seedDatabase();
+  if (!isServerlessRuntime) runMigrations();
+  if (!isServerlessRuntime) seedAgents(getDb(), 'org_default');
+  if (!isServerlessRuntime) seedDatabase();
 } else {
   logger.info('Running in Supabase mode — Skipping local SQLite migrations and seeding.');
 }
@@ -151,7 +164,8 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────
-const isServerlessRuntime = Boolean(process.env.VERCEL);
+// Already defined above for early use
+
 let server: ReturnType<typeof app.listen> | null = null;
 
 if (!isServerlessRuntime) {

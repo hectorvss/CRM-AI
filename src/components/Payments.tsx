@@ -688,7 +688,7 @@ export default function Payments() {
                       <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
                     </button>
                     <div className="space-y-2 mt-2">
-                      <a href={`https://dashboard.stripe.com/search?query=${encodeURIComponent(selectedPayment.paymentId)}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
+                      <a href={`https://dashboard.stripe.com/search?query=${encodeURIComponent(selectedPayment?.paymentId || '')}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
                         Payment Gateway (PSP)
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
                       </a>
@@ -696,7 +696,7 @@ export default function Payments() {
                         Order Management System (OMS)
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
                       </a>
-                      <a href={`https://reconcile.example.local/payments/${encodeURIComponent(selectedPayment.paymentId)}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
+                      <a href={`https://reconcile.example.local/payments/${encodeURIComponent(selectedPayment?.paymentId || '')}`} target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all">
                         Reconciliation Tool
                         <span className="material-symbols-outlined text-sm">open_in_new</span>
                       </a>
