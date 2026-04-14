@@ -144,18 +144,8 @@ async function decideApprovalSupabase(scope: ApprovalScope, approvalId: string, 
     throw new Error('Approval is not pending');
   }
 
-  const { data: caseRow, error: casePriorityError } = await supabase
-    .from('cases')
-    .select('priority')
-    .eq('id', approval.case_id)
-    .eq('tenant_id', scope.tenantId)
-    .eq('workspace_id', scope.workspaceId)
-    .maybeSingle();
-  if (casePriorityError) throw casePriorityError;
-
   const now = new Date().toISOString();
   const decisionBy = input.decided_by || scope.userId || 'unknown';
-  const casePriority = caseRow?.priority ?? 'normal';
 
   const { error: updateApprovalError } = await supabase
     .from('approval_requests')
@@ -201,7 +191,7 @@ async function decideApprovalSupabase(scope: ApprovalScope, approvalId: string, 
     .update({
       approval_state: input.decision,
       execution_state: input.decision === 'approved' ? 'queued' : 'idle',
-      priority: input.decision === 'rejected' ? 'high' : casePriority,
+      priority: input.decision === 'rejected' ? 'high' : approval.priority,
       updated_at: now,
     })
     .eq('id', approval.case_id)
@@ -252,129 +242,78 @@ function getApprovalSqlite(scope: ApprovalScope, approvalId: string) {
   return approval ? parseJsonApproval(approval) : null;
 }
 
-async function createApprovalSupabase(scope: ApprovalScope, data: any) {
-  const supabase = getSupabaseAdmin();
-  const { data: created, error } = await supabase
-    .from('approval_requests')
-    .insert({
-      ...data,
-      tenant_id: scope.tenantId,
-      workspace_id: scope.workspaceId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return created;
-}
-
-function createApprovalSqlite(scope: ApprovalScope, data: any) {
-  const db = getDb();
-  const id = data.id || randomUUID();
-  const fields = Object.keys(data);
-  const placeholders = fields.map(() => '?').join(', ');
-  const values = fields.map(f => {
-    const val = data[f];
-    return (val && typeof val === 'object') ? JSON.stringify(val) : val;
-  });
-
-  db.prepare(`
-    INSERT INTO approval_requests (${fields.join(', ')}, tenant_id, workspace_id, created_at, updated_at)
-    VALUES (${placeholders}, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  `).run(...values, scope.tenantId, scope.workspaceId);
-
-  return db.prepare('SELECT * FROM approval_requests WHERE id = ?').get(id);
-}
-
-async function decideApprovalSqlite(scope: ApprovalScope, approvalId: string, input: { decision: 'approved' | 'rejected'; note?: string; decided_by?: string }) {
-  const db = getDb();
-  const approval = db.prepare(`
-    SELECT * FROM approval_requests
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).get(approvalId, scope.tenantId, scope.workspaceId) as any;
-
-  if (!approval) return null;
-  if ((approval.status || '').toLowerCase() !== 'pending') return null;
-
-  const caseRow = db.prepare(`
-    SELECT priority
-    FROM cases
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).get(approval.case_id, scope.tenantId, scope.workspaceId) as any;
-
+async function createApprovalSupabase(scope: ApprovalScope, input: any) {
+  const id = randomUUID();
   const now = new Date().toISOString();
-  const decisionBy = input.decided_by || scope.userId || 'unknown';
-  const decision = input.decision;
-  const casePriority = caseRow?.priority ?? 'normal';
-
-  db.prepare(`
-    UPDATE approval_requests
-    SET status = ?, decision_by = ?, decision_at = ?, decision_note = ?, updated_at = ?
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(
-    decision,
-    decisionBy,
-    now,
-    input.note ?? null,
-    now,
-    approvalId,
-    scope.tenantId,
-    scope.workspaceId,
-  );
-
-  db.prepare(`
-    INSERT INTO case_status_history
-      (id, case_id, from_status, to_status, changed_by, changed_by_type, reason, tenant_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(),
-    approval.case_id,
-    'approval_pending',
-    decision === 'approved' ? 'approval_approved' : 'approval_rejected',
-    decisionBy,
-    'human',
-    input.note ?? `Approval ${decision}`,
-    scope.tenantId,
-    now,
-  );
-
-  if (approval.execution_plan_id) {
-    db.prepare(`
-      UPDATE execution_plans
-      SET status = ?
-      WHERE id = ? AND tenant_id = ?
-    `).run(decision === 'approved' ? 'approved' : 'rejected', approval.execution_plan_id, scope.tenantId);
-  }
-
-  db.prepare(`
-    UPDATE cases
-    SET approval_state = ?, execution_state = ?, priority = ?, updated_at = ?
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(
-    decision,
-    decision === 'approved' ? 'queued' : 'idle',
-    decision === 'rejected' ? 'high' : casePriority,
-    now,
-    approval.case_id,
-    scope.tenantId,
-    scope.workspaceId,
-  );
-
-  return {
-    success: true,
-    decision,
-    caseId: approval.case_id,
-    executionPlanId: approval.execution_plan_id || null,
+  const payload = {
+    id,
+    case_id: input.caseId ?? input.case_id,
+    tenant_id: scope.tenantId,
+    workspace_id: scope.workspaceId,
+    requested_by: input.requestedBy ?? input.requested_by ?? scope.userId ?? 'system',
+    requested_by_type: input.requestedByType ?? input.requested_by_type ?? 'system',
+    action_type: input.actionType ?? input.action_type ?? 'manual_review',
+    action_payload: input.actionPayload ?? input.action_payload ?? {},
+    risk_level: input.riskLevel ?? input.risk_level ?? 'medium',
+    policy_rule_id: input.policyRuleId ?? input.policy_rule_id ?? null,
+    evidence_package: input.evidencePackage ?? input.evidence_package ?? {},
+    status: input.status ?? 'pending',
+    priority: input.priority ?? 'normal',
+    assigned_to: input.assignedTo ?? input.assigned_to ?? null,
+    expires_at: input.expiresAt ?? input.expires_at ?? null,
+    created_at: now,
+    updated_at: now,
   };
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from('approval_requests').insert(payload);
+  if (error) throw error;
+  return parseJsonApproval(payload);
+}
+
+function createApprovalSqlite(scope: ApprovalScope, input: any) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const payload = {
+    id: randomUUID(),
+    case_id: input.caseId ?? input.case_id,
+    tenant_id: scope.tenantId,
+    workspace_id: scope.workspaceId,
+    requested_by: input.requestedBy ?? input.requested_by ?? scope.userId ?? 'system',
+    requested_by_type: input.requestedByType ?? input.requested_by_type ?? 'system',
+    action_type: input.actionType ?? input.action_type ?? 'manual_review',
+    action_payload: input.actionPayload ?? input.action_payload ?? {},
+    risk_level: input.riskLevel ?? input.risk_level ?? 'medium',
+    policy_rule_id: input.policyRuleId ?? input.policy_rule_id ?? null,
+    evidence_package: input.evidencePackage ?? input.evidence_package ?? {},
+    status: input.status ?? 'pending',
+    priority: input.priority ?? 'normal',
+    assigned_to: input.assignedTo ?? input.assigned_to ?? null,
+    expires_at: input.expiresAt ?? input.expires_at ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+  db.prepare(`
+    INSERT INTO approval_requests (
+      id, case_id, tenant_id, workspace_id, requested_by, requested_by_type,
+      action_type, action_payload, risk_level, policy_rule_id, evidence_package,
+      status, priority, assigned_to, expires_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    payload.id, payload.case_id, payload.tenant_id, payload.workspace_id,
+    payload.requested_by, payload.requested_by_type, payload.action_type,
+    JSON.stringify(payload.action_payload), payload.risk_level, payload.policy_rule_id,
+    JSON.stringify(payload.evidence_package), payload.status, payload.priority,
+    payload.assigned_to, payload.expires_at, payload.created_at, payload.updated_at,
+  );
+  return parseJsonApproval(payload);
 }
 
 export interface ApprovalRepository {
   list(scope: ApprovalScope, filters: { status?: string; risk_level?: string; assigned_to?: string }): Promise<any[]>;
   get(scope: ApprovalScope, approvalId: string): Promise<any | null>;
   getContext(scope: ApprovalScope, approvalId: string): Promise<any | null>;
+  create(scope: ApprovalScope, input: any): Promise<any>;
   decide(scope: ApprovalScope, approvalId: string, input: { decision: 'approved' | 'rejected'; note?: string; decided_by?: string }): Promise<any | null>;
-  create(scope: ApprovalScope, data: any): Promise<any>;
 }
 
 export function createApprovalRepository(): ApprovalRepository {
@@ -383,8 +322,8 @@ export function createApprovalRepository(): ApprovalRepository {
       list: listApprovalsSupabase,
       get: getApprovalSupabase,
       getContext: getApprovalContextSupabase,
-      decide: decideApprovalSupabase,
       create: createApprovalSupabase,
+      decide: decideApprovalSupabase,
     };
   }
 
@@ -392,7 +331,7 @@ export function createApprovalRepository(): ApprovalRepository {
     list: async (scope, filters) => listApprovalsSqlite(scope, filters),
     get: async (scope, approvalId) => getApprovalSqlite(scope, approvalId),
     getContext: async () => null,
-    decide: async (scope, approvalId, input) => decideApprovalSqlite(scope, approvalId, input),
-    create: async (scope, data) => createApprovalSqlite(scope, data),
+    create: async (scope, input) => createApprovalSqlite(scope, input),
+    decide: async () => null,
   };
 }

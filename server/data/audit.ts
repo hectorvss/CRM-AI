@@ -22,11 +22,29 @@ export interface AuditEvent {
 
 export interface AuditRepository {
   logEvent(scope: AuditScope, event: AuditEvent): Promise<void>;
+  log(scopeOrEvent: AuditScope | (Partial<AuditEvent> & AuditScope), event?: Partial<AuditEvent>): Promise<void>;
   listByEntity(scope: AuditScope, entityType: string, entityId: string): Promise<any[]>;
   listByWorkspace(scope: AuditScope, limit?: number): Promise<any[]>;
 }
 
 class SQLiteAuditRepository implements AuditRepository {
+  async log(scopeOrEvent: AuditScope | (Partial<AuditEvent> & AuditScope), event?: Partial<AuditEvent>) {
+    const scope = event
+      ? scopeOrEvent as AuditScope
+      : { tenantId: (scopeOrEvent as any).tenantId, workspaceId: (scopeOrEvent as any).workspaceId };
+    const payload = event ?? {
+      actorId: (scopeOrEvent as any).actorId ?? 'system',
+      actorType: (scopeOrEvent as any).actorType,
+      action: (scopeOrEvent as any).action,
+      entityType: (scopeOrEvent as any).entityType,
+      entityId: (scopeOrEvent as any).entityId,
+      oldValue: (scopeOrEvent as any).oldValue,
+      newValue: (scopeOrEvent as any).newValue,
+      metadata: (scopeOrEvent as any).metadata,
+    };
+    await this.logEvent(scope, { actorId: 'system', ...payload } as AuditEvent);
+  }
+
   async logEvent(scope: AuditScope, event: AuditEvent) {
     const db = getDb();
     const id = crypto.randomUUID();
@@ -65,6 +83,23 @@ class SQLiteAuditRepository implements AuditRepository {
 }
 
 class SupabaseAuditRepository implements AuditRepository {
+  async log(scopeOrEvent: AuditScope | (Partial<AuditEvent> & AuditScope), event?: Partial<AuditEvent>) {
+    const scope = event
+      ? scopeOrEvent as AuditScope
+      : { tenantId: (scopeOrEvent as any).tenantId, workspaceId: (scopeOrEvent as any).workspaceId };
+    const payload = event ?? {
+      actorId: (scopeOrEvent as any).actorId ?? 'system',
+      actorType: (scopeOrEvent as any).actorType,
+      action: (scopeOrEvent as any).action,
+      entityType: (scopeOrEvent as any).entityType,
+      entityId: (scopeOrEvent as any).entityId,
+      oldValue: (scopeOrEvent as any).oldValue,
+      newValue: (scopeOrEvent as any).newValue,
+      metadata: (scopeOrEvent as any).metadata,
+    };
+    await this.logEvent(scope, { actorId: 'system', ...payload } as AuditEvent);
+  }
+
   async logEvent(scope: AuditScope, event: AuditEvent) {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.from('audit_events').insert({

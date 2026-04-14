@@ -1,31 +1,29 @@
 import { Router } from 'express';
-import { randomUUID } from 'crypto';
+import crypto from 'crypto';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { createWorkflowRepository } from '../data/workflows.js';
-import { createAuditRepository } from '../data/audit.js';
-import { sendError } from '../http/errors.js';
+import { createWorkflowRepository, createAuditRepository } from '../data/index.js';
 
 const router = Router();
+const workflowRepository = createWorkflowRepository();
+const auditRepository = createAuditRepository();
+
 router.use(extractMultiTenant);
 
-// GET /api/workflows
 router.get('/', async (req: MultiTenantRequest, res) => {
   try {
-    const workflowRepo = createWorkflowRepository();
     const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
-    
-    const workflows = await workflowRepo.listDefinitions(tenantId, workspaceId);
+    const wfs = await workflowRepository.listDefinitions(tenantId, workspaceId);
 
-    const enriched = await Promise.all(workflows.map(async (wf) => {
-      const metrics = await workflowRepo.getMetrics(wf.id, tenantId);
+    const enriched = await Promise.all(wfs.map(async (workflow: any) => {
+      const metrics = await workflowRepository.getMetrics(workflow.id, tenantId);
       const health_status =
         metrics.failed > 0 ? 'warning'
-        : wf.version_status === 'draft' ? 'needs_setup'
+        : workflow.version_status === 'draft' ? 'needs_setup'
         : 'active';
 
       return {
-        ...wf,
+        ...workflow,
         metrics,
         health_status,
         health_message: health_status === 'warning' ? 'Recent workflow failures detected' : undefined,
@@ -35,21 +33,17 @@ router.get('/', async (req: MultiTenantRequest, res) => {
 
     res.json(enriched);
   } catch (error) {
-    console.error('Error listing workflows:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list workflows');
+    console.error('Error fetching workflows:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST /api/workflows
 router.post('/', async (req: MultiTenantRequest, res) => {
   try {
-    const workflowRepo = createWorkflowRepository();
-    const auditRepo = createAuditRepository();
     const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
-    const workflowId = randomUUID();
-    const versionId = randomUUID();
-    
+    const workflowId = crypto.randomUUID();
+    const versionId = crypto.randomUUID();
     const {
       name = 'New workflow draft',
       description = 'Draft workflow created from template',
@@ -58,7 +52,7 @@ router.post('/', async (req: MultiTenantRequest, res) => {
       trigger = { type: 'manual' },
     } = req.body ?? {};
 
-    await workflowRepo.createDefinition({
+    await workflowRepository.createDefinition({
       id: workflowId,
       tenantId,
       workspaceId,
@@ -68,7 +62,7 @@ router.post('/', async (req: MultiTenantRequest, res) => {
       createdBy: req.userId ?? 'system',
     });
 
-    await workflowRepo.createVersion({
+    await workflowRepository.createVersion({
       id: versionId,
       workflowId,
       versionNumber: 1,
@@ -79,11 +73,10 @@ router.post('/', async (req: MultiTenantRequest, res) => {
       tenantId,
     });
 
-    const workflow = await workflowRepo.getDefinition(workflowId, tenantId, workspaceId);
-    const version = await workflowRepo.getVersion(versionId);
-    const metrics = await workflowRepo.getMetrics(workflowId, tenantId);
+    const workflow = await workflowRepository.getDefinition(workflowId, tenantId, workspaceId);
+    const version = await workflowRepository.getVersion(versionId);
 
-    await auditRepo.logEvent({ tenantId, workspaceId }, {
+    await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',
       action: 'WORKFLOW_CREATED',
       entityType: 'workflow',
@@ -94,186 +87,160 @@ router.post('/', async (req: MultiTenantRequest, res) => {
     res.status(201).json({
       ...workflow,
       current_version: version,
-      metrics,
+      metrics: await workflowRepository.getMetrics(workflowId, tenantId),
     });
   } catch (error) {
     console.error('Error creating workflow:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create workflow');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/workflows/runs/recent
 router.get('/runs/recent', async (req: MultiTenantRequest, res) => {
   try {
-    const workflowRepo = createWorkflowRepository();
-    const runs = await workflowRepo.listRecentRuns(req.tenantId!);
+    const runs = await workflowRepository.listRecentRuns(req.tenantId!);
     res.json(runs);
   } catch (error) {
     console.error('Error fetching recent runs:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch recent runs');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/workflows/:id
 router.get('/:id', async (req: MultiTenantRequest, res) => {
   try {
-    const workflowRepo = createWorkflowRepository();
     const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
-    
-    const wf = await workflowRepo.getDefinition(req.params.id, tenantId, workspaceId);
-    if (!wf) return sendError(res, 404, 'WORKFLOW_NOT_FOUND', 'Workflow not found');
+    const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
 
-    const versions = await workflowRepo.listVersions(wf.id);
-    const runs = await workflowRepo.listRunsByWorkflow(wf.id, tenantId);
-    const currentVersion = wf.current_version_id 
-      ? await workflowRepo.getVersion(wf.current_version_id)
-      : await workflowRepo.getLatestVersion(wf.id);
-    const metrics = await workflowRepo.getMetrics(wf.id, tenantId);
+    const versions = await workflowRepository.listVersions(wf.id);
+    const runs = await workflowRepository.listRunsByWorkflow(wf.id, tenantId);
+    const currentVersion = await (wf.current_version_id 
+      ? workflowRepository.getVersion(wf.current_version_id) 
+      : workflowRepository.getLatestVersion(wf.id));
 
     res.json({
       ...wf,
       current_version: currentVersion,
       versions,
       recent_runs: runs,
-      metrics,
+      metrics: await workflowRepository.getMetrics(wf.id, tenantId),
     });
   } catch (error) {
     console.error('Error fetching workflow:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch workflow');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// PUT /api/workflows/:id
 router.put('/:id', async (req: MultiTenantRequest, res) => {
   try {
-    const workflowRepo = createWorkflowRepository();
-    const auditRepo = createAuditRepository();
     const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
-    
-    const wf = await workflowRepo.getDefinition(req.params.id, tenantId, workspaceId);
-    if (!wf) return sendError(res, 404, 'WORKFLOW_NOT_FOUND', 'Workflow not found');
+    const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
 
-    const currentVersion = wf.current_version_id 
-      ? await workflowRepo.getVersion(wf.current_version_id)
-      : await workflowRepo.getLatestVersion(wf.id);
-    
+    const currentVersion = await (wf.current_version_id 
+      ? workflowRepository.getVersion(wf.current_version_id) 
+      : workflowRepository.getLatestVersion(wf.id));
+
     const nextVersionNumber = currentVersion ? Number(currentVersion.version_number || 0) + 1 : 1;
-    const isCurrentlyDraft = currentVersion?.status === 'draft';
-    const draftId = isCurrentlyDraft ? currentVersion.id : randomUUID();
-
+    const draftId = currentVersion?.status === 'draft' ? currentVersion.id : crypto.randomUUID();
+    
     const updates = {
-      name: req.body.name ?? wf.name,
-      description: req.body.description ?? wf.description,
-    };
-
-    const versionUpdates = {
       nodes: req.body.nodes ?? currentVersion?.nodes ?? [],
       edges: req.body.edges ?? currentVersion?.edges ?? [],
       trigger: req.body.trigger ?? currentVersion?.trigger ?? {},
-      status: 'draft',
     };
 
-    await workflowRepo.updateDefinition(wf.id, tenantId, workspaceId, updates);
+    await workflowRepository.updateDefinition(wf.id, tenantId, workspaceId, {
+      name: req.body.name ?? wf.name,
+      description: req.body.description ?? wf.description,
+    });
 
-    if (isCurrentlyDraft) {
-      await workflowRepo.updateVersion(draftId, versionUpdates);
+    if (currentVersion?.status === 'draft') {
+      await workflowRepository.updateVersion(draftId, updates);
     } else {
-      await workflowRepo.createVersion({
+      await workflowRepository.createVersion({
         id: draftId,
         workflowId: wf.id,
         versionNumber: nextVersionNumber,
         status: 'draft',
-        nodes: versionUpdates.nodes,
-        edges: versionUpdates.edges,
-        trigger: versionUpdates.trigger,
+        ...updates,
         tenantId,
       });
     }
 
-    const updatedWorkflow = await workflowRepo.getDefinition(wf.id, tenantId, workspaceId);
-    const draftVersion = await workflowRepo.getVersion(draftId);
-    const metrics = await workflowRepo.getMetrics(wf.id, tenantId);
+    const draftVersion = await workflowRepository.getVersion(draftId);
 
-    await auditRepo.logEvent({ tenantId, workspaceId }, {
+    await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',
       action: 'WORKFLOW_DRAFT_UPDATED',
       entityType: 'workflow',
       entityId: wf.id,
       oldValue: { workflow: wf, version: currentVersion },
-      newValue: { workflow: updatedWorkflow, version: draftVersion },
+      newValue: { workflow: { ...wf, ...req.body }, version: draftVersion },
     });
 
     res.json({
-      ...updatedWorkflow,
+      ...wf,
+      name: req.body.name ?? wf.name,
+      description: req.body.description ?? wf.description,
       current_version: draftVersion,
-      metrics,
+      metrics: await workflowRepository.getMetrics(wf.id, tenantId),
     });
   } catch (error) {
     console.error('Error updating workflow:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to update workflow');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST /api/workflows/:id/publish
 router.post('/:id/publish', async (req: MultiTenantRequest, res) => {
   try {
-    const workflowRepo = createWorkflowRepository();
-    const auditRepo = createAuditRepository();
     const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
-    
-    const wf = await workflowRepo.getDefinition(req.params.id, tenantId, workspaceId);
-    if (!wf) return sendError(res, 404, 'WORKFLOW_NOT_FOUND', 'Workflow not found');
+    const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
 
-    // Get the latest draft version
-    const versions = await workflowRepo.listVersions(wf.id);
+    const versions = await workflowRepository.listVersions(wf.id);
     const draftVersion = versions.find(v => v.status === 'draft');
 
     if (!draftVersion) {
-      return sendError(res, 400, 'NO_DRAFT_VERSION', 'No draft version available to publish');
+      return res.status(400).json({ error: 'No draft version available to publish' });
     }
 
     const now = new Date().toISOString();
-    
-    // Archive current published version if exists
     if (wf.current_version_id && wf.current_version_id !== draftVersion.id) {
-      await workflowRepo.updateVersion(wf.current_version_id, { status: 'archived' });
+      await workflowRepository.updateVersion(wf.current_version_id, { status: 'archived' });
     }
 
-    // Publish draft
-    await workflowRepo.updateVersion(draftVersion.id, {
+    await workflowRepository.updateVersion(draftVersion.id, {
       status: 'published',
       publishedBy: req.userId ?? 'system',
       publishedAt: now,
     });
 
-    // Update definition to point to new version
-    await workflowRepo.updateDefinition(wf.id, tenantId, workspaceId, {
+    await workflowRepository.updateDefinition(wf.id, tenantId, workspaceId, {
       currentVersionId: draftVersion.id,
     });
 
-    const updatedWorkflow = await workflowRepo.getDefinition(wf.id, tenantId, workspaceId);
-    const publishedVersion = await workflowRepo.getVersion(draftVersion.id);
-    const metrics = await workflowRepo.getMetrics(wf.id, tenantId);
+    const updated = await workflowRepository.getDefinition(wf.id, tenantId, workspaceId);
+    const version = await workflowRepository.getVersion(draftVersion.id);
 
-    await auditRepo.logEvent({ tenantId, workspaceId }, {
+    await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',
       action: 'WORKFLOW_PUBLISHED',
       entityType: 'workflow',
       entityId: wf.id,
-      newValue: { workflow: updatedWorkflow, version: publishedVersion },
+      newValue: { workflow: updated, version },
     });
 
     res.json({
-      ...updatedWorkflow,
-      current_version: publishedVersion,
-      metrics,
+      ...updated,
+      current_version: version,
+      metrics: await workflowRepository.getMetrics(wf.id, tenantId),
     });
   } catch (error) {
     console.error('Error publishing workflow:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to publish workflow');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

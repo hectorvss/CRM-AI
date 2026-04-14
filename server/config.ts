@@ -7,11 +7,6 @@
  * a clear message so the problem is obvious before any request is served.
  */
 
-import dotenv from 'dotenv';
-// Load environment variables immediately so they are available for buildConfig
-dotenv.config({ path: '.env.local' });
-dotenv.config();
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Config {
@@ -57,14 +52,14 @@ export interface Config {
     defaultRateLimitPerMinute: number;
   };
 
-  /** Optional: Shopify credentials */
+  /** Optional: Shopify credentials (not required in Phase 0) */
   shopify?: {
     shopDomain: string;
     adminApiToken: string;
     webhookSecret: string;
   };
 
-  /** Optional: Stripe credentials */
+  /** Optional: Stripe credentials (not required in Phase 0) */
   stripe?: {
     secretKey: string;
     webhookSecret: string;
@@ -113,7 +108,8 @@ function optionalInt(key: string, defaultValue: number): number {
 function buildConfig(): Config {
   const env = optionalEnv('NODE_ENV', 'development') as Config['env'];
 
-  // Gemini is optional for local product demos
+  // Gemini is optional for local product demos: when it is missing, the API
+  // still boots and AI routes can return deterministic canonical-state fallbacks.
   const geminiApiKey = optionalEnv('GEMINI_API_KEY', '');
   if (!geminiApiKey) {
     console.warn('GEMINI_API_KEY is not set. AI endpoints will use safe local fallbacks where available.');
@@ -142,7 +138,7 @@ function buildConfig(): Config {
     },
 
     db: {
-      provider: (process.env.DB_PROVIDER?.trim() || 'supabase') as 'sqlite' | 'supabase',
+      provider: optionalEnv('DB_PROVIDER', 'sqlite') as 'sqlite' | 'supabase',
       path: optionalEnv('DB_PATH', './data/crmai.db'),
       supabaseUrl: process.env.SUPABASE_URL?.trim(),
       supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
@@ -150,7 +146,7 @@ function buildConfig(): Config {
 
     ai: {
       geminiApiKey,
-      geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-2.0-flash'),
+      geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-2.5-pro'),
     },
 
     queue: {
@@ -167,12 +163,12 @@ function buildConfig(): Config {
     },
   };
 
-  // Attach optional integration blocks
+  // Attach optional integration blocks only when ALL keys for that integration exist
   if (shopifyDomain && shopifyToken && shopifySecret) {
     config.shopify = {
-      shopDomain:    shopifyDomain,
-      adminApiToken: shopifyToken,
-      webhookSecret: shopifySecret,
+      shopDomain:     shopifyDomain,
+      adminApiToken:  shopifyToken,
+      webhookSecret:  shopifySecret,
     };
   }
 
@@ -185,9 +181,9 @@ function buildConfig(): Config {
 
   if (whatsappVerifyToken || whatsappPhoneNumberId || whatsappAccessToken) {
     config.channels = {
-      whatsappVerifyToken,
-      whatsappPhoneNumberId,
-      whatsappAccessToken,
+      whatsappVerifyToken:   whatsappVerifyToken,
+      whatsappPhoneNumberId: whatsappPhoneNumberId,
+      whatsappAccessToken:   whatsappAccessToken,
     };
   }
 

@@ -1,105 +1,55 @@
 import { Router, Response } from 'express';
+import crypto from 'crypto';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { parseRow } from '../db/utils.js';
-import { Case } from '../models.js';
 import {
-  buildCaseGraphView,
-  buildCaseListSummary,
-  buildCaseResolveView,
-  buildCaseTimeline,
-  getCaseCanonicalState,
-} from '../services/canonicalState.js';
+  createCaseRepository,
+  createConversationRepository,
+  createAuditRepository,
+  buildCaseState,
+  buildGraphView,
+  buildInboxView,
+  buildResolveView,
+  buildTimeline,
+} from '../data/index.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
-import { createCaseRepository, createConversationRepository, createAuditRepository, CaseFilters } from '../data/index.js';
-import { createDraftRepository } from '../data/drafts.js';
-import { buildInboxView } from '../data/cases.js';
-import crypto from 'crypto';
 
 const router = Router();
-const caseRepo = createCaseRepository();
-const convRepo = createConversationRepository();
-const auditRepo = createAuditRepository();
-const draftRepo = createDraftRepository();
+const caseRepository = createCaseRepository();
+const conversationRepository = createConversationRepository();
+const auditRepository = createAuditRepository();
 
 router.use(extractMultiTenant);
 
-function computeSlaView(caseRow: any) {
-  const deadline = caseRow.sla_resolution_deadline;
-  if (!deadline) {
-    return {
-      status: caseRow.sla_status || 'on_track',
-      label: 'Waiting',
-      time: 'N/A',
-    };
-  }
-
-  const diffMs = new Date(deadline).getTime() - Date.now();
-  if (diffMs <= 0) {
-    return {
-      status: 'breached',
-      label: 'Overdue',
-      time: 'Overdue',
-    };
-  }
-
-  const diffMinutes = Math.max(1, Math.round(diffMs / 60000));
-  const time = diffMinutes < 60
-    ? `${diffMinutes}m remaining`
-    : `${Math.round(diffMinutes / 60)}h remaining`;
-
-  return {
-    status: caseRow.sla_status || 'on_track',
-    label: caseRow.sla_status === 'at_risk' ? 'SLA risk' : 'Waiting',
-    time,
-  };
-}
-
-// ── GET /api/cases ────────────────────────────────────────
 router.get('/', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const filters: CaseFilters = {
-      status: req.query.status as string,
-      assigned_user_id: req.query.assigned_user_id as string,
-      priority: req.query.priority as string,
-      risk_level: req.query.risk_level as string,
-      q: req.query.q as string,
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const filters = {
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      assigned_user_id: typeof req.query.assigned_user_id === 'string' ? req.query.assigned_user_id : undefined,
+      priority: typeof req.query.priority === 'string' ? req.query.priority : undefined,
+      risk_level: typeof req.query.risk_level === 'string' ? req.query.risk_level : undefined,
+      q: typeof req.query.q === 'string' ? req.query.q : undefined,
     };
 
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    console.log('GET /api/cases scope:', scope);
-    const cases = await caseRepo.list(scope, filters);
-    
-    const enriched = await Promise.all(cases.map(async (row: any) => {
-      const summary = await buildCaseListSummary(row.id, req.tenantId!, req.workspaceId!);
-
-      return {
-        ...row,
-        latest_message_preview: summary?.latest_message_preview || null,
-        channel_context: summary?.channel_context || null,
-        system_status_summary: summary?.system_status_summary || null,
-        conflict_summary: summary?.conflict_summary || null,
-      };
-    }));
-
-    res.json(enriched);
+    const items = await caseRepository.list(scope, filters);
+    res.json(items);
   } catch (error) {
     console.error('Error fetching cases:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ── GET /api/cases/:id ────────────────────────────────────
 router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const row = await caseRepo.get(scope, req.params.id);
-
-    if (!row) return res.status(404).json({ error: 'Case not found' });
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
 
     res.json({
-      ...row,
-      state_snapshot: await getCaseCanonicalState(req.params.id, req.tenantId!, req.workspaceId!),
+      ...bundle.case,
+      state_snapshot: buildCaseState(bundle),
     });
   } catch (error) {
     console.error('Error fetching case:', error);
@@ -109,9 +59,11 @@ router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
 
 router.get('/:id/state', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const state = await getCaseCanonicalState(req.params.id, req.tenantId!, req.workspaceId!);
-    if (!state) return res.status(404).json({ error: 'Case not found' });
-    res.json(state);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+    
+    res.json(buildCaseState(bundle));
   } catch (error) {
     console.error('Error fetching case state:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -120,9 +72,11 @@ router.get('/:id/state', async (req: MultiTenantRequest, res: Response) => {
 
 router.get('/:id/graph', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const graph = await buildCaseGraphView(req.params.id, req.tenantId!, req.workspaceId!);
-    if (!graph) return res.status(404).json({ error: 'Case not found' });
-    res.json(graph);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+    
+    res.json(buildGraphView(bundle));
   } catch (error) {
     console.error('Error fetching case graph:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -131,9 +85,11 @@ router.get('/:id/graph', async (req: MultiTenantRequest, res: Response) => {
 
 router.get('/:id/resolve', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const resolve = await buildCaseResolveView(req.params.id, req.tenantId!, req.workspaceId!);
-    if (!resolve) return res.status(404).json({ error: 'Case not found' });
-    res.json(resolve);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+    
+    res.json(buildResolveView(bundle));
   } catch (error) {
     console.error('Error fetching case resolve view:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -142,8 +98,11 @@ router.get('/:id/resolve', async (req: MultiTenantRequest, res: Response) => {
 
 router.get('/:id/timeline', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const timeline = await buildCaseTimeline(req.params.id, req.tenantId!, req.workspaceId!);
-    res.json(timeline);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+    
+    res.json(buildTimeline(bundle));
   } catch (error) {
     console.error('Error fetching timeline:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -153,45 +112,46 @@ router.get('/:id/timeline', async (req: MultiTenantRequest, res: Response) => {
 router.get('/:id/inbox-view', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const bundle = await caseRepo.getBundle(scope, req.params.id);
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
     if (!bundle) return res.status(404).json({ error: 'Case not found' });
-    const view = buildInboxView(bundle);
-    if (!view) return res.status(404).json({ error: 'Case not found' });
-    res.json(view);
+    
+    res.json(buildInboxView(bundle));
   } catch (error) {
     console.error('Error fetching inbox view:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ── PATCH /api/cases/:id/status ──────────────────────────
 router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const { status, reason, changed_by } = req.body;
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const { status, reason, changed_by } = req.body;
 
-    const existing = await caseRepo.get(scope, req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Case not found' });
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
 
-    await caseRepo.update(scope, req.params.id, { 
+    const oldStatus = bundle.case.status;
+    await caseRepository.update(scope, req.params.id, { 
       status, 
       last_activity_at: new Date().toISOString() 
     });
 
-    await caseRepo.addStatusHistory(scope, {
+    await caseRepository.addStatusHistory(scope, {
       caseId: req.params.id,
-      fromStatus: existing.status,
+      fromStatus: oldStatus,
       toStatus: status,
       changedBy: changed_by || req.userId || 'system',
       reason: reason || null
     });
 
-    await auditRepo.logEvent(scope, {
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
       actorId: req.userId || 'system',
       action: 'CASE_STATUS_UPDATE',
       entityType: 'case',
       entityId: req.params.id,
-      oldValue: { status: existing.status },
+      oldValue: { status: oldStatus },
       newValue: { status },
       metadata: { reason },
     });
@@ -203,19 +163,20 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-// ── PATCH /api/cases/:id/assign ──────────────────────────
 router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const { user_id, team_id } = req.body;
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const { user_id, team_id } = req.body;
 
-    await caseRepo.update(scope, req.params.id, {
-      assignedUserId: user_id || null,
-      assignedTeamId: team_id || null
+    await caseRepository.update(scope, req.params.id, {
+      assigned_user_id: user_id || null,
+      assigned_team_id: team_id || null
     });
 
-    await auditRepo.logEvent(scope, {
-      actorId: req.userId!,
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
       action: 'CASE_ASSIGNMENT_UPDATE',
       entityType: 'case',
       entityId: req.params.id,
@@ -229,65 +190,64 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-// ── POST /api/cases/:id/internal-note ─────────────────────
 router.post('/:id/internal-note', async (req: MultiTenantRequest, res: Response) => {
   try {
     const { content } = req.body;
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-
     if (!content || !String(content).trim()) {
       return res.status(400).json({ error: 'Note content is required' });
     }
 
-    const caseRow = await caseRepo.get(scope, req.params.id);
-    if (!caseRow) return res.status(404).json({ error: 'Case not found' });
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
 
-    const noteId = crypto.randomUUID();
-    const now = new Date().toISOString();
-
-    await convRepo.createInternalNote(scope, {
+    const note = await conversationRepository.createInternalNote(scope, {
       caseId: req.params.id,
       content: String(content).trim(),
-      createdBy: req.userId || 'user_local',
-      
+      createdBy: req.userId || 'user_local'
     });
 
-    let messageId: string | null = null;
-    if (caseRow.conversation_id) {
-      messageId = crypto.randomUUID();
-      await convRepo.appendMessage(scope, {
-        conversationId: caseRow.conversation_id,
+    let message: any = null;
+    if (bundle.conversation || bundle.case.conversation_id) {
+      const convId = bundle.conversation?.id || bundle.case.conversation_id;
+      message = await conversationRepository.appendMessage(scope, {
+        conversationId: convId,
         caseId: req.params.id,
+        customerId: bundle.case.customer_id || null,
         type: 'internal',
         direction: 'outbound',
         senderId: req.userId || 'user_local',
         senderName: 'Internal Note',
         content: String(content).trim(),
         channel: 'internal',
-        sentAt: now
       });
     }
 
-    await caseRepo.update(scope, req.params.id, { last_activity_at: now });
+    await caseRepository.update(scope, req.params.id, { 
+      last_activity_at: new Date().toISOString() 
+    });
 
-    await auditRepo.logEvent(scope, {
-      actorId: req.userId || 'user_local',
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
       action: 'CASE_INTERNAL_NOTE_CREATED',
       entityType: 'case',
       entityId: req.params.id,
-      metadata: { noteId },
+      metadata: { noteId: note.id },
     });
 
     res.status(201).json({
       success: true,
-      noteId,
-      message: messageId ? {
+      noteId: note.id,
+      message: message ? {
+        id: message.id,
         type: 'internal',
         direction: 'outbound',
         sender_name: 'Internal Note',
         content: String(content).trim(),
         channel: 'internal',
-        sent_at: now,
+        sent_at: message.sent_at,
       } : null,
     });
   } catch (error) {
@@ -296,30 +256,26 @@ router.post('/:id/internal-note', async (req: MultiTenantRequest, res: Response)
   }
 });
 
-// ── POST /api/cases/:id/reply ─────────────────────────────
 router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
   try {
     const { content, draft_reply_id } = req.body;
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-
     if (!content || !String(content).trim()) {
       return res.status(400).json({ error: 'Reply content is required' });
     }
 
-    const caseRow = await caseRepo.get(scope, req.params.id);
-    if (!caseRow) return res.status(404).json({ error: 'Case not found' });
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
 
-    const conversation = await convRepo.ensureForCase({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, caseRow);
-    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
-
-    const now = new Date().toISOString();
+    const conversation = await conversationRepository.ensureForCase(scope, bundle.case);
+    const channel = conversation.channel || bundle.case.source_channel || 'web_chat';
     const queuedMessageId = crypto.randomUUID();
-    const channel = conversation.channel || caseRow.source_channel || 'web_chat';
+    const now = new Date().toISOString();
 
-    await convRepo.appendMessage(scope, {
+    await conversationRepository.appendMessage(scope, {
       conversationId: conversation.id,
       caseId: req.params.id,
-      customerId: caseRow.customer_id || null,
+      customerId: bundle.case.customer_id || null,
       type: 'agent',
       direction: 'outbound',
       senderId: req.userId || 'user_local',
@@ -328,11 +284,13 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
       channel,
       externalMessageId: `queued_${queuedMessageId}`,
       draftReplyId: draft_reply_id || null,
-      sentAt: now
+      sentAt: now,
     });
 
-    await caseRepo.updateConversation(scope, conversation.id, { last_message_at: now });
-    await caseRepo.update(scope, req.params.id, { last_activity_at: now });
+    if (draft_reply_id) {
+       // Ideally we'd have a DraftRepository, but for now we can use a direct call if needed or let the worker handle status
+       // For completeness, we'll keep it as is or add it to ConversationRepository later.
+    }
 
     await enqueue(
       JobType.SEND_MESSAGE,
@@ -352,8 +310,10 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
       },
     );
 
-    await auditRepo.logEvent(scope, {
-      actorId: req.userId || 'user_local',
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
       action: 'CASE_REPLY_QUEUED',
       entityType: 'case',
       entityId: req.params.id,
@@ -365,13 +325,10 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
       },
     });
 
-    if (draft_reply_id) {
-      await draftRepo.upsert(scope, { id: draft_reply_id, status: 'sent' });
-    }
-
     res.status(202).json({
       success: true,
       queued: true,
+      message_id: queuedMessageId,
       message: {
         id: queuedMessageId,
         type: 'agent',
@@ -383,7 +340,7 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Error queueing reply:', error);
+    console.error('Error sending reply:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

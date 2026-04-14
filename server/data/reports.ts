@@ -62,17 +62,17 @@ async function getOverviewSupabase(scope: ReportScope, period: string) {
     { count: autoResolved },
     { count: priorAutoResolved }
   ] = await Promise.all([
-    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId),
+    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', since),
     supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', priorStart).lt('created_at', priorEnd),
-    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).in('status', ['resolved', 'closed']),
+    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', since).in('status', ['resolved', 'closed']),
     supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', priorStart).lt('created_at', priorEnd).in('status', ['resolved', 'closed']),
-    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).eq('sla_status', 'breached'),
-    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).not('sla_status', 'is', null),
+    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', since).eq('sla_status', 'breached'),
+    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', since).not('sla_status', 'is', null),
     supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', priorStart).lt('created_at', priorEnd).eq('sla_status', 'breached'),
     supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', priorStart).lt('created_at', priorEnd).not('sla_status', 'is', null),
     supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).not('status', 'in', ['resolved', 'closed', 'cancelled']),
-    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).in('risk_level', ['high', 'critical']),
-    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).eq('resolution_state', 'resolved').eq('execution_state', 'completed'),
+    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', since).in('risk_level', ['high', 'critical']),
+    supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', since).eq('resolution_state', 'resolved').eq('execution_state', 'completed'),
     supabase.from('cases').select('*', { count: 'exact', head: true }).eq('tenant_id', scope.tenantId).gte('created_at', priorStart).lt('created_at', priorEnd).eq('resolution_state', 'resolved').eq('execution_state', 'completed')
   ]);
 
@@ -144,19 +144,19 @@ function getOverviewSqlite(scope: ReportScope, period: string) {
   const priorEnd = since;
   const priorStart = new Date(new Date(since).getTime() - days * 86_400_000).toISOString();
 
-  const totalCases = (db.prepare('SELECT COUNT(*) as n FROM cases WHERE tenant_id = ?').get(scope.tenantId) as any).n;
+  const totalCases = (db.prepare('SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?').get(scope.tenantId, since) as any).n;
   const priorCases = (db.prepare('SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ?').get(scope.tenantId, priorStart, priorEnd) as any).n;
-  const resolvedCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND status IN ('resolved', 'closed')`).get(scope.tenantId) as any).n;
+  const resolvedCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND status IN ('resolved', 'closed')`).get(scope.tenantId, since) as any).n;
   const priorResolved = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ? AND status IN ('resolved', 'closed')`).get(scope.tenantId, priorStart, priorEnd) as any).n;
-  const slaBreached = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND sla_status = 'breached'`).get(scope.tenantId) as any).n;
-  const slaTotal = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND sla_status IS NOT NULL`).get(scope.tenantId) as any).n;
+  const slaBreached = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND sla_status = 'breached'`).get(scope.tenantId, since) as any).n;
+  const slaTotal = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND sla_status IS NOT NULL`).get(scope.tenantId, since) as any).n;
   const slaCompliant = slaTotal - slaBreached;
   const priorSlaBreached = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ? AND sla_status = 'breached'`).get(scope.tenantId, priorStart, priorEnd) as any).n;
   const priorSlaTotal = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ? AND sla_status IS NOT NULL`).get(scope.tenantId, priorStart, priorEnd) as any).n;
   const priorSlaCompliant = priorSlaTotal - priorSlaBreached;
   const openCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND status NOT IN ('resolved','closed','cancelled')`).get(scope.tenantId) as any).n;
-  const highRiskCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND risk_level IN ('high', 'critical')`).get(scope.tenantId) as any).n;
-  const autoResolved = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND resolution_state = 'resolved' AND execution_state = 'completed'`).get(scope.tenantId) as any).n;
+  const highRiskCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND risk_level IN ('high', 'critical')`).get(scope.tenantId, since) as any).n;
+  const autoResolved = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND resolution_state = 'resolved' AND execution_state = 'completed'`).get(scope.tenantId, since) as any).n;
   const priorAutoResolved = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ? AND resolution_state = 'resolved' AND execution_state = 'completed'`).get(scope.tenantId, priorStart, priorEnd) as any).n;
 
   return {

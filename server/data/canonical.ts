@@ -3,21 +3,12 @@ import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 
-function normalizeSqlValue(value: any): any {
-  if (value === undefined || value === null) return null;
-  if (Array.isArray(value)) return JSON.stringify(value);
-  if (typeof value === 'object' && !(value instanceof Date)) return JSON.stringify(value);
-  return value;
-}
-
 export interface CanonicalScope {
   tenantId: string;
   workspaceId: string;
 }
 
 export interface CanonicalRepository {
-  getEventById(scope: CanonicalScope, eventId: string): Promise<any>;
-
   fetchCaseGraphRows(scope: CanonicalScope, caseId: string): Promise<any>;
   findCaseByLinkedEntity(scope: CanonicalScope, entityType: string, entityId: string): Promise<any>;
   getCustomerState(scope: CanonicalScope, customerId: string): Promise<any>;
@@ -25,10 +16,7 @@ export interface CanonicalRepository {
   getInternalNotes(scope: CanonicalScope, caseId: string, limit?: number): Promise<any[]>;
   getApprovalWithContext(scope: CanonicalScope, approvalId: string): Promise<any>;
   getAuditTrail(scope: CanonicalScope, caseId: string, approvalId: string): Promise<any[]>;
-  getEventByDedupeKey(scope: CanonicalScope, dedupeKey: string): Promise<any>;
-  createEvent(scope: CanonicalScope, data: any): Promise<void>;
   updateEventStatus(scope: CanonicalScope, eventId: string, updates: any): Promise<void>;
-  updateEvent(scope: CanonicalScope, eventId: string, updates: any): Promise<void>;
 }
 
 async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string) {
@@ -40,7 +28,7 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     .select(`
       *,
       customers(*),
-      assigned_user:users!cases_assigned_user_id_fkey(name),
+      assigned_user:users(name),
       assigned_team:teams(name),
       conversations(*)
     `)
@@ -362,18 +350,19 @@ async function findCaseByLinkedEntitySupabase(scope: CanonicalScope, entityType:
     .select('id, case_number, type, status, customer_id, conversation_id')
     .eq('tenant_id', scope.tenantId)
     .eq('workspace_id', scope.workspaceId)
-    .contains(column, [entityId])
+    .filter(column, 'cs', `{"${entityId}"}`) // Assuming jsonb array contains
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) {
+    // try literal filter if it's text[]
     const { data: data2, error: error2 } = await supabase
       .from('cases')
       .select('id, case_number, type, status, customer_id, conversation_id')
       .eq('tenant_id', scope.tenantId)
       .eq('workspace_id', scope.workspaceId)
-      .filter(column, 'cs', JSON.stringify([entityId]))
+      .contains(column, [entityId])
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -467,48 +456,11 @@ export function createCanonicalRepository(): CanonicalRepository {
       getInternalNotes: getInternalNotesSupabase,
       getApprovalWithContext: getApprovalWithContextSupabase,
       getAuditTrail: getAuditTrailSupabase,
-      getEventById: async (scope, id) => {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase.from('canonical_events').select('*').eq('id', id).maybeSingle();
-        return data;
-      },
-      getEventByDedupeKey: async (scope, dedupeKey) => {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase.from('canonical_events').select('*').eq('dedupe_key', dedupeKey).maybeSingle();
-        return data;
-      },
-      createEvent: async (scope, data) => {
-        const supabase = getSupabaseAdmin();
-        const { error } = await supabase.from('canonical_events').insert({
-          id: data.id,
-          dedupe_key: data.dedupeKey,
-          tenant_id: scope.tenantId,
-          workspace_id: scope.workspaceId,
-          source_system: data.sourceSystem,
-          source_entity_type: data.sourceEntityType,
-          source_entity_id: data.sourceEntityId,
-          event_type: data.eventType,
-          event_category: data.eventCategory,
-          occurred_at: data.occurredAt,
-          normalized_payload: data.normalizedPayload,
-          status: data.status,
-          ingested_at: new Date().toISOString()
-        });
-        if (error) throw error;
-      },
       updateEventStatus: async (scope, eventId, updates) => {
         const supabase = getSupabaseAdmin();
         const { error } = await supabase
           .from('canonical_events')
           .update({ ...updates, processed_at: new Date().toISOString() })
-          .eq('id', eventId);
-        if (error) throw error;
-      },
-      updateEvent: async (scope, eventId, updates) => {
-        const supabase = getSupabaseAdmin();
-        const { error } = await supabase
-          .from('canonical_events')
-          .update(updates)
           .eq('id', eventId);
         if (error) throw error;
       }
@@ -523,48 +475,12 @@ export function createCanonicalRepository(): CanonicalRepository {
     getInternalNotes: async (scope, caseId, limit) => getInternalNotesSqlite(scope, caseId, limit),
     getApprovalWithContext: async (scope, approvalId) => getApprovalWithContextSqlite(scope, approvalId),
     getAuditTrail: async (scope, caseId, approvalId) => getAuditTrailSqlite(scope, caseId, approvalId),
-    getEventById: async (scope, id) => {
-      const db = getDb();
-      return parseRow(db.prepare('SELECT * FROM canonical_events WHERE id = ?').get(id));
-    },
-    getEventByDedupeKey: async (scope, dedupeKey) => {
-      const db = getDb();
-      return parseRow(db.prepare('SELECT * FROM canonical_events WHERE dedupe_key = ?').get(dedupeKey));
-    },
-    createEvent: async (scope, data) => {
-      const db = getDb();
-      db.prepare(`
-        INSERT INTO canonical_events (
-          id, dedupe_key, tenant_id, workspace_id,
-          source_system, source_entity_type, source_entity_id,
-          event_type, event_category, occurred_at,
-          normalized_payload, status, ingested_at
-        ) VALUES (
-          ?, ?, ?, ?,
-          ?, ?, ?,
-          ?, ?, ?,
-          ?, ?, CURRENT_TIMESTAMP
-        )
-      `).run(
-        data.id, data.dedupeKey, scope.tenantId, scope.workspaceId,
-        data.sourceSystem, data.sourceEntityType, data.sourceEntityId,
-        data.eventType, data.eventCategory, data.occurredAt,
-        data.normalizedPayload, data.status
-      );
-    },
     updateEventStatus: async (scope, eventId, updates) => {
       const db = getDb();
       const fields = Object.keys(updates).map(k => `${k} = ?`);
-      const params = Object.values(updates).map(normalizeSqlValue);
+      const params = Object.values(updates);
       params.push(eventId);
       db.prepare(`UPDATE canonical_events SET ${fields.join(', ')}, processed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
-    },
-    updateEvent: async (scope, eventId, updates) => {
-      const db = getDb();
-      const fields = Object.keys(updates).map(k => `${k} = ?`);
-      const params = Object.values(updates).map(normalizeSqlValue);
-      params.push(eventId);
-      db.prepare(`UPDATE canonical_events SET ${fields.join(', ')} WHERE id = ?`).run(...params);
     }
   };
 }

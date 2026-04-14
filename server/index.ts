@@ -45,7 +45,7 @@ import reconciliationRouter from './routes/reconciliation.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
-// ── Register job handlers ──
+// ── Register job handlers (must import to trigger side-effect registration) ──
 import './queue/handlers/webhookProcess.js';
 import './pipeline/canonicalizer.js';
 import './pipeline/channelIngest.js';
@@ -59,70 +59,45 @@ import './pipeline/draftReply.js';
 import './pipeline/messageSender.js';
 import './pipeline/slaMonitor.js';
 
+// ── Agent engine (registers AGENT_TRIGGER handler via queue/handlers/index.ts) ──
+// Importing orchestrator ensures the agentTriggerHandler is available
+// to the worker without needing a separate registration call.
 import './agents/orchestrator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
 
-const isServerlessRuntime = Boolean(process.env.VERCEL);
+mkdirSync(DATA_DIR, { recursive: true });
+assertDatabaseProviderReady();
 
-if (!isServerlessRuntime) {
-  try {
-    mkdirSync(DATA_DIR, { recursive: true });
-  } catch (err) {
-    logger.warn('Failed to create DATA_DIR', { error: err });
-  }
-}
-
-// ── Database Readiness ────────────────────────────────────
-try {
-  assertDatabaseProviderReady();
-} catch (err: any) {
-  logger.error('Database configuration check failed', { error: err.message });
-  if (!isServerlessRuntime) process.exit(1);
-}
-
-// ── Database Initialization ───────────────────────────────
-if (config.db.provider === 'sqlite') {
-  if (!isServerlessRuntime) runMigrations();
-  if (!isServerlessRuntime) seedAgents(getDb(), 'org_default');
-  if (!isServerlessRuntime) seedDatabase();
-} else {
-  logger.info('Running in Supabase mode — Skipping local SQLite migrations and seeding.');
-}
+// ── Database ──────────────────────────────────────────────
+runMigrations();
+seedAgents(getDb(), 'org_default');
+seedDatabase();
 
 // ── Integrations ──────────────────────────────────────────
+// Non-blocking: adapters that fail to init are logged but don't crash startup
 bootstrapIntegrations().catch(err => {
   logger.error('Integration bootstrap error', err);
 });
-
-// Register demo adapters in development mode
-if (config.env === 'development') {
-  // Use dynamic import to avoid issues in prod bundles if any
-  Promise.all([
-    import('./demo/scenarios.js'),
-    import('./demo/sandboxAdapters.js')
-  ]).then(([{ DEMO_SCENARIOS }, { registerDemoIntegrationAdapters }]) => {
-    registerDemoIntegrationAdapters(DEMO_SCENARIOS);
-    logger.info('Demo sandbox integration adapters registered');
-  }).catch(err => {
-    logger.error('Failed to register demo adapters', err);
-  });
-}
 
 // ── Express App ───────────────────────────────────────────
 const app = express();
 
 app.use(cors({ origin: config.server.corsOrigins, credentials: true }));
 
+// ⚠️  Webhooks MUST be mounted BEFORE express.json() so that the raw body
+//     bytes are available for HMAC signature verification.
+//     The webhook router uses its own express.raw() middleware internally.
 app.use('/webhooks', webhookRouter);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Multi-tenant context
 app.use('/api', extractMultiTenant);
 
-// Request logger
+// Request logger (replaces raw console.log)
 app.use((req, _res, next) => {
   logger.debug(`${req.method} ${req.path}`);
   next();
@@ -153,10 +128,10 @@ app.use('/api/demo', demoRouter);
 app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
 
-// ── Health check ─────────────────────────────────────────
+// ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {
   const integrationHealth = await integrationRegistry.healthCheck();
-  const queueCounts       = await countJobs();
+  const queueCounts       = countJobs();
   const worker            = workerStatus();
   const databaseStatus    = await getDatabaseConnectivityStatus();
 
@@ -178,35 +153,39 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────
-let server: ReturnType<typeof app.listen> | null = null;
-
-if (!isServerlessRuntime) {
-  server = app.listen(config.server.port, () => {
-    logger.info('CRM AI API server started', {
-      port:         config.server.port,
-      env:          config.env,
-      database:     getDatabaseProviderStatus(),
-      integrations: integrationRegistry.registeredSystems(),
-    });
+const server = app.listen(config.server.port, () => {
+  logger.info('CRM AI API server started', {
+    port:         config.server.port,
+    env:          config.env,
+    database:     getDatabaseProviderStatus(),
+    integrations: integrationRegistry.registeredSystems(),
   });
+});
 
-  startWorker();
-  startScheduledJobs();
-}
+// Start the background job worker
+startWorker();
+
+// Start recurring maintenance jobs (SLA sweeps, reconciliation sweeps)
+startScheduledJobs();
 
 // ── Graceful shutdown ─────────────────────────────────────
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received — shutting down gracefully`);
-  server?.close();
+
+  // Stop accepting new HTTP requests
+  server.close();
+
+  // Stop scheduled job intervals first
   stopScheduledJobs();
+
+  // Wait for in-flight queue jobs to finish (max 30 s)
   await stopWorker();
+
   logger.info('Shutdown complete');
   process.exit(0);
 }
 
-if (!isServerlessRuntime) {
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT',  () => shutdown('SIGINT'));
-}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 export default app;

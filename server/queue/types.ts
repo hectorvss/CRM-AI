@@ -52,6 +52,9 @@ export const JobType = {
 
   // Phase 7 — agent engine
   AGENT_TRIGGER:           'agent.trigger',            // trigger one or more agents for a case
+  AGENT_EXECUTE:           'agent.execute',            // execute a single agent ad hoc
+  AI_DIAGNOSE:             'ai.diagnose',              // queued AI diagnosis request
+  AI_DRAFT:                'ai.draft',                 // queued AI draft request
 } as const;
 
 export type JobType = typeof JobType[keyof typeof JobType];
@@ -146,6 +149,28 @@ export interface AgentTriggerPayload {
   context?: Record<string, unknown>;
 }
 
+export interface AgentExecutePayload {
+  agentId: string;
+  agentSlug: string;
+  input?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+  isTest?: boolean;
+}
+
+export interface AiDiagnosePayload {
+  caseId: string;
+  profile?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface AiDraftPayload {
+  caseId: string;
+  profile?: string;
+  agentSlug?: string;
+  tone?: string;
+  context?: Record<string, unknown>;
+}
+
 // ── Discriminated union ───────────────────────────────────────────────────────
 
 export type JobPayloadMap = {
@@ -163,6 +188,9 @@ export type JobPayloadMap = {
   [JobType.SEND_MESSAGE]:        SendMessagePayload;
   [JobType.SLA_CHECK]:           SlaCheckPayload;
   [JobType.AGENT_TRIGGER]:       AgentTriggerPayload;
+  [JobType.AGENT_EXECUTE]:       AgentExecutePayload;
+  [JobType.AI_DIAGNOSE]:         AiDiagnosePayload;
+  [JobType.AI_DRAFT]:            AiDraftPayload;
 };
 
 // ── DB row shape (as stored in the `jobs` table) ──────────────────────────────

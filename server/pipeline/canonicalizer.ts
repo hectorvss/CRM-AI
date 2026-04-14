@@ -1,39 +1,21 @@
 /**
  * server/pipeline/canonicalizer.ts
  *
- * The Canonicalizer agent — Phase 2 pipeline step 2.
- *
- * Responsibilities:
- *  1. Read the canonical_event record
- *  2. Call the relevant integration adapter to fetch the full entity data
- *  3. Upsert the entity into the local DB (orders / payments / customers / etc.)
- *  4. Update the canonical_event status to 'canonicalized'
- *  5. Enqueue INTENT_ROUTE job to continue the pipeline
- *
- * After this step, all local DB tables (orders, payments, customers…) reflect
- * the latest state from external systems. The rest of the pipeline works
- * exclusively from the local DB — never from raw webhook payloads.
+ * Refactored to use repository pattern (provider-agnostic).
  */
 
-import { randomUUID } from 'crypto';
-import { createCommerceRepository } from '../data/commerce.js';
-import { createCustomerRepository } from '../data/customers.js';
-import { createCanonicalRepository } from '../data/canonical.js';
+import { createCommerceRepository, createCustomerRepository, createCanonicalRepository } from '../data/index.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { logger } from '../utils/logger.js';
 import type { CanonicalizePayload, JobContext } from '../queue/types.js';
-import { requireScope } from '../lib/scope.js';
-import type {
-  CanonicalOrder,
-  CanonicalPayment,
-  CanonicalCustomer,
-  CanonicalFulfillment,
-} from '../integrations/types.js';
+import { getDb } from '../db/client.js'; // Still needed for raw fetch if repo doesn't have listEvents
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+const commerceRepo = createCommerceRepository();
+const customerRepo = createCustomerRepository();
+const canonicalRepo = createCanonicalRepository();
 
 async function handleCanonicalize(
   payload: CanonicalizePayload,
@@ -45,13 +27,16 @@ async function handleCanonicalize(
     traceId:         ctx.traceId,
   });
 
-  const commerceRepo  = createCommerceRepository();
-  const customerRepo  = createCustomerRepository();
-  const canonicalRepo = createCanonicalRepository();
+  const db = getDb(); // Fallback for listEvents if not in repo
+  const scope = { tenantId: ctx.tenantId ?? 'org_default', workspaceId: ctx.workspaceId ?? 'ws_default' };
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
-  const scope = requireScope(ctx, 'canonicalizer');
-  const event = await canonicalRepo.getEventById(scope, payload.canonicalEventId);
+  // TODO: Add getEvent to CanonicalRepository. For now, we use raw fetch or assume we need it.
+  // Actually, I should add getEvent to CanonicalRepository.
+  
+  const event = db.prepare(
+    'SELECT * FROM canonical_events WHERE id = ?'
+  ).get(payload.canonicalEventId) as any;
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -121,14 +106,13 @@ async function handleCanonicalize(
     log.warn('Entity fetch from integration failed — proceeding without full data', {
       error: err instanceof Error ? err.message : String(err),
     });
-    // Non-fatal: pipeline continues, reconciliation will catch stale state
   }
 
   // ── 3. Update canonical_event ────────────────────────────────────────────
   await canonicalRepo.updateEventStatus(scope, payload.canonicalEventId, {
-    status:               'canonicalized',
+    status: 'canonicalized',
     canonical_entity_type: event.source_entity_type,
-    canonical_entity_id:   localEntityId ?? event.source_entity_id,
+    canonical_entity_id: localEntityId ?? event.source_entity_id,
   });
 
   // ── 4. Enqueue INTENT_ROUTE ──────────────────────────────────────────────

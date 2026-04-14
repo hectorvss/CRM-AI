@@ -26,11 +26,6 @@ export interface IAMRepository {
     role?: string;
     isSystem?: number;
   }): Promise<void>;
-  updateUser(id: string, updates: {
-    name?: string;
-    avatarUrl?: string | null;
-    preferences?: Record<string, unknown>;
-  }): Promise<void>;
   listWorkspaceUsers(tenantId: string, workspaceId: string): Promise<any[]>;
 
   // Members
@@ -67,7 +62,6 @@ export interface IAMRepository {
     name?: string;
     permissions?: string[];
   }): Promise<void>;
-  getPermissionKeys(roleId: string): Promise<string[]>;
 }
 
 class SQLiteIAMRepository implements IAMRepository {
@@ -105,30 +99,9 @@ class SQLiteIAMRepository implements IAMRepository {
   async createUser(data: any) {
     const db = getDb();
     db.prepare(`
-      INSERT INTO users (id, email, name, role, is_system, preferences)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(data.id, data.email, data.name, data.role || 'agent', data.isSystem || 0, JSON.stringify(data.preferences || {}));
-  }
-
-  async updateUser(id: string, updates: any) {
-    const db = getDb();
-    const fields: string[] = [];
-    const params: any[] = [];
-    if (typeof updates.name === 'string') {
-      fields.push('name = ?');
-      params.push(updates.name);
-    }
-    if (updates.avatarUrl !== undefined) {
-      fields.push('avatar_url = ?');
-      params.push(updates.avatarUrl);
-    }
-    if (updates.preferences !== undefined) {
-      fields.push('preferences = ?');
-      params.push(JSON.stringify(updates.preferences || {}));
-    }
-    if (fields.length === 0) return;
-    params.push(id);
-    db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+      INSERT INTO users (id, email, name, role, is_system)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(data.id, data.email, data.name, data.role || 'agent', data.isSystem || 0);
   }
 
   async listWorkspaceUsers(tenantId: string, workspaceId: string) {
@@ -242,14 +215,6 @@ class SQLiteIAMRepository implements IAMRepository {
       updates.permissions.forEach((pk: string) => insertRolePerm.run(id, pk));
     }
   }
-
-  async getPermissionKeys(roleId: string): Promise<string[]> {
-    const db = getDb();
-    const rows = db.prepare(`
-      SELECT permission_key FROM role_permissions WHERE role_id = ?
-    `).all(roleId) as Array<{ permission_key: string }>;
-    return rows.map(r => r.permission_key);
-  }
 }
 
 class SupabaseIAMRepository implements IAMRepository {
@@ -307,20 +272,8 @@ class SupabaseIAMRepository implements IAMRepository {
       email: data.email,
       name: data.name,
       role: data.role || 'agent',
-      is_system: data.isSystem ? 1 : 0,
-      preferences: JSON.stringify(data.preferences || {}),
+      is_system: data.isSystem ? 1 : 0
     });
-    if (error) throw error;
-  }
-
-  async updateUser(id: string, updates: any) {
-    const supabase = getSupabaseAdmin();
-    const toUpdate: any = {};
-    if (typeof updates.name === 'string') toUpdate.name = updates.name;
-    if (updates.avatarUrl !== undefined) toUpdate.avatar_url = updates.avatarUrl;
-    if (updates.preferences !== undefined) toUpdate.preferences = JSON.stringify(updates.preferences || {});
-    if (Object.keys(toUpdate).length === 0) return;
-    const { error } = await supabase.from('users').update(toUpdate).eq('id', id);
     if (error) throw error;
   }
 
@@ -495,15 +448,6 @@ class SupabaseIAMRepository implements IAMRepository {
       }));
       await supabase.from('role_permissions').insert(perms);
     }
-  }
-
-  async getPermissionKeys(roleId: string): Promise<string[]> {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from('role_permissions')
-      .select('permission_key')
-      .eq('role_id', roleId);
-    return (data || []).map(r => r.permission_key);
   }
 }
 

@@ -3,17 +3,11 @@
  *
  * Responsible for creating and finding cases.
  *
- * Rules:
- *  - One open case per customer per case type within a deduplication window
- *    (default 72 h). If a matching open case exists, return it instead of
- *    creating a duplicate.
- *  - Case numbers are sequential per tenant: CS-0001, CS-0002, …
- *  - On creation the case is linked to the canonical_event that triggered it.
+ * Refactored to use repository pattern (provider-agnostic).
  */
 
 import { randomUUID } from 'crypto';
-import { createCaseRepository } from '../data/cases.js';
-import { createCanonicalRepository } from '../data/canonical.js';
+import { createCaseRepository, createCanonicalRepository } from '../data/index.js';
 import { logger } from '../utils/logger.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -54,37 +48,35 @@ const DEDUP_WINDOW_HOURS = 72;
 // Case types that should ALWAYS create a new case (not deduplicated)
 const ALWAYS_NEW_TYPES = new Set(['fraud_alert', 'chargeback']);
 
-// ── Case number generator ───────────────────────────────────────────────────
+const caseRepo = createCaseRepository();
+const canonicalRepo = createCanonicalRepository();
+
+// ── Find open duplicate ─────────────────────────────────────────────────────
 
 async function findOpenCase(
   tenantId: string,
+  workspaceId: string,
   customerId: string | null,
   type: string
 ): Promise<string | null> {
   if (!customerId || ALWAYS_NEW_TYPES.has(type)) return null;
-
-  const caseRepo = createCaseRepository();
-  const scope = { tenantId, workspaceId: '' }; // WorkspaceId not strictly needed for dedup if we check tenant-wide
-
-  return caseRepo.findOpenCase(scope, customerId, type, DEDUP_WINDOW_HOURS);
+  return caseRepo.findOpenCase({ tenantId, workspaceId }, customerId, type, DEDUP_WINDOW_HOURS);
 }
 
 // ── Create case ─────────────────────────────────────────────────────────────
 
 export async function getOrCreateCase(input: CreateCaseInput): Promise<CaseRecord> {
-  const caseRepo = createCaseRepository();
-  const canonicalRepo = createCanonicalRepository();
   const scope = { tenantId: input.tenantId, workspaceId: input.workspaceId };
 
   // Deduplicate
-  const existingId = await findOpenCase(input.tenantId, input.customerId, input.type);
+  const existingId = await findOpenCase(input.tenantId, input.workspaceId, input.customerId, input.type);
   if (existingId) {
     // Update last_activity_at to signal new activity on existing case
     await caseRepo.update(scope, existingId, { last_activity_at: new Date().toISOString() });
 
     // Link canonical event if provided
     if (input.canonicalEventId) {
-      await canonicalRepo.updateEvent(scope, input.canonicalEventId, { case_id: existingId });
+      await canonicalRepo.updateEventStatus(scope, input.canonicalEventId, { case_id: existingId, status: 'case_created' });
     }
 
     logger.debug('Reusing existing open case', {
@@ -93,8 +85,8 @@ export async function getOrCreateCase(input: CreateCaseInput): Promise<CaseRecor
       customerId: input.customerId,
     });
 
-    const row = await caseRepo.get(scope, existingId);
-    return { id: existingId, caseNumber: row.case_number, isNew: false };
+    const bundle = await caseRepo.getBundle(scope, existingId);
+    return { id: existingId, caseNumber: bundle.case.case_number, isNew: false };
   }
 
   // Create new
@@ -106,7 +98,7 @@ export async function getOrCreateCase(input: CreateCaseInput): Promise<CaseRecor
   const slaFirstResponse = new Date(Date.now() + 4  * 3_600_000).toISOString();
   const slaResolution    = new Date(Date.now() + 24 * 3_600_000).toISOString();
 
-  const caseData = {
+  const data = {
     id, case_number: caseNumber, tenant_id: input.tenantId, workspace_id: input.workspaceId,
     source_system: input.sourceSystem ?? 'webhook', source_channel: input.channel ?? 'unknown', source_entity_id: input.sourceEntityId ?? null,
     type: input.type, sub_type: input.subType ?? null, intent: input.intent ?? null, intent_confidence: input.intentConfidence ?? null,
@@ -122,12 +114,12 @@ export async function getOrCreateCase(input: CreateCaseInput): Promise<CaseRecor
     created_at: now, updated_at: now, last_activity_at: now
   };
 
-  await caseRepo.createCase(scope, caseData);
+  await caseRepo.createCase(scope, data);
 
   // Status history entry
   await caseRepo.addStatusHistory(scope, {
     caseId: id,
-    fromStatus: null,
+    fromStatus: 'NULL',
     toStatus: 'new',
     changedBy: 'system',
     reason: 'Case created by pipeline'
@@ -135,7 +127,7 @@ export async function getOrCreateCase(input: CreateCaseInput): Promise<CaseRecor
 
   // Link canonical event
   if (input.canonicalEventId) {
-    await canonicalRepo.updateEvent(scope, input.canonicalEventId, { case_id: id, status: 'case_created' });
+    await canonicalRepo.updateEventStatus(scope, input.canonicalEventId, { case_id: id, status: 'case_created' });
   }
 
   logger.info('Case created', {
@@ -154,19 +146,17 @@ export async function getOrCreateCase(input: CreateCaseInput): Promise<CaseRecor
  */
 export async function linkEntityToCase(
   caseId: string,
-  tenantId: string,
-  workspaceId: string,
   entityType: 'order' | 'payment' | 'return',
-  entityId: string
+  entityId: string,
+  tenantId: string,
+  workspaceId: string
 ): Promise<void> {
-  const caseRepo = createCaseRepository();
   const scope = { tenantId, workspaceId };
-  
-  const caseRow = await caseRepo.get(scope, caseId);
-  if (!caseRow) return;
+  const bundle = await caseRepo.getBundle(scope, caseId);
+  if (!bundle) return;
 
   const col = `${entityType}_ids`;
-  const existing: string[] = Array.isArray(caseRow[col]) ? caseRow[col] : JSON.parse(caseRow[col] || '[]');
+  const existing: string[] = bundle.case[col] || [];
   if (existing.includes(entityId)) return;
 
   existing.push(entityId);

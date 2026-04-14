@@ -8,7 +8,6 @@ export * from './commerce.js';
 export * from './agentRuns.js';
 export * from './agents.js';
 export * from './reconciliation.js';
-export * from './resolution.js';
 export * from './audit.js';
 export * from './iam.js';
 export * from './workflows.js';

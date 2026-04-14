@@ -1,100 +1,87 @@
 import { Router, Response } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { sendError } from '../http/errors.js';
-import { createConversationRepository, createCaseRepository, createAuditRepository } from '../data/index.js';
-import crypto from 'crypto';
+import { createConversationRepository, createAuditRepository, createCaseRepository } from '../data/index.js';
 
 const router = Router();
-const convRepo = createConversationRepository();
-const caseRepo = createCaseRepository();
-const auditRepo = createAuditRepository();
+const conversationRepository = createConversationRepository();
+const caseRepository = createCaseRepository();
+const auditRepository = createAuditRepository();
 
 router.use(extractMultiTenant);
 
-// GET /api/conversations/by-case/:caseId
 router.get('/by-case/:caseId', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const conv = await convRepo.getByCase(scope, req.params.caseId);
-
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const conv = await conversationRepository.getByCase(scope, req.params.caseId);
+    
     if (!conv) return res.status(404).json({ error: 'No conversation found for this case' });
-
-    const messages = await convRepo.listMessages(scope, conv.id);
-
-    res.json({ ...conv, messages });
+    res.json(conv);
   } catch (error) {
     console.error('Error fetching conversation by case:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/conversations/:id
 router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const conv = await convRepo.get(scope, req.params.id);
-
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const conv = await conversationRepository.get(scope, req.params.id);
+    
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     res.json(conv);
   } catch (error) {
     console.error('Error fetching conversation:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// GET /api/conversations/:id/messages
 router.get('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const messages = await convRepo.listMessages(scope, req.params.id);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const messages = await conversationRepository.listMessages(scope, req.params.id);
     res.json(messages);
   } catch (error) {
     console.error('Error fetching messages:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// POST /api/conversations/:id/messages
 router.post('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const conv = await convRepo.get(scope, req.params.id);
-
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const conv = await conversationRepository.get(scope, req.params.id);
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
 
     const { type, content, sender_name } = req.body;
-    const messageId = crypto.randomUUID();
-    const now = new Date().toISOString();
-
-    await convRepo.appendMessage(scope, {
+    const message = await conversationRepository.appendMessage(scope, {
       conversationId: req.params.id,
-      caseId: conv.caseId,
+      caseId: conv.case_id || null,
+      customerId: conv.customer_id || null,
       type: type || 'agent',
-      senderId: req.userId || 'system',
+      senderId: req.userId,
       senderName: sender_name || null,
       content,
       channel: conv.channel,
-      sentAt: now
     });
 
-    if (conv.caseId) {
-      await caseRepo.update(scope, conv.caseId, { 
-        last_activity_at: now 
+    if (conv.case_id) {
+      await caseRepository.update(scope, conv.case_id, {
+        last_activity_at: new Date().toISOString()
       });
     }
 
-    await auditRepo.logEvent(scope, {
-      actorId: req.userId || 'system',
+    await auditRepository.logEvent(scope, {
+      actorId: req.userId!,
       action: 'MESSAGE_SENT',
       entityType: 'conversation',
       entityId: req.params.id,
-      metadata: { messageId, type: type || 'agent' },
+      metadata: { messageId: message.id, type: type || 'agent' },
     });
 
-    res.json({ success: true, id: messageId });
+    res.json({ success: true, id: message.id });
   } catch (error) {
     console.error('Error sending message:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

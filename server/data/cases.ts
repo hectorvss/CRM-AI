@@ -70,13 +70,6 @@ function buildTimeline(bundle: any) {
   return timeline.sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
 }
 
-function normalizeSqlValue(value: any): any {
-  if (value === undefined || value === null) return null;
-  if (Array.isArray(value)) return JSON.stringify(value);
-  if (typeof value === 'object' && !(value instanceof Date)) return JSON.stringify(value);
-  return value;
-}
-
 function buildCaseState(bundle: any) {
   const conversation = bundle.conversation;
   const latestInbound = (bundle.messages ?? []).filter((message: any) => message.direction === 'inbound').at(-1);
@@ -312,16 +305,16 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     userResult,
     teamResult,
   ] = await Promise.all([
-    caseRow.customer_id ? supabase.from('customers').select('*').eq('id', caseRow.customer_id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
+    caseRow.customer_id ? supabase.from('customers').select('*').eq('id', caseRow.customer_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
     supabase.from('conversations').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('last_message_at', { ascending: false }).limit(1).maybeSingle(),
-    caseRow.order_ids?.length ? supabase.from('orders').select('*').in('id', caseRow.order_ids).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId) : Promise.resolve({ data: [], error: null } as any),
-    caseRow.payment_ids?.length ? supabase.from('payments').select('*').in('id', caseRow.payment_ids).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId) : Promise.resolve({ data: [], error: null } as any),
-    caseRow.return_ids?.length ? supabase.from('returns').select('*').in('id', caseRow.return_ids).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId) : Promise.resolve({ data: [], error: null } as any),
-    supabase.from('approval_requests').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: false }),
-      supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('detected_at', { ascending: false }),
+    caseRow.order_ids?.length ? supabase.from('orders').select('*').in('id', caseRow.order_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    caseRow.payment_ids?.length ? supabase.from('payments').select('*').in('id', caseRow.payment_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    caseRow.return_ids?.length ? supabase.from('returns').select('*').in('id', caseRow.return_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    supabase.from('approval_requests').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
+    supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
     supabase.from('case_links').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId),
-    supabase.from('draft_replies').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('generated_at', { ascending: false }),
-    supabase.from('internal_notes').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: false }),
+    supabase.from('draft_replies').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('generated_at', { ascending: false }),
+    supabase.from('internal_notes').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
     supabase.from('messages').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('sent_at', { ascending: true }),
     caseRow.assigned_user_id ? supabase.from('users').select('name, email').eq('id', caseRow.assigned_user_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
     caseRow.assigned_team_id ? supabase.from('teams').select('name').eq('id', caseRow.assigned_team_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
@@ -398,23 +391,23 @@ function fetchCaseBundleSqlite(scope: CaseScope, caseId: string) {
     : null;
 
   const orders = parsedCase.order_ids?.length
-    ? db.prepare(`SELECT * FROM orders WHERE tenant_id = ? AND workspace_id = ? AND id IN (${parsedCase.order_ids.map(() => '?').join(',')})`).all(scope.tenantId, scope.workspaceId, ...parsedCase.order_ids)
+    ? db.prepare(`SELECT * FROM orders WHERE tenant_id = ? AND id IN (${parsedCase.order_ids.map(() => '?').join(',')})`).all(scope.tenantId, ...parsedCase.order_ids)
     : [];
   const payments = parsedCase.payment_ids?.length
-    ? db.prepare(`SELECT * FROM payments WHERE tenant_id = ? AND workspace_id = ? AND id IN (${parsedCase.payment_ids.map(() => '?').join(',')})`).all(scope.tenantId, scope.workspaceId, ...parsedCase.payment_ids)
+    ? db.prepare(`SELECT * FROM payments WHERE tenant_id = ? AND id IN (${parsedCase.payment_ids.map(() => '?').join(',')})`).all(scope.tenantId, ...parsedCase.payment_ids)
     : [];
   const returns = parsedCase.return_ids?.length
-    ? db.prepare(`SELECT * FROM returns WHERE tenant_id = ? AND workspace_id = ? AND id IN (${parsedCase.return_ids.map(() => '?').join(',')})`).all(scope.tenantId, scope.workspaceId, ...parsedCase.return_ids)
+    ? db.prepare(`SELECT * FROM returns WHERE tenant_id = ? AND id IN (${parsedCase.return_ids.map(() => '?').join(',')})`).all(scope.tenantId, ...parsedCase.return_ids)
     : [];
-  const approvals = db.prepare(`SELECT * FROM approval_requests WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? ORDER BY created_at DESC`).all(caseId, scope.tenantId, scope.workspaceId);
-    const reconciliationIssues = db.prepare(`SELECT * FROM reconciliation_issues WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? ORDER BY detected_at DESC`).all(caseId, scope.tenantId, scope.workspaceId);
+  const approvals = db.prepare(`SELECT * FROM approval_requests WHERE case_id = ? AND tenant_id = ? ORDER BY created_at DESC`).all(caseId, scope.tenantId);
+  const reconciliationIssues = db.prepare(`SELECT * FROM reconciliation_issues WHERE case_id = ? AND tenant_id = ? ORDER BY created_at DESC`).all(caseId, scope.tenantId);
   const caseLinks = db.prepare(`SELECT * FROM case_links WHERE case_id = ? AND tenant_id = ?`).all(caseId, scope.tenantId);
   const linkedCaseIds = compactStrings(caseLinks.map((item: any) => item.linked_case_id));
   const linkedCases = linkedCaseIds.length
-    ? db.prepare(`SELECT id, case_number, type, status, priority, risk_level FROM cases WHERE tenant_id = ? AND workspace_id = ? AND id IN (${linkedCaseIds.map(() => '?').join(',')})`).all(scope.tenantId, scope.workspaceId, ...linkedCaseIds)
+    ? db.prepare(`SELECT id, case_number, type, status, priority, risk_level FROM cases WHERE tenant_id = ? AND id IN (${linkedCaseIds.map(() => '?').join(',')})`).all(scope.tenantId, ...linkedCaseIds)
     : [];
-  const drafts = db.prepare(`SELECT * FROM draft_replies WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? ORDER BY generated_at DESC`).all(caseId, scope.tenantId, scope.workspaceId);
-  const internalNotes = db.prepare(`SELECT * FROM internal_notes WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? ORDER BY created_at DESC`).all(caseId, scope.tenantId, scope.workspaceId);
+  const drafts = db.prepare(`SELECT * FROM draft_replies WHERE case_id = ? AND tenant_id = ? ORDER BY generated_at DESC`).all(caseId, scope.tenantId);
+  const internalNotes = db.prepare(`SELECT * FROM internal_notes WHERE case_id = ? AND tenant_id = ? ORDER BY created_at DESC`).all(caseId, scope.tenantId);
   const messages = db.prepare(`SELECT * FROM messages WHERE case_id = ? AND tenant_id = ? ORDER BY sent_at ASC`).all(caseId, scope.tenantId);
 
   return {
@@ -434,78 +427,73 @@ function fetchCaseBundleSqlite(scope: CaseScope, caseId: string) {
 }
 
 function listCasesSqlite(scope: CaseScope, filters: CaseFilters) {
-  try {
-    const db = getDb();
-    let query = `
-      SELECT c.*,
-             cu.canonical_name AS customer_name, cu.canonical_email AS customer_email,
-             cu.segment AS customer_segment,
-             u.name AS assigned_user_name,
-             t.name AS assigned_team_name
-      FROM cases c
-      LEFT JOIN customers cu ON c.customer_id = cu.id
-      LEFT JOIN users u ON c.assigned_user_id = u.id
-      LEFT JOIN teams t ON c.assigned_team_id = t.id
-      WHERE c.tenant_id = ? AND c.workspace_id = ?
-    `;
-    const params: any[] = [scope.tenantId, scope.workspaceId];
+  const db = getDb();
+  let query = `
+    SELECT c.*,
+           cu.canonical_name AS customer_name, cu.canonical_email AS customer_email,
+           cu.segment AS customer_segment,
+           u.name AS assigned_user_name,
+           t.name AS assigned_team_name
+    FROM cases c
+    LEFT JOIN customers cu ON c.customer_id = cu.id
+    LEFT JOIN users u ON c.assigned_user_id = u.id
+    LEFT JOIN teams t ON c.assigned_team_id = t.id
+    WHERE c.tenant_id = ? AND c.workspace_id = ?
+  `;
+  const params: any[] = [scope.tenantId, scope.workspaceId];
 
-    if (filters.status) { query += ' AND c.status = ?'; params.push(filters.status); }
-    if (filters.assigned_user_id) { query += ' AND c.assigned_user_id = ?'; params.push(filters.assigned_user_id); }
-    if (filters.priority) { query += ' AND c.priority = ?'; params.push(filters.priority); }
-    if (filters.risk_level) { query += ' AND c.risk_level = ?'; params.push(filters.risk_level); }
-    if (filters.q) {
-      query += ' AND (c.case_number LIKE ? OR cu.canonical_name LIKE ? OR cu.canonical_email LIKE ?)';
-      const term = `%${filters.q}%`;
-      params.push(term, term, term);
-    }
-    query += ' ORDER BY c.last_activity_at DESC';
-
-    return db.prepare(query).all(...params).map((row: any) => {
-      const parsed = parseRow(row) as any;
-      const message = db.prepare(`
-        SELECT content, sent_at
-        FROM messages
-        WHERE case_id = ? AND tenant_id = ?
-        ORDER BY sent_at DESC
-        LIMIT 1
-      `).get(parsed.id, scope.tenantId) as any;
-      const orders: any[] = parsed.order_ids?.length
-        ? db.prepare(`SELECT status, fulfillment_status FROM orders WHERE tenant_id = ? AND id IN (${parsed.order_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.order_ids)
-        : [];
-      const payments: any[] = parsed.payment_ids?.length
-        ? db.prepare(`SELECT status FROM payments WHERE tenant_id = ? AND id IN (${parsed.payment_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.payment_ids)
-        : [];
-      const returns: any[] = parsed.return_ids?.length
-        ? db.prepare(`SELECT status FROM returns WHERE tenant_id = ? AND id IN (${parsed.return_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.return_ids)
-        : [];
-
-      return {
-        ...parsed,
-        latest_message_preview: message?.content || null,
-        channel_context: {
-          channel: parsed.source_channel || 'web_chat',
-          latest_message_at: message?.sent_at || parsed.last_activity_at,
-        },
-        system_status_summary: {
-          order: orders[0]?.status || 'N/A',
-          payment: payments[0]?.status || 'N/A',
-          fulfillment: orders[0]?.fulfillment_status || 'N/A',
-          refund: returns[0]?.status || payments[0]?.status || 'N/A',
-          approval: parsed.approval_state || 'not_required',
-        },
-        conflict_summary: {
-          has_conflict: Boolean(parsed.has_reconciliation_conflicts),
-          severity: parsed.conflict_severity || parsed.risk_level || 'warning',
-          root_cause: parsed.ai_root_cause || null,
-          recommended_action: parsed.ai_recommended_action || null,
-        },
-      };
-    });
-  } catch (err: any) {
-    console.error('[listCasesSqlite] Error:', err.message);
-    throw err;
+  if (filters.status) { query += ' AND c.status = ?'; params.push(filters.status); }
+  if (filters.assigned_user_id) { query += ' AND c.assigned_user_id = ?'; params.push(filters.assigned_user_id); }
+  if (filters.priority) { query += ' AND c.priority = ?'; params.push(filters.priority); }
+  if (filters.risk_level) { query += ' AND c.risk_level = ?'; params.push(filters.risk_level); }
+  if (filters.q) {
+    query += ' AND (c.case_number LIKE ? OR cu.canonical_name LIKE ? OR cu.canonical_email LIKE ?)';
+    const term = `%${filters.q}%`;
+    params.push(term, term, term);
   }
+  query += ' ORDER BY c.last_activity_at DESC';
+
+  return db.prepare(query).all(...params).map((row: any) => {
+    const parsed = parseRow(row) as any;
+    const message = db.prepare(`
+      SELECT content, sent_at
+      FROM messages
+      WHERE case_id = ? AND tenant_id = ?
+      ORDER BY sent_at DESC
+      LIMIT 1
+    `).get(parsed.id, scope.tenantId) as any;
+    const orders: any[] = parsed.order_ids?.length
+      ? db.prepare(`SELECT status, fulfillment_status FROM orders WHERE tenant_id = ? AND id IN (${parsed.order_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.order_ids)
+      : [];
+    const payments: any[] = parsed.payment_ids?.length
+      ? db.prepare(`SELECT status, refund_status FROM payments WHERE tenant_id = ? AND id IN (${parsed.payment_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.payment_ids)
+      : [];
+    const returns: any[] = parsed.return_ids?.length
+      ? db.prepare(`SELECT status FROM returns WHERE tenant_id = ? AND id IN (${parsed.return_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.return_ids)
+      : [];
+
+    return {
+      ...parsed,
+      latest_message_preview: message?.content || null,
+      channel_context: {
+        channel: parsed.source_channel || 'web_chat',
+        latest_message_at: message?.sent_at || parsed.last_activity_at,
+      },
+      system_status_summary: {
+        order: orders[0]?.status || 'N/A',
+        payment: payments[0]?.status || 'N/A',
+        fulfillment: orders[0]?.fulfillment_status || 'N/A',
+        refund: returns[0]?.status || payments[0]?.refund_status || 'N/A',
+        approval: parsed.approval_state || 'not_required',
+      },
+      conflict_summary: {
+        has_conflict: Boolean(parsed.has_reconciliation_conflicts),
+        severity: parsed.conflict_severity || parsed.risk_level || 'warning',
+        root_cause: parsed.ai_root_cause || null,
+        recommended_action: parsed.ai_recommended_action || null,
+      },
+    };
+  });
 }
 
 async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
@@ -524,11 +512,7 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
   if (filters.q) query = query.ilike('case_number', `%${filters.q}%`);
 
   const { data, error } = await query;
-  console.log('listCasesSupabase rows:', data?.length);
-  if (error) {
-    console.error('listCasesSupabase error:', error);
-    throw error;
-  }
+  if (error) throw error;
 
   const rows = data ?? [];
   const caseIds = rows.map((row) => row.id);
@@ -599,9 +583,9 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
 }
 export interface CaseRepository {
   list(scope: CaseScope, filters: CaseFilters): Promise<any[]>;
-  get(scope: CaseScope, id: string): Promise<any | null>;
   getBundle(scope: CaseScope, caseId: string): Promise<any | null>;
   update(scope: CaseScope, id: string, updates: any): Promise<void>;
+  addStatusHistory(scope: CaseScope, data: any): Promise<void>;
   updateConflictState(scope: CaseScope, caseId: string, hasConflict: boolean, severity: string | null): Promise<void>;
   findOpenCase(scope: CaseScope, customerId: string | null, type: string, windowHours: number): Promise<string | null>;
   getNextCaseNumber(scope: CaseScope): Promise<string>;
@@ -609,38 +593,6 @@ export interface CaseRepository {
   getOpenReconciliationIssues(scope: CaseScope, caseId: string): Promise<any[]>;
   upsertReconciliationIssue(scope: CaseScope, data: any): Promise<string>;
   findStaleCases(scope: CaseScope, limit: number, thresholdMins: number): Promise<any[]>;
-  
-  // Conversations
-  getConversationByCase(scope: CaseScope, caseId: string): Promise<any | null>;
-  getConversationByChannel(scope: CaseScope, customerId: string, channel: string): Promise<any | null>;
-  updateConversation(scope: CaseScope, id: string, updates: any): Promise<void>;
-  createConversation(scope: CaseScope, data: any): Promise<string>;
-  
-  // Messages
-  getMessagesByConversation(scope: CaseScope, conversationId: string, limit?: number): Promise<any[]>;
-  getMessageByExternalId(scope: CaseScope, conversationId: string, externalId: string): Promise<any | null>;
-  createMessage(scope: CaseScope, data: any): Promise<string>;
-  
-  // Drafts
-  getDrafts(scope: CaseScope, caseId: string): Promise<any[]>;
-  updateDraft(scope: CaseScope, id: string, updates: any): Promise<void>;
-  createDraft(scope: CaseScope, data: any): Promise<string>;
-
-  // SLA & Approvals
-  listOpenCasesWithSLA(scope: CaseScope, limit: number): Promise<any[]>;
-  listExpiredApprovals(scope: CaseScope, threshold: string): Promise<any[]>;
-  expireApprovals(scope: CaseScope, threshold: string): Promise<{ changes: number }>;
-  updateCasesForExpiredApprovals(scope: CaseScope): Promise<void>;
-
-  updateMessage(scope: CaseScope, id: string, updates: any): Promise<void>;
-  getConversation(scope: CaseScope, id: string): Promise<any | null>;
-
-  // Execution Plans
-  getExecutionPlan(scope: CaseScope, id: string): Promise<any | null>;
-  updateExecutionPlan(scope: CaseScope, id: string, updates: any): Promise<void>;
-  getPreviousStatusFromHistory(scope: CaseScope, caseId: string, changedBy: string): Promise<string | null>;
-  reopenReconciliationIssues(scope: CaseScope, caseId: string): Promise<void>;
-  addStatusHistory(scope: CaseScope, data: any): Promise<void>;
 }
 
 async function updateConflictStateSqlite(scope: CaseScope, caseId: string, hasConflict: boolean, severity: string | null) {
@@ -663,12 +615,6 @@ async function updateConflictStateSupabase(scope: CaseScope, caseId: string, has
 }
 
 class SQLiteCaseRepository implements CaseRepository {
-  async listOpenCasesWithSLA(scope: CaseScope, limit: number): Promise<any[]> { return []; }
-  async listExpiredApprovals(scope: CaseScope, threshold: string): Promise<any[]> { return []; }
-  async expireApprovals(scope: CaseScope, threshold: string): Promise<{ changes: number }> { return { changes: 0 }; }
-  async updateCasesForExpiredApprovals(scope: CaseScope): Promise<void> {}
-  async updateMessage(scope: CaseScope, id: string, updates: any): Promise<void> {}
-
   async list(scope: CaseScope, filters: CaseFilters) {
     return listCasesSqlite(scope, filters);
   }
@@ -678,7 +624,7 @@ class SQLiteCaseRepository implements CaseRepository {
   async update(scope: CaseScope, id: string, updates: any) {
     const db = getDb();
     const fields = Object.keys(updates).map(k => `${k} = ?`);
-    const params = Object.values(updates).map(normalizeSqlValue);
+    const params = Object.values(updates);
     params.push(id, scope.tenantId, scope.workspaceId);
     db.prepare(`UPDATE cases SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND workspace_id = ?`).run(...params);
   }
@@ -699,14 +645,13 @@ class SQLiteCaseRepository implements CaseRepository {
     const row = db.prepare(`
       SELECT id FROM cases
       WHERE tenant_id  = ?
-        AND workspace_id = ?
         AND customer_id = ?
         AND type        = ?
         AND status NOT IN ('resolved', 'closed', 'cancelled')
         AND created_at >= ?
       ORDER BY created_at DESC
       LIMIT 1
-    `).get(scope.tenantId, scope.workspaceId, customerId, type, since) as any;
+    `).get(scope.tenantId, customerId, type, since) as any;
     return row?.id ?? null;
   }
   async getNextCaseNumber(scope: CaseScope) {
@@ -714,10 +659,9 @@ class SQLiteCaseRepository implements CaseRepository {
     const row = db.prepare(`
       SELECT case_number FROM cases
       WHERE tenant_id = ?
-        AND workspace_id = ?
       ORDER BY created_at DESC
       LIMIT 1
-    `).get(scope.tenantId, scope.workspaceId) as any;
+    `).get(scope.tenantId) as any;
     if (!row) return 'CS-0001';
     const match = row.case_number.match(/^CS-(\d+)$/);
     if (!match) return 'CS-0001';
@@ -726,40 +670,38 @@ class SQLiteCaseRepository implements CaseRepository {
   }
   async createCase(scope: CaseScope, data: any) {
     const db = getDb();
-    const payload = { ...data, tenant_id: scope.tenantId, workspace_id: scope.workspaceId };
-    const fields = Object.keys(payload);
+    const fields = Object.keys(data);
     const placeholders = fields.map(() => '?');
     db.prepare(`
       INSERT INTO cases (${fields.join(', ')})
       VALUES (${placeholders.join(', ')})
-    `).run(...Object.values(payload).map(normalizeSqlValue));
-    return payload.id;
+    `).run(...Object.values(data));
+    return data.id;
   }
   async getOpenReconciliationIssues(scope: CaseScope, caseId: string) {
     const db = getDb();
-    return db.prepare("SELECT * FROM reconciliation_issues WHERE case_id = ? AND status = 'open' AND tenant_id = ? AND workspace_id = ?").all(caseId, scope.tenantId, scope.workspaceId).map(parseRow);
+    return db.prepare('SELECT * FROM reconciliation_issues WHERE case_id = ? AND status = "open" AND tenant_id = ?').all(caseId, scope.tenantId).map(parseRow);
   }
   async upsertReconciliationIssue(scope: CaseScope, data: any) {
     const db = getDb();
     const existing = db.prepare(`
       SELECT id FROM reconciliation_issues
-      WHERE case_id = ? AND entity_id = ? AND conflict_domain = ? AND status = 'open' AND tenant_id = ? AND workspace_id = ?
+      WHERE case_id = ? AND entity_id = ? AND conflict_domain = ? AND status = 'open'
       LIMIT 1
-    `).get(data.case_id, data.entity_id, data.conflict_domain, scope.tenantId, scope.workspaceId) as any;
+    `).get(data.case_id, data.entity_id, data.conflict_domain) as any;
 
     if (existing) {
       db.prepare(`
         UPDATE reconciliation_issues SET
           severity = ?, actual_states = ?, detected_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-      `).run(data.severity, JSON.stringify(data.actual_states), existing.id, scope.tenantId, scope.workspaceId);
+        WHERE id = ?
+      `).run(data.severity, JSON.stringify(data.actual_states), existing.id);
       return existing.id;
     }
 
     const id = data.id || crypto.randomUUID();
-    const payload = { ...data, id, tenant_id: scope.tenantId, workspace_id: scope.workspaceId };
-    const fields = Object.keys(payload);
-    const params = Object.values(payload).map(v => typeof v === 'object' ? JSON.stringify(v) : v);
+    const fields = Object.keys(data);
+    const params = Object.values(data).map(v => typeof v === 'object' ? JSON.stringify(v) : v);
     const placeholders = fields.map(() => '?');
     db.prepare(`
       INSERT INTO reconciliation_issues (${fields.join(', ')})
@@ -774,115 +716,10 @@ class SQLiteCaseRepository implements CaseRepository {
       SELECT id, tenant_id FROM cases
       WHERE status NOT IN ('resolved', 'closed', 'cancelled')
         AND tenant_id = ?
-        AND workspace_id = ?
         AND (has_reconciliation_conflicts = 0 OR updated_at < ?)
       ORDER BY last_activity_at DESC
       LIMIT ?
-    `).all(scope.tenantId, scope.workspaceId, threshold, limit).map(parseRow);
-  }
-  async getConversation(scope: CaseScope, id: string) {
-    const db = getDb();
-    return parseRow(db.prepare('SELECT * FROM conversations WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
-  }
-  async getExecutionPlan(scope: CaseScope, id: string) {
-    const db = getDb();
-    return parseRow(db.prepare('SELECT * FROM execution_plans WHERE id = ?').get(id));
-  }
-  async updateExecutionPlan(scope: CaseScope, id: string, updates: any) {
-    const db = getDb();
-    const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
-    db.prepare(`UPDATE execution_plans SET ${fields} WHERE id = ?`).run(...Object.values(updates).map(normalizeSqlValue), id);
-  }
-  async getPreviousStatusFromHistory(scope: CaseScope, caseId: string, changedBy: string) {
-    const db = getDb();
-    const row = db.prepare(`
-      SELECT from_status FROM case_status_history
-      WHERE case_id = ? AND changed_by = ?
-      ORDER BY rowid DESC LIMIT 1
-    `).get(caseId, changedBy) as any;
-    return row?.from_status ?? null;
-  }
-  async reopenReconciliationIssues(scope: CaseScope, caseId: string) {
-    const db = getDb();
-    db.prepare(`
-      UPDATE reconciliation_issues
-      SET status = 'open', resolved_at = NULL
-      WHERE case_id = ? AND resolved_at IS NOT NULL
-    `).run(caseId);
-    db.prepare('UPDATE cases SET has_reconciliation_conflicts = 1 WHERE id = ?').run(caseId);
-  }
-  async get(scope: CaseScope, id: string) {
-    const db = getDb();
-    return parseRow(db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(id, scope.tenantId, scope.workspaceId));
-  }
-  async getConversationByCase(scope: CaseScope, caseId: string) {
-    const db = getDb();
-    return parseRow(db.prepare('SELECT * FROM conversations WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? LIMIT 1').get(caseId, scope.tenantId, scope.workspaceId));
-  }
-  async getConversationByChannel(scope: CaseScope, customerId: string, channel: string) {
-    const db = getDb();
-    return parseRow(db.prepare(`
-      SELECT * FROM conversations 
-      WHERE customer_id = ? AND channel = ? AND tenant_id = ? AND workspace_id = ?
-        AND status NOT IN ('closed', 'resolved')
-      ORDER BY last_message_at DESC LIMIT 1
-    `).get(customerId, channel, scope.tenantId, scope.workspaceId));
-  }
-  async updateConversation(scope: CaseScope, id: string, updates: any) {
-    const db = getDb();
-    const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
-    db.prepare(`UPDATE conversations SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND workspace_id = ?`).run(...Object.values(updates).map(normalizeSqlValue), id, scope.tenantId, scope.workspaceId);
-  }
-  async createConversation(scope: CaseScope, data: any) {
-    const db = getDb();
-    const payload = { ...data, tenant_id: scope.tenantId, workspace_id: scope.workspaceId };
-    const fields = Object.keys(payload);
-    db.prepare(`INSERT INTO conversations (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`).run(...Object.values(payload).map(normalizeSqlValue));
-    return payload.id;
-  }
-  async getMessagesByConversation(scope: CaseScope, conversationId: string, limit = 50) {
-    const db = getDb();
-    return db.prepare('SELECT * FROM messages WHERE conversation_id = ? AND tenant_id = ? ORDER BY sent_at ASC LIMIT ?').all(conversationId, scope.tenantId, limit).map(parseRow);
-  }
-  async getMessageByExternalId(scope: CaseScope, conversationId: string, externalId: string) {
-    const db = getDb();
-    return parseRow(db.prepare('SELECT * FROM messages WHERE conversation_id = ? AND external_message_id = ? AND tenant_id = ?').get(conversationId, externalId, scope.tenantId));
-  }
-  async createMessage(scope: CaseScope, data: any) {
-    const db = getDb();
-    const fields = Object.keys(data).filter(k => data[k] !== undefined);
-    const values = fields.map(k => {
-      const v = data[k];
-      return (v && typeof v === 'object') ? JSON.stringify(v) : v;
-    });
-    db.prepare(`INSERT INTO messages (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`).run(...values);
-    return data.id;
-  }
-  async getDrafts(scope: CaseScope, caseId: string) {
-    const db = getDb();
-    return db.prepare('SELECT * FROM draft_replies WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? ORDER BY generated_at DESC').all(caseId, scope.tenantId, scope.workspaceId).map(parseRow);
-  }
-  async updateDraft(scope: CaseScope, id: string, updates: any) {
-    const db = getDb();
-    const fields = Object.keys(updates);
-    const setClause = fields.map(f => `${f} = ?`).join(', ');
-    const values = fields.map(f => {
-      const v = updates[f];
-      return (v && typeof v === 'object') ? JSON.stringify(v) : v;
-    });
-    db.prepare(`UPDATE draft_replies SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND workspace_id = ?`).run(...values, id, scope.tenantId, scope.workspaceId);
-  }
-  async createDraft(scope: CaseScope, data: any) {
-    const db = getDb();
-    const payload = { ...data, tenant_id: scope.tenantId, workspace_id: scope.workspaceId };
-    const fields = Object.keys(payload);
-    const placeholders = fields.map(() => '?');
-    const values = fields.map(f => {
-      const v = payload[f];
-      return (v && typeof v === 'object') ? JSON.stringify(v) : v;
-    });
-    db.prepare(`INSERT INTO draft_replies (${fields.join(', ')}) VALUES (${placeholders.join(', ')})`).run(...values);
-    return payload.id;
+    `).all(scope.tenantId, threshold, limit) as any[];
   }
 }
 
@@ -929,7 +766,6 @@ class SupabaseCaseRepository implements CaseRepository {
       .from('cases')
       .select('id')
       .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId)
       .eq('customer_id', customerId)
       .eq('type', type)
       .not('status', 'in', '("resolved", "closed", "cancelled")')
@@ -943,7 +779,6 @@ class SupabaseCaseRepository implements CaseRepository {
         .from('cases')
         .select('id, status')
         .eq('tenant_id', scope.tenantId)
-        .eq('workspace_id', scope.workspaceId)
         .eq('customer_id', customerId)
         .eq('type', type)
         .gte('created_at', since)
@@ -959,7 +794,6 @@ class SupabaseCaseRepository implements CaseRepository {
       .from('cases')
       .select('case_number')
       .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -972,13 +806,13 @@ class SupabaseCaseRepository implements CaseRepository {
   }
   async createCase(scope: CaseScope, data: any) {
     const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('cases').insert({ ...data, tenant_id: scope.tenantId, workspace_id: scope.workspaceId });
+    const { error } = await supabase.from('cases').insert(data);
     if (error) throw error;
     return data.id;
   }
   async getOpenReconciliationIssues(scope: CaseScope, caseId: string) {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('status', 'open').eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId);
+    const { data, error } = await supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('status', 'open').eq('tenant_id', scope.tenantId);
     if (error) throw error;
     return data || [];
   }
@@ -991,8 +825,6 @@ class SupabaseCaseRepository implements CaseRepository {
       .eq('entity_id', data.entity_id)
       .eq('conflict_domain', data.conflict_domain)
       .eq('status', 'open')
-      .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId)
       .maybeSingle();
 
     if (findError) throw findError;
@@ -1005,15 +837,13 @@ class SupabaseCaseRepository implements CaseRepository {
           actual_states: data.actual_states,
           detected_at: new Date().toISOString()
         })
-        .eq('id', (existing as any).id)
-        .eq('tenant_id', scope.tenantId)
-        .eq('workspace_id', scope.workspaceId);
+        .eq('id', (existing as any).id);
       if (updateError) throw updateError;
       return (existing as any).id;
     }
 
     const id = data.id || crypto.randomUUID();
-    const { error: insertError } = await supabase.from('reconciliation_issues').insert({ ...data, id, tenant_id: scope.tenantId, workspace_id: scope.workspaceId });
+    const { error: insertError } = await supabase.from('reconciliation_issues').insert({ ...data, id });
     if (insertError) throw insertError;
     return id;
   }
@@ -1024,174 +854,12 @@ class SupabaseCaseRepository implements CaseRepository {
       .from('cases')
       .select('id, tenant_id')
       .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId)
       .not('status', 'in', '("resolved", "closed", "cancelled")')
       .or(`has_reconciliation_conflicts.eq.false,updated_at.lt.${threshold}`)
       .order('last_activity_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
     return data || [];
-  }
-  async get(scope: CaseScope, id: string) {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from('cases').select('*').eq('id', id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).maybeSingle();
-    return data;
-  }
-  async getConversationByCase(scope: CaseScope, caseId: string) {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from('conversations').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).maybeSingle();
-    return data;
-  }
-  async getConversationByChannel(scope: CaseScope, customerId: string, channel: string) {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('customer_id', customerId)
-      .eq('channel', channel)
-      .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId)
-      .not('status', 'in', '("closed", "resolved")')
-      .order('last_message_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    return data;
-  }
-  async updateConversation(scope: CaseScope, id: string, updates: any) {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('conversations').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId);
-    if (error) throw error;
-  }
-  async createConversation(scope: CaseScope, data: any) {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('conversations').insert({ ...data, tenant_id: scope.tenantId, workspace_id: scope.workspaceId });
-    if (error) throw error;
-    return data.id;
-  }
-  async getMessagesByConversation(scope: CaseScope, conversationId: string, limit = 50) {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from('messages').select('*').eq('conversation_id', conversationId).eq('tenant_id', scope.tenantId).order('sent_at', { ascending: true }).limit(limit);
-    return data || [];
-  }
-  async getMessageByExternalId(scope: CaseScope, conversationId: string, externalId: string) {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from('messages').select('*').eq('conversation_id', conversationId).eq('external_message_id', externalId).eq('tenant_id', scope.tenantId).maybeSingle();
-    return data;
-  }
-  async createMessage(scope: CaseScope, data: any) {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('messages').insert(data);
-    if (error) throw error;
-    return data.id;
-  }
-  async getDrafts(scope: CaseScope, caseId: string) {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from('draft_replies').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('generated_at', { ascending: false });
-    return data || [];
-  }
-  async updateDraft(scope: CaseScope, id: string, updates: any) {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('draft_replies').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId);
-    if (error) throw error;
-  }
-  async createDraft(scope: CaseScope, data: any) {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('draft_replies').insert({ ...data, tenant_id: scope.tenantId, workspace_id: scope.workspaceId });
-    if (error) throw error;
-    return data.id;
-  }
-  async listOpenCasesWithSLA(scope: CaseScope, limit: number) {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('cases')
-      .select('*')
-      .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId)
-      .not('status', 'in', '(' + ['resolved', 'closed', 'cancelled'].join(',') + ')')
-      .or('sla_first_response_deadline.not.is.null,sla_resolution_deadline.not.is.null')
-      .order('last_activity_at', { ascending: false })
-      .limit(limit);
-    if (error) throw error;
-    return data || [];
-  }
-  async listExpiredApprovals(scope: CaseScope, threshold: string) {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('approval_requests')
-      .select('*')
-      .eq('status', 'pending')
-      .eq('tenant_id', scope.tenantId)
-      .lt('expires_at', threshold);
-    if (error) throw error;
-    return data || [];
-  }
-  async expireApprovals(scope: CaseScope, threshold: string) {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('approval_requests')
-      .update({ status: 'expired', updated_at: new Date().toISOString() })
-      .eq('status', 'pending')
-      .eq('tenant_id', scope.tenantId)
-      .lt('expires_at', threshold)
-      .select('id');
-    if (error) throw error;
-    return { changes: data?.length || 0 };
-  }
-  async updateCasesForExpiredApprovals(scope: CaseScope) {
-    const supabase = getSupabaseAdmin();
-    // Subqueries in UPDATE are tricky in Supabase/PostgREST. 
-    // We'll do it in two steps.
-    const { data: expired } = await supabase.from('approval_requests').select('id').eq('status', 'expired').eq('tenant_id', scope.tenantId);
-    if (!expired || expired.length === 0) return;
-    const ids = expired.map(r => r.id);
-    await supabase.from('cases')
-      .update({ approval_state: 'expired', updated_at: new Date().toISOString() })
-      .eq('approval_state', 'pending')
-      .eq('tenant_id', scope.tenantId)
-      .in('active_approval_request_id', ids);
-  }
-  async updateMessage(scope: CaseScope, id: string, updates: any) {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('messages').update(updates).eq('id', id).eq('tenant_id', scope.tenantId);
-    if (error) throw error;
-  }
-  async getConversation(scope: CaseScope, id: string) {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.from('conversations').select('*').eq('id', id).eq('tenant_id', scope.tenantId).maybeSingle();
-    if (error) throw error;
-    return data;
-  }
-  async getExecutionPlan(scope: CaseScope, id: string) {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.from('execution_plans').select('*').eq('id', id).maybeSingle();
-    if (error) throw error;
-    return data;
-  }
-  async updateExecutionPlan(scope: CaseScope, id: string, updates: any) {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('execution_plans').update(updates).eq('id', id);
-    if (error) throw error;
-  }
-  async getPreviousStatusFromHistory(scope: CaseScope, caseId: string, changedBy: string) {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('case_status_history')
-      .select('from_status')
-      .eq('case_id', caseId)
-      .eq('changed_by', changedBy)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data?.from_status ?? null;
-  }
-  async reopenReconciliationIssues(scope: CaseScope, caseId: string) {
-    const supabase = getSupabaseAdmin();
-    await supabase.from('reconciliation_issues')
-      .update({ status: 'open', resolved_at: null })
-      .eq('case_id', caseId)
-      .not('resolved_at', 'is', null);
-    await supabase.from('cases').update({ has_reconciliation_conflicts: true }).eq('id', caseId);
   }
 }
 

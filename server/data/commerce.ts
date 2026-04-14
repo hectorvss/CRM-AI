@@ -48,13 +48,6 @@ function compactBadges(values: Array<string | null | undefined>): string[] {
   );
 }
 
-function normalizeSqlValue(value: any): any {
-  if (value === undefined || value === null) return null;
-  if (Array.isArray(value)) return JSON.stringify(value);
-  if (typeof value === 'object' && !(value instanceof Date)) return JSON.stringify(value);
-  return value;
-}
-
 // ── Order enrichment ─────────────────────────────────────────
 
 function buildOrderTab(row: any): string {
@@ -360,7 +353,7 @@ function updateOrderSqlite(scope: CommerceScope, orderId: string, updates: any):
   if (fields.length === 0) return;
 
   const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates).map(normalizeSqlValue), orderId, scope.tenantId, scope.workspaceId];
+  const params = [...Object.values(updates), orderId, scope.tenantId, scope.workspaceId];
   
   db.prepare(`
     UPDATE orders 
@@ -370,7 +363,7 @@ function updateOrderSqlite(scope: CommerceScope, orderId: string, updates: any):
 }
 
 async function getOrderContextSqlite(scope: CommerceScope, orderId: string): Promise<any | null> {
-  return (await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId)) ?? null;
+  return await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId) ?? null;
 }
 
 async function listPaymentsSqlite(scope: CommerceScope, filters: PaymentFilters): Promise<any[]> {
@@ -422,7 +415,7 @@ function updatePaymentSqlite(scope: CommerceScope, paymentId: string, updates: a
   if (fields.length === 0) return;
 
   const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates).map(normalizeSqlValue), paymentId, scope.tenantId, scope.workspaceId];
+  const params = [...Object.values(updates), paymentId, scope.tenantId, scope.workspaceId];
   
   db.prepare(`
     UPDATE payments 
@@ -432,7 +425,7 @@ function updatePaymentSqlite(scope: CommerceScope, paymentId: string, updates: a
 }
 
 async function getPaymentContextSqlite(scope: CommerceScope, paymentId: string): Promise<any | null> {
-  return (await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId)) ?? null;
+  return await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId) ?? null;
 }
 
 async function listReturnsSqlite(scope: CommerceScope, filters: ReturnFilters): Promise<any[]> {
@@ -494,7 +487,7 @@ function updateReturnSqlite(scope: CommerceScope, returnId: string, updates: any
   if (fields.length === 0) return;
 
   const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates).map(normalizeSqlValue), returnId, scope.tenantId, scope.workspaceId];
+  const params = [...Object.values(updates), returnId, scope.tenantId, scope.workspaceId];
   
   db.prepare(`
     UPDATE returns 
@@ -504,7 +497,7 @@ function updateReturnSqlite(scope: CommerceScope, returnId: string, updates: any
 }
 
 async function getReturnContextSqlite(scope: CommerceScope, returnId: string): Promise<any | null> {
-  return (await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId)) ?? null;
+  return await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId) ?? null;
 }
 
 // ── Supabase implementations ─────────────────────────────────
@@ -572,7 +565,7 @@ async function getOrderSupabase(scope: CommerceScope, orderId: string): Promise<
     supabase
       .from('cases')
       .select('id, case_number, status, type')
-      .filter('order_ids', 'cs', JSON.stringify([orderId]))
+      .like('order_ids', `%${orderId}%`)
       .eq('tenant_id', scope.tenantId)
       .eq('workspace_id', scope.workspaceId),
   ]);
@@ -608,7 +601,7 @@ async function updateOrderSupabase(scope: CommerceScope, orderId: string, update
 }
 
 async function getOrderContextSupabase(scope: CommerceScope, orderId: string): Promise<any | null> {
-  return (await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId)) ?? null;
+  return await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId) ?? null;
 }
 
 async function listPaymentsSupabase(scope: CommerceScope, filters: PaymentFilters): Promise<any[]> {
@@ -682,7 +675,7 @@ async function updatePaymentSupabase(scope: CommerceScope, paymentId: string, up
 }
 
 async function getPaymentContextSupabase(scope: CommerceScope, paymentId: string): Promise<any | null> {
-  return (await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId)) ?? null;
+  return await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId) ?? null;
 }
 
 async function listReturnsSupabase(scope: CommerceScope, filters: ReturnFilters): Promise<any[]> {
@@ -770,7 +763,7 @@ async function updateReturnSupabase(scope: CommerceScope, returnId: string, upda
 }
 
 async function getReturnContextSupabase(scope: CommerceScope, returnId: string): Promise<any | null> {
-  return (await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId)) ?? null;
+  return await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId) ?? null;
 }
 
 // ── Repository interface & factory ───────────────────────────
@@ -787,10 +780,6 @@ export interface CommerceRepository {
   listReturns(scope: CommerceScope, filters: ReturnFilters): Promise<any[]>;
   getReturn(scope: CommerceScope, returnId: string): Promise<any | null>;
   getReturnContext(scope: CommerceScope, returnId: string): Promise<any | null>;
-
-  getOrderByExternalId(scope: CommerceScope, externalId: string): Promise<any | null>;
-  getPaymentByExternalId(scope: CommerceScope, externalId: string): Promise<any | null>;
-  getReturnByExternalId(scope: CommerceScope, externalId: string): Promise<any | null>;
 
   updateOrder(scope: CommerceScope, orderId: string, updates: any): Promise<void>;
   updatePayment(scope: CommerceScope, paymentId: string, updates: any): Promise<void>;
@@ -817,22 +806,6 @@ export function createCommerceRepository(): CommerceRepository {
       listReturns: listReturnsSupabase,
       getReturn: getReturnSupabase,
       getReturnContext: getReturnContextSupabase,
-
-      getOrderByExternalId: async (scope, externalId) => {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase.from('orders').select('*').eq('external_order_id', externalId).eq('tenant_id', scope.tenantId).maybeSingle();
-        return data;
-      },
-      getPaymentByExternalId: async (scope, externalId) => {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase.from('payments').select('*').eq('external_payment_id', externalId).eq('tenant_id', scope.tenantId).maybeSingle();
-        return data;
-      },
-      getReturnByExternalId: async (scope, externalId) => {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase.from('returns').select('*').eq('external_return_id', externalId).eq('tenant_id', scope.tenantId).maybeSingle();
-        return data;
-      },
 
       updateOrder: updateOrderSupabase,
       updatePayment: updatePaymentSupabase,
@@ -977,19 +950,6 @@ export function createCommerceRepository(): CommerceRepository {
     listReturns: async (scope, filters) => listReturnsSqlite(scope, filters),
     getReturn: async (scope, returnId) => getReturnSqlite(scope, returnId),
     getReturnContext: async (scope, returnId) => getReturnContextSqlite(scope, returnId),
-
-    getOrderByExternalId: async (scope, externalId) => {
-      const db = getDb();
-      return parseRow(db.prepare('SELECT * FROM orders WHERE external_order_id = ? AND tenant_id = ?').get(externalId, scope.tenantId));
-    },
-    getPaymentByExternalId: async (scope, externalId) => {
-      const db = getDb();
-      return parseRow(db.prepare('SELECT * FROM payments WHERE external_payment_id = ? AND tenant_id = ?').get(externalId, scope.tenantId));
-    },
-    getReturnByExternalId: async (scope, externalId) => {
-      const db = getDb();
-      return parseRow(db.prepare('SELECT * FROM returns WHERE external_return_id = ? AND tenant_id = ?').get(externalId, scope.tenantId));
-    },
 
     updateOrder: async (scope, orderId, updates) => updateOrderSqlite(scope, orderId, updates),
     updatePayment: async (scope, paymentId, updates) => updatePaymentSqlite(scope, paymentId, updates),

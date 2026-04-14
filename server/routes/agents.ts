@@ -1,396 +1,246 @@
-import { Router, Response } from 'express';
+/**
+ * server/routes/agents.ts
+ *
+ * Agents & Connectors API — Refactored to Repository Pattern.
+ * This route handles Agent Lifecycle, Versions, Test Runs, and External Connectors.
+ */
+
+import { Router } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { runAgent } from '../agents/runner.js';
-import { triggerAgents } from '../agents/orchestrator.js';
-import { hasAgentImpl, getImplementationMode } from '../agents/registry.js';
-import { getCatalogEntryBySlug } from '../agents/catalog.js';
-import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
-import { createAgentRepository, createIntegrationRepository, createAuditRepository } from '../data/index.js';
+import { requirePermission } from '../middleware/authorization.js';
 import { sendError } from '../http/errors.js';
+import { enqueue } from '../queue/client.js';
+import { JobType } from '../queue/types.js';
+import { createAgentRepository, createIntegrationRepository } from '../data/index.js';
 
 const router = Router();
-const agentRepo = createAgentRepository();
-const integrationRepo = createIntegrationRepository();
-const auditRepo = createAuditRepository();
-
 router.use(extractMultiTenant);
 
-function buildEffectivePolicy(agent: any, connectorCapabilities: any[]) {
-  const globalSafety = {
-    enforcement: 'restrictive_wins',
-    workspace_lock: agent.is_locked ? 'locked' : 'editable',
-  };
-
-  return {
-    agent_id: agent.id,
-    agent_name: agent.name,
-    is_active: Boolean(agent.is_active),
-    version_id: agent.version_id,
-    version_status: agent.version_status,
-    global_safety: globalSafety,
-    permission_profile: agent.permission_profile ?? {},
-    reasoning_profile: agent.reasoning_profile ?? {},
-    safety_profile: agent.safety_profile ?? {},
-    knowledge_profile: agent.knowledge_profile ?? {},
-    connector_capabilities: connectorCapabilities,
-    rollout_policy: {
-      rollout_percentage: agent.rollout_percentage ?? 100,
-      published_at: agent.published_at ?? null,
-    },
-    precedence: [
-      'workspace_safety',
-      'domain_safety',
-      'global_permissions',
-      'agent_overrides',
-      'dynamic_case_conditions',
-    ],
-  };
-}
-
-// GET /api/agents
-router.get('/', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const agents = await agentRepo.list(scope);
-    res.json(agents);
-  } catch (error) {
-    console.error('Error fetching agents:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.get('/:id/policy-bundle-draft', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const draft = await agentRepo.getPolicyDraft(scope, req.params.id);
-    if (!draft) return res.status(404).json({ error: 'Agent not found' });
-    res.json(draft);
-  } catch (error) {
-    console.error('Error fetching policy bundle draft:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.put('/:id/policy-bundle-draft', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
-    const result = await agentRepo.updatePolicyDraft(scope, req.params.id, req.body);
-    
-    if (result.error === 'not_found') return res.status(404).json({ error: 'Agent not found' });
-    if (result.error === 'locked') return res.status(403).json({ error: 'Agent is locked' });
-
-    res.json(result);
-  } catch (error) {
-    console.error('Error updating policy bundle draft:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.post('/:id/policy-bundle-publish', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
-    const publishedAgent = await agentRepo.publishPolicyDraft(scope, req.params.id, req.body);
-    
-    if (publishedAgent.error === 'not_found') return res.status(404).json({ error: 'Agent not found' });
-    if (publishedAgent.error === 'no_draft') return res.status(400).json({ error: 'No draft to publish' });
-
-    const connectorCapabilities = await agentRepo.listConnectorCapabilities(scope);
-    res.json(buildEffectivePolicy(publishedAgent, connectorCapabilities));
-  } catch (error) {
-    console.error('Error publishing agent policy bundle:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.post('/:id/policy-bundle-rollback', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
-    const result = await agentRepo.rollbackPolicyDraft(scope, req.params.id, req.body);
-    
-    if (result.error === 'not_found') return res.status(404).json({ error: 'Agent not found' });
-    if (result.error === 'no_target') return res.status(400).json({ error: 'No version to rollback to' });
-
-    res.json(result);
-  } catch (error) {
-    console.error('Error rolling back agent policy bundle:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.get(/^\/([^/]+)\/policy-bundle:draft$/, async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const agentId = (req.params as any)[0] ?? req.params.id;
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const draft = await agentRepo.getPolicyDraft(scope, agentId);
-    if (!draft) return res.status(404).json({ error: 'Agent not found' });
-    res.json(draft);
-  } catch (error) {
-    console.error('Error fetching legacy policy bundle draft:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.put(/^\/([^/]+)\/policy-bundle:draft$/, async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const agentId = (req.params as any)[0] ?? req.params.id;
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
-    const result = await agentRepo.updatePolicyDraft(scope, agentId, req.body);
-
-    if (result.error === 'not_found') return res.status(404).json({ error: 'Agent not found' });
-    if (result.error === 'locked') return res.status(403).json({ error: 'Agent is locked' });
-
-    res.json(result);
-  } catch (error) {
-    console.error('Error updating legacy policy bundle draft:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.post(/^\/([^/]+)\/policy-bundle:publish$/, async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const agentId = (req.params as any)[0] ?? req.params.id;
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
-    const publishedAgent = await agentRepo.publishPolicyDraft(scope, agentId, req.body);
-
-    if (publishedAgent.error === 'not_found') return res.status(404).json({ error: 'Agent not found' });
-    if (publishedAgent.error === 'no_draft') return res.status(400).json({ error: 'No draft to publish' });
-
-    const connectorCapabilities = await agentRepo.listConnectorCapabilities(scope);
-    res.json(buildEffectivePolicy(publishedAgent, connectorCapabilities));
-  } catch (error) {
-    console.error('Error publishing legacy agent policy bundle:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.post(/^\/([^/]+)\/policy-bundle:rollback$/, async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const agentId = (req.params as any)[0] ?? req.params.id;
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
-    const result = await agentRepo.rollbackPolicyDraft(scope, agentId, req.body);
-
-    if (result.error === 'not_found') return res.status(404).json({ error: 'Agent not found' });
-    if (result.error === 'no_target') return res.status(400).json({ error: 'No version to rollback to' });
-
-    res.json(result);
-  } catch (error) {
-    console.error('Error rolling back legacy agent policy bundle:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.get('/:id/effective-policy', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const agent = await agentRepo.getEffectiveAgent(scope, req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
-
-    const connectorCapabilities = await agentRepo.listConnectorCapabilities(scope);
-    res.json(buildEffectivePolicy(agent, connectorCapabilities));
-  } catch (error) {
-    console.error('Error fetching effective policy:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.get('/:id/knowledge-access', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const agent = await agentRepo.getEffectiveAgent(scope, req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
-
-    const caseId = String(req.query.caseId ?? '');
-    const caseContext = caseId ? await agentRepo.getCaseKnowledgeContext(scope, caseId) : undefined;
-
-    const bundle = await resolveAgentKnowledgeBundle({
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
-      knowledgeProfile: agent.knowledge_profile ?? {},
-      caseContext,
-    });
-
-    res.json({
-      agent_id: agent.id,
-      case_id: caseId || null,
-      knowledge_profile: bundle.profile,
-      accessible_documents: bundle.accessibleDocuments,
-      blocked_documents: bundle.blockedDocuments,
-      citations: bundle.citations,
-      prompt_context: bundle.promptContext,
-    });
-  } catch (error) {
-    console.error('Error fetching agent knowledge access:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-// GET /api/agents/:id
-router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const detail = await agentRepo.getDetail(scope, req.params.id);
-    if (!detail) return res.status(404).json({ error: 'Agent not found' });
-    res.json(detail);
-  } catch (error) {
-    console.error('Error fetching agent detail:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-// POST /api/agents/:id/run — manually trigger an agent for a case
-router.post('/:id/run', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const detail = await agentRepo.getDetail(scope, req.params.id);
-    if (!detail) return res.status(404).json({ error: 'Agent not found' });
-
-    const { caseId, triggerEvent = 'case_created', context = {} } = req.body;
-    if (!caseId) return res.status(400).json({ error: 'caseId is required' });
-
-    const result = await runAgent({
-      agentSlug: detail.slug,
-      caseId,
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
-      triggerEvent,
-      extraContext: context,
-    });
-
-    res.json({ success: result.success, result });
-  } catch (error) {
-    console.error('Error running agent:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-// POST /api/agents/trigger — fire a full agent chain for a trigger event
-router.post('/trigger', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const { caseId, triggerEvent, agentSlug, context = {} } = req.body;
-
-    if (!caseId)       return res.status(400).json({ error: 'caseId is required' });
-    if (!triggerEvent) return res.status(400).json({ error: 'triggerEvent is required' });
-
-    const validEvents = ['case_created', 'message_received', 'conflicts_detected', 'case_resolved', 'approval_requested'];
-    if (!validEvents.includes(triggerEvent)) {
-      return res.status(400).json({ error: `triggerEvent must be one of: ${validEvents.join(', ')}` });
-    }
-
-    if (agentSlug) {
-      const result = await runAgent({
-        agentSlug,
-        caseId,
-        tenantId: req.tenantId!,
-        workspaceId: req.workspaceId!,
-        triggerEvent,
-        extraContext: context,
-      });
-      return res.json({ mode: 'direct', result });
-    }
-
-    await triggerAgents(triggerEvent, caseId, {
-      tenantId: req.tenantId!,
-      workspaceId: req.workspaceId!,
-      context,
-    });
-
-    res.json({ mode: 'queued', message: `Agent chain for "${triggerEvent}" enqueued for case ${caseId}` });
-  } catch (error) {
-    console.error('Error triggering agents:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-// PUT /api/agents/:id/config — update agent version profiles
-router.put('/:id/config', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
-    // This is a simplified version of the update logic, usually handled via draft/publish
-    // but kept for legacy compat if needed.
-    const result = await agentRepo.updatePolicyDraft(scope, req.params.id, req.body);
-    if (result.error) return res.status(404).json({ error: 'Agent not found' });
-    
-    const published = await agentRepo.publishPolicyDraft(scope, req.params.id, { isActive: req.body.isActive });
-    res.json(published);
-  } catch (error) {
-    console.error('Error updating agent config:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-// GET /api/agents/:id/runs — recent runs for an agent
-router.get('/:id/runs', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const detail = await agentRepo.getDetail(scope, req.params.id);
-    if (!detail) return res.status(404).json({ error: 'Agent not found' });
-    res.json(detail.recent_runs);
-  } catch (error) {
-    console.error('Error fetching agent runs:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-// ── Connectors Router ──────────────────────────────────────────
 export const connectorsRouter = Router();
 connectorsRouter.use(extractMultiTenant);
 
-connectorsRouter.get('/', async (req: MultiTenantRequest, res: Response) => {
+const agentRepository = createAgentRepository();
+const integrationRepository = createIntegrationRepository();
+
+// ── AGENTS ───────────────────────────────────────────────────────────────────
+
+// List Agents
+router.get('/', requirePermission('agents.read'), async (req: MultiTenantRequest, res) => {
   try {
-    const scope = { tenantId: req.tenantId! };
-    const connectors = await integrationRepo.listConnectors(scope);
-    res.json(connectors);
+    const agents = await agentRepository.listAgents({ tenantId: req.tenantId! });
+    res.json(agents);
   } catch (error) {
-    console.error('Error fetching connectors:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    console.error('Error listing agents:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list agents');
   }
 });
 
-connectorsRouter.get('/:id', async (req: MultiTenantRequest, res: Response) => {
+// Create Agent
+router.post('/', requirePermission('agents.write'), async (req: MultiTenantRequest, res) => {
   try {
-    const scope = { tenantId: req.tenantId! };
-    const connector = await integrationRepo.getConnector(scope, req.params.id);
-    if (!connector) return res.status(404).json({ error: 'Connector not found' });
+    const { name, slug, category, description, config } = req.body;
+    if (!name || !slug) return sendError(res, 400, 'INVALID_AGENT', 'Name and slug are required');
+
+    const created = await agentRepository.createAgent({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      userId: req.userId
+    }, { name, slug, category, description, config });
     
-    const capabilities = await integrationRepo.listCapabilities(scope, req.params.id);
-    const recentWebhooks = await integrationRepo.listRecentWebhooks(scope, req.params.id);
-    
-    res.json({ ...connector, capabilities, recent_webhooks: recentWebhooks });
+    res.status(201).json(created);
   } catch (error) {
-    console.error('Error fetching connector detail:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    console.error('Error creating agent:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create agent');
   }
 });
 
-connectorsRouter.put('/:id', async (req: MultiTenantRequest, res: Response) => {
+// Get Agent Detail
+router.get('/:idOrSlug', requirePermission('agents.read'), async (req: MultiTenantRequest, res) => {
   try {
-    const scope = { tenantId: req.tenantId! };
-    const existing = await integrationRepo.getConnector(scope, req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Connector not found' });
+    const agent = await agentRepository.getAgent({ tenantId: req.tenantId! }, req.params.idOrSlug);
+    if (!agent) return sendError(res, 404, 'AGENT_NOT_FOUND', 'Agent not found');
+    res.json(agent);
+  } catch (error) {
+    console.error('Error fetching agent:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch agent');
+  }
+});
 
-    const updated = await integrationRepo.updateConnector(scope, req.params.id, {
-      name: req.body?.name,
-      status: req.body?.status,
-      auth_config: req.body?.auth_config,
-      last_health_check_at: req.body?.last_health_check_at,
-    });
-
+// Update Agent
+router.patch('/:id', requirePermission('agents.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    const updated = await agentRepository.updateAgent({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      userId: req.userId
+    }, req.params.id, req.body);
+    if (!updated) return sendError(res, 404, 'AGENT_NOT_FOUND', 'Agent not found');
     res.json(updated);
   } catch (error) {
-    console.error('Error updating connector:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    console.error('Error updating agent:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to update agent');
   }
 });
 
-connectorsRouter.post('/:id/test', async (req: MultiTenantRequest, res: Response) => {
+// Create Agent Version
+router.post('/:id/versions', requirePermission('agents.write'), async (req: MultiTenantRequest, res) => {
   try {
-    const scope = { tenantId: req.tenantId! };
-    const result = await integrationRepo.testConnector(scope, req.params.id);
-    if (!result) return res.status(404).json({ error: 'Connector not found' });
-    res.json(result);
+    const version = await agentRepository.createVersion({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      userId: req.userId
+    }, req.params.id, req.body);
+    res.status(201).json(version);
   } catch (error) {
-    console.error('Error testing connector:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    console.error('Error creating agent version:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create agent version');
+  }
+});
+
+// Set Active Agent Version
+router.post('/:id/versions/:vId/activate', requirePermission('agents.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    await agentRepository.activateVersion({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      userId: req.userId
+    }, req.params.id, req.params.vId);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error activating agent version:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to activate version');
+  }
+});
+
+// ── AGENT RUNS ───────────────────────────────────────────────────────────────
+
+// Trigger Agent Run (Manual/Test)
+router.post('/:id/run', requirePermission('agents.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    const agent = await agentRepository.getAgent({ tenantId: req.tenantId! }, req.params.id);
+    if (!agent) return sendError(res, 404, 'AGENT_NOT_FOUND', 'Agent not found');
+
+    const jobId = enqueue(
+      JobType.AGENT_EXECUTE,
+      {
+        agentId: agent.id,
+        agentSlug: agent.slug,
+        input: req.body.input || {},
+        context: req.body.context || {},
+        isTest: req.body.isTest === true,
+      },
+      {
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId!,
+        traceId: `manual-run-${agent.slug}-${Date.now()}`,
+        priority: 5,
+      },
+    );
+
+    res.json({ ok: true, jobId, status: 'enqueued' });
+  } catch (error) {
+    console.error('Error triggering agent run:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to trigger agent run');
+  }
+});
+
+// Get Agent Run Status
+router.get('/runs/:runId', requirePermission('agents.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const run = await agentRepository.getRun({ tenantId: req.tenantId! }, req.params.runId);
+    if (!run) return sendError(res, 404, 'RUN_NOT_FOUND', 'Agent run not found');
+    res.json(run);
+  } catch (error) {
+    console.error('Error fetching agent run:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch agent run');
+  }
+});
+
+// ── CONNECTORS ────────────────────────────────────────────────────────────────
+
+// List Connectors
+router.get('/connectors', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const connectors = await integrationRepository.listConnectors({ tenantId: req.tenantId! });
+    res.json(connectors);
+  } catch (error) {
+    console.error('Error listing connectors:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list connectors');
+  }
+});
+
+// Get Connector Detail
+router.get('/connectors/:id', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const connector = await integrationRepository.getConnector({ tenantId: req.tenantId! }, req.params.id);
+    if (!connector) return sendError(res, 404, 'CONNECTOR_NOT_FOUND', 'Connector not found');
+    res.json(connector);
+  } catch (error) {
+    console.error('Error fetching connector:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch connector');
+  }
+});
+
+// List Connector Capabilities
+router.get('/connectors/:id/capabilities', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const caps = await integrationRepository.listCapabilities({ tenantId: req.tenantId! }, req.params.id);
+    res.json(caps);
+  } catch (error) {
+    console.error('Error listing connector capabilities:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list capabilities');
+  }
+});
+
+// List Connector Recent Webhooks
+router.get('/connectors/:id/webhooks', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const webhooks = await integrationRepository.listRecentWebhooks({ tenantId: req.tenantId! }, req.params.id);
+    res.json(webhooks);
+  } catch (error) {
+    console.error('Error listing connector webhooks:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list webhooks');
+  }
+});
+
+connectorsRouter.get('/', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const connectors = await integrationRepository.listConnectors({ tenantId: req.tenantId! });
+    res.json(connectors);
+  } catch (error) {
+    console.error('Error listing connectors:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list connectors');
+  }
+});
+
+connectorsRouter.get('/:id', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const connector = await integrationRepository.getConnector({ tenantId: req.tenantId! }, req.params.id);
+    if (!connector) return sendError(res, 404, 'CONNECTOR_NOT_FOUND', 'Connector not found');
+    res.json(connector);
+  } catch (error) {
+    console.error('Error fetching connector:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch connector');
+  }
+});
+
+connectorsRouter.get('/:id/capabilities', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const caps = await integrationRepository.listCapabilities({ tenantId: req.tenantId! }, req.params.id);
+    res.json(caps);
+  } catch (error) {
+    console.error('Error listing connector capabilities:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list capabilities');
+  }
+});
+
+connectorsRouter.get('/:id/webhooks', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const webhooks = await integrationRepository.listRecentWebhooks({ tenantId: req.tenantId! }, req.params.id);
+    res.json(webhooks);
+  } catch (error) {
+    console.error('Error listing connector webhooks:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list webhooks');
   }
 });
 
