@@ -142,7 +142,7 @@ function buildConfig(): Config {
     },
 
     db: {
-      provider: (process.env.DB_PROVIDER?.trim() || 'sqlite') as 'sqlite' | 'supabase',
+      provider: (process.env.DB_PROVIDER?.trim() || 'supabase') as 'sqlite' | 'supabase',
       path: optionalEnv('DB_PATH', './data/crmai.db'),
       supabaseUrl: process.env.SUPABASE_URL?.trim(),
       supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
