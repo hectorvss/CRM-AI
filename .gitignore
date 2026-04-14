@@ -7,3 +7,4 @@ coverage/
 tmp-*.err
 .env*
 !.env.example
+.vercel
