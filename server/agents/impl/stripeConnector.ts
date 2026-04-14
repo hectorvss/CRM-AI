@@ -18,6 +18,8 @@
 
 import { randomUUID } from 'crypto';
 import { getDb } from '../../db/client.js';
+import { getDatabaseProvider } from '../../db/provider.js';
+import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import { integrationRegistry } from '../../integrations/registry.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -28,8 +30,11 @@ export const stripeConnectorImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, tenantId, workspaceId, permissions, runId } = ctx;
     const caseId = contextWindow.case.id;
-    const db = getDb();
     const now = new Date().toISOString();
+    const provider = getDatabaseProvider();
+    const useSupabase = provider === 'supabase';
+    const db = useSupabase ? null : getDb();
+    const supabase = useSupabase ? getSupabaseAdmin() : null;
 
     if (!permissions.canCallStripe) {
       return {
@@ -68,8 +73,16 @@ export const stripeConnectorImpl: AgentImplementation = {
           if (livePayment?.status) {
             stripeState = livePayment.status;
             const currentStates = typeof payment.systemStates === 'object' ? payment.systemStates : {};
-            db.prepare('UPDATE payments SET system_states = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
-              .run(JSON.stringify({ ...currentStates, stripe: stripeState }), now, payment.id, tenantId);
+            if (useSupabase) {
+              await supabase!.from('payments')
+                .update({ system_states: JSON.stringify({ ...currentStates, stripe: stripeState }), updated_at: now })
+                .eq('id', payment.id)
+                .eq('tenant_id', tenantId)
+                .eq('workspace_id', workspaceId);
+            } else {
+              db!.prepare('UPDATE payments SET system_states = ?, updated_at = ? WHERE id = ? AND tenant_id = ? AND workspace_id = ?')
+                .run(JSON.stringify({ ...currentStates, stripe: stripeState }), now, payment.id, tenantId, workspaceId);
+            }
           }
         } catch (err: any) {
           logger.warn('Stripe live fetch failed, using cached state', { paymentId: payment.id, error: err?.message });
@@ -98,9 +111,11 @@ export const stripeConnectorImpl: AgentImplementation = {
       }
 
       // Check refund amount consistency
-      const paymentRow = db.prepare(
-        'SELECT refund_amount, refund_status FROM payments WHERE id = ? AND tenant_id = ?'
-      ).get(payment.id, tenantId) as any;
+      const paymentRow = useSupabase
+        ? (await supabase!.from('payments').select('refund_amount, refund_status').eq('id', payment.id).eq('tenant_id', tenantId).eq('workspace_id', workspaceId).maybeSingle()).data
+        : db!.prepare(
+            'SELECT refund_amount, refund_status FROM payments WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
+          ).get(payment.id, tenantId, workspaceId) as any;
 
       if (paymentRow && payment.refundAmount > 0) {
         const stripeRefundState = payment.systemStates?.stripe_refund;
@@ -118,18 +133,34 @@ export const stripeConnectorImpl: AgentImplementation = {
     // ── Log discrepancies to audit ───────────────────────────────────────
     if (discrepancies.length > 0 || activeDisputes.length > 0) {
       try {
-        db.prepare(`
-          INSERT INTO audit_events
-            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
-        `).run(
-          randomUUID(), tenantId, workspaceId,
-          'stripe_sync_check',
-          caseId,
-          `Stripe connector: ${discrepancies.length} discrepancy(ies), ${activeDisputes.length} active dispute(s)`,
-          JSON.stringify({ discrepancies, activeDisputes, agentRunId: runId }),
-          now,
-        );
+        if (useSupabase) {
+          const { error } = await supabase!.from('audit_events').insert({
+            id: randomUUID(),
+            tenant_id: tenantId,
+            workspace_id: workspaceId,
+            actor_type: 'agent',
+            action: 'stripe_sync_check',
+            entity_type: 'case',
+            entity_id: caseId,
+            new_value: `Stripe connector: ${discrepancies.length} discrepancy(ies), ${activeDisputes.length} active dispute(s)`,
+            metadata: { discrepancies, activeDisputes, agentRunId: runId },
+            occurred_at: now,
+          });
+          if (error) throw error;
+        } else {
+          db!.prepare(`
+            INSERT INTO audit_events
+              (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+            VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
+          `).run(
+            randomUUID(), tenantId, workspaceId,
+            'stripe_sync_check',
+            caseId,
+            `Stripe connector: ${discrepancies.length} discrepancy(ies), ${activeDisputes.length} active dispute(s)`,
+            JSON.stringify({ discrepancies, activeDisputes, agentRunId: runId }),
+            now,
+          );
+        }
       } catch (err: any) {
         logger.error('Stripe connector audit write failed', { error: err?.message });
       }

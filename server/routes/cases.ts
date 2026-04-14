@@ -175,7 +175,7 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
 
     await caseRepo.update(scope, req.params.id, { 
       status, 
-      lastActivityAt: new Date().toISOString() 
+      last_activity_at: new Date().toISOString() 
     });
 
     await caseRepo.addStatusHistory(scope, {
@@ -268,7 +268,7 @@ router.post('/:id/internal-note', async (req: MultiTenantRequest, res: Response)
       });
     }
 
-    await caseRepo.update(scope, req.params.id, { lastActivityAt: now });
+    await caseRepo.update(scope, req.params.id, { last_activity_at: now });
 
     await auditRepo.logEvent(scope, {
       actorId: req.userId || 'user_local',
@@ -331,8 +331,8 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
       sentAt: now
     });
 
-    await caseRepo.updateConversation(scope, conversation.id, now);
-    await caseRepo.update(scope, req.params.id, { lastActivityAt: now });
+    await caseRepo.updateConversation(scope, conversation.id, { last_message_at: now });
+    await caseRepo.update(scope, req.params.id, { last_activity_at: now });
 
     await enqueue(
       JobType.SEND_MESSAGE,
@@ -372,7 +372,8 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
     res.status(202).json({
       success: true,
       queued: true,
-      message_message: {
+      message: {
+        id: queuedMessageId,
         type: 'agent',
         direction: 'outbound',
         sender_name: 'Alex Morgan',

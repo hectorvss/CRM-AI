@@ -1,10 +1,53 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useApi } from '../../api/hooks';
+import { billingApi, workspacesApi } from '../../api/client';
+
+function parseSettings(settings: any) {
+  if (!settings) return {};
+  if (typeof settings === 'string') {
+    try {
+      return JSON.parse(settings);
+    } catch {
+      return {};
+    }
+  }
+  return settings;
+}
 
 export default function CreditsTab() {
+  const { data: workspace } = useApi(workspacesApi.currentContext);
+  const orgId = workspace?.org_id;
+  const { data: subscription, refetch: refetchSubscription } = useApi(() => (orgId ? billingApi.subscription(orgId) : Promise.resolve(null)), [orgId], null);
   const [isFlexibleUsageExpanded, setIsFlexibleUsageExpanded] = useState(false);
   const [isFlexibleUsageEnabled, setIsFlexibleUsageEnabled] = useState(false);
   const [spendCap, setSpendCap] = useState('100');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const includedCredits = subscription?.credits_included ?? 5000;
+  const usedCredits = subscription?.credits_used ?? 3240;
+  const remainingCredits = Math.max(includedCredits - usedCredits, 0);
+  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace?.settings]);
+
+  useEffect(() => {
+    setSpendCap(String(workspaceSettings.billing?.monthlyBudgetCap ?? 100));
+    setIsFlexibleUsageEnabled(workspaceSettings.billing?.flexibleUsageEnabled ?? false);
+  }, [workspaceSettings]);
+
+  const buyPack = async (credits: number, amountCents: number) => {
+    if (!orgId) return;
+    setIsSaving(true);
+    setStatusMessage(null);
+    try {
+      await billingApi.topUp(orgId, { type: 'credits', quantity: credits, amount_cents: amountCents });
+      setStatusMessage(`Purchased ${credits.toLocaleString()} credits.`);
+      refetchSubscription();
+    } catch (error: any) {
+      setStatusMessage(error?.message || 'Unable to buy credits.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const creditPacks = [
     { 
@@ -30,6 +73,12 @@ export default function CreditsTab() {
 
   return (
     <div className="space-y-8">
+      {statusMessage && (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
+          {statusMessage}
+        </div>
+      )}
+
       {/* Current Credits */}
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
@@ -40,17 +89,17 @@ export default function CreditsTab() {
           <div className="grid grid-cols-3 gap-6 mb-6">
             <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Included Monthly Credits</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">5,000</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{includedCredits.toLocaleString()}</p>
               <p className="text-[10px] text-gray-400 mt-1">Resets on Nov 12, 2024</p>
             </div>
             <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Used Credits</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">3,240</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{usedCredits.toLocaleString()}</p>
               <p className="text-[10px] text-gray-400 mt-1">This billing cycle</p>
             </div>
             <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30">
               <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1 font-medium">Remaining Credits</p>
-              <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">1,760</p>
+              <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{remainingCredits.toLocaleString()}</p>
               <p className="text-[10px] text-indigo-500/70 mt-1">Available to use</p>
             </div>
           </div>
@@ -150,7 +199,11 @@ export default function CreditsTab() {
                 {/* Right: Price & Button */}
                 <div className="flex flex-col items-end w-1/4">
                   <div className="text-3xl font-bold text-gray-900 dark:text-white mb-3">€{pack.price}</div>
-                  <button className={`w-full py-2.5 rounded-xl text-sm font-bold transition-all ${
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void buyPack(Number(String(pack.credits).replace(/,/g, '')), pack.price * 100)}
+                    className={`w-full py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                     pack.popular
                       ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md'
                       : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm'

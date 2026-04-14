@@ -13,6 +13,8 @@
 
 import { randomUUID } from 'crypto';
 import { getDb } from '../../db/client.js';
+import { getDatabaseProvider } from '../../db/provider.js';
+import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
 
@@ -34,13 +36,9 @@ function scoreArticle(article: ArticleRow, signals: string[]): number {
     if (text.includes(signal)) score += 1;
   }
 
-  // Boost SOPs over generic FAQs
   if (article.type === 'sop') score += 2;
   if (article.type === 'policy') score += 1;
-
-  // Boost cited articles (trusted)
   score += Math.min(article.citation_count / 10, 2);
-
   return score;
 }
 
@@ -48,44 +46,45 @@ export const knowledgeRetrieverImpl: AgentImplementation = {
   slug: 'knowledge-retriever',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, tenantId } = ctx;
+    const { contextWindow, tenantId, workspaceId } = ctx;
     const { case: caseData, conflicts } = contextWindow;
-    const db = getDb();
+    const provider = getDatabaseProvider();
+    const useSupabase = provider === 'supabase';
+    const db = useSupabase ? null : getDb();
+    const supabase = useSupabase ? getSupabaseAdmin() : null;
 
-    // ── Build search signals from case context ────────────────────────────
     const signals: string[] = [];
-
     if (caseData.intent) {
-      // Turn 'refund_status_inquiry' → ['refund', 'status', 'inquiry']
       signals.push(...caseData.intent.split('_'));
       signals.push(caseData.intent.replace(/_/g, ' '));
     }
-
     if (caseData.type) signals.push(caseData.type.replace(/_/g, ' '));
+    for (const conflict of conflicts) signals.push(...conflict.domain.split('_'));
+    for (const tag of caseData.tags) signals.push(tag.toLowerCase());
 
-    // Add conflict domain signals
-    for (const conflict of conflicts) {
-      signals.push(...conflict.domain.split('_'));
-    }
-
-    // Add tags
-    for (const tag of caseData.tags) {
-      signals.push(tag.toLowerCase());
-    }
-
-    // ── Query published articles ──────────────────────────────────────────
-    const articles = db.prepare(`
-      SELECT id, title, content, type, domain_id, citation_count
-      FROM knowledge_articles
-      WHERE tenant_id = ? AND status = 'published'
-      LIMIT 100
-    `).all(tenantId) as ArticleRow[];
+    const articles: ArticleRow[] = useSupabase
+      ? await (async () => {
+          const { data, error } = await supabase!
+            .from('knowledge_articles')
+            .select('id, title, content, type, domain_id, citation_count')
+            .eq('tenant_id', tenantId)
+            .eq('workspace_id', workspaceId)
+            .eq('status', 'published')
+            .limit(100);
+          if (error) throw error;
+          return (data ?? []) as ArticleRow[];
+        })()
+      : db!.prepare(`
+          SELECT id, title, content, type, domain_id, citation_count
+          FROM knowledge_articles
+          WHERE tenant_id = ? AND workspace_id = ? AND status = 'published'
+          LIMIT 100
+        `).all(tenantId, workspaceId) as ArticleRow[];
 
     if (articles.length === 0) {
       return { success: true, summary: 'No published knowledge articles found' };
     }
 
-    // ── Score and rank articles ───────────────────────────────────────────
     const scored = articles
       .map(a => ({ article: a, score: scoreArticle(a, signals) }))
       .filter(({ score }) => score > 0)
@@ -93,40 +92,48 @@ export const knowledgeRetrieverImpl: AgentImplementation = {
       .slice(0, 5);
 
     const topArticles = scored.map(({ article }) => article);
-
     if (topArticles.length === 0) {
       return { success: true, summary: 'No relevant articles found for this case' };
     }
 
-    // ── Persist article references ────────────────────────────────────────
-    // Store top article IDs in case.tags or as audit metadata
-    // (case_knowledge_links table may not exist yet)
     const now = new Date().toISOString();
-
-    // Try inserting into case_knowledge_links if it exists
     let linkedCount = 0;
+
     for (const article of topArticles) {
       try {
-        db.prepare(`
-          INSERT OR IGNORE INTO case_knowledge_links
-            (id, case_id, article_id, tenant_id, relevance_score, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(
-          randomUUID(),
-          caseData.id, article.id, tenantId,
-          scored.find(s => s.article.id === article.id)?.score ?? 0,
-          now,
-        );
+        if (useSupabase) {
+          const { error } = await supabase!.from('case_knowledge_links').insert({
+            id: randomUUID(),
+            case_id: caseData.id,
+            article_id: article.id,
+            tenant_id: tenantId,
+            workspace_id: workspaceId,
+            relevance_score: scored.find(s => s.article.id === article.id)?.score ?? 0,
+            created_at: now,
+          });
+          if (error) throw error;
+        } else {
+          db!.prepare(`
+            INSERT OR IGNORE INTO case_knowledge_links
+              (id, case_id, article_id, tenant_id, relevance_score, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).run(
+            randomUUID(),
+            caseData.id,
+            article.id,
+            tenantId,
+            scored.find(s => s.article.id === article.id)?.score ?? 0,
+            now,
+          );
+        }
         linkedCount++;
       } catch {
-        // Table doesn't exist — log and continue
         logger.debug('case_knowledge_links table not found — skipping article link', { articleId: article.id });
-        linkedCount++;  // count it anyway for the summary
+        linkedCount++;
       }
     }
 
     const articleTitles = topArticles.map(a => a.title).join(', ');
-
     return {
       success: true,
       confidence: 0.85,

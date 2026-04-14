@@ -16,6 +16,7 @@ import { enqueue }         from '../queue/client.js';
 import { JobType }         from '../queue/types.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { logger }          from '../utils/logger.js';
+import { requireScope }    from '../lib/scope.js';
 import type { ReconcileScheduledPayload, JobContext } from '../queue/types.js';
 
 const DEFAULT_SWEEP_LIMIT  = 50;
@@ -28,9 +29,8 @@ async function handleReconcileScheduled(
   const log = logger.child({ jobId: ctx.jobId, traceId: ctx.traceId });
   const caseRepo = createCaseRepository();
   const limit = payload.limit ?? DEFAULT_SWEEP_LIMIT;
-  const tenantId    = ctx.tenantId    ?? 'org_default';
-  const workspaceId = ctx.workspaceId ?? 'ws_default';
-  const scope = { tenantId, workspaceId };
+  const scope = requireScope(ctx, 'reconcilerScheduled');
+  const { tenantId, workspaceId } = scope;
 
   // Find open cases that either:
   //  a) have no reconciliation issues yet (never reconciled), or

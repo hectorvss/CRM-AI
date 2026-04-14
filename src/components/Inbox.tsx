@@ -365,7 +365,7 @@ const CONVERSATIONS: Conversation[] = [
   }
 ];
 
-export default function Inbox() {
+export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<CaseTab>('assigned');
   const [selectedId, setSelectedId] = useState<string>('');
@@ -378,11 +378,12 @@ export default function Inbox() {
   const [copilotInput, setCopilotInput] = useState('');
   const [isCopilotSending, setIsCopilotSending] = useState(false);
   const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Fetch canonical cases from the backend. Static fixtures are no longer used
   // as runtime data, so every visible case comes from the simulated API/DB flow.
-  const { data: apiCases } = useApi(() => casesApi.list(), [refreshKey], []);
-  const { data: selectedInboxView } = useApi(
+  const { data: apiCases, error: casesError } = useApi(() => casesApi.list(), [refreshKey], []);
+  const { data: selectedInboxView, error: inboxError } = useApi(
     () => selectedId ? casesApi.inboxView(selectedId) : Promise.resolve(null),
     [selectedId, refreshKey]
   );
@@ -439,6 +440,14 @@ export default function Inbox() {
 
   const filteredConversations = conversations.filter(c => c.tab === activeTab);
   const selectedBaseConv = filteredConversations.find(c => c.id === selectedId) || filteredConversations[0];
+
+  useEffect(() => {
+    if (!focusCaseId || !filteredConversations.length) return;
+    const target = filteredConversations.find((conv) => conv.id === focusCaseId || conv.caseId === focusCaseId);
+    if (target && target.id !== selectedId) {
+      setSelectedId(target.id);
+    }
+  }, [focusCaseId, filteredConversations, selectedId]);
   const caseState = selectedInboxView?.state;
   const selectedConv = selectedBaseConv ? (() => {
     const apiMessages = selectedInboxView?.messages?.map((msg: any) => ({
@@ -544,6 +553,7 @@ export default function Inbox() {
     if (!selectedConv || !composerText.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
+    setActionError(null);
     try {
       const content = composerText.trim();
       if (composeMode === 'internal') {
@@ -584,6 +594,7 @@ export default function Inbox() {
       setRefreshKey(key => key + 1);
       window.setTimeout(() => setRefreshKey(key => key + 1), 900);
     } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Inbox action failed');
       console.error('Inbox action failed:', error);
     } finally {
       setIsSubmitting(false);
@@ -635,8 +646,9 @@ export default function Inbox() {
             content: `Copilot could not answer right now: ${error?.message || 'unknown error'}`,
             time: formatTime(new Date().toISOString()),
           },
-        ],
+          ],
       }));
+      setActionError(error?.message || 'Copilot could not answer right now');
     } finally {
       setIsCopilotSending(false);
     }
@@ -730,7 +742,18 @@ export default function Inbox() {
       </div>
 
       {/* Main Content Area (3 Panes) */}
-      <div className="flex-1 flex mx-2 mb-2 bg-card-light dark:bg-card-dark shadow-card overflow-hidden rounded-b-xl border border-t-0 border-gray-100 dark:border-gray-800">
+      <div className="relative flex-1 flex mx-2 mb-2 bg-card-light dark:bg-card-dark shadow-card overflow-hidden rounded-b-xl border border-t-0 border-gray-100 dark:border-gray-800">
+        {(casesError || inboxError || actionError) && (
+          <div className="absolute left-1/2 top-20 z-20 w-[min(960px,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-card dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-lg mt-0.5">error</span>
+              <div className="min-w-0">
+                <div className="font-semibold">Inbox action unavailable</div>
+                <div className="text-xs opacity-90">{actionError || inboxError || casesError}</div>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Left Pane: Conversation List */}
         <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">

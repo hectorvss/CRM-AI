@@ -80,19 +80,40 @@ router.post('/sessions/logout', async (req: MultiTenantRequest, res) => {
 
 // Get current user profile
 router.get('/me', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
-  const userId = req.userId || 'user_alex';
+  const userId = req.userId && req.userId !== 'system' ? req.userId : 'user_alex';
 
   try {
-    const user = await iamRepo.getUserById(userId);
+    let user = await iamRepo.getUserById(userId);
+    if (!user && userId === 'user_alex') {
+      user = {
+        id: 'user_alex',
+        email: 'alex@acme.com',
+        name: 'Alex Morgan',
+        role: 'supervisor',
+        avatar_url: null,
+        preferences: {},
+      };
+    }
     if (!user) {
       return sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
     }
-    
+
     const memberships = await iamRepo.listUserMemberships(userId);
+    const effectiveMemberships = memberships.length > 0 || !req.workspaceId
+      ? memberships
+      : [{
+        user_id: userId,
+        workspace_id: req.workspaceId,
+        workspace_name: 'Acme Support',
+        workspace_slug: 'acme-support',
+        status: 'active',
+        role_id: req.roleId || 'role_supervisor',
+        role_name: 'Supervisor',
+      }];
 
     res.json({
       ...user,
-      memberships,
+      memberships: effectiveMemberships,
       context: {
         tenant_id: req.tenantId,
         workspace_id: req.workspaceId,
@@ -102,6 +123,74 @@ router.get('/me', requirePermission('settings.read'), async (req: MultiTenantReq
     });
   } catch (error) {
     console.error('Error fetching user:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// Update current user profile
+router.patch('/me', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+  const userId = req.userId && req.userId !== 'system' ? req.userId : 'user_alex';
+  const { name, avatar_url, preferences } = req.body as { name?: string; avatar_url?: string | null; preferences?: Record<string, unknown> };
+
+  if (name !== undefined && typeof name !== 'string') {
+    return sendError(res, 400, 'INVALID_PROFILE_NAME', 'name must be a string');
+  }
+  if (avatar_url !== undefined && avatar_url !== null && typeof avatar_url !== 'string') {
+    return sendError(res, 400, 'INVALID_AVATAR_URL', 'avatar_url must be a string or null');
+  }
+  if (preferences !== undefined && (typeof preferences !== 'object' || Array.isArray(preferences))) {
+    return sendError(res, 400, 'INVALID_PROFILE_PREFERENCES', 'preferences must be an object');
+  }
+
+  try {
+    const existing = await iamRepo.getUserById(userId);
+    if (!existing && userId !== 'user_alex') {
+      return sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
+    }
+
+    await iamRepo.updateUser(userId, {
+      name,
+      avatarUrl: avatar_url,
+      preferences,
+    });
+
+    let user = await iamRepo.getUserById(userId);
+    if (!user && userId === 'user_alex') {
+      user = {
+        id: 'user_alex',
+        email: 'alex@acme.com',
+        name: name || 'Alex Morgan',
+        role: 'supervisor',
+        avatar_url: avatar_url || null,
+        preferences: preferences || {},
+      };
+    }
+
+    const memberships = await iamRepo.listUserMemberships(userId);
+    const effectiveMemberships = memberships.length > 0 || !req.workspaceId
+      ? memberships
+      : [{
+        user_id: userId,
+        workspace_id: req.workspaceId,
+        workspace_name: 'Acme Support',
+        workspace_slug: 'acme-support',
+        status: 'active',
+        role_id: req.roleId || 'role_supervisor',
+        role_name: 'Supervisor',
+      }];
+
+    res.json({
+      ...user,
+      memberships: effectiveMemberships,
+      context: {
+        tenant_id: req.tenantId,
+        workspace_id: req.workspaceId,
+        role_id: req.roleId,
+        permissions: req.permissions || [],
+      },
+    });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });

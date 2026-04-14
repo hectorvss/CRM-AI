@@ -1,5 +1,4 @@
-import { getDb } from '../db/client.js';
-import { parseRow } from '../db/utils.js';
+import { createKnowledgeRepository } from '../data/knowledge.js';
 
 type AccessLevel =
   | 'No access'
@@ -257,8 +256,8 @@ function buildPromptContext(documents: KnowledgeArticleView[]): string {
     .join('\n\n');
 }
 
-export function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): AgentKnowledgeBundle {
-  const db = getDb();
+export async function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): Promise<AgentKnowledgeBundle> {
+  const knowledgeRepo = createKnowledgeRepository();
   const profile = typeof options.knowledgeProfile === 'string'
     ? (() => {
         try {
@@ -270,26 +269,15 @@ export function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): A
     : options.knowledgeProfile ?? {};
   const signals = buildSignals(options.caseContext);
 
-  let query = `
-    SELECT a.*, d.name as domain_name
-    FROM knowledge_articles a
-    LEFT JOIN knowledge_domains d ON a.domain_id = d.id
-    WHERE a.tenant_id = ? AND a.workspace_id = ?
-  `;
-  const params: any[] = [options.tenantId, options.workspaceId];
-
   const docStatus = profile.document_status ?? 'Final documents only';
-  if (docStatus === 'Include drafts') {
-    query += ` AND a.status IN ('draft', 'published')`;
-  } else if (docStatus === 'Approved policies only') {
-    query += ` AND a.status = 'published' AND a.type = 'policy'`;
-  } else {
-    query += ` AND a.status = 'published'`;
-  }
-
-  query += ' ORDER BY a.updated_at DESC, a.citation_count DESC';
-
-  const rows = db.prepare(query).all(...params).map(parseRow) as any[];
+  const rows = await knowledgeRepo.listArticles(
+    { tenantId: options.tenantId, workspaceId: options.workspaceId },
+    docStatus === 'Approved policies only'
+      ? { status: 'published', type: 'policy' }
+      : docStatus === 'Include drafts'
+        ? {}
+        : { status: 'published' }
+  );
   const sourcePriority = profile.trusted_source_priority ?? [];
   const accessibleDocuments: KnowledgeArticleView[] = [];
   const blockedDocuments: KnowledgeArticleView[] = [];

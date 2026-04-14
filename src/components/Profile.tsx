@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ProfileTab from './profile/ProfileTab';
 import AccessPermissionsTab from './profile/AccessPermissionsTab';
@@ -11,6 +11,17 @@ type ProfileTabType = 'profile' | 'access_permissions' | 'security' | 'notificat
 
 export default function Profile() {
   const [activeTab, setActiveTab] = useState<ProfileTabType>('profile');
+  const [saveHandler, setSaveHandler] = useState<null | (() => Promise<void> | void)>(null);
+
+  useEffect(() => {
+    setSaveHandler(null);
+  }, [activeTab]);
+
+  const handleSave = useCallback(async () => {
+    if (saveHandler) {
+      await saveHandler();
+    }
+  }, [saveHandler]);
 
   const tabs: { id: ProfileTabType; label: string }[] = [
     { id: 'profile', label: 'Profile' },
@@ -34,7 +45,14 @@ export default function Profile() {
             </div>
             <div className="flex items-center gap-3">
               <button className="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors">Discard Changes</button>
-              <button className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-md hover:opacity-90 transition-all">Save changes</button>
+              <button
+                type="button"
+                onClick={() => { void handleSave().catch(() => undefined); }}
+                disabled={!saveHandler}
+                className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-md hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Save changes
+              </button>
             </div>
           </div>
           <div className="px-6 flex items-center space-x-8 border-t border-gray-100 dark:border-gray-800 pt-3">
@@ -67,11 +85,11 @@ export default function Profile() {
               transition={{ duration: 0.2 }}
               className="h-full"
             >
-              {activeTab === 'profile' && <ProfileTab />}
+              {activeTab === 'profile' && <ProfileTab onSaveReady={setSaveHandler} />}
               {activeTab === 'access_permissions' && <AccessPermissionsTab />}
-              {activeTab === 'security' && <SecurityTab />}
-              {activeTab === 'notifications' && <NotificationsTab />}
-              {activeTab === 'preferences' && <PreferencesTab />}
+              {activeTab === 'security' && <SecurityTab onSaveReady={setSaveHandler} />}
+              {activeTab === 'notifications' && <NotificationsTab onSaveReady={setSaveHandler} />}
+              {activeTab === 'preferences' && <PreferencesTab onSaveReady={setSaveHandler} />}
               {activeTab === 'activity' && <ActivityTab />}
             </motion.div>
           </AnimatePresence>

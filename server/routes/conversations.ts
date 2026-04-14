@@ -79,7 +79,7 @@ router.post('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
 
     if (conv.caseId) {
       await caseRepo.update(scope, conv.caseId, { 
-        lastActivityAt: now 
+        last_activity_at: now 
       });
     }
 

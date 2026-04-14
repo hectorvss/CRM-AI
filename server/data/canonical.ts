@@ -3,6 +3,13 @@ import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 
+function normalizeSqlValue(value: any): any {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (typeof value === 'object' && !(value instanceof Date)) return JSON.stringify(value);
+  return value;
+}
+
 export interface CanonicalScope {
   tenantId: string;
   workspaceId: string;
@@ -548,14 +555,14 @@ export function createCanonicalRepository(): CanonicalRepository {
     updateEventStatus: async (scope, eventId, updates) => {
       const db = getDb();
       const fields = Object.keys(updates).map(k => `${k} = ?`);
-      const params = Object.values(updates);
+      const params = Object.values(updates).map(normalizeSqlValue);
       params.push(eventId);
       db.prepare(`UPDATE canonical_events SET ${fields.join(', ')}, processed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
     },
     updateEvent: async (scope, eventId, updates) => {
       const db = getDb();
       const fields = Object.keys(updates).map(k => `${k} = ?`);
-      const params = Object.values(updates);
+      const params = Object.values(updates).map(normalizeSqlValue);
       params.push(eventId);
       db.prepare(`UPDATE canonical_events SET ${fields.join(', ')} WHERE id = ?`).run(...params);
     }

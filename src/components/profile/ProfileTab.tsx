@@ -1,9 +1,51 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
 
-export default function ProfileTab() {
+type SaveHandler = (() => Promise<void> | void) | null;
+
+type ProfileTabProps = {
+  onSaveReady?: (handler: SaveHandler) => void;
+};
+
+export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
   const { data: user, loading, error } = useApi<any>(iamApi.me);
+  const [name, setName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    setName(user.name || '');
+    setAvatarUrl(user.avatar_url || '');
+  }, [user]);
+
+  const workspace = useMemo(() => {
+    return user?.memberships && user.memberships.length > 0 ? user.memberships[0] : null;
+  }, [user]);
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    setStatusMessage(null);
+    try {
+      await iamApi.updateMe({
+        name,
+        avatar_url: avatarUrl || null,
+      });
+      setStatusMessage('Profile changes saved.');
+    } catch (saveError: any) {
+      setStatusMessage(saveError?.message || 'Unable to save profile changes.');
+      throw saveError;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [avatarUrl, name]);
+
+  useEffect(() => {
+    onSaveReady?.(handleSave);
+    return () => onSaveReady?.(null);
+  }, [handleSave, onSaveReady]);
 
   if (loading) {
     return <div className="p-6 text-sm text-gray-500">Loading profile data...</div>;
@@ -13,10 +55,14 @@ export default function ProfileTab() {
     return <div className="p-6 text-sm text-red-500">Error loading profile data.</div>;
   }
 
-  const workspace = user.memberships && user.memberships.length > 0 ? user.memberships[0] : null;
-
   return (
     <div className="space-y-8">
+      {statusMessage && (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
+          {statusMessage}
+        </div>
+      )}
+
       {/* Personal Info */}
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
@@ -26,50 +72,52 @@ export default function ProfileTab() {
         <div className="p-6 space-y-6">
           <div className="flex items-center gap-6">
             <div className="relative">
-              <img src={user.avatar_url || "https://i.pravatar.cc/150?img=11"} alt="User" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover" />
-              <button className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
+              <img src={avatarUrl || user.avatar_url || 'https://i.pravatar.cc/150?img=11'} alt="User" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover" />
+              <button type="button" className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
                 <span className="material-symbols-outlined text-[14px]">edit</span>
               </button>
             </div>
             <div>
               <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Profile Photo</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">This will be displayed on your profile and in conversations.</p>
-              <button className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
+              <button type="button" className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
-              <input 
-                type="text" 
-                defaultValue={user.name}
+              <input
+                type="text"
+                value={name}
+                onChange={event => setName(event.target.value)}
                 className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Work Email</label>
-              <input 
-                type="email" 
-                defaultValue={user.email}
+              <input
+                type="email"
+                value={user.email}
                 readOnly
                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Role ID</label>
-              <input 
-                type="text" 
-                defaultValue={user.role}
-                readOnly
-                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Avatar URL</label>
+              <input
+                type="url"
+                value={avatarUrl}
+                onChange={event => setAvatarUrl(event.target.value)}
+                placeholder="https://..."
+                className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Joined At</label>
-              <input 
-                type="text" 
-                defaultValue={new Date(user.created_at).toLocaleDateString()}
+              <input
+                type="text"
+                value={new Date(user.created_at).toLocaleDateString()}
                 readOnly
                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
               />
@@ -142,6 +190,19 @@ export default function ProfileTab() {
             </div>
           </div>
         </section>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-500">{isSaving ? 'Saving profile changes...' : 'Changes are saved to your profile record.'}</span>
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={isSaving}
+          className="hidden"
+          aria-hidden="true"
+        >
+          Save
+        </button>
       </div>
     </div>
   );
