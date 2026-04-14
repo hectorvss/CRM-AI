@@ -27,6 +27,7 @@ export interface JobRepository {
 
   countJobs(): Promise<Record<string, number>>;
   retryDeadJob(id: string): Promise<boolean>;
+  quarantineOrphanJobs(): Promise<number>;
 }
 
 class SQLiteJobRepository implements JobRepository {
@@ -103,6 +104,10 @@ class SQLiteJobRepository implements JobRepository {
       WHERE id = ? AND status = 'dead'
     `).run(id);
     return result.changes > 0;
+  }
+
+  async quarantineOrphanJobs() {
+    return 0;
   }
 }
 
@@ -222,6 +227,10 @@ class SupabaseJobRepository implements JobRepository {
       .eq('id', id)
       .eq('status', 'dead');
     return !error;
+  }
+
+  async quarantineOrphanJobs() {
+    return 0;
   }
 }
 
