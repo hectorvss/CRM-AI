@@ -190,8 +190,10 @@ async function listCustomersSupabase(scope: CustomerScope, filters: CustomerFilt
   if (error) throw error;
 
   const rows = (data ?? []).map((row) => ({ ...row }));
-  const detailEntries = await Promise.all(rows.map(async (row) => [row.id, await getCustomerDetailSupabase(scope, row.id)] as const));
-  return enrichCustomerRows(rows, new Map(detailEntries));
+  const detailEntries = await Promise.all(
+    rows.map(async (row): Promise<[string, any]> => [row.id, await getCustomerDetailSupabase(scope, row.id)]),
+  );
+  return enrichCustomerRows(rows, new Map<string, any>(detailEntries));
 }
 
 async function getCustomerStateSupabase(scope: CustomerScope, customerId: string) {
@@ -263,9 +265,8 @@ function listCustomersSqlite(scope: CustomerScope, filters: CustomerFilters) {
   query += ' ORDER BY lifetime_value DESC';
 
   const rows = db.prepare(query).all(...params).map((row: any) => parseRow(row));
-  const detailByCustomerId = new Map(
-    rows.map((row: any) => [row.id, getCustomerDetailSqlite(scope, row.id)]),
-  );
+  const detailEntries: Array<[string, any]> = rows.map((row: any) => [row.id, getCustomerDetailSqlite(scope, row.id)]);
+  const detailByCustomerId = new Map<string, any>(detailEntries);
   return enrichCustomerRows(rows, detailByCustomerId);
 }
 

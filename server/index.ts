@@ -11,8 +11,6 @@ dotenv.config();
 
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { runMigrations } from './db/client.js';
-import { seedDatabase } from './db/seed.js';
 import { startWorker, stopWorker, workerStatus } from './queue/worker.js';
 import { countJobs } from './queue/client.js';
 import { startScheduledJobs, stopScheduledJobs } from './queue/scheduledJobs.js';
@@ -66,12 +64,23 @@ import './agents/orchestrator.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
 
-mkdirSync(DATA_DIR, { recursive: true });
-assertDatabaseProviderReady();
+const isServerlessRuntime = Boolean(process.env.VERCEL);
 
-// ── Database ──────────────────────────────────────────────
-runMigrations();
-seedDatabase();
+if (!isServerlessRuntime) {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+  } catch (err) {
+    logger.warn('Failed to create DATA_DIR', { error: err });
+  }
+}
+
+// ── Database Readiness ────────────────────────────────────
+try {
+  assertDatabaseProviderReady();
+} catch (err: any) {
+  logger.error('Database configuration check failed', { error: err.message });
+  if (!isServerlessRuntime) process.exit(1);
+}
 
 // ── Integrations ──────────────────────────────────────────
 // Non-blocking: adapters that fail to init are logged but don't crash startup
