@@ -113,6 +113,11 @@ function optionalInt(key: string, defaultValue: number): number {
 function buildConfig(): Config {
   const env = optionalEnv('NODE_ENV', 'development') as Config['env'];
 
+  const requestedDbProvider = optionalEnv('DB_PROVIDER', 'supabase');
+  if (requestedDbProvider !== 'supabase') {
+    console.warn(`DB_PROVIDER=${requestedDbProvider} is no longer supported. Supabase will be used exclusively.`);
+  }
+
   // Gemini is optional for local product demos
   const geminiApiKey = optionalEnv('GEMINI_API_KEY', '');
   if (!geminiApiKey) {
@@ -142,7 +147,7 @@ function buildConfig(): Config {
     },
 
     db: {
-      provider: (process.env.DB_PROVIDER?.trim() || 'supabase') as 'sqlite' | 'supabase',
+      provider: 'supabase',
       path: optionalEnv('DB_PATH', './data/crmai.db'),
       supabaseUrl: process.env.SUPABASE_URL?.trim(),
       supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),

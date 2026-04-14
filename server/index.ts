@@ -11,9 +11,6 @@ dotenv.config();
 
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { runMigrations, getDb } from './db/client.js';
-import { seedDatabase } from './db/seed.js';
-import { seedAgents } from './agents/seed.js';
 import { startWorker, stopWorker, workerStatus } from './queue/worker.js';
 import { countJobs } from './queue/client.js';
 import { startScheduledJobs, stopScheduledJobs } from './queue/scheduledJobs.js';
@@ -82,14 +79,6 @@ try {
   if (!isServerlessRuntime) process.exit(1);
 }
 
-// ── Database Initialization ───────────────────────────────
-if (config.db.provider === 'sqlite') {
-  if (!isServerlessRuntime) runMigrations();
-  if (!isServerlessRuntime) seedAgents(getDb(), 'org_default');
-  if (!isServerlessRuntime) seedDatabase();
-} else {
-  logger.info('Running in Supabase mode — Skipping local SQLite migrations and seeding.');
-}
 
 // ── Integrations ──────────────────────────────────────────
 bootstrapIntegrations().catch(err => {
