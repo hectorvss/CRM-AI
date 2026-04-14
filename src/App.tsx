@@ -22,6 +22,12 @@ import { Page } from './types';
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('case_graph');
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [focusCaseId, setFocusCaseId] = useState<string | null>(null);
+
+  const navigate = (page: Page, nextFocusCaseId?: string | null) => {
+    setCurrentPage(page);
+    setFocusCaseId(nextFocusCaseId ?? null);
+  };
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200 font-sans h-screen flex overflow-hidden selection:bg-purple-200 dark:selection:bg-purple-900">
@@ -33,22 +39,22 @@ export default function App() {
       />
       <main className="flex-1 flex flex-col h-full min-w-0 relative">
         <PageErrorBoundary page={currentPage}>
-          {currentPage === 'inbox' && <Inbox />}
+          {currentPage === 'inbox' && <Inbox focusCaseId={focusCaseId} />}
           {currentPage === 'home' && <Home />}
           {currentPage === 'ai_studio' && <AIStudio />}
-          {currentPage === 'workflows' && <Workflows />}
+          {currentPage === 'workflows' && <Workflows onNavigate={navigate} />}
           {currentPage === 'approvals' && <Approvals />}
           {currentPage === 'knowledge' && <Knowledge />}
-          {currentPage === 'customers' && <Customers />}
+          {currentPage === 'customers' && <Customers onNavigate={navigate} />}
           {currentPage === 'tools_integrations' && <ToolsIntegrations />}
           {currentPage === 'reports' && <Reports />}
           {currentPage === 'settings' && <Settings />}
           {currentPage === 'upgrade' && <Upgrade />}
           {currentPage === 'profile' && <Profile />}
-          {currentPage === 'orders' && <Orders />}
+          {currentPage === 'orders' && <Orders onNavigate={navigate} />}
           {currentPage === 'returns' && <Returns />}
           {currentPage === 'payments' && <Payments />}
-          {currentPage === 'case_graph' && <CaseGraph onPageChange={setCurrentPage} />}
+          {currentPage === 'case_graph' && <CaseGraph onPageChange={(page) => navigate(page, page === 'case_graph' ? focusCaseId : null)} focusCaseId={focusCaseId} />}
         </PageErrorBoundary>
       </main>
     </div>

@@ -48,6 +48,13 @@ function compactBadges(values: Array<string | null | undefined>): string[] {
   );
 }
 
+function normalizeSqlValue(value: any): any {
+  if (value === undefined || value === null) return null;
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (typeof value === 'object' && !(value instanceof Date)) return JSON.stringify(value);
+  return value;
+}
+
 // ── Order enrichment ─────────────────────────────────────────
 
 function buildOrderTab(row: any): string {
@@ -353,7 +360,7 @@ function updateOrderSqlite(scope: CommerceScope, orderId: string, updates: any):
   if (fields.length === 0) return;
 
   const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates), orderId, scope.tenantId, scope.workspaceId];
+  const params = [...Object.values(updates).map(normalizeSqlValue), orderId, scope.tenantId, scope.workspaceId];
   
   db.prepare(`
     UPDATE orders 
@@ -415,7 +422,7 @@ function updatePaymentSqlite(scope: CommerceScope, paymentId: string, updates: a
   if (fields.length === 0) return;
 
   const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates), paymentId, scope.tenantId, scope.workspaceId];
+  const params = [...Object.values(updates).map(normalizeSqlValue), paymentId, scope.tenantId, scope.workspaceId];
   
   db.prepare(`
     UPDATE payments 
@@ -487,7 +494,7 @@ function updateReturnSqlite(scope: CommerceScope, returnId: string, updates: any
   if (fields.length === 0) return;
 
   const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates), returnId, scope.tenantId, scope.workspaceId];
+  const params = [...Object.values(updates).map(normalizeSqlValue), returnId, scope.tenantId, scope.workspaceId];
   
   db.prepare(`
     UPDATE returns 

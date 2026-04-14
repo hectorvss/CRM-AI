@@ -1,9 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { customersApi } from '../api/client';
+import { customersApi, paymentsApi, policyApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import type { Page } from '../types';
 
 type CustomerTab = 'all_activity' | 'conversations' | 'orders' | 'system_logs';
+type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
+
+interface CustomersProps {
+  onNavigate?: NavigateFn;
+}
 
 interface Order {
   id: string;
@@ -34,6 +40,13 @@ interface Customer {
   ltv: string;
   nextRenewal: string;
   orders: Order[];
+  recentCases?: Array<{
+    id: string;
+    caseNumber?: string;
+    case_number?: string;
+    type?: string;
+    status?: string;
+  }>;
   reconciliation?: {
     status: 'Healthy' | 'Warning' | 'Conflict' | 'Blocked';
     mismatches: number;
@@ -236,14 +249,26 @@ function buildInitialsAvatar(name: string) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-export default function Customers() {
+export default function Customers({ onNavigate }: CustomersProps) {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<CustomerTab>('all_activity');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isCreateCustomerOpen, setIsCreateCustomerOpen] = useState(false);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [customerActionsOpen, setCustomerActionsOpen] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    name: '',
+    email: '',
+    company: '',
+    source: 'manual',
+    externalId: '',
+  });
 
   // Fetch canonical customers from the backend. The visual mock list is kept
   // only as historical reference data, never as runtime source.
-  const { data: apiCustomers } = useApi(() => customersApi.list(), [], []);
-  const { data: apiSelectedState } = useApi(
+  const { data: apiCustomers, error: customersError } = useApi(() => customersApi.list(), [], []);
+  const { data: apiSelectedState, error: customerStateError } = useApi(
     () => selectedCustomerId ? customersApi.state(selectedCustomerId) : Promise.resolve(null),
     [selectedCustomerId]
   );
@@ -303,6 +328,24 @@ export default function Customers() {
     return [];
   }, [apiCustomers]);
 
+  const visibleCustomers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return customers;
+    return customers.filter(customer => {
+      const haystack = [
+        customer.name,
+        customer.email,
+        customer.company,
+        customer.plan,
+        customer.segment,
+        customer.topIssue,
+        customer.risk || '',
+        ...customer.sources.map(source => source.name),
+      ].join(' ').toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [customers, searchQuery]);
+
   const selectedCustomer = React.useMemo(() => {
     const fallbackCustomer = customers.find(c => c.id === selectedCustomerId) || null;
     if (!apiSelectedState) return fallbackCustomer;
@@ -355,6 +398,15 @@ export default function Customers() {
       plan: fallbackCustomer?.plan || 'Standard',
       ltv: `$${Number(apiSelectedState.metrics?.lifetime_value || customer.lifetime_value || 0).toLocaleString()}`,
       nextRenewal: fallbackCustomer?.nextRenewal || 'N/A',
+      recentCases: Array.isArray(recentCases)
+        ? recentCases.map((recentCase: any) => ({
+            id: recentCase.id || recentCase.case_number,
+            caseNumber: recentCase.case_number || recentCase.id,
+            case_number: recentCase.case_number || recentCase.id,
+            type: recentCase.type || recentCase.conflict_type || 'Case',
+            status: recentCase.status || 'open',
+          }))
+        : fallbackCustomer?.recentCases || [],
       orders: (systems.orders?.nodes || []).map((node: any) => ({
         id: node.label,
         date: node.timestamp ? new Date(node.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
@@ -365,6 +417,92 @@ export default function Customers() {
       reconciliation,
     } as Customer;
   }, [apiSelectedState, customers, selectedCustomerId]);
+
+  const selectedCustomerCaseId = selectedCustomer?.recentCases?.[0]?.id
+    || selectedCustomer?.recentCases?.[0]?.caseNumber
+    || selectedCustomer?.recentCases?.[0]?.case_number
+    || null;
+
+  const openCustomerCase = (page: Page) => {
+    if (!selectedCustomerCaseId) {
+      setActionMessage('No linked case found for this customer.');
+      return;
+    }
+    onNavigate?.(page, selectedCustomerCaseId);
+  };
+
+  const handleCreateCustomer = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setActionMessage(null);
+    setIsCreatingCustomer(true);
+    try {
+      const created = await customersApi.create({
+        displayName: newCustomer.name.trim() || newCustomer.email.trim() || 'New Customer',
+        email: newCustomer.email.trim(),
+        source: newCustomer.source,
+        externalId: newCustomer.externalId.trim() || undefined,
+        company: newCustomer.company.trim() || undefined,
+      });
+      setActionMessage(`Customer created: ${created?.canonical_name || created?.name || newCustomer.name || 'New Customer'}`);
+      setIsCreateCustomerOpen(false);
+      setNewCustomer({ name: '', email: '', company: '', source: 'manual', externalId: '' });
+      if (created?.id) setSelectedCustomerId(created.id);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Failed to create customer.');
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  };
+
+  const handleCreateApproval = async () => {
+    if (!selectedCustomerCaseId) {
+      setActionMessage('No linked case found to send for approval.');
+      return;
+    }
+    try {
+      const result = await policyApi.evaluateAndRoute({
+        entity_type: 'case',
+        action_type: 'customer_profile_action',
+        case_id: selectedCustomerCaseId,
+        requested_by: 'user_alex',
+        requested_by_type: 'human',
+        context: {
+          customer_id: selectedCustomer?.id,
+          customer_email: selectedCustomer?.email,
+          customer_name: selectedCustomer?.name,
+          risk_level: selectedCustomer?.risk === 'Churn Risk' ? 'high' : selectedCustomer?.risk === 'Watchlist' ? 'medium' : 'low',
+        },
+      });
+      setActionMessage(result?.approval_request_id
+        ? `Approval request created for ${selectedCustomerCaseId}`
+        : `Policy evaluated for ${selectedCustomerCaseId}: ${result?.decision || 'approved'}`);
+      if (result?.approval_request_id) onNavigate?.('approvals');
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Failed to create approval.');
+    }
+  };
+
+  const handleStartRefund = async () => {
+    if (!selectedCustomer) {
+      setActionMessage('Select a customer first.');
+      return;
+    }
+    try {
+      const candidatePayments = await paymentsApi.list(selectedCustomer.email ? { q: selectedCustomer.email } : {});
+      const payment = candidatePayments[0];
+      if (!payment) {
+        setActionMessage('No refundable payment found for this customer.');
+        return;
+      }
+      const refund = await paymentsApi.refund(payment.id, {
+        reason: `Refund requested from customer profile for ${selectedCustomer.name}`,
+      });
+      setActionMessage(`Refund created for payment ${payment.id}${refund?.id ? ` (${refund.id})` : ''}`);
+      onNavigate?.('payments');
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Failed to start refund.');
+    }
+  };
 
   const renderListView = () => (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -382,10 +520,15 @@ export default function Customers() {
                 <input 
                   type="text" 
                   placeholder="Search customers..." 
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-all"
                 />
               </div>
-              <button className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg text-sm font-bold hover:opacity-90 transition-opacity shadow-card flex items-center gap-2">
+              <button
+                onClick={() => setIsCreateCustomerOpen(true)}
+                className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg text-sm font-bold shadow-card flex items-center gap-2 hover:opacity-90 transition-opacity"
+              >
                 <span className="material-symbols-outlined text-lg">add</span>
                 New Customer
               </button>
@@ -410,6 +553,29 @@ export default function Customers() {
         </div>
       </div>
 
+      {(customersError || customerStateError) && (
+        <div className="mx-6 mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-card dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-lg mt-0.5">error</span>
+            <div className="min-w-0">
+              <div className="font-semibold">Customer data unavailable</div>
+              <div className="text-xs opacity-90">{customerStateError || customersError}</div>
+            </div>
+          </div>
+        </div>
+      )}
+      {actionMessage && (
+        <div className="mx-6 mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-card dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-lg mt-0.5">info</span>
+            <div className="min-w-0">
+              <div className="font-semibold">Customer action status</div>
+              <div className="text-xs opacity-90">{actionMessage}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 flex gap-3 overflow-hidden min-h-0 p-6">
         <div className="flex-1 bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden flex flex-col">
           <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -427,7 +593,7 @@ export default function Customers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800 bg-white dark:bg-card-dark">
-                {customers.map((customer) => (
+                {visibleCustomers.length > 0 ? visibleCustomers.map((customer) => (
                   <tr 
                     key={customer.id} 
                     className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
@@ -497,12 +663,38 @@ export default function Customers() {
                     </td>
                     <td className="px-4 py-5 whitespace-nowrap text-right text-sm font-medium">
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-end space-x-1">
-                        <button className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"><span className="material-symbols-outlined text-lg">visibility</span></button>
-                        <button className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"><span className="material-symbols-outlined text-lg">more_horiz</span></button>
+                        <button
+                          className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedCustomerId(customer.id);
+                            openCustomerCase('case_graph');
+                          }}
+                          title="View analysis"
+                        >
+                          <span className="material-symbols-outlined text-lg">visibility</span>
+                        </button>
+                        <button
+                          className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedCustomerId(customer.id);
+                            setCustomerActionsOpen((value) => !value);
+                          }}
+                          title="More actions"
+                        >
+                          <span className="material-symbols-outlined text-lg">more_horiz</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
+                      No customers match your search.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -554,7 +746,7 @@ export default function Customers() {
                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
                   AI detected 3 high-value customers at risk of churning due to recent billing disputes.
                 </p>
-                <button className="mt-3 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 transition-colors">View analysis →</button>
+                        <button onClick={() => openCustomerCase('case_graph')} className="mt-3 text-xs font-bold text-indigo-700 dark:text-indigo-300 transition-colors hover:underline">View analysis →</button>
               </div>
             </div>
           </div>
@@ -604,17 +796,62 @@ export default function Customers() {
               </span>
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="px-4 py-2 text-sm font-semibold bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors shadow-card flex items-center gap-2">
+          <div className="relative flex items-center gap-3">
+            <button
+              onClick={() => setCustomerActionsOpen((value) => !value)}
+              className="px-4 py-2 text-sm font-semibold bg-white/90 dark:bg-card-dark/90 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-lg shadow-card flex items-center gap-2 hover:bg-white dark:hover:bg-gray-800 transition-colors"
+            >
               <span className="material-symbols-outlined text-[18px]">more_horiz</span>
               More
             </button>
-            <button className="px-4 py-2 text-sm font-semibold bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors shadow-card flex items-center gap-2">
+            <button
+              onClick={() => openCustomerCase('inbox')}
+              className="px-4 py-2 text-sm font-semibold bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg shadow-card flex items-center gap-2 hover:opacity-90 transition-opacity"
+            >
               <span className="material-symbols-outlined text-[18px]">open_in_new</span>
               Open in Inbox
             </button>
+            {customerActionsOpen && (
+              <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-card-dark shadow-2xl z-20 p-2">
+                <button
+                  onClick={() => openCustomerCase('case_graph')}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <span className="material-symbols-outlined text-[18px]">timeline</span>
+                  View analysis
+                </button>
+                <button
+                  onClick={() => handleCreateApproval()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
+                  Create approval
+                </button>
+                <button
+                  onClick={() => handleStartRefund()}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <span className="material-symbols-outlined text-[18px]">currency_exchange</span>
+                  Start refund
+                </button>
+              </div>
+            )}
           </div>
         </header>
+
+        {actionMessage && (
+          <div className="px-6 pt-4">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-card dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined text-lg mt-0.5">info</span>
+                <div className="min-w-0">
+                  <div className="font-semibold">Customer action status</div>
+                  <div className="text-xs opacity-90">{actionMessage}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 flex gap-6 p-6 overflow-hidden min-h-0">
           {/* Left Sidebar */}
@@ -786,11 +1023,17 @@ export default function Customers() {
             <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
               <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-3">Quick Actions</h3>
               <div className="space-y-2">
-                <button className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors">
+                <button
+                  onClick={handleCreateApproval}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
                   <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px] text-gray-500">assignment_turned_in</span> Create Approval</span>
                   <span className="material-symbols-outlined text-[16px] text-gray-400">arrow_forward</span>
                 </button>
-                <button className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800/30 transition-colors">
+                <button
+                  onClick={handleStartRefund}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-800/30 transition-colors hover:bg-red-100 dark:hover:bg-red-900/20"
+                >
                   <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">currency_exchange</span> Start Refund</span>
                   <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                 </button>
@@ -1002,6 +1245,103 @@ export default function Customers() {
             className="flex-1 flex flex-col overflow-hidden"
           >
             {renderListView()}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isCreateCustomerOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          >
+            <form
+              onSubmit={handleCreateCustomer}
+              className="w-full max-w-lg rounded-2xl bg-white dark:bg-card-dark shadow-2xl border border-gray-200 dark:border-gray-700 p-6"
+            >
+              <div className="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">New Customer</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Create a real customer record in the active workspace.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateCustomerOpen(false)}
+                  className="w-9 h-9 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-500"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="text-gray-600 dark:text-gray-300 font-medium">Name</span>
+                  <input
+                    value={newCustomer.name}
+                    onChange={(event) => setNewCustomer((value) => ({ ...value, name: event.target.value }))}
+                    className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                    placeholder="Customer name"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="text-gray-600 dark:text-gray-300 font-medium">Email</span>
+                  <input
+                    type="email"
+                    value={newCustomer.email}
+                    onChange={(event) => setNewCustomer((value) => ({ ...value, email: event.target.value }))}
+                    className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                    placeholder="customer@example.com"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="text-gray-600 dark:text-gray-300 font-medium">Company</span>
+                  <input
+                    value={newCustomer.company}
+                    onChange={(event) => setNewCustomer((value) => ({ ...value, company: event.target.value }))}
+                    className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                    placeholder="Company name"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="text-gray-600 dark:text-gray-300 font-medium">Source</span>
+                  <select
+                    value={newCustomer.source}
+                    onChange={(event) => setNewCustomer((value) => ({ ...value, source: event.target.value }))}
+                    className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="shopify">Shopify</option>
+                    <option value="stripe">Stripe</option>
+                    <option value="intercom">Intercom</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm sm:col-span-2">
+                  <span className="text-gray-600 dark:text-gray-300 font-medium">External ID</span>
+                  <input
+                    value={newCustomer.externalId}
+                    onChange={(event) => setNewCustomer((value) => ({ ...value, externalId: event.target.value }))}
+                    className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                    placeholder="Optional external identifier"
+                  />
+                </label>
+              </div>
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateCustomerOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingCustomer}
+                  className="px-4 py-2 rounded-lg bg-black dark:bg-white text-white dark:text-black text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+                >
+                  {isCreatingCustomer ? 'Creating...' : 'Create customer'}
+                </button>
+              </div>
+            </form>
           </motion.div>
         )}
       </AnimatePresence>

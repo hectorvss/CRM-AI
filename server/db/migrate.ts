@@ -370,23 +370,24 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
             has_policies INTEGER DEFAULT 0,
             citations TEXT DEFAULT '[]',
             status TEXT NOT NULL DEFAULT 'pending_review',
-            reviewed_by TEXT,
-            reviewed_at TEXT,
-            sent_at TEXT,
-            updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-            tenant_id TEXT NOT NULL
-          );
+          reviewed_by TEXT,
+          reviewed_at TEXT,
+          sent_at TEXT,
+          updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+          tenant_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL DEFAULT 'ws_default'
+        );
 
-          INSERT INTO draft_replies (
-            id, case_id, conversation_id, content, generated_by, generated_at,
-            tone, confidence, has_policies, citations, status, reviewed_by,
-            reviewed_at, sent_at, updated_at, tenant_id
-          )
-          SELECT
-            id, case_id, conversation_id, content, generated_by, generated_at,
-            tone, confidence, has_policies, citations, status, reviewed_by,
-            reviewed_at, sent_at, updated_at, tenant_id
-          FROM draft_replies_legacy_conversation_fk;
+        INSERT INTO draft_replies (
+          id, case_id, conversation_id, content, generated_by, generated_at,
+          tone, confidence, has_policies, citations, status, reviewed_by,
+          reviewed_at, sent_at, updated_at, tenant_id, workspace_id
+        )
+        SELECT
+          id, case_id, conversation_id, content, generated_by, generated_at,
+          tone, confidence, has_policies, citations, status, reviewed_by,
+          reviewed_at, sent_at, updated_at, tenant_id, COALESCE(workspace_id, 'ws_default')
+        FROM draft_replies_legacy_conversation_fk;
 
           DROP TABLE draft_replies_legacy_conversation_fk;
         `);
@@ -430,20 +431,21 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
           created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
           delivered_at TEXT,
           read_at TEXT,
-          tenant_id TEXT NOT NULL
+          tenant_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL DEFAULT 'ws_default'
         );
 
         INSERT INTO messages (
           id, conversation_id, case_id, customer_id, type, direction,
           sender_id, sender_name, content, content_type, channel,
           external_message_id, draft_reply_id, sentiment, sentiment_score,
-          attachments, sent_at, created_at, delivered_at, read_at, tenant_id
+          attachments, sent_at, created_at, delivered_at, read_at, tenant_id, workspace_id
         )
         SELECT
           id, conversation_id, case_id, customer_id, type, direction,
           sender_id, sender_name, content, content_type, channel,
           external_message_id, draft_reply_id, sentiment, sentiment_score,
-          attachments, sent_at, created_at, delivered_at, read_at, tenant_id
+          attachments, sent_at, created_at, delivered_at, read_at, tenant_id, COALESCE(workspace_id, 'ws_default')
         FROM messages_legacy_draft_fk;
 
         DROP TABLE messages_legacy_draft_fk;
@@ -499,6 +501,218 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       db.prepare('UPDATE agent_runs SET workspace_id = COALESCE(workspace_id, ?)').run(workspace?.id || 'ws_default');
       db.prepare("UPDATE agent_runs SET status = COALESCE(status, outcome_status, 'completed')").run();
       db.exec('CREATE INDEX IF NOT EXISTS idx_agent_runs_tenant_workspace ON agent_runs(tenant_id, workspace_id)');
+    },
+  },
+  {
+    version: '2026-04-09-009',
+    up(db) {
+      const workspace = db.prepare('SELECT id FROM workspaces LIMIT 1').get() as { id: string } | undefined;
+      const workspaceId = workspace?.id || 'ws_default';
+
+      addColumn(db, 'draft_replies', 'workspace_id', `TEXT NOT NULL DEFAULT '${workspaceId}'`);
+      addColumn(db, 'internal_notes', 'workspace_id', `TEXT NOT NULL DEFAULT '${workspaceId}'`);
+      addColumn(db, 'reconciliation_issues', 'workspace_id', `TEXT NOT NULL DEFAULT '${workspaceId}'`);
+
+      db.prepare('UPDATE draft_replies SET workspace_id = COALESCE(workspace_id, ?)').run(workspaceId);
+      db.prepare('UPDATE internal_notes SET workspace_id = COALESCE(workspace_id, ?)').run(workspaceId);
+      db.prepare('UPDATE reconciliation_issues SET workspace_id = COALESCE(workspace_id, ?)').run(workspaceId);
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_draft_replies_case_workspace ON draft_replies(case_id, workspace_id, generated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_internal_notes_case_workspace ON internal_notes(case_id, workspace_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_reconciliation_issues_case_workspace ON reconciliation_issues(case_id, workspace_id, status, detected_at DESC);
+      `);
+    },
+  },
+  {
+    version: '2026-04-09-010',
+    up(db) {
+      const workspace = db.prepare('SELECT org_id, id FROM workspaces LIMIT 1').get() as { org_id?: string; id?: string } | undefined;
+      const tenantId = workspace?.org_id || 'org_default';
+      const workspaceId = workspace?.id || 'ws_default';
+
+      db.prepare(`
+        UPDATE workflow_definitions
+        SET tenant_id = ?, workspace_id = ?, updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+        WHERE tenant_id = 'tenant_default' OR workspace_id = 'ws_default'
+      `).run(tenantId, workspaceId);
+
+      db.prepare(`
+        UPDATE workflow_versions
+        SET tenant_id = ?
+        WHERE tenant_id = 'tenant_default'
+      `).run(tenantId);
+
+      db.prepare(`
+        UPDATE workflow_runs
+        SET tenant_id = ?
+        WHERE tenant_id = 'tenant_default'
+      `).run(tenantId);
+    },
+  },
+  {
+    version: '2026-04-09-011',
+    up(db) {
+      const workspace = db.prepare('SELECT org_id FROM workspaces LIMIT 1').get() as { org_id?: string } | undefined;
+      const tenantId = workspace?.org_id || 'org_default';
+      const now = new Date().toISOString();
+      const makePast = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+
+      const rows = [
+        {
+          id: 'wfr_001',
+          workflow_version_id: 'wf_001_v1',
+          case_id: 'case_001',
+          tenant_id: tenantId,
+          trigger_type: 'return.received',
+          trigger_payload: JSON.stringify({ return_id: 'ret_001' }),
+          status: 'completed',
+          current_node_id: 'issue_refund',
+          context: JSON.stringify({ approval_id: 'apr_001' }),
+          started_at: makePast(240),
+          ended_at: makePast(236),
+          error: null,
+        },
+        {
+          id: 'wfr_002',
+          workflow_version_id: 'wf_002_v1',
+          case_id: 'case_002',
+          tenant_id: tenantId,
+          trigger_type: 'return.received',
+          trigger_payload: JSON.stringify({ return_id: 'ret_002' }),
+          status: 'failed',
+          current_node_id: 'approval_check',
+          context: JSON.stringify({ approval_id: 'apr_002' }),
+          started_at: makePast(120),
+          ended_at: makePast(119),
+          error: 'Approval gate timed out',
+        },
+        {
+          id: 'wfr_003',
+          workflow_version_id: 'wf_003_v1',
+          case_id: 'case_004',
+          tenant_id: tenantId,
+          trigger_type: 'payment.refund_detected',
+          trigger_payload: JSON.stringify({ payment_id: 'pay_004' }),
+          status: 'running',
+          current_node_id: 'duplicate_check',
+          context: JSON.stringify({ risk_score: 0.82 }),
+          started_at: makePast(25),
+          ended_at: null,
+          error: null,
+        },
+      ];
+
+      const insertRun = db.prepare(`
+        INSERT OR IGNORE INTO workflow_runs (
+          id, workflow_version_id, case_id, tenant_id, trigger_type, trigger_payload,
+          status, current_node_id, context, started_at, ended_at, error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const row of rows) {
+        insertRun.run(
+          row.id,
+          row.workflow_version_id,
+          row.case_id,
+          row.tenant_id,
+          row.trigger_type,
+          row.trigger_payload,
+          row.status,
+          row.current_node_id,
+          row.context,
+          row.started_at,
+          row.ended_at,
+          row.error,
+        );
+      }
+    },
+  },
+  {
+    version: '2026-04-09-012',
+    up(db) {
+      const workspace = db.prepare('SELECT org_id FROM workspaces LIMIT 1').get() as { org_id?: string } | undefined;
+      const tenantId = workspace?.org_id || 'org_default';
+      const now = new Date().toISOString();
+
+      const capabilities = [
+        { id: 'cap_shopify_orders', connector_id: 'conn_shopify', capability_key: 'orders.read', direction: 'read', is_enabled: 1, requires_approval: 0, is_idempotent: 1 },
+        { id: 'cap_shopify_cancel', connector_id: 'conn_shopify', capability_key: 'orders.cancel', direction: 'write', is_enabled: 1, requires_approval: 1, is_idempotent: 1 },
+        { id: 'cap_shopify_returns', connector_id: 'conn_shopify', capability_key: 'returns.read', direction: 'read', is_enabled: 1, requires_approval: 0, is_idempotent: 1 },
+        { id: 'cap_stripe_payments', connector_id: 'conn_stripe', capability_key: 'payments.read', direction: 'read', is_enabled: 1, requires_approval: 0, is_idempotent: 1 },
+        { id: 'cap_stripe_refund', connector_id: 'conn_stripe', capability_key: 'refunds.create', direction: 'write', is_enabled: 1, requires_approval: 1, is_idempotent: 1 },
+        { id: 'cap_zendesk_tickets', connector_id: 'conn_zendesk', capability_key: 'tickets.read', direction: 'read', is_enabled: 1, requires_approval: 0, is_idempotent: 1 },
+        { id: 'cap_intercom_conversations', connector_id: 'conn_intercom', capability_key: 'conversations.read', direction: 'read', is_enabled: 1, requires_approval: 0, is_idempotent: 1 },
+      ];
+
+      const insertCapability = db.prepare(`
+        INSERT OR IGNORE INTO connector_capabilities
+          (id, connector_id, capability_key, direction, is_enabled, requires_approval, is_idempotent)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const cap of capabilities) {
+        insertCapability.run(
+          cap.id,
+          cap.connector_id,
+          cap.capability_key,
+          cap.direction,
+          cap.is_enabled,
+          cap.requires_approval,
+          cap.is_idempotent,
+        );
+      }
+
+      const events = [
+        {
+          id: 'webhook_shopify_001',
+          connector_id: 'conn_shopify',
+          source_system: 'shopify',
+          event_type: 'orders/fulfilled',
+          raw_payload: JSON.stringify({ order_id: 'ord_55213', status: 'fulfilled' }),
+          status: 'processed',
+          dedupe_key: 'shopify:orders/fulfilled:ord_55213',
+          received_at: now,
+          processed_at: now,
+        },
+        {
+          id: 'webhook_stripe_001',
+          connector_id: 'conn_stripe',
+          source_system: 'stripe',
+          event_type: 'charge.refunded',
+          raw_payload: JSON.stringify({ payment_id: 'pay_001', amount: 129 }),
+          status: 'processed',
+          dedupe_key: 'stripe:charge.refunded:pay_001',
+          received_at: now,
+          processed_at: now,
+        },
+      ];
+
+      const insertWebhook = db.prepare(`
+        INSERT OR IGNORE INTO webhook_events
+          (id, connector_id, tenant_id, source_system, event_type, raw_payload, status, dedupe_key, received_at, processed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const event of events) {
+        insertWebhook.run(
+          event.id,
+          event.connector_id,
+          tenantId,
+          event.source_system,
+          event.event_type,
+          event.raw_payload,
+          event.status,
+          event.dedupe_key,
+          event.received_at,
+          event.processed_at,
+        );
+      }
+    },
+  },
+  {
+    version: '2026-04-10-001',
+    up(db) {
+      addColumn(db, 'users', 'preferences', `TEXT NOT NULL DEFAULT '{}'`);
+      db.prepare("UPDATE users SET preferences = COALESCE(preferences, '{}')").run();
     },
   },
 ];

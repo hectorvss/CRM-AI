@@ -10,6 +10,7 @@
  */
 
 import { createCaseRepository } from '../data/cases.js';
+import { requireScope } from '../lib/scope.js';
 
 // ── Output types ─────────────────────────────────────────────────────────────
 
@@ -138,9 +139,9 @@ function safeJson<T>(raw: any, fallback: T): T {
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
-export async function buildContextWindow(caseId: string, tenantId: string): Promise<ContextWindow | null> {
+export async function buildContextWindow(caseId: string, tenantId: string, workspaceId: string): Promise<ContextWindow | null> {
   const caseRepo = createCaseRepository();
-  const bundle = await caseRepo.getBundle({ tenantId, workspaceId: 'ws_default' }, caseId);
+  const bundle = await caseRepo.getBundle(requireScope({ tenantId, workspaceId }, 'contextWindow'), caseId);
 
   if (!bundle) return null;
 

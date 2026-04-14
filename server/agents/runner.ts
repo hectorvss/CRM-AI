@@ -100,14 +100,14 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   const knowledgeProfile = safeJson<KnowledgeProfile>(agentRow.knowledge_profile, {});
 
   // ── Step 4: Build context window ──────────────────────────────────────────
-  const contextWindow = await buildContextWindow(caseId, tenantId);
+  const contextWindow = await buildContextWindow(caseId, tenantId, workspaceId);
   if (!contextWindow) {
     logger.warn('Could not build context window for case', { caseId, tenantId });
     return { success: false, error: `Case "${caseId}" not found` };
   }
 
   const latestMessage = contextWindow.messages[contextWindow.messages.length - 1]?.content ?? null;
-  const knowledgeBundle = resolveAgentKnowledgeBundle({
+  const knowledgeBundle = await resolveAgentKnowledgeBundle({
     tenantId,
     workspaceId,
     knowledgeProfile,

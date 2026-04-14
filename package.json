@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "worker": "tsx server/worker-standalone.ts",
     "seed:supabase-demo": "tsx seed_sample_data.ts"
   },
   "dependencies": {

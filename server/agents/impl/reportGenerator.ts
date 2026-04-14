@@ -2,28 +2,12 @@
  * server/agents/impl/reportGenerator.ts
  *
  * Report Generator Agent — generates AI diagnosis, root cause, and resolution summary.
- *
- * Uses Gemini with the full context window to produce structured diagnosis text.
- * Writes the output back to the case row fields:
- *   - ai_diagnosis
- *   - ai_root_cause
- *   - ai_recommended_action
- *   - ai_confidence
- *
- * Prompt returns JSON:
- * {
- *   diagnosis: string,
- *   rootCause: string,
- *   recommendedAction: string,
- *   confidence: number,
- *   conflictSummary?: string,
- *   resolutionSummary?: string,
- *   keyInsights: string[],
- * }
  */
 
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { getDb } from '../../db/client.js';
+import { getDatabaseProvider } from '../../db/provider.js';
+import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
 
@@ -31,13 +15,14 @@ export const reportGeneratorImpl: AgentImplementation = {
   slug: 'report-generator',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, triggerEvent } = ctx;
+    const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId, triggerEvent } = ctx;
     const caseId = contextWindow.case.id;
-    const db = getDb();
+    const provider = getDatabaseProvider();
+    const useSupabase = provider === 'supabase';
+    const db = useSupabase ? null : getDb();
+    const supabase = useSupabase ? getSupabaseAdmin() : null;
 
-    // ── Build prompt ──────────────────────────────────────────────────────
     const contextStr = contextWindow.toPromptString();
-
     const isResolution = triggerEvent === 'case_resolved';
 
     const prompt = `You are an expert CRM analyst. ${isResolution
@@ -66,7 +51,6 @@ Focus on:
 - What is the most efficient path to resolution?
 - Are there policy or financial risks?`;
 
-    // ── Call Gemini ───────────────────────────────────────────────────────
     let reportOutput: any;
     let tokensUsed = 0;
 
@@ -80,10 +64,7 @@ Focus on:
         },
       });
 
-      const response = await withGeminiRetry(
-        () => model.generateContent(prompt),
-        { label: 'report-generator' },
-      );
+      const response = await withGeminiRetry(() => model.generateContent(prompt), { label: 'report-generator' });
       const text = response.response.text();
       tokensUsed = response.response.usageMetadata?.totalTokenCount ?? 0;
       reportOutput = JSON.parse(text);
@@ -101,24 +82,32 @@ Focus on:
       return { success: false, error: 'Report output missing required fields', tokensUsed };
     }
 
-    // ── Write to case ─────────────────────────────────────────────────────
     const now = new Date().toISOString();
-
-    db.prepare(`
-      UPDATE cases SET
-        ai_diagnosis = ?,
-        ai_root_cause = ?,
-        ai_recommended_action = ?,
-        ai_confidence = ?,
-        updated_at = ?
-      WHERE id = ? AND tenant_id = ?
-    `).run(
-      diagnosis, rootCause, recommendedAction, confidence, now,
-      caseId, tenantId,
-    );
+    if (useSupabase) {
+      const { error } = await supabase!.from('cases').update({
+        ai_diagnosis: diagnosis,
+        ai_root_cause: rootCause,
+        ai_recommended_action: recommendedAction,
+        ai_confidence: confidence,
+        updated_at: now,
+      }).eq('id', caseId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
+      if (error) throw error;
+    } else {
+      db!.prepare(`
+        UPDATE cases SET
+          ai_diagnosis = ?,
+          ai_root_cause = ?,
+          ai_recommended_action = ?,
+          ai_confidence = ?,
+          updated_at = ?
+        WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+      `).run(
+        diagnosis, rootCause, recommendedAction, confidence, now,
+        caseId, tenantId, workspaceId,
+      );
+    }
 
     const costCredits = Math.ceil(tokensUsed / 1000);
-
     return {
       success: true,
       confidence,

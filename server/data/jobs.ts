@@ -19,11 +19,12 @@ export interface JobRepository {
   getJob(id: string): Promise<any>;
   claimJob(): Promise<any>;
   finishJob(id: string, updates: {
-    status: 'completed' | 'failed' | 'dead';
-    finishedAt: string;
-    attempts?: number;
+    status: 'completed' | 'pending' | 'dead';
+    finishedAt?: string;
+    runAt?: string;
     error?: string | null;
   }): Promise<void>;
+  quarantineOrphanJobs(): Promise<number>;
 
   countJobs(): Promise<Record<string, number>>;
   retryDeadJob(id: string): Promise<boolean>;
@@ -57,10 +58,13 @@ class SQLiteJobRepository implements JobRepository {
     // Atomic claim in SQLite using subquery
     return db.prepare(`
       UPDATE jobs
-      SET status = 'running', started_at = CURRENT_TIMESTAMP
+      SET status = 'running', started_at = CURRENT_TIMESTAMP, attempts = attempts + 1
       WHERE id = (
         SELECT id FROM jobs
-        WHERE status = 'pending' AND run_at <= CURRENT_TIMESTAMP
+        WHERE status = 'pending'
+          AND run_at <= CURRENT_TIMESTAMP
+          AND tenant_id IS NOT NULL
+          AND workspace_id IS NOT NULL
         ORDER BY priority ASC, run_at ASC, created_at ASC
         LIMIT 1
       )
@@ -70,12 +74,15 @@ class SQLiteJobRepository implements JobRepository {
 
   async finishJob(id: string, updates: any) {
     const db = getDb();
-    const fields = ['status = ?', 'finished_at = ?'];
-    const params = [updates.status, updates.finishedAt];
+    const fields = ['status = ?'];
+    const params = [updates.status];
 
-    if (updates.attempts !== undefined) {
-      fields.push('attempts = ?');
-      params.push(updates.attempts);
+    if (updates.status === 'pending') {
+      fields.push('run_at = ?', 'finished_at = NULL');
+      params.push(updates.runAt ?? new Date().toISOString());
+    } else {
+      fields.push('finished_at = ?');
+      params.push(updates.finishedAt ?? new Date().toISOString());
     }
     if (updates.error !== undefined) {
       fields.push('error = ?');
@@ -84,6 +91,19 @@ class SQLiteJobRepository implements JobRepository {
 
     params.push(id);
     db.prepare(`UPDATE jobs SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+  }
+
+  async quarantineOrphanJobs() {
+    const db = getDb();
+    const result = db.prepare(`
+      UPDATE jobs
+      SET status = 'dead',
+          finished_at = CURRENT_TIMESTAMP,
+          error = COALESCE(error, 'Missing tenant/workspace scope')
+      WHERE status IN ('pending', 'running')
+        AND (tenant_id IS NULL OR workspace_id IS NULL)
+    `).run();
+    return result.changes ?? 0;
   }
 
   async countJobs() {
@@ -134,65 +154,45 @@ class SupabaseJobRepository implements JobRepository {
 
   async claimJob() {
     const supabase = getSupabaseAdmin();
-    // In PostgreSQL/Supabase, we use a single query with FOR UPDATE SKIP LOCKED
-    // to avoid race conditions. Since Supabase client doesn't support RETURNING on single UPDATE directly with SKIP LOCKED logic easily,
-    // we use a Raw SQL via RPC or just a careful series.
-    // Recommended: Use an RPC for atomic claim in Supabase.
-    
-    /* 
-    SQL for RPC 'claim_next_job':
-    UPDATE jobs
-    SET status = 'running', started_at = now()
-    WHERE id = (
-      SELECT id FROM jobs
-      WHERE status = 'pending' AND run_at <= now()
-      ORDER BY priority ASC, run_at ASC, created_at ASC
-      FOR UPDATE SKIP LOCKED
-      LIMIT 1
-    )
-    RETURNING *;
-    */
-
     const { data, error } = await supabase.rpc('claim_next_job');
     if (error) {
-      // Fallback if RPC not defined: simple non-locking claim (risk of race if multiple workers)
-      // For now, assume RPC exists or use a simple variant
-      const { data: nextJob } = await supabase
-        .from('jobs')
-        .select('*')
-        .eq('status', 'pending')
-        .lte('run_at', new Date().toISOString())
-        .order('priority', { ascending: true })
-        .order('run_at', { ascending: true })
-        .limit(1)
-        .single();
-      
-      if (!nextJob) return null;
-
-      const { data: claimed } = await supabase
-        .from('jobs')
-        .update({ status: 'running', started_at: new Date().toISOString() })
-        .eq('id', nextJob.id)
-        .eq('status', 'pending') // Double check
-        .select()
-        .single();
-      
-      return claimed;
+      throw new Error(`claim_next_job RPC failed: ${error.message}. Deploy server/db/supabase-rpc-claim_next_job.sql to Supabase.`);
     }
     return data?.[0] || null;
   }
 
   async finishJob(id: string, updates: any) {
     const supabase = getSupabaseAdmin();
-    const toUpdate: any = {
-      status: updates.status,
-      finished_at: updates.finishedAt
-    };
-    if (updates.attempts !== undefined) toUpdate.attempts = updates.attempts;
+    const toUpdate: any = updates.status === 'pending'
+      ? {
+          status: 'pending',
+          run_at: updates.runAt ?? new Date().toISOString(),
+          finished_at: null,
+        }
+      : {
+          status: updates.status,
+          finished_at: updates.finishedAt ?? new Date().toISOString(),
+        };
     if (updates.error !== undefined) toUpdate.error = updates.error;
 
     const { error } = await supabase.from('jobs').update(toUpdate).eq('id', id);
     if (error) throw error;
+  }
+
+  async quarantineOrphanJobs() {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('jobs')
+      .update({
+        status: 'dead',
+        finished_at: new Date().toISOString(),
+        error: 'Missing tenant/workspace scope',
+      })
+      .in('status', ['pending', 'running'])
+      .or('tenant_id.is.null,workspace_id.is.null')
+      .select('id');
+    if (error) throw error;
+    return data?.length ?? 0;
   }
 
   async countJobs() {

@@ -7,15 +7,11 @@
  *   - risk_level (low/medium/high/critical)
  *   - segment (vip/regular/at_risk/new)
  *   - risk_score (0-100)
- *
- * Scoring factors:
- *   - Dispute rate, refund rate, chargeback count
- *   - LTV (inverse — high LTV lowers risk)
- *   - Number of linked systems (more = lower risk)
- *   - Active conflicts on current case
  */
 
 import { getDb } from '../../db/client.js';
+import { getDatabaseProvider } from '../../db/provider.js';
+import { getSupabaseAdmin } from '../../db/supabase.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
 
 function computeRiskScore(
@@ -27,23 +23,14 @@ function computeRiskScore(
   activeConflicts: number,
 ): number {
   let score = 0;
-
-  // Dispute/chargeback signals (0-40 pts)
-  score += Math.min(disputeRate * 100, 20);       // 0-20 from dispute rate
-  score += Math.min(chargebacks * 5, 15);          // 0-15 from chargebacks
-  score += Math.min(refundRate * 50, 5);           // 0-5 from refund rate
-
-  // Active conflicts (0-30 pts)
+  score += Math.min(disputeRate * 100, 20);
+  score += Math.min(chargebacks * 5, 15);
+  score += Math.min(refundRate * 50, 5);
   score += Math.min(activeConflicts * 15, 30);
-
-  // LTV inverse bonus (0-20 pts reduction)
   if (ltv >= 1000) score -= 10;
   if (ltv >= 3000) score -= 10;
-
-  // Identity verification bonus (0-10 pts reduction)
   if (linkedIdCount >= 2) score -= 5;
   if (linkedIdCount >= 4) score -= 5;
-
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
@@ -56,7 +43,7 @@ function riskLevelFromScore(score: number): string {
 
 function segmentFromLtv(ltv: number, totalOrders: number): string {
   if (ltv >= 2000 || totalOrders >= 10) return 'vip';
-  if (ltv === 0 && totalOrders <= 1)    return 'new';
+  if (ltv === 0 && totalOrders <= 1) return 'new';
   return 'regular';
 }
 
@@ -64,20 +51,20 @@ export const customerProfilerImpl: AgentImplementation = {
   slug: 'customer-profiler',
 
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
-    const { contextWindow, tenantId } = ctx;
+    const { contextWindow, tenantId, workspaceId } = ctx;
     const { customer, conflicts } = contextWindow;
 
     if (!customer) {
       return { success: true, summary: 'No customer on case — skipping profile' };
     }
 
-    const db = getDb();
+    const provider = getDatabaseProvider();
+    const useSupabase = provider === 'supabase';
+    const db = useSupabase ? null : getDb();
+    const supabase = useSupabase ? getSupabaseAdmin() : null;
     const customerId = customer.id;
-
-    // Count linked identities
     const linkedIdCount = customer.linkedIds.length;
 
-    // Compute risk score
     const riskScore = computeRiskScore(
       customer.disputeRate,
       customer.refundRate,
@@ -88,22 +75,35 @@ export const customerProfilerImpl: AgentImplementation = {
     );
 
     const riskLevel = riskLevelFromScore(riskScore);
-    const segment   = segmentFromLtv(customer.ltv, customer.totalOrders);
-
+    const segment = segmentFromLtv(customer.ltv, customer.totalOrders);
     const now = new Date().toISOString();
 
-    // Persist updated profile
-    db.prepare(`
-      UPDATE customers SET
-        risk_level = ?, segment = ?, updated_at = ?
-      WHERE id = ? AND tenant_id = ?
-    `).run(riskLevel, segment, now, customerId, tenantId);
+    if (useSupabase) {
+      const { error: customerError } = await supabase!.from('customers')
+        .update({ risk_level: riskLevel, segment, updated_at: now })
+        .eq('id', customerId)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId);
+      if (customerError) throw customerError;
 
-    // Also update risk_score on the case row for dashboard display
-    db.prepare(`
-      UPDATE cases SET risk_level = ?, risk_score = ?, updated_at = ?
-      WHERE id = ? AND tenant_id = ?
-    `).run(riskLevel, riskScore, now, contextWindow.case.id, tenantId);
+      const { error: caseError } = await supabase!.from('cases')
+        .update({ risk_level: riskLevel, risk_score: riskScore, updated_at: now })
+        .eq('id', contextWindow.case.id)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId);
+      if (caseError) throw caseError;
+    } else {
+      db!.prepare(`
+        UPDATE customers SET
+          risk_level = ?, segment = ?, updated_at = ?
+        WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+      `).run(riskLevel, segment, now, customerId, tenantId, workspaceId);
+
+      db!.prepare(`
+        UPDATE cases SET risk_level = ?, risk_score = ?, updated_at = ?
+        WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+      `).run(riskLevel, riskScore, now, contextWindow.case.id, tenantId, workspaceId);
+    }
 
     return {
       success: true,

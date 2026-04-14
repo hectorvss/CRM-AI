@@ -192,6 +192,7 @@ async function createInternalNoteSupabase(scope: ConversationScope, input: Inter
     created_by_type: 'human',
     created_at: now,
     tenant_id: scope.tenantId,
+    workspace_id: scope.workspaceId,
   };
 
   const { error } = await supabase.from('internal_notes').insert(payload);
@@ -318,9 +319,9 @@ function createInternalNoteSqlite(scope: ConversationScope, input: InternalNoteI
   const noteId = crypto.randomUUID();
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO internal_notes (id, case_id, content, created_by, created_by_type, created_at, tenant_id)
-    VALUES (?, ?, ?, ?, 'human', ?, ?)
-  `).run(noteId, input.caseId, input.content, input.createdBy || scope.userId || 'user_local', now, scope.tenantId);
+    INSERT INTO internal_notes (id, case_id, content, created_by, created_by_type, created_at, tenant_id, workspace_id)
+    VALUES (?, ?, ?, ?, 'human', ?, ?, ?)
+  `).run(noteId, input.caseId, input.content, input.createdBy || scope.userId || 'user_local', now, scope.tenantId, scope.workspaceId);
   return {
     id: noteId,
     case_id: input.caseId,

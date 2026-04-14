@@ -261,7 +261,7 @@ export default function Returns() {
 
   // Fetch canonical return contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
-  const { data: apiReturns } = useApi(() => returnsApi.list(), [], []);
+  const { data: apiReturns, error: returnsError } = useApi(() => returnsApi.list(), [], []);
 
   const mapApiReturn = (r: any): Return => ({
     id: r.id,
@@ -377,6 +377,11 @@ export default function Returns() {
         </div>
 
         {/* Main Content Area: Three Panes */}
+        {returnsError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {returnsError}
+          </div>
+        )}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Pane: List */}
           <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-blue-600/5">

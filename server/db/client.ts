@@ -13,11 +13,8 @@ const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 let _db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
-  // If we are in Supabase mode, getDb() shouldn't be the primary bucket.
-  // We allow it to initialize ONLY if explicitly needed or for legacy fallbacks,
-  // but we should aim for zero usage in Supabase mode.
   if (config.db.provider === 'supabase') {
-    console.warn('⚠️  Legacy getDb() called while in Supabase mode. Ensure this is intentional.');
+    throw new Error('getDb() is disabled in Supabase mode. Use a Supabase-backed repository instead.');
   }
 
   if (!_db) {

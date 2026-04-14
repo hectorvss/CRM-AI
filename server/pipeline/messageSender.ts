@@ -32,6 +32,7 @@ import { config }             from '../config.js';
 import { registerHandler }    from '../queue/handlers/index.js';
 import { JobType }            from '../queue/types.js';
 import { logger }             from '../utils/logger.js';
+import { requireScope }       from '../lib/scope.js';
 import type { SendMessagePayload, JobContext } from '../queue/types.js';
 
 // ── Channel senders ───────────────────────────────────────────────────────────
@@ -163,8 +164,7 @@ async function handleSendMessage(
   const customerRepo = createCustomerRepository();
   const opsRepo = createOperationsRepository();
 
-  const tenantId = ctx.tenantId ?? 'org_default';
-  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const { tenantId, workspaceId } = requireScope(ctx, 'messageSender');
   const scope = { tenantId, workspaceId };
 
   // ── 1. Load case + conversation ───────────────────────────────────────────
