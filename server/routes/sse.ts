@@ -63,7 +63,7 @@ const router = Router();
 router.use(extractMultiTenant);
 
 router.get('/agent-runs', (req: MultiTenantRequest, res: Response) => {
-  const tenantId = req.tenantId ?? 'tenant_default';
+  const tenantId = req.tenantId ?? 'org_default';
 
   // Set SSE headers
   res.writeHead(200, {

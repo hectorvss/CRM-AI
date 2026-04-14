@@ -132,8 +132,8 @@ export async function resolveTenantWorkspaceContext(
   }
 
   return {
-    tenantId: tenantId || 'tenant_default',
-    workspaceId: workspaceId || 'workspace_default',
+    tenantId: tenantId || 'org_default',
+    workspaceId: workspaceId || 'ws_default',
     userId: userId || 'system',
   };
 }
@@ -224,8 +224,8 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
       path: req.path,
       error: error instanceof Error ? error.message : String(error),
     });
-    req.tenantId = req.tenantId || 'tenant_default';
-    req.workspaceId = req.workspaceId || 'workspace_default';
+    req.tenantId = req.tenantId || 'org_default';
+    req.workspaceId = req.workspaceId || 'ws_default';
     req.userId = req.userId || 'system';
     req.roleId = 'workspace_admin';
     req.permissions = ['*'];
