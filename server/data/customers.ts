@@ -15,13 +15,15 @@ export interface CustomerFilters {
   q?: string;
 }
 
-function buildCustomerState(detail: any) {
-  const customer = detail.customer;
-  const cases = detail.cases ?? [];
-  const orders = detail.orders ?? [];
-  const payments = detail.payments ?? [];
-  const returns = detail.returns ?? [];
-  const linkedIdentities = detail.linked_identities ?? [];
+function buildCustomerState(detail: any = {}) {
+  const customer = detail.customer ?? detail ?? {};
+  const cases = Array.isArray(detail.cases) ? detail.cases : [];
+  const orders = Array.isArray(detail.orders) ? detail.orders : [];
+  const payments = Array.isArray(detail.payments) ? detail.payments : [];
+  const returns = Array.isArray(detail.returns) ? detail.returns : [];
+  const linkedIdentities = Array.isArray(detail.linked_identities) ? detail.linked_identities : [];
+  const lifetimeValue = Number(customer?.lifetime_value ?? customer?.total_spent ?? 0);
+  const totalSpent = Number(customer?.total_spent ?? customer?.lifetime_value ?? 0);
 
   const unresolvedConflicts = cases
     .filter((item: any) => item.has_reconciliation_conflicts || item.conflict_severity || item.ai_root_cause)
@@ -44,8 +46,8 @@ function buildCustomerState(detail: any) {
       total_orders: orders.length,
       total_payments: payments.length,
       total_returns: returns.length,
-      lifetime_value: Number(customer.lifetime_value || 0),
-      total_spent: Number(customer.total_spent || 0),
+      lifetime_value: Number.isFinite(lifetimeValue) ? lifetimeValue : 0,
+      total_spent: Number.isFinite(totalSpent) ? totalSpent : 0,
     },
     systems: {
       orders: {
