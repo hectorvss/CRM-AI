@@ -87,7 +87,7 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
   const { triggerEvent, caseId, agentSlug, context: extraContext = {} } = payload;
   const { tenantId, workspaceId, traceId } = ctx;
 
-  const resolvedTenantId    = tenantId    ?? 'tenant_default';
+  const resolvedTenantId    = tenantId    ?? 'org_default';
   const resolvedWorkspaceId = workspaceId ?? 'ws_default';
 
   // ── Determine which agents to run ────────────────────────────────────────

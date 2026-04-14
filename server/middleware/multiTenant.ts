@@ -128,8 +128,8 @@ export async function resolveTenantWorkspaceContext(
   }
 
   return {
-    tenantId: tenantId || 'tenant_default',
-    workspaceId: workspaceId || 'workspace_default',
+    tenantId: tenantId || 'org_default',
+    workspaceId: workspaceId || 'ws_default',
     userId: userId || 'system',
   };
 }
