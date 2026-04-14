@@ -311,7 +311,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     caseRow.payment_ids?.length ? supabase.from('payments').select('*').in('id', caseRow.payment_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
     caseRow.return_ids?.length ? supabase.from('returns').select('*').in('id', caseRow.return_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
     supabase.from('approval_requests').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
-    supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
+    supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('detected_at', { ascending: false }),
     supabase.from('case_links').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId),
     supabase.from('draft_replies').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('generated_at', { ascending: false }),
     supabase.from('internal_notes').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),

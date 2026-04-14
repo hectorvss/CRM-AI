@@ -630,7 +630,7 @@ async function getCaseKnowledgeContextSupabase(scope: AgentScope, caseId: string
   if (!caseRow) return null;
   const [messageRes, conflictsRes] = await Promise.all([
     supabase.from('messages').select('content').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('sent_at', { ascending: false }).limit(1),
-    supabase.from('reconciliation_issues').select('conflict_domain').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }).limit(10),
+    supabase.from('reconciliation_issues').select('conflict_domain').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('detected_at', { ascending: false }).limit(10),
   ]);
   if (messageRes.error) throw messageRes.error;
   if (conflictsRes.error) throw conflictsRes.error;
