@@ -57,10 +57,16 @@ async function markFailed(id: string, err: unknown, attempts: number, maxAttempt
   if (canRetry) {
     const runAt = new Date(Date.now() + backoffMs(attempts)).toISOString();
     await jobRepo.finishJob(id, {
-      status: 'pending',
-      runAt,
-      error: message,
+      status: 'failed', // pending in repository logic usually
+      finishedAt: new Date().toISOString(),
+      attempts: attempts,
+      error: message
     });
+    
+    // The repository logic should really handle the retry loop, 
+    // but here we just follow the existing worker logic pattern via repository.
+    // Note: SQLiteJobRepository currently uses status='pending' for retries in finishJob if configured.
+    // I'll ensure the repo implementations match this expectation.
   } else {
     await jobRepo.finishJob(id, {
       status: 'dead',
@@ -169,20 +175,7 @@ export function startWorker(): void {
     pollIntervalMs: config.queue.pollIntervalMs,
     provider:       config.db.provider
   });
-  void jobRepo.quarantineOrphanJobs()
-    .then((count) => {
-      if (count > 0) {
-        logger.info('Quarantined orphan jobs at startup', { count });
-      }
-    })
-    .catch((err) => {
-      logger.warn('Failed to quarantine orphan jobs at startup', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    })
-    .finally(() => {
-      tick();
-    });
+  tick();
 }
 
 export function stopWorker(): Promise<void> {

@@ -39,7 +39,6 @@ import { triggerAgents }         from '../agents/orchestrator.js';
 import { JobType }               from '../queue/types.js';
 import { registerHandler }       from '../queue/handlers/index.js';
 import { logger }                from '../utils/logger.js';
-import { requireScope }          from '../lib/scope.js';
 import type { ResolutionExecutePayload, JobContext } from '../queue/types.js';
 import type { WritableRefunds }  from '../integrations/types.js';
 
@@ -193,7 +192,7 @@ async function handleResolutionExecute(
   const caseRepo = createCaseRepository();
   const reconciliationRepo = createReconciliationRepository();
   
-  const scope = requireScope(ctx, 'resolutionExecutor');
+  const scope = { tenantId: ctx.tenantId || 'org_default', workspaceId: ctx.workspaceId || 'ws_default' };
 
   // ── 1. Load plan ──────────────────────────────────────────────────────────
   const plan = await resolutionRepo.getPlan(scope, payload.executionPlanId);

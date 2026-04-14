@@ -55,41 +55,6 @@ router.get('/:id', async (req: MultiTenantRequest, res) => {
   }
 });
 
-// Update workspace metadata and settings
-router.patch('/:id', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
-  if (!req.tenantId) {
-    return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant context is missing');
-  }
-
-  const { name, slug, settings } = req.body as { name?: string; slug?: string; settings?: Record<string, unknown> };
-  if (name !== undefined && typeof name !== 'string') {
-    return sendError(res, 400, 'INVALID_WORKSPACE_NAME', 'name must be a string');
-  }
-  if (slug !== undefined && typeof slug !== 'string') {
-    return sendError(res, 400, 'INVALID_WORKSPACE_SLUG', 'slug must be a string');
-  }
-  if (settings !== undefined && (typeof settings !== 'object' || Array.isArray(settings))) {
-    return sendError(res, 400, 'INVALID_SETTINGS', 'settings must be an object');
-  }
-
-  if (name === undefined && slug === undefined && settings === undefined) {
-    return sendError(res, 400, 'EMPTY_WORKSPACE_UPDATE', 'At least one workspace field must be provided');
-  }
-
-  try {
-    const workspaceRepo = createWorkspaceRepository();
-    const existing = await workspaceRepo.getById(req.params.id, req.tenantId);
-    if (!existing) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
-
-    await workspaceRepo.updateWorkspace(req.params.id, { name, slug, settings });
-    const updated = await workspaceRepo.getById(req.params.id, req.tenantId);
-    res.json(updated);
-  } catch (error) {
-    console.error('Error updating workspace:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
 // Update workspace settings
 router.patch('/:id/settings', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId) {

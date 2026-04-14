@@ -1,12 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React from 'react';
 import { useApi } from '../../api/hooks';
-import { iamApi, workspacesApi } from '../../api/client';
-
-type SaveHandler = (() => Promise<void> | void) | null;
-
-type WorkspaceTabProps = {
-  onSaveReady?: (handler: SaveHandler) => void;
-};
+import { workspacesApi } from '../../api/client';
+import { iamApi } from '../../api/client';
 
 const fallbackWorkspace = {
   id: 'workspace-local',
@@ -14,107 +9,23 @@ const fallbackWorkspace = {
   slug: 'crm-ai',
 };
 
-const defaultLanguages = ['English (US)', 'Spanish', 'French', 'German', 'Portuguese'];
-
-function parseSettings(settings: any) {
-  if (!settings) return {};
-  if (typeof settings === 'string') {
-    try {
-      return JSON.parse(settings);
-    } catch {
-      return {};
-    }
-  }
-  return settings;
-}
-
-export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
+export default function WorkspaceTab() {
   const { data: workspaces, loading, error } = useApi<any[]>(workspacesApi.list);
   const { data: me } = useApi(() => iamApi.me(), [], null as any);
-  const [name, setName] = useState(fallbackWorkspace.name);
-  const [domain, setDomain] = useState(`${fallbackWorkspace.slug}.helpdesk.com`);
-  const [timezone, setTimezone] = useState('(GMT-05:00) Eastern Time');
-  const [businessHoursEnabled, setBusinessHoursEnabled] = useState(true);
-  const [weekdayStart, setWeekdayStart] = useState('09:00 AM');
-  const [weekdayEnd, setWeekdayEnd] = useState('06:00 PM');
-  const [languages, setLanguages] = useState<string[]>(defaultLanguages);
-  const [isSaving, setIsSaving] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-
-  const workspace = useMemo(() => (
-    workspaces?.[0]
-      || me?.workspace
-      || me?.membership?.workspace
-      || me?.workspaces?.[0]
-      || fallbackWorkspace
-  ), [me, workspaces]);
-
-  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace]);
-  const showFallbackNotice = Boolean(error) || !workspaces || workspaces.length === 0;
-
-  useEffect(() => {
-    if (!workspace) return;
-    setName(workspace.name || fallbackWorkspace.name);
-    setDomain(`${workspace.slug || fallbackWorkspace.slug}.helpdesk.com`);
-    setTimezone(workspaceSettings.timezone || '(GMT-05:00) Eastern Time');
-    setBusinessHoursEnabled(workspaceSettings.businessHoursEnabled ?? true);
-    setWeekdayStart(workspaceSettings.businessHours?.weekdayStart || workspaceSettings.businessHoursStart || '09:00 AM');
-    setWeekdayEnd(workspaceSettings.businessHours?.weekdayEnd || workspaceSettings.businessHoursEnd || '06:00 PM');
-    setLanguages(Array.isArray(workspaceSettings.languages) && workspaceSettings.languages.length > 0 ? workspaceSettings.languages : defaultLanguages);
-  }, [workspace, workspaceSettings]);
-
-  const handleSave = useCallback(async () => {
-    if (!workspace?.id) {
-      throw new Error('Workspace not loaded');
-    }
-
-    setIsSaving(true);
-    setStatusMessage(null);
-    try {
-      const normalizedSlug = domain.trim().replace(/\.helpdesk\.com$/i, '').replace(/^https?:\/\//i, '');
-      const nextSettings = {
-        ...workspaceSettings,
-        timezone,
-        businessHoursEnabled,
-        businessHours: {
-          weekdayStart,
-          weekdayEnd,
-        },
-        languages,
-        primary_domain: domain.trim(),
-      };
-
-      await workspacesApi.update(workspace.id, {
-        name: name.trim(),
-        slug: normalizedSlug || workspace.slug,
-        settings: nextSettings,
-      });
-      setStatusMessage('Workspace changes saved.');
-    } catch (saveError: any) {
-      setStatusMessage(saveError?.message || 'Unable to save workspace changes.');
-      throw saveError;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [businessHoursEnabled, domain, languages, name, timezone, weekdayEnd, weekdayStart, workspace?.id, workspace?.slug, workspaceSettings]);
-
-  useEffect(() => {
-    onSaveReady?.(handleSave);
-    return () => onSaveReady?.(null);
-  }, [handleSave, onSaveReady]);
 
   if (loading) {
     return <div className="p-6 text-sm text-gray-500">Loading workspace data...</div>;
   }
 
+  const workspace = workspaces?.[0]
+    || me?.workspace
+    || me?.membership?.workspace
+    || me?.workspaces?.[0]
+    || fallbackWorkspace;
+  const showFallbackNotice = Boolean(error) || !workspaces || workspaces.length === 0;
+
   return (
     <div className="space-y-8">
-      {statusMessage && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
-          {statusMessage}
-        </div>
-      )}
-
       {/* Workspace Profile */}
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
@@ -134,24 +45,23 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
               <div className="w-20 h-20 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50">
                 <span className="material-symbols-outlined text-gray-400 text-3xl">image</span>
               </div>
-              <button type="button" className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
+              <button className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
                 <span className="material-symbols-outlined text-[14px]">edit</span>
               </button>
             </div>
             <div>
               <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Workspace Logo</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">This logo will appear on your help center and email notifications.</p>
-              <button type="button" className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
+              <button className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Workspace Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={event => setName(event.target.value)}
+              <input 
+                type="text" 
+                defaultValue={workspace?.name || fallbackWorkspace.name}
                 className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
               />
             </div>
@@ -159,10 +69,9 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Primary Domain</label>
               <div className="flex">
                 <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500 text-sm">https://</span>
-                <input
-                  type="text"
-                  value={domain}
-                  onChange={event => setDomain(event.target.value)}
+                <input 
+                  type="text" 
+                  defaultValue={`${workspace?.slug || fallbackWorkspace.slug}.helpdesk.com`}
                   className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-r-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                 />
               </div>
@@ -171,11 +80,7 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Default Timezone</label>
-            <select
-              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none"
-              value={timezone}
-              onChange={event => setTimezone(event.target.value)}
-            >
+            <select className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none" defaultValue="(GMT-05:00) Eastern Time">
               <option>(GMT+01:00) Europe/Madrid</option>
               <option>(GMT+00:00) UTC</option>
               <option>(GMT-05:00) Eastern Time</option>
@@ -196,12 +101,8 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
             <p className="text-sm text-gray-500 dark:text-gray-400">Set your team's availability. Messages received outside these hours will trigger an auto-responder.</p>
             <div className="flex items-center gap-3">
               <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Enable Schedule</span>
-              <button
-                type="button"
-                onClick={() => setBusinessHoursEnabled(current => !current)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${businessHoursEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${businessHoursEnabled ? 'translate-x-6' : 'translate-x-1'}`}></span>
+              <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600 transition-colors focus:outline-none">
+                <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
               </button>
             </div>
           </div>
@@ -218,25 +119,15 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <select
-                  className="flex items-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 shadow-card text-xs font-medium"
-                  value={weekdayStart}
-                  onChange={event => setWeekdayStart(event.target.value)}
-                >
-                  <option>09:00 AM</option>
-                  <option>08:00 AM</option>
-                  <option>10:00 AM</option>
-                </select>
-                <span className="text-gray-400">-</span>
-                <select
-                  className="flex items-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 shadow-card text-xs font-medium"
-                  value={weekdayEnd}
-                  onChange={event => setWeekdayEnd(event.target.value)}
-                >
-                  <option>06:00 PM</option>
-                  <option>05:00 PM</option>
-                  <option>07:00 PM</option>
-                </select>
+                <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 shadow-card">
+                  <span className="text-xs font-medium mr-2">09:00 AM</span>
+                  <span className="material-symbols-outlined text-[14px] text-gray-400">schedule</span>
+                </div>
+                <span className="text-gray-400">−</span>
+                <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 shadow-card">
+                  <span className="text-xs font-medium mr-2">06:00 PM</span>
+                  <span className="material-symbols-outlined text-[14px] text-gray-400">schedule</span>
+                </div>
               </div>
             </div>
 
@@ -272,45 +163,21 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
         </div>
         <div className="p-6">
           <div className="flex flex-wrap gap-2">
-            {languages.map((lang) => (
+            {['English (US)', 'Spanish', 'French', 'German', 'Portuguese'].map((lang) => (
               <div key={lang} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-xl">
                 <span className="text-xs font-medium">{lang}</span>
-                <button
-                  type="button"
-                  className="text-gray-400 hover:text-red-500 transition-colors"
-                  onClick={() => setLanguages(current => current.filter(item => item !== lang))}
-                >
+                <button className="text-gray-400 hover:text-red-500 transition-colors">
                   <span className="material-symbols-outlined text-[14px]">close</span>
                 </button>
               </div>
             ))}
-            <button
-              type="button"
-              className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-600 px-3 py-1.5 rounded-xl text-indigo-600 dark:text-indigo-400 hover:border-indigo-500 transition-all"
-              onClick={() => setLanguages(current => {
-                const nextLanguage = defaultLanguages.find(language => !current.includes(language));
-                return nextLanguage ? [...current, nextLanguage] : current;
-              })}
-            >
+            <button className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-600 px-3 py-1.5 rounded-xl text-indigo-600 dark:text-indigo-400 hover:border-indigo-500 transition-all">
               <span className="material-symbols-outlined text-[14px]">add</span>
               <span className="text-xs font-bold">Add Language</span>
             </button>
           </div>
         </div>
       </section>
-
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">{isSaving ? 'Saving workspace changes...' : 'Changes are saved to the workspace record.'}</span>
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={isSaving}
-          className="hidden"
-          aria-hidden="true"
-        >
-          Save
-        </button>
-      </div>
     </div>
   );
 }

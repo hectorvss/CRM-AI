@@ -17,7 +17,6 @@ import { createCaseRepository } from '../data/cases.js';
 import { logger } from '../utils/logger.js';
 import { runAgent } from './runner.js';
 import { broadcastSSE } from '../routes/sse.js';
-import { requireScope } from '../lib/scope.js';
 import type { JobHandler } from '../queue/types.js';
 import type { AgentTriggerPayload } from '../queue/types.js';
 
@@ -88,7 +87,8 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
   const { triggerEvent, caseId, agentSlug, context: extraContext = {} } = payload;
   const { tenantId, workspaceId, traceId } = ctx;
 
-  const { tenantId: resolvedTenantId, workspaceId: resolvedWorkspaceId } = requireScope({ tenantId, workspaceId }, 'agentTriggerHandler');
+  const resolvedTenantId    = tenantId    ?? 'tenant_default';
+  const resolvedWorkspaceId = workspaceId ?? 'ws_default';
 
   // ── Determine which agents to run ────────────────────────────────────────
   let slugsToRun: string[];

@@ -51,13 +51,6 @@ function parseReconciliationIssue(row: any) {
   return parsed;
 }
 
-function normalizeSqlValue(value: any): any {
-  if (value === undefined || value === null) return null;
-  if (Array.isArray(value)) return JSON.stringify(value);
-  if (typeof value === 'object' && !(value instanceof Date)) return JSON.stringify(value);
-  return value;
-}
-
 // ── SQLite implementation ────────────────────────────────────
 
 function listIssuesSqlite(scope: ReconciliationScope, filters: ReconciliationFilters): any[] {
@@ -142,7 +135,7 @@ function updateIssueSqlite(scope: ReconciliationScope, id: string, updates: any)
   if (fields.length === 0) return;
 
   const setClause = fields.map(f => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates).map(normalizeSqlValue), id, scope.tenantId];
+  const params = [...Object.values(updates), id, scope.tenantId];
 
   db.prepare(`
     UPDATE reconciliation_issues

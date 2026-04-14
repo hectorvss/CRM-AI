@@ -30,7 +30,6 @@ import { enqueue }      from '../queue/client.js';
 import { JobType }      from '../queue/types.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { logger }       from '../utils/logger.js';
-import { requireScope } from '../lib/scope.js';
 import type { ChannelIngestPayload, JobContext } from '../queue/types.js';
 
 // ── Normalised inbound message shape ─────────────────────────────────────────
@@ -76,8 +75,9 @@ async function handleChannelIngest(
   const customerRepo = createCustomerRepository();
   const caseRepo = createCaseRepository();
 
-  const scope = requireScope(ctx, 'channelIngest');
-  const { tenantId, workspaceId } = scope;
+  const tenantId    = ctx.tenantId    ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const scope = { tenantId, workspaceId };
 
   // ── 1. Load canonical event ───────────────────────────────────────────────
   const event = await integrationRepo.getCanonicalEvent(payload.canonicalEventId);

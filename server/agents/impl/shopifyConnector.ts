@@ -18,8 +18,6 @@
 
 import { randomUUID } from 'crypto';
 import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
-import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import { integrationRegistry } from '../../integrations/registry.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -30,11 +28,8 @@ export const shopifyConnectorImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, tenantId, workspaceId, permissions, runId } = ctx;
     const caseId = contextWindow.case.id;
+    const db = getDb();
     const now = new Date().toISOString();
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
 
     if (!permissions.canCallShopify) {
       return {
@@ -73,16 +68,8 @@ export const shopifyConnectorImpl: AgentImplementation = {
             shopifyState = liveOrder.status;
             // Update system_states with the live value
             const currentStates = typeof order.systemStates === 'object' ? order.systemStates : {};
-            if (useSupabase) {
-              await supabase!.from('orders')
-                .update({ system_states: JSON.stringify({ ...currentStates, shopify: shopifyState }), updated_at: now })
-                .eq('id', order.id)
-                .eq('tenant_id', tenantId)
-                .eq('workspace_id', workspaceId);
-            } else {
-              db!.prepare('UPDATE orders SET system_states = ?, updated_at = ? WHERE id = ? AND tenant_id = ? AND workspace_id = ?')
-                .run(JSON.stringify({ ...currentStates, shopify: shopifyState }), now, order.id, tenantId, workspaceId);
-            }
+            db.prepare('UPDATE orders SET system_states = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+              .run(JSON.stringify({ ...currentStates, shopify: shopifyState }), now, order.id, tenantId);
           }
         } catch (err: any) {
           logger.warn('Shopify live fetch failed, using cached state', { orderId: order.id, error: err?.message });
@@ -103,11 +90,9 @@ export const shopifyConnectorImpl: AgentImplementation = {
       }
 
       // Check fulfillment state from order DB row
-      const orderRow = useSupabase
-        ? (await supabase!.from('orders').select('fulfillment_status, tracking_number, tracking_url').eq('id', order.id).eq('tenant_id', tenantId).eq('workspace_id', workspaceId).maybeSingle()).data
-        : db!.prepare(
-            'SELECT fulfillment_status, tracking_number, tracking_url FROM orders WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
-          ).get(order.id, tenantId, workspaceId) as any;
+      const orderRow = db.prepare(
+        'SELECT fulfillment_status, tracking_number, tracking_url FROM orders WHERE id = ? AND tenant_id = ?'
+      ).get(order.id, tenantId) as any;
 
       if (orderRow) {
         const fulfillmentInSystem = order.systemStates?.fulfillment;
@@ -125,34 +110,18 @@ export const shopifyConnectorImpl: AgentImplementation = {
     // ── Log discrepancies to audit ───────────────────────────────────────
     if (discrepancies.length > 0) {
       try {
-        if (useSupabase) {
-          const { error } = await supabase!.from('audit_events').insert({
-            id: randomUUID(),
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-            actor_type: 'agent',
-            action: 'shopify_sync_discrepancy',
-            entity_type: 'case',
-            entity_id: caseId,
-            new_value: `Shopify connector found ${discrepancies.length} state discrepancy(ies)`,
-            metadata: { discrepancies, agentRunId: runId },
-            occurred_at: now,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT INTO audit_events
-              (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-            VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
-          `).run(
-            randomUUID(), tenantId, workspaceId,
-            'shopify_sync_discrepancy',
-            caseId,
-            `Shopify connector found ${discrepancies.length} state discrepancy(ies)`,
-            JSON.stringify({ discrepancies, agentRunId: runId }),
-            now,
-          );
-        }
+        db.prepare(`
+          INSERT INTO audit_events
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
+        `).run(
+          randomUUID(), tenantId, workspaceId,
+          'shopify_sync_discrepancy',
+          caseId,
+          `Shopify connector found ${discrepancies.length} state discrepancy(ies)`,
+          JSON.stringify({ discrepancies, agentRunId: runId }),
+          now,
+        );
       } catch (err: any) {
         logger.error('Shopify connector audit write failed', { error: err?.message });
       }
@@ -160,17 +129,9 @@ export const shopifyConnectorImpl: AgentImplementation = {
 
     // ── Update last sync timestamp ───────────────────────────────────────
     try {
-      if (useSupabase) {
-        await supabase!.from('cases')
-          .update({ last_activity_at: now })
-          .eq('id', caseId)
-          .eq('tenant_id', tenantId)
-          .eq('workspace_id', workspaceId);
-      } else {
-        db!.prepare(
-          "UPDATE cases SET last_activity_at = ? WHERE id = ? AND tenant_id = ? AND workspace_id = ?"
-        ).run(now, caseId, tenantId, workspaceId);
-      }
+      db.prepare(
+        "UPDATE cases SET last_activity_at = ? WHERE id = ? AND tenant_id = ?"
+      ).run(now, caseId, tenantId);
     } catch { /* non-critical */ }
 
     return {

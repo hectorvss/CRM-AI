@@ -8,25 +8,6 @@ const customerRepo = createCustomerRepository();
 
 router.use(extractMultiTenant);
 
-router.post('/', async (req: MultiTenantRequest, res: Response) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const payload = {
-      displayName: req.body?.displayName || req.body?.name || req.body?.canonical_name || 'New Customer',
-      email: req.body?.email || req.body?.canonical_email || '',
-      source: req.body?.source || 'manual',
-      externalId: req.body?.externalId || req.body?.external_id || `manual_${Date.now()}`,
-    };
-
-    const id = await customerRepo.upsertCustomer(scope, payload);
-    const detail = await customerRepo.getDetail(scope, id);
-    res.status(201).json(detail ?? { id });
-  } catch (error) {
-    console.error('Error creating customer:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
 router.get('/', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };

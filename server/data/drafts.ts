@@ -6,7 +6,6 @@ import { parseRow } from '../db/utils.js';
 
 export interface DraftScope {
   tenantId: string;
-  workspaceId: string;
 }
 
 export interface DraftReply {
@@ -41,7 +40,6 @@ export function createDraftRepository(): DraftRepository {
           .eq('case_id', caseId)
           .eq('status', 'pending_review')
           .eq('tenant_id', scope.tenantId)
-          .eq('workspace_id', scope.workspaceId)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -52,12 +50,7 @@ export function createDraftRepository(): DraftRepository {
         const supabase = getSupabaseAdmin();
         const { error } = await supabase
           .from('draft_replies')
-          .upsert({
-            ...draft,
-            tenant_id: scope.tenantId,
-            workspace_id: scope.workspaceId,
-            updated_at: new Date().toISOString(),
-          });
+          .upsert({ ...draft, tenant_id: scope.tenantId, updated_at: new Date().toISOString() });
         if (error) throw error;
       }
     };
@@ -68,15 +61,15 @@ export function createDraftRepository(): DraftRepository {
       const db = getDb();
       const row = db.prepare(`
         SELECT * FROM draft_replies
-        WHERE case_id = ? AND status = 'pending_review' AND workspace_id = ?
+        WHERE case_id = ? AND status = 'pending_review'
         ORDER BY created_at DESC
         LIMIT 1
-      `).get(caseId, scope.workspaceId);
+      `).get(caseId);
       return row ? parseRow(row) : null;
     },
     upsert: async (scope, draft) => {
       const db = getDb();
-      const existing = db.prepare('SELECT id FROM draft_replies WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(draft.id, scope.tenantId, scope.workspaceId);
+      const existing = db.prepare('SELECT id FROM draft_replies WHERE id = ?').get(draft.id);
       
       const fields = Object.keys(draft);
       const values = fields.map(f => {
@@ -86,12 +79,12 @@ export function createDraftRepository(): DraftRepository {
 
       if (existing) {
         const setClause = fields.map(f => `${f} = ?`).join(', ');
-        db.prepare(`UPDATE draft_replies SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
-          .run(...values, draft.id, scope.tenantId, scope.workspaceId);
+        db.prepare(`UPDATE draft_replies SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+          .run(...values, draft.id);
       } else {
         const placeholders = fields.map(() => '?').join(', ');
-        db.prepare(`INSERT INTO draft_replies (${fields.join(', ')}, tenant_id, workspace_id) VALUES (${placeholders}, ?, ?)`)
-          .run(...values, scope.tenantId, scope.workspaceId);
+        db.prepare(`INSERT INTO draft_replies (${fields.join(', ')}, tenant_id) VALUES (${placeholders}, ?)`)
+          .run(...values, scope.tenantId);
       }
     }
   };

@@ -8,7 +8,6 @@ import { JobType } from '../queue/types.js';
 import { logger } from '../utils/logger.js';
 import { buildContextWindow } from './contextWindow.js';
 import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
-import { requireScope } from '../lib/scope.js';
 import type { DraftReplyPayload, JobContext } from '../queue/types.js';
 
 async function generateDraft(
@@ -74,10 +73,11 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
   });
 
   const db = getDb();
-  const { tenantId, workspaceId } = requireScope(ctx, 'draftReply');
+  const tenantId = ctx.tenantId ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
   const tone = payload.tone ?? 'professional';
 
-  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(payload.caseId, tenantId, workspaceId) as any;
+  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ?').get(payload.caseId) as any;
   if (!caseRow) {
     log.warn('Case not found for draft reply');
     return;
@@ -88,7 +88,7 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
     return;
   }
 
-  const conversation = db.prepare('SELECT id FROM conversations WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? LIMIT 1').get(payload.caseId, tenantId, workspaceId) as any;
+  const conversation = db.prepare('SELECT id FROM conversations WHERE case_id = ? LIMIT 1').get(payload.caseId) as any;
   if (!conversation) {
     log.debug('No conversation linked to case, skipping draft');
     return;
@@ -96,7 +96,7 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
 
   log.info('Generating draft reply', { tone });
 
-  const contextWindow = await buildContextWindow(payload.caseId, tenantId, workspaceId);
+  const contextWindow = await buildContextWindow(payload.caseId, tenantId);
   if (!contextWindow) {
     log.warn('No context window available for draft reply');
     return;
@@ -113,7 +113,7 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
     ? JSON.parse(composerAgent.knowledge_profile)
     : {};
 
-  const knowledgeBundle = await resolveAgentKnowledgeBundle({
+  const knowledgeBundle = resolveAgentKnowledgeBundle({
     tenantId,
     workspaceId,
     knowledgeProfile,
@@ -138,9 +138,9 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
   const hasPolicies = knowledgeBundle.citations.length > 0 ? 1 : 0;
   const existingDraft = db.prepare(`
     SELECT id FROM draft_replies
-    WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? AND status = 'pending_review'
+    WHERE case_id = ? AND status = 'pending_review'
     LIMIT 1
-  `).get(payload.caseId, tenantId, workspaceId) as any;
+  `).get(payload.caseId) as any;
 
   if (existingDraft) {
     db.prepare(`
@@ -151,7 +151,7 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
         has_policies = ?,
         citations = ?,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
+      WHERE id = ?
     `).run(
       draft,
       confidence,
@@ -159,8 +159,6 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
       hasPolicies,
       citations,
       existingDraft.id,
-      tenantId,
-      workspaceId,
     );
     log.info('Draft reply updated', { draftId: existingDraft.id });
   } else {
@@ -169,7 +167,7 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
       INSERT INTO draft_replies (
         id, case_id, conversation_id, content, generated_by, tone,
         confidence, has_policies, citations, status, tenant_id
-      , workspace_id) VALUES (?, ?, ?, ?, 'draft_reply_agent', ?, ?, ?, ?, 'pending_review', ?, ?)
+      ) VALUES (?, ?, ?, ?, 'draft_reply_agent', ?, ?, ?, ?, 'pending_review', ?)
     `).run(
       draftId,
       payload.caseId,
@@ -180,7 +178,6 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
       hasPolicies,
       citations,
       tenantId,
-      workspaceId,
     );
     log.info('Draft reply created', { draftId });
   }

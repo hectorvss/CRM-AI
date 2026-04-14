@@ -11,8 +11,6 @@ export interface IntegrationScope {
 export interface IntegrationRepository {
   listConnectors(scope: IntegrationScope): Promise<any[]>;
   getConnector(scope: IntegrationScope, id: string): Promise<any>;
-  updateConnector(scope: IntegrationScope, id: string, updates: any): Promise<any>;
-  testConnector(scope: IntegrationScope, id: string): Promise<any>;
   listCapabilities(scope: IntegrationScope, connectorId: string): Promise<any[]>;
   listRecentWebhooks(scope: IntegrationScope, connectorId: string, limit?: number): Promise<any[]>;
   getWebhookEventByDedupeKey(dedupeKey: string): Promise<any>;
@@ -78,52 +76,6 @@ export function createIntegrationRepository(): IntegrationRepository {
         const { data, error } = await supabase.from('connectors').select('*').eq('id', id).eq('tenant_id', scope.tenantId).maybeSingle();
         if (error) throw error;
         return data;
-      },
-      updateConnector: async (scope, id, updates) => {
-        const supabase = getSupabaseAdmin();
-        const payload: any = { updated_at: new Date().toISOString() };
-        if (updates.name !== undefined) payload.name = updates.name;
-        if (updates.status !== undefined) payload.status = updates.status;
-        if (updates.auth_config !== undefined) payload.auth_config = updates.auth_config;
-        if (updates.last_health_check_at !== undefined) payload.last_health_check_at = updates.last_health_check_at;
-        const { data, error } = await supabase
-          .from('connectors')
-          .update(payload)
-          .eq('id', id)
-          .eq('tenant_id', scope.tenantId)
-          .select('*')
-          .maybeSingle();
-        if (error) throw error;
-        return data;
-      },
-      testConnector: async (scope, id) => {
-        const connector = await (async () => {
-          const supabase = getSupabaseAdmin();
-          const { data, error } = await supabase.from('connectors').select('*').eq('id', id).eq('tenant_id', scope.tenantId).maybeSingle();
-          if (error) throw error;
-          return data;
-        })();
-        if (!connector) return null;
-        const now = new Date().toISOString();
-        const nextStatus = connector.status === 'disconnected' ? 'disconnected' : 'healthy';
-        const updated = await (async () => {
-          const supabase = getSupabaseAdmin();
-          const { data, error } = await supabase
-            .from('connectors')
-            .update({ status: nextStatus, last_health_check_at: now, updated_at: now })
-            .eq('id', id)
-            .eq('tenant_id', scope.tenantId)
-            .select('*')
-            .maybeSingle();
-          if (error) throw error;
-          return data;
-        })();
-        return {
-          ok: nextStatus === 'healthy',
-          connector: updated,
-          checked_at: now,
-          message: nextStatus === 'healthy' ? 'Connector health check passed.' : 'Connector remains disconnected.',
-        };
       },
       listCapabilities: async (scope, connectorId) => {
         const supabase = getSupabaseAdmin();
@@ -203,40 +155,6 @@ export function createIntegrationRepository(): IntegrationRepository {
     getConnector: async (scope, id) => {
       const db = getDb();
       return parseRow(db.prepare('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
-    },
-    updateConnector: async (scope, id, updates) => {
-      const db = getDb();
-      const fields: string[] = [];
-      const params: any[] = [];
-      if (updates.name !== undefined) { fields.push('name = ?'); params.push(updates.name); }
-      if (updates.status !== undefined) { fields.push('status = ?'); params.push(updates.status); }
-      if (updates.auth_config !== undefined) { fields.push('auth_config = ?'); params.push(typeof updates.auth_config === 'string' ? updates.auth_config : JSON.stringify(updates.auth_config)); }
-      if (updates.last_health_check_at !== undefined) { fields.push('last_health_check_at = ?'); params.push(updates.last_health_check_at); }
-      if (fields.length === 0) {
-        return parseRow(db.prepare('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
-      }
-      fields.push('updated_at = ?');
-      params.push(new Date().toISOString());
-      params.push(id, scope.tenantId);
-      db.prepare(`UPDATE connectors SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...params);
-      return parseRow(db.prepare('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
-    },
-    testConnector: async (scope, id) => {
-      const connector = await (async () => {
-        const db = getDb();
-        return parseRow(db.prepare('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
-      })();
-      if (!connector) return null;
-      const now = new Date().toISOString();
-      const nextStatus = connector.status === 'disconnected' ? 'disconnected' : 'healthy';
-      const db = getDb();
-      db.prepare(`UPDATE connectors SET status = ?, last_health_check_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ?`).run(nextStatus, now, now, id, scope.tenantId);
-      return {
-        ok: nextStatus === 'healthy',
-        connector: await (async () => parseRow(db.prepare('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId)))(),
-        checked_at: now,
-        message: nextStatus === 'healthy' ? 'Connector health check passed.' : 'Connector remains disconnected.',
-      };
     },
     listCapabilities: async (scope, connectorId) => {
       const db = getDb();

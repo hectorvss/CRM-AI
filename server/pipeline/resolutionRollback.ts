@@ -24,7 +24,6 @@ import { createCommerceRepository } from '../data/commerce.js';
 import { registerHandler }    from '../queue/handlers/index.js';
 import { JobType }            from '../queue/types.js';
 import { logger }             from '../utils/logger.js';
-import { requireScope }       from '../lib/scope.js';
 import type { ResolutionRollbackPayload, JobContext } from '../queue/types.js';
 
 async function handleResolutionRollback(
@@ -39,8 +38,9 @@ async function handleResolutionRollback(
 
   const caseRepo = createCaseRepository();
   const commerceRepo = createCommerceRepository();
-  const scope = requireScope(ctx, 'resolutionRollback');
-  const { tenantId, workspaceId } = scope;
+  const tenantId = ctx.tenantId ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const scope = { tenantId, workspaceId };
 
   const plan = await caseRepo.getExecutionPlan(scope, payload.executionPlanId);
   if (!plan) {

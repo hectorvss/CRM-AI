@@ -1,55 +1,50 @@
-import React, { useMemo } from 'react';
-import { useApi } from '../../api/hooks';
-import { iamApi } from '../../api/client';
-
-const DOMAINS = [
-  ['Inbox', 'inbox.read'],
-  ['Orders', 'orders.read'],
-  ['Payments', 'payments.read'],
-  ['Returns', 'returns.read'],
-  ['Approvals', 'approvals.read'],
-  ['Knowledge', 'knowledge.read'],
-  ['Customers', 'customers.read'],
-  ['Integrations', 'integrations.read'],
-  ['Reports', 'reports.read'],
-  ['Settings / Admin', 'settings.read'],
-  ['Billing & Plans', 'billing.read'],
-  ['AI Studio', 'ai.read'],
-] as const;
+import React from 'react';
 
 export default function AccessPermissionsTab() {
-  const { data: user, loading, error } = useApi<any>(iamApi.me);
-  const { data: roles } = useApi<any[]>(iamApi.roles);
-
-  const roleId = user?.context?.role_id || user?.memberships?.[0]?.role_id || null;
-  const role = useMemo(() => (roles || []).find((item: any) => item.id === roleId) || null, [roleId, roles]);
-  const rolePermissions = Array.isArray(role?.permissions) ? role.permissions : [];
-  const permissions = useMemo(() => new Set<string>(user?.context?.permissions || rolePermissions || []), [rolePermissions, user?.context?.permissions]);
-
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading access permissions...</div>;
-  if (error || !user) return <div className="p-6 text-sm text-red-500">Error loading access permissions.</div>;
-
-  const currentRoleName = role?.name || user?.memberships?.[0]?.role_name || user?.role || 'Unknown';
-  const specialAccess = [
-    ['Can approve refunds', permissions.has('payments.write') || permissions.has('approvals.write')],
-    ['Can edit knowledge', permissions.has('knowledge.write')],
-    ['Can manage workflows', permissions.has('workflows.write')],
-    ['Can access billing', permissions.has('billing.read')],
-    ['Can manage integrations', permissions.has('integrations.write')],
-    ['Can view audit logs', permissions.has('audit.read')],
+  const permissions = [
+    { domain: 'Inbox', level: 'Edit' },
+    { domain: 'Orders', level: 'View only' },
+    { domain: 'Payments', level: 'No access' },
+    { domain: 'Returns', level: 'Edit' },
+    { domain: 'Approvals', level: 'Approve' },
+    { domain: 'Workflows', level: 'View only' },
+    { domain: 'Knowledge', level: 'Edit' },
+    { domain: 'Customers', level: 'Edit' },
+    { domain: 'Integrations', level: 'No access' },
+    { domain: 'Reports', level: 'View only' },
+    { domain: 'Settings / Admin', level: 'No access' },
+    { domain: 'Billing & Plans', level: 'No access' },
+    { domain: 'AI Studio', level: 'View only' },
   ];
+
+  const getLevelColor = (level: string) => {
+    switch (level) {
+      case 'Admin':
+      case 'Approve':
+        return 'text-purple-700 bg-purple-50 border-purple-200 dark:text-purple-400 dark:bg-purple-900/20 dark:border-purple-800/30';
+      case 'Edit':
+        return 'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-900/20 dark:border-blue-800/30';
+      case 'View only':
+        return 'text-gray-700 bg-gray-100 border-gray-200 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-700';
+      case 'No access':
+      default:
+        return 'text-gray-400 bg-gray-50 border-gray-100 dark:text-gray-500 dark:bg-gray-900/50 dark:border-gray-800';
+    }
+  };
 
   return (
     <div className="space-y-8">
+      {/* Read-Only Admin Context */}
       <div className="bg-blue-50 dark:bg-blue-900/10 rounded-xl p-4 border border-blue-100 dark:border-blue-800/30 flex gap-3 items-center">
         <span className="material-symbols-outlined text-blue-500 text-xl">admin_panel_settings</span>
         <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">
-          Permissions are derived from your live role membership. This view mirrors what the backend enforces.
+          Permissions are managed by your workspace administrator.
         </p>
       </div>
 
       <div className="grid grid-cols-3 gap-8">
         <div className="col-span-1 space-y-8">
+          {/* Role */}
           <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Current Role</h2>
@@ -61,33 +56,53 @@ export default function AccessPermissionsTab() {
                   <span className="material-symbols-outlined">support_agent</span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">{currentRoleName}</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{role?.is_system ? 'System role' : 'Custom role'}</p>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Support Lead</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Assigned by Admin</p>
                 </div>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-                {role?.description || 'Your role governs the capabilities shown in the matrix on the right.'}
+                Manages daily support queues, handles escalations, and approves standard returns. Has read-only access to reporting and workflows.
               </p>
             </div>
           </section>
 
+          {/* Special Access Flags */}
           <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Special Access</h2>
               <span className="material-symbols-outlined text-gray-400">key</span>
             </div>
             <div className="p-6 space-y-4">
-              {specialAccess.map(([label, enabled]) => (
-                <div key={String(label)} className="flex items-center gap-3">
-                  <span className={`material-symbols-outlined text-[18px] ${enabled ? 'text-green-500' : 'text-gray-300 dark:text-gray-600'}`}>{enabled ? 'check_circle' : 'cancel'}</span>
-                  <span className={`text-sm ${enabled ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}`}>{label as string}</span>
-                </div>
-              ))}
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-green-500 text-[18px]">check_circle</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Can approve refunds</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-green-500 text-[18px]">check_circle</span>
+                <span className="text-sm text-gray-700 dark:text-gray-300">Can edit knowledge</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-[18px]">cancel</span>
+                <span className="text-sm text-gray-400 dark:text-gray-500">Can manage workflows</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-[18px]">cancel</span>
+                <span className="text-sm text-gray-400 dark:text-gray-500">Can access billing</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-[18px]">cancel</span>
+                <span className="text-sm text-gray-400 dark:text-gray-500">Can manage integrations</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-[18px]">cancel</span>
+                <span className="text-sm text-gray-400 dark:text-gray-500">Can view audit logs</span>
+              </div>
             </div>
           </section>
         </div>
 
         <div className="col-span-2">
+          {/* Permissions Summary */}
           <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden h-full">
             <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Domain Permissions</h2>
@@ -102,21 +117,18 @@ export default function AccessPermissionsTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {DOMAINS.map(([domain, key]) => {
-                    const enabled = permissions.has(key);
-                    return (
-                      <tr key={domain} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                        <td className="px-6 py-3">
-                          <span className="text-sm font-medium text-gray-900 dark:text-white">{domain}</span>
-                        </td>
-                        <td className="px-6 py-3 text-right">
-                          <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${enabled ? 'text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-900/20 dark:border-blue-800/30' : 'text-gray-400 bg-gray-50 border-gray-100 dark:text-gray-500 dark:bg-gray-900/50 dark:border-gray-800'}`}>
-                            {enabled ? 'Granted' : 'No access'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {permissions.map((perm, idx) => (
+                    <tr key={idx} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                      <td className="px-6 py-3">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{perm.domain}</span>
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${getLevelColor(perm.level)}`}>
+                          {perm.level}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

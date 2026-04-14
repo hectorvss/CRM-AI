@@ -530,61 +530,6 @@ export function seedDatabase(): void {
   const insertConn = db.prepare('INSERT OR IGNORE INTO connectors (id,tenant_id,system,name,status,auth_type,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)');
   connectors.forEach(c => insertConn.run(c.id, TENANT_ID, c.system, c.name, c.status, 'oauth2', new Date().toISOString(), new Date().toISOString()));
 
-  const insertPlan = db.prepare('INSERT OR IGNORE INTO billing_plans (id, name, price_cents, currency, interval, created_at) VALUES (?,?,?,?,?,?)');
-  [
-    ['starter', 'Starter', 4900, 'EUR', 'month'],
-    ['growth', 'Growth', 12900, 'EUR', 'month'],
-    ['scale', 'Scale', 29900, 'EUR', 'month'],
-    ['business', 'Business', 0, 'EUR', 'month'],
-  ].forEach(([id, name, price_cents, currency, interval]) => insertPlan.run(id, name, price_cents, currency, interval, new Date().toISOString()));
-
-  const insertSubscription = db.prepare(`
-    INSERT OR IGNORE INTO billing_subscriptions
-    (id, org_id, plan_id, status, current_period_start, current_period_end, seats_included, seats_used, credits_included, credits_used, external_subscription_id, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-  `);
-  insertSubscription.run(
-    'sub_org_default',
-    ORG_ID,
-    'growth',
-    'active',
-    new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString(),
-    new Date(Date.now() + 16 * 24 * 3600 * 1000).toISOString(),
-    8,
-    2,
-    20000,
-    3240,
-    'sub_demo_growth',
-    new Date().toISOString(),
-  );
-
-  const insertLedger = db.prepare(`
-    INSERT OR IGNORE INTO credit_ledger
-    (id, org_id, tenant_id, entry_type, amount, reason, reference_id, balance_after, occurred_at)
-    VALUES (?,?,?,?,?,?,?,?,?)
-  `);
-  insertLedger.run(
-    'ledger_sub_001',
-    ORG_ID,
-    TENANT_ID,
-    'debit',
-    129,
-    'Growth plan subscription',
-    'sub_org_default',
-    18871,
-    new Date(Date.now() - 12 * 24 * 3600 * 1000).toISOString(),
-  );
-  insertLedger.run(
-    'ledger_sub_002',
-    ORG_ID,
-    TENANT_ID,
-    'debit',
-    79,
-    'AI credit top-up',
-    'topup_credits_001',
-    19621,
-    new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString(),
-  );
   // ── Agents ────────────────────────────────────────────────
   const agentList = [
     { id: 'agent_supervisor', slug: 'supervisor', name: 'Supervisor', cat: 'orchestration', sys: 1, locked: 1 },
@@ -613,4 +558,3 @@ export function seedDatabase(): void {
 
   console.log('✅ Database seeded successfully');
 }
-

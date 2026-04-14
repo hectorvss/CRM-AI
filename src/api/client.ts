@@ -82,11 +82,6 @@ export const customersApi = {
   },
   get: (id: string) => request<any>(`/customers/${id}`),
   state: (id: string) => request<any>(`/customers/${id}/state`),
-  create: (payload: Record<string, any>) =>
-    request<any>('/customers', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
 };
 
 // ── Orders ────────────────────────────────────────────────
@@ -141,14 +136,6 @@ export const approvalsApi = {
     request<any>(`/approvals/${id}/decide`, {
       method: 'POST',
       body: JSON.stringify({ decision, note, decided_by }),
-    }),
-};
-
-export const policyApi = {
-  evaluateAndRoute: (payload: Record<string, any>) =>
-    request<any>('/policy/evaluate-and-route', {
-      method: 'POST',
-      body: JSON.stringify(payload),
     }),
 };
 
@@ -212,19 +199,19 @@ export const workflowsApi = {
 export const agentsApi = {
   list: () => request<any>('/agents').then(unwrapList),
   get: (id: string) => request<any>(`/agents/${id}`),
-  policyDraft: (id: string) => request<any>(`/agents/${id}/policy-bundle-draft`),
+  policyDraft: (id: string) => request<any>(`/agents/${id}/policy-bundle:draft`),
   updatePolicyDraft: (id: string, payload: Record<string, any>) =>
-    request<any>(`/agents/${id}/policy-bundle-draft`, {
+    request<any>(`/agents/${id}/policy-bundle:draft`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
   publishPolicyDraft: (id: string, payload: Record<string, any> = {}) =>
-    request<any>(`/agents/${id}/policy-bundle-publish`, {
+    request<any>(`/agents/${id}/policy-bundle:publish`, {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
   rollbackPolicy: (id: string, payload: Record<string, any> = {}) =>
-    request<any>(`/agents/${id}/policy-bundle-rollback`, {
+    request<any>(`/agents/${id}/policy-bundle:rollback`, {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
@@ -267,8 +254,6 @@ export const connectorsApi = {
 
 // ── AI ────────────────────────────────────────────────────
 export const aiApi = {
-  studio: () => request<any>('/ai/studio'),
-  agents: () => request<any>('/ai/agents').then(unwrapList),
   diagnose: (caseId: string) =>
     request<any>(`/ai/diagnose/${caseId}`, { method: 'POST', body: '{}' }),
   draft: (caseId: string, tone = 'professional', additional_context = '') =>
@@ -293,70 +278,11 @@ export const aiApi = {
 export const iamApi = {
   me: () => request<any>('/iam/me'),
   users: () => request<any>('/iam/users').then(unwrapList),
-  members: () => request<any>('/iam/members').then(unwrapList),
-  roles: () => request<any>('/iam/roles').then(unwrapList),
-  inviteMember: (payload: { email: string; name?: string; role_id: string }) =>
-    request<any>('/iam/members/invite', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  updateMember: (id: string, payload: { status?: string; role_id?: string }) =>
-    request<any>(`/iam/members/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-  createRole: (payload: { name: string; permissions: string[] }) =>
-    request<any>('/iam/roles', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  updateRole: (id: string, payload: { name?: string; permissions?: string[] }) =>
-    request<any>(`/iam/roles/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-  updateMe: (payload: Record<string, any>) =>
-    request<any>('/iam/me', {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
 };
 
 export const workspacesApi = {
   list: () => request<any>('/workspaces').then(unwrapList),
-  currentContext: () => request<any>('/workspaces/current/context'),
   get: (id: string) => request<any>(`/workspaces/${id}`),
-  update: (id: string, payload: Record<string, any>) =>
-    request<any>(`/workspaces/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-  updateSettings: (id: string, settings: Record<string, any>) =>
-    request<any>(`/workspaces/${id}/settings`, {
-      method: 'PATCH',
-      body: JSON.stringify({ settings }),
-    }),
-  featureFlags: (id: string) => request<any>(`/workspaces/${id}/feature-flags`),
-  updateFeatureFlag: (id: string, featureKey: string, isEnabled: boolean) =>
-    request<any>(`/workspaces/${id}/feature-flags/${featureKey}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_enabled: isEnabled }),
-    }),
-};
-
-export const billingApi = {
-  subscription: (orgId: string) => request<any>(`/billing/${orgId}/subscription`),
-  ledger: (orgId: string) => request<any[]>(`/billing/${orgId}/ledger`).then(unwrapList),
-  changePlan: (orgId: string, planId: string) =>
-    request<any>(`/billing/${orgId}/subscription`, {
-      method: 'PATCH',
-      body: JSON.stringify({ plan_id: planId }),
-    }),
-  topUp: (orgId: string, payload: { type: 'credits' | 'seats'; quantity: number; amount_cents?: number }) =>
-    request<any>(`/billing/${orgId}/top-ups`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
 };
 
 // ── Reports ──────────────────────────────────────────────
@@ -386,11 +312,6 @@ export const operationsApi = {
     }),
   canonicalEvents: () => request<any>('/operations/canonical-events').then(unwrapList),
   agentRuns: () => request<any>('/operations/agent-runs').then(unwrapList),
-};
-
-export const auditApi = {
-  workspaceAll: () => request<any>('/audit/workspace/all').then(unwrapList),
-  entity: (entityType: string, entityId: string) => request<any>(`/audit/${entityType}/${entityId}`).then(unwrapList),
 };
 
 // ── Health ────────────────────────────────────────────────

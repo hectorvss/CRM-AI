@@ -7,12 +7,6 @@ export interface WorkspaceRepository {
   listByUser(userId: string): Promise<any[]>;
   getById(id: string, orgId?: string): Promise<any>;
   updateSettings(id: string, settings: any): Promise<void>;
-  updateWorkspace(id: string, updates: {
-    name?: string;
-    slug?: string;
-    settings?: any;
-    planId?: string;
-  }): Promise<void>;
   listFeatureFlags(tenantId: string, workspaceId: string): Promise<any[]>;
   updateFeatureFlag(data: {
     tenantId: string;
@@ -28,18 +22,12 @@ export interface WorkspaceRepository {
 class SQLiteWorkspaceRepository implements WorkspaceRepository {
   async listByUser(userId: string) {
     const db = getDb();
-    const rows = db.prepare(`
+    return db.prepare(`
       SELECT w.*, m.role_id, m.status as member_status 
       FROM workspaces w
       JOIN members m ON w.id = m.workspace_id
       WHERE m.user_id = ?
     `).all(userId);
-
-    if (rows.length > 0) return rows;
-
-    const fallback = db.prepare('SELECT * FROM workspaces ORDER BY created_at ASC LIMIT 1').get() as any;
-    if (!fallback) return [];
-    return [{ ...fallback, role_id: null, member_status: 'active' }];
   }
 
   async getById(id: string, orgId?: string) {
@@ -57,31 +45,6 @@ class SQLiteWorkspaceRepository implements WorkspaceRepository {
       SET settings = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(JSON.stringify(settings), id);
-  }
-
-  async updateWorkspace(id: string, updates: any) {
-    const db = getDb();
-    const fields: string[] = [];
-    const params: any[] = [];
-    if (typeof updates.name === 'string') {
-      fields.push('name = ?');
-      params.push(updates.name);
-    }
-    if (typeof updates.slug === 'string') {
-      fields.push('slug = ?');
-      params.push(updates.slug);
-    }
-    if (updates.settings !== undefined) {
-      fields.push('settings = ?');
-      params.push(JSON.stringify(updates.settings));
-    }
-    if (typeof updates.planId === 'string') {
-      fields.push('plan_id = ?');
-      params.push(updates.planId);
-    }
-    if (fields.length === 0) return;
-    fields.push('updated_at = CURRENT_TIMESTAMP');
-    db.prepare(`UPDATE workspaces SET ${fields.join(', ')} WHERE id = ?`).run(...params, id);
   }
 
   async listFeatureFlags(tenantId: string, workspaceId: string) {
@@ -147,20 +110,11 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
       .select('*, members!inner(role_id, status)')
       .eq('members.user_id', userId);
     if (error) throw error;
-    const rows = (data || []).map(w => ({
+    return (data || []).map(w => ({
       ...w,
       role_id: w.members[0]?.role_id,
       member_status: w.members[0]?.status
     }));
-    if (rows.length > 0) return rows;
-
-    const { data: fallback } = await supabase
-      .from('workspaces')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    return fallback ? [{ ...fallback, role_id: null, member_status: 'active' }] : [];
   }
 
   async getById(id: string, orgId?: string) {
@@ -177,17 +131,6 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
       .from('workspaces')
       .update({ settings, updated_at: new Date().toISOString() })
       .eq('id', id);
-    if (error) throw error;
-  }
-
-  async updateWorkspace(id: string, updates: any) {
-    const supabase = getSupabaseAdmin();
-    const toUpdate: any = { updated_at: new Date().toISOString() };
-    if (typeof updates.name === 'string') toUpdate.name = updates.name;
-    if (typeof updates.slug === 'string') toUpdate.slug = updates.slug;
-    if (updates.settings !== undefined) toUpdate.settings = updates.settings;
-    if (typeof updates.planId === 'string') toUpdate.plan_id = updates.planId;
-    const { error } = await supabase.from('workspaces').update(toUpdate).eq('id', id);
     if (error) throw error;
   }
 

@@ -37,7 +37,6 @@ import { triggerAgents } from '../agents/orchestrator.js';
 import { JobType }       from '../queue/types.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { logger }        from '../utils/logger.js';
-import { requireScope }  from '../lib/scope.js';
 import type { ReconcileCasePayload, JobContext } from '../queue/types.js';
 
 // ── Conflict result ────────────────────────────────────────────────────────────
@@ -265,7 +264,7 @@ async function handleReconcileCase(
   const caseRepo = createCaseRepository();
   const customerRepo = createCustomerRepository();
   
-  const scope = requireScope(ctx, 'reconciler');
+  const scope = { tenantId: ctx.tenantId || 'org_default', workspaceId: ctx.workspaceId || 'ws_default' };
 
   // ── 1. Load case bundle ──────────────────────────────────────────────────
   const bundle = await caseRepo.getBundle(scope, payload.caseId);

@@ -32,7 +32,6 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url TEXT,
   role TEXT NOT NULL DEFAULT 'agent',
   is_system INTEGER NOT NULL DEFAULT 0,
-  preferences TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 );
 
@@ -268,8 +267,7 @@ CREATE TABLE IF NOT EXISTS draft_replies (
   reviewed_at TEXT,
   sent_at TEXT,                              -- set when the draft is actually delivered
   updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-  tenant_id TEXT NOT NULL,
-  workspace_id TEXT NOT NULL DEFAULT 'ws_default'
+  tenant_id TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS internal_notes (
@@ -279,8 +277,7 @@ CREATE TABLE IF NOT EXISTS internal_notes (
   created_by TEXT,
   created_by_type TEXT DEFAULT 'human',
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-  tenant_id TEXT NOT NULL,
-  workspace_id TEXT NOT NULL DEFAULT 'ws_default'
+  tenant_id TEXT NOT NULL
 );
 
 -- ============================================================
@@ -437,7 +434,6 @@ CREATE TABLE IF NOT EXISTS reconciliation_issues (
   id TEXT PRIMARY KEY,
   case_id TEXT REFERENCES cases(id),
   tenant_id TEXT NOT NULL,
-  workspace_id TEXT NOT NULL DEFAULT 'ws_default',
   entity_type TEXT NOT NULL,
   entity_id TEXT NOT NULL,
   conflict_domain TEXT NOT NULL,

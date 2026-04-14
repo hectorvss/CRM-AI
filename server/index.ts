@@ -96,20 +96,6 @@ bootstrapIntegrations().catch(err => {
   logger.error('Integration bootstrap error', err);
 });
 
-// Register demo adapters in development mode
-if (config.env === 'development') {
-  // Use dynamic import to avoid issues in prod bundles if any
-  Promise.all([
-    import('./demo/scenarios.js'),
-    import('./demo/sandboxAdapters.js')
-  ]).then(([{ DEMO_SCENARIOS }, { registerDemoIntegrationAdapters }]) => {
-    registerDemoIntegrationAdapters(DEMO_SCENARIOS);
-    logger.info('Demo sandbox integration adapters registered');
-  }).catch(err => {
-    logger.error('Failed to register demo adapters', err);
-  });
-}
-
 // ── Express App ───────────────────────────────────────────
 const app = express();
 
@@ -178,6 +164,8 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────
+// Already defined above for early use
+
 let server: ReturnType<typeof app.listen> | null = null;
 
 if (!isServerlessRuntime) {

@@ -58,8 +58,6 @@ export interface Order {
     carrier: string;
     canonical: string;
   };
-  canonicalContext?: Record<string, any>;
-  canonical_context?: Record<string, any>;
   relatedCases: { id: string; type: string; status: string }[];
   tab: OrderTab;
   conflictDetected?: string;

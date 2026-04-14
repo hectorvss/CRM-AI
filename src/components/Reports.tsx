@@ -64,7 +64,7 @@ const recommendedActions: any[] = [];
 export default function Reports() {
   const [activeTab, setActiveTab] = useState<ReportsTab>('overview');
   const [selectedReportId, setSelectedReportId] = useState('1');
-  const [period, setPeriod] = useState('7d');
+  const [period] = useState('7d');
 
   // ── Real API data ────────────────────────────────────────────────
   const { data: overviewData } = useApi(() => reportsApi.overview(period), [period]);
@@ -921,18 +921,6 @@ export default function Reports() {
           <div className="px-6 py-4 flex items-center justify-between">
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Reports & Analytics</h1>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg mr-2">
-                {['7d', '30d', '90d'].map(option => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setPeriod(option)}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${period === option ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
-                  >
-                    {option.toUpperCase()}
-                  </button>
-                ))}
-              </div>
               <button className="flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm">
                 <span className="material-symbols-outlined text-sm mr-1.5">share</span>
                 Share

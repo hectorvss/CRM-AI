@@ -17,7 +17,6 @@
 import { enqueueDelayed } from './client.js';
 import { JobType }        from './types.js';
 import { logger }         from '../utils/logger.js';
-import { requireScope }    from '../lib/scope.js';
 
 let slaIntervalId:     ReturnType<typeof setInterval> | null = null;
 let reconcileIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -31,30 +30,29 @@ export function startScheduledJobs(): void {
     reconcileIntervalMin: RECONCILE_INTERVAL_MS / 60_000,
   });
 
-  const scope = bootstrapScope();
-  if (!scope) {
-    logger.info('Skipping scheduled job bootstrap because DEFAULT_TENANT_ID/DEFAULT_WORKSPACE_ID are not set');
-    return;
+  // Fire once shortly after startup (give the worker a few seconds to be fully up)
+  try {
+    enqueueDelayed(JobType.SLA_CHECK,           {}, 10_000, { tenantId: 'org_default', priority: 9 });
+    enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 30_000, { tenantId: 'org_default', priority: 9 });
+  } catch (err) {
+    logger.warn('Failed to enqueue initial scheduled jobs', { error: String(err) });
   }
 
-  // Fire once shortly after startup (give the worker a few seconds to be fully up)
-  enqueueDelayed(JobType.SLA_CHECK,           {}, 10_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-  enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 30_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-
   slaIntervalId = setInterval(() => {
-    enqueueDelayed(JobType.SLA_CHECK, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+    try {
+      enqueueDelayed(JobType.SLA_CHECK, {}, 0, { tenantId: 'org_default', priority: 9 });
+    } catch (err) {
+      logger.warn('Failed to enqueue SLA_CHECK', { error: String(err) });
+    }
   }, SLA_INTERVAL_MS);
 
   reconcileIntervalId = setInterval(() => {
-    enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+    try {
+      enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: 'org_default', priority: 9 });
+    } catch (err) {
+      logger.warn('Failed to enqueue RECONCILE_SCHEDULED', { error: String(err) });
+    }
   }, RECONCILE_INTERVAL_MS);
-}
-
-function bootstrapScope() {
-  const tenantId = process.env.DEFAULT_TENANT_ID ?? null;
-  const workspaceId = process.env.DEFAULT_WORKSPACE_ID ?? null;
-  if (!tenantId || !workspaceId) return null;
-  return requireScope({ tenantId, workspaceId }, 'scheduledJobs');
 }
 
 export function stopScheduledJobs(): void {

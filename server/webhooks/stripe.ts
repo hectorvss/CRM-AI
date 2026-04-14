@@ -17,9 +17,6 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { createIntegrationRepository } from '../data/integrations.js';
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
-import { getSupabaseAdmin } from '../db/supabase.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
@@ -42,25 +39,6 @@ const SUPPORTED_EVENT_TYPES = new Set([
   'invoice.payment_failed',
   'invoice.payment_succeeded',
 ]);
-
-async function resolveTenantIdForStripe(): Promise<string | null> {
-  if (getDatabaseProvider() === 'supabase') {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('connectors')
-      .select('tenant_id')
-      .eq('system', 'stripe')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data?.tenant_id ?? null;
-  }
-
-  const db = getDb();
-  const row = db.prepare('SELECT tenant_id FROM connectors WHERE system = ? ORDER BY created_at ASC LIMIT 1').get('stripe') as any;
-  return row?.tenant_id ?? null;
-}
 
 stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
@@ -125,16 +103,9 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
     // ── 5. Persist raw event ───────────────────────────────────────────────────
     const eventId = randomUUID();
 
-    const tenantId = await resolveTenantIdForStripe();
-    if (!tenantId) {
-      logger.warn('Stripe webhook: no tenant mapping found for connector, skipping persistence', { eventType });
-      res.status(200).send('ok');
-      return;
-    }
-
     await integrationRepo.createWebhookEvent({
       id: eventId,
-      tenantId,
+      tenantId: 'org_default',
       sourceSystem: 'stripe',
       eventType,
       rawPayload: rawBody,

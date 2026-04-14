@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useEffect, useState } from 'react';
+import React, { ReactNode, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import WorkspaceTab from './settings/Workspace';
 import TeamsRolesTab from './settings/TeamsRoles';
@@ -18,17 +18,6 @@ function TabErrorBoundary({ children }: TabErrorBoundaryProps) {
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('workspace');
-  const [saveHandler, setSaveHandler] = useState<null | (() => Promise<void> | void)>(null);
-
-  useEffect(() => {
-    setSaveHandler(null);
-  }, [activeTab]);
-
-  const handleSave = useCallback(async () => {
-    if (saveHandler) {
-      await saveHandler();
-    }
-  }, [saveHandler]);
 
   const tabs: { id: SettingsTab; label: string }[] = [
     { id: 'workspace', label: 'Workspace' },
@@ -53,14 +42,7 @@ export default function Settings() {
             </div>
             <div className="flex items-center gap-3">
               <button className="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors">Discard Changes</button>
-              <button
-                type="button"
-                onClick={() => { void handleSave().catch(() => undefined); }}
-                disabled={!saveHandler}
-                className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-md hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Save changes
-              </button>
+              <button className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-md hover:opacity-90 transition-all">Save changes</button>
             </div>
           </div>
           <div className="px-6 flex items-center space-x-8 border-t border-gray-100 dark:border-gray-800 pt-3">
@@ -94,13 +76,13 @@ export default function Settings() {
               className="h-full"
             >
               <TabErrorBoundary label={tabs.find(tab => tab.id === activeTab)?.label || 'Settings tab'}>
-                {activeTab === 'workspace' && <WorkspaceTab onSaveReady={setSaveHandler} />}
-                {activeTab === 'teams_roles' && <TeamsRolesTab onSaveReady={setSaveHandler} />}
-                {activeTab === 'notifications' && <NotificationsTab onSaveReady={setSaveHandler} />}
-                {activeTab === 'security_audit' && <SecurityAuditTab onSaveReady={setSaveHandler} />}
-                {activeTab === 'billing_usage' && <BillingUsageTab onSaveReady={setSaveHandler} />}
-                {activeTab === 'data_privacy' && <DataPrivacyTab onSaveReady={setSaveHandler} />}
-                {activeTab === 'personal' && <PersonalTab onSaveReady={setSaveHandler} />}
+                {activeTab === 'workspace' && <WorkspaceTab />}
+                {activeTab === 'teams_roles' && <TeamsRolesTab />}
+                {activeTab === 'notifications' && <NotificationsTab />}
+                {activeTab === 'security_audit' && <SecurityAuditTab />}
+                {activeTab === 'billing_usage' && <BillingUsageTab />}
+                {activeTab === 'data_privacy' && <DataPrivacyTab />}
+                {activeTab === 'personal' && <PersonalTab />}
               </TabErrorBoundary>
             </motion.div>
           </AnimatePresence>

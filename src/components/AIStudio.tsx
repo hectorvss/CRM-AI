@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { aiApi, agentsApi } from '../api/client';
+import { agentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import { connectionCategories } from '../connectionsData';
 import ConnectionsView from './ConnectionsView';
@@ -320,11 +320,7 @@ export default function AIStudio() {
   const [agentSearch, setAgentSearch] = useState('');
   const [agentListFilter, setAgentListFilter] = useState<'All' | 'Needs setup' | 'Enabled' | 'Disabled'>('All');
 
-  const { data: studioData, refetch: refetchStudio } = useApi(aiApi.studio);
-  const apiAgents = useMemo(() => {
-    const raw = studioData?.agents ?? studioData?.data ?? [];
-    return Array.isArray(raw) ? raw : [];
-  }, [studioData]);
+  const { data: apiAgents, refetch: refetchAgents } = useApi(agentsApi.list);
 
   const CATEGORY_ICONS: Record<string, string> = {
     orchestration: 'supervisor_account', ingest: 'input', resolution: 'build',
@@ -436,7 +432,7 @@ export default function AIStudio() {
     });
     refetchDraft();
     refetchEffective();
-    refetchStudio();
+    refetchAgents();
   };
 
   const handlePublishDraft = async () => {
@@ -444,7 +440,7 @@ export default function AIStudio() {
     await publishDraft.mutate({ id: selectedAgentId });
     refetchDraft();
     refetchEffective();
-    refetchStudio();
+    refetchAgents();
   };
 
   const handleRollbackDraft = async () => {
@@ -452,7 +448,7 @@ export default function AIStudio() {
     await rollbackDraft.mutate({ id: selectedAgentId });
     refetchDraft();
     refetchEffective();
-    refetchStudio();
+    refetchAgents();
   };
 
   const handleToggleAgent = async (agent: any) => {
@@ -461,7 +457,7 @@ export default function AIStudio() {
       id: agent.id,
       body: { isActive: !agent.active },
     });
-    refetchStudio();
+    refetchAgents();
     refetchEffective();
   };
 

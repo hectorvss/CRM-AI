@@ -2,14 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { workflowsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
-import type { Page } from '../types';
 
 type WorkflowView = 'list' | 'builder' | 'new';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
-
-interface WorkflowsProps {
-  onNavigate?: NavigateFn;
-}
 
 interface Workflow {
   id: string;
@@ -155,43 +149,17 @@ const mockWorkflows: Workflow[] = [
   }
 ];
 
-const TEMPLATE_LIBRARY = [
-  {
-    id: 'refund_auto_approval',
-    label: 'Refund Auto-Approval',
-    description: 'Approve low-risk refunds below the threshold and route anything suspicious to manual review.',
-    category: 'Refunds',
-  },
-  {
-    id: 'cancel_packing_guard',
-    label: 'Packing Guard',
-    description: 'Block cancellations once the order is packed or a label has been generated.',
-    category: 'Orders',
-  },
-  {
-    id: 'approval_escalation',
-    label: 'Approval Escalation',
-    description: 'Route high-value or high-risk actions to approval before execution.',
-    category: 'Approvals',
-  },
-] as const;
-
-export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
-  void _onNavigate;
+export default function Workflows() {
   const [view, setView] = useState<WorkflowView>('list');
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [activeFilter, setActiveFilter] = useState('All');
   const [rightTab, setRightTab] = useState<'details' | 'copilot'>('details');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
-  const [dryRunResult, setDryRunResult] = useState<string | null>(null);
 
   const filters = ['All', 'Orders', 'Refunds', 'Returns', 'Approvals', 'Conflicts', 'Escalations'];
 
   // Fetch from API, fallback to static
-  const { data: apiWorkflows, error: workflowsError } = useApi(() => workflowsApi.list(), [], []);
+  const { data: apiWorkflows } = useApi(() => workflowsApi.list(), [], []);
   const createWorkflow = useMutation((payload: Record<string, any>) => workflowsApi.create(payload));
   const updateWorkflow = useMutation((payload: { id: string; body: Record<string, any> }) => workflowsApi.update(payload.id, payload.body));
   const publishWorkflow = useMutation((id: string) => workflowsApi.publish(id));
@@ -216,19 +184,11 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
   const workflows = (apiWorkflows && apiWorkflows.length > 0) ? apiWorkflows.map(mapApiWorkflow) : mockWorkflows;
 
   const handleWorkflowClick = (wf: Workflow) => {
-    setActionMessage(null);
-    setDryRunResult(null);
     setSelectedWorkflow(wf);
     setView('builder');
   };
 
-  const handleBrowseTemplates = () => {
-    setIsTemplatePickerOpen(true);
-  };
-
   const handleNewWorkflow = async () => {
-    setActionMessage(null);
-    setDryRunResult(null);
     const created = await createWorkflow.mutate({
       name: 'New workflow draft',
       description: 'Draft workflow created from template',
@@ -243,30 +203,6 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
     } else {
       setSelectedWorkflow(null);
       setView('new');
-    }
-  };
-
-  const createFromTemplate = async (templateId: typeof TEMPLATE_LIBRARY[number]['id']) => {
-    const template = TEMPLATE_LIBRARY.find((item) => item.id === templateId);
-    if (!template) return;
-    setActionMessage(null);
-    setDryRunResult(null);
-    setIsTemplatePickerOpen(false);
-    const created = await createWorkflow.mutate({
-      name: template.label,
-      description: template.description,
-      category: template.category,
-      trigger: { type: 'manual' },
-      nodes: [
-        { id: 'start', type: 'trigger', label: 'Start' },
-        { id: 'guard', type: 'condition', label: template.category },
-      ],
-      edges: [{ id: 'edge_1', source: 'start', target: 'guard' }],
-    });
-    if (created?.id) {
-      setSelectedWorkflow(mapApiWorkflow(created));
-      setView('builder');
-      setActionMessage(`Template created: ${template.label}`);
     }
   };
 
@@ -290,56 +226,6 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
     }
   };
 
-  const handleFixDependencies = () => {
-    const problematic = workflows.find((wf) => wf.status === 'dependency_missing' || wf.status === 'blocked' || wf.status === 'warning');
-    if (!problematic) {
-      setActionMessage('No dependency issues found right now.');
-      return;
-    }
-    setSelectedWorkflow(problematic);
-    setView('builder');
-    setRightTab('details');
-    setActionMessage(`Opened ${problematic.name} for dependency review.`);
-  };
-
-  const handleRunDryRun = () => {
-    if (!selectedWorkflow) {
-      setDryRunResult('Select a workflow first.');
-      return;
-    }
-    const hasIssue = selectedWorkflow.status === 'blocked' || selectedWorkflow.status === 'dependency_missing';
-    const result = hasIssue
-      ? `Dry-run detected a blocker in ${selectedWorkflow.name}: ${selectedWorkflow.statusMessage || 'dependency issue'}`
-      : `Dry-run passed for ${selectedWorkflow.name}. No blocking conditions detected.`;
-    setDryRunResult(result);
-    setActionMessage(result);
-  };
-
-  const handleApplyToComposer = async () => {
-    if (!selectedWorkflow?.id) {
-      setActionMessage('Select a workflow first.');
-      return;
-    }
-    const updatedDescription = `${selectedWorkflow.description}\n\nComposer note: optimize this workflow for operational guardrails and faster reviews.`;
-    const updated = await updateWorkflow.mutate({
-      id: selectedWorkflow.id,
-      body: {
-        name: selectedWorkflow.name,
-        description: updatedDescription,
-        trigger: { type: selectedWorkflow.category.toLowerCase() || 'manual' },
-        nodes: [
-          { id: 'start', type: 'trigger', label: 'Start' },
-          { id: 'composer', type: 'action', label: 'Composer note applied' },
-        ],
-        edges: [{ id: 'edge_1', source: 'start', target: 'composer' }],
-      },
-    });
-    if (updated?.id) {
-      setSelectedWorkflow(mapApiWorkflow(updated));
-      setActionMessage(`Composer note applied to ${selectedWorkflow.name}`);
-    }
-  };
-
   const handlePublishWorkflow = async () => {
     if (!selectedWorkflow?.id) return;
     await handleSaveWorkflow();
@@ -350,11 +236,7 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
   };
 
   const filteredWorkflows = workflows.filter(wf => 
-    (activeFilter === 'All' || wf.category === activeFilter) &&
-    (
-      searchQuery.trim() === '' ||
-      `${wf.name} ${wf.description} ${wf.category} ${wf.status}`.toLowerCase().includes(searchQuery.trim().toLowerCase())
-    )
+    activeFilter === 'All' || wf.category === activeFilter
   );
 
   return (
@@ -383,12 +265,10 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
                       <input 
                         type="text" 
                         placeholder="Search workflows..." 
-                        value={searchQuery}
-                        onChange={(event) => setSearchQuery(event.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-all"
                       />
                     </div>
-                    <button onClick={handleBrowseTemplates} className="px-4 py-2 text-sm font-bold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800/60 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <button className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
                       Browse templates
                     </button>
                     <button 
@@ -417,33 +297,6 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
                 </div>
               </div>
             </div>
-
-            {(workflowsError || createWorkflow.error || updateWorkflow.error || publishWorkflow.error) && (
-              <div className="px-6 mt-4">
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-card dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
-                  <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined text-lg mt-0.5">error</span>
-                    <div className="min-w-0">
-                      <div className="font-semibold">Workflow action unavailable</div>
-                      <div className="text-xs opacity-90">{publishWorkflow.error || updateWorkflow.error || createWorkflow.error || workflowsError}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {actionMessage && (
-              <div className="px-6 mt-4">
-                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-card dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
-                  <div className="flex items-start gap-3">
-                    <span className="material-symbols-outlined text-lg mt-0.5">info</span>
-                    <div className="min-w-0">
-                      <div className="font-semibold">Workflow action status</div>
-                      <div className="text-xs opacity-90">{actionMessage}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* List Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
@@ -550,12 +403,7 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
                             2 workflows blocked due to PSP mapping mismatch
                           </p>
                         </div>
-                        {dryRunResult && (
-                          <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
-                            {dryRunResult}
-                          </div>
-                        )}
-                        <button onClick={handleFixDependencies} className="w-full py-2 bg-white dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold shadow-card hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <button className="w-full py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-xl text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-card">
                           Fix dependencies
                         </button>
                       </div>
@@ -601,7 +449,7 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <button onClick={handleRunDryRun} className="px-4 py-1.5 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800/60 border border-gray-300 dark:border-gray-600 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-card hover:bg-gray-50 dark:hover:bg-gray-700">
+                <button className="px-4 py-1.5 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 shadow-card">
                   <span className="material-symbols-outlined text-sm">play_arrow</span>
                   Run dry-run
                 </button>
@@ -788,9 +636,9 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
                             <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed italic mb-3">
                               "I've analyzed the workflow. It's performing well, but we could improve the efficiency of the conditional branches."
                             </p>
-                <button onClick={handleApplyToComposer} className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
-                  Apply to Composer
-                </button>
+                            <button className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
+                              Apply to Composer
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -966,44 +814,6 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {isTemplatePickerOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          >
-            <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-card-dark shadow-2xl border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Browse templates</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Create a workflow from a working operational pattern.</p>
-                </div>
-                <button
-                  onClick={() => setIsTemplatePickerOpen(false)}
-                  className="w-9 h-9 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-500"
-                >
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                {TEMPLATE_LIBRARY.map((template) => (
-                  <button
-                    key={template.id}
-                    onClick={() => createFromTemplate(template.id)}
-                    className="text-left rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:border-secondary hover:bg-purple-50/40 dark:hover:bg-purple-900/10 transition-colors"
-                  >
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">{template.category}</div>
-                    <div className="font-bold text-gray-900 dark:text-white mb-2">{template.label}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{template.description}</div>
-                  </button>
-                ))}
               </div>
             </div>
           </motion.div>

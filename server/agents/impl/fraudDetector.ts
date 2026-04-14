@@ -1,8 +1,27 @@
+/**
+ * server/agents/impl/fraudDetector.ts
+ *
+ * Fraud Detector Agent — identifies fraud signals in payment and
+ * customer behaviour patterns.
+ *
+ * Uses Gemini to analyze the full context window and returns structured
+ * fraud assessment. Writes fraud risk to audit_events and updates
+ * case risk_level when fraud indicators are found.
+ *
+ * Prompt returns JSON:
+ * {
+ *   fraudRisk: 'none' | 'low' | 'medium' | 'high' | 'critical',
+ *   signals: string[],
+ *   confidence: number,
+ *   recommendation: string,
+ *   requiresBlock: boolean,
+ *   blockReason?: string,
+ * }
+ */
+
 import { randomUUID } from 'crypto';
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
-import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
 
@@ -12,16 +31,15 @@ export const fraudDetectorImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId, runId } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
-    const now = new Date().toISOString();
+    const db = getDb();
+
+    // ── Build prompt ──────────────────────────────────────────────────────
+    const contextStr = contextWindow.toPromptString();
 
     const prompt = `You are an expert fraud analyst for an e-commerce CRM.
 Analyze this support case for fraud indicators.
 
-${contextWindow.toPromptString()}
+${contextStr}
 
 ${knowledgeBundle.promptContext ? `ACCESSIBLE KNOWLEDGE AND POLICIES:\n${knowledgeBundle.promptContext}\n` : ''}
 
@@ -33,8 +51,19 @@ Return a JSON object with exactly these fields:
   "recommendation": "What action should be taken (1-2 sentences)",
   "requiresBlock": true | false,
   "blockReason": "Only if requiresBlock is true"
-}`;
+}
 
+Fraud signals to evaluate:
+- Multiple refund requests in short period
+- Payment amount / refund amount mismatches
+- Dispute filed while refund already pending
+- New customer with high-value order returning immediately
+- Mismatched shipping addresses across orders
+- Chargeback history from the customer profile
+- Cross-system state contradictions suggesting manipulation
+- Unusual order patterns (multiple orders, different addresses, same items)`;
+
+    // ── Call Gemini ───────────────────────────────────────────────────────
     let fraudOutput: any;
     let tokensUsed = 0;
 
@@ -48,7 +77,10 @@ Return a JSON object with exactly these fields:
         },
       });
 
-      const response = await withGeminiRetry(() => model.generateContent(prompt), { label: 'fraud-detector' });
+      const response = await withGeminiRetry(
+        () => model.generateContent(prompt),
+        { label: 'fraud-detector' },
+      );
       const text = response.response.text();
       tokensUsed = response.response.usageMetadata?.totalTokenCount ?? 0;
       fraudOutput = JSON.parse(text);
@@ -57,94 +89,73 @@ Return a JSON object with exactly these fields:
       return { success: false, error: err?.message, tokensUsed };
     }
 
-    const { fraudRisk = 'none', signals = [], confidence = 0, recommendation, requiresBlock, blockReason } = fraudOutput;
-    if (!fraudRisk) return { success: false, error: 'Fraud output missing fraudRisk field', tokensUsed };
+    const {
+      fraudRisk = 'none', signals = [], confidence = 0,
+      recommendation, requiresBlock, blockReason,
+    } = fraudOutput;
 
+    if (!fraudRisk) {
+      return { success: false, error: 'Fraud output missing fraudRisk field', tokensUsed };
+    }
+
+    const now = new Date().toISOString();
+
+    // ── Write fraud assessment to audit ───────────────────────────────────
     if (fraudRisk !== 'none') {
       try {
-        const payload = {
-          fraudRisk,
-          signals,
-          confidence,
-          recommendation,
-          requiresBlock,
-          blockReason,
-          citations: knowledgeBundle.citations,
-          agentRunId: runId,
-        };
-        if (useSupabase) {
-          const { error } = await supabase!.from('audit_events').insert({
-            id: randomUUID(),
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-            actor_type: 'agent',
-            action: `fraud_assessment:${fraudRisk}`,
-            entity_type: 'case',
-            entity_id: caseId,
-            new_value: `Fraud risk ${fraudRisk}: ${signals.slice(0, 3).join('; ')}`,
-            metadata: payload,
-            occurred_at: now,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT INTO audit_events
-              (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-            VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
-          `).run(randomUUID(), tenantId, workspaceId, `fraud_assessment:${fraudRisk}`, caseId, `Fraud risk ${fraudRisk}: ${signals.slice(0, 3).join('; ')}`, JSON.stringify(payload), now);
-        }
+        db.prepare(`
+          INSERT INTO audit_events
+            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
+          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
+        `).run(
+          randomUUID(), tenantId, workspaceId,
+          `fraud_assessment:${fraudRisk}`,
+          caseId,
+          `Fraud risk ${fraudRisk}: ${signals.slice(0, 3).join('; ')}`,
+          JSON.stringify({
+            fraudRisk, signals, confidence, recommendation,
+            requiresBlock, blockReason, citations: knowledgeBundle.citations, agentRunId: runId,
+          }),
+          now,
+        );
       } catch (err: any) {
         logger.error('Failed to write fraud audit event', { caseId, error: err?.message });
       }
     }
 
+    // ── Update case risk if fraud is high/critical ───────────────────────
     if (fraudRisk === 'high' || fraudRisk === 'critical') {
       try {
-        if (useSupabase) {
-          await supabase!.from('cases').update({ risk_level: fraudRisk === 'critical' ? 'critical' : 'high', updated_at: now }).eq('id', caseId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
-        } else {
-          db!.prepare('UPDATE cases SET risk_level = ?, updated_at = ? WHERE id = ? AND tenant_id = ? AND workspace_id = ?').run(fraudRisk === 'critical' ? 'critical' : 'high', now, caseId, tenantId, workspaceId);
-        }
-      } catch {
-        // non-critical
-      }
+        db.prepare(
+          'UPDATE cases SET risk_level = ?, updated_at = ? WHERE id = ? AND tenant_id = ?'
+        ).run(fraudRisk === 'critical' ? 'critical' : 'high', now, caseId, tenantId);
+      } catch { /* non-critical */ }
 
+      // If block required, create an approval request to block the customer
       if (requiresBlock) {
         try {
-          const actionPayload = JSON.stringify({ reason: blockReason ?? 'Fraud detected', recommendation });
-          const evidence = JSON.stringify({ fraudRisk, signals, confidence, agentRunId: runId });
-          if (useSupabase) {
-            const { error } = await supabase!.from('approval_requests').insert({
-              id: randomUUID(),
-              case_id: caseId,
-              tenant_id: tenantId,
-              workspace_id: workspaceId,
-              requested_by: 'fraud-detector',
-              requested_by_type: 'agent',
-              action_type: 'block_customer',
-              action_payload: actionPayload,
-              risk_level: fraudRisk === 'critical' ? 'critical' : 'high',
-              evidence_package: evidence,
-              status: 'pending',
-              created_at: now,
-              updated_at: now,
-            });
-            if (error) throw error;
-          } else {
-            db!.prepare(`
-              INSERT OR IGNORE INTO approval_requests
-                (id, case_id, tenant_id, workspace_id, requested_by, requested_by_type,
-                 action_type, action_payload, risk_level, evidence_package, status, created_at, updated_at)
-              VALUES (?, ?, ?, ?, 'fraud-detector', 'agent', 'block_customer', ?, ?, ?, 'pending', ?, ?)
-            `).run(randomUUID(), caseId, tenantId, workspaceId, actionPayload, fraudRisk === 'critical' ? 'critical' : 'high', evidence, now, now);
-          }
-        } catch {
-          // non-critical
-        }
+          db.prepare(`
+            INSERT OR IGNORE INTO approval_requests
+              (id, case_id, tenant_id, workspace_id, requested_by, requested_by_type,
+               action_type, action_payload, risk_level, evidence_package, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'fraud-detector', 'agent', 'block_customer', ?, ?, ?, 'pending', ?, ?)
+          `).run(
+            randomUUID(),
+            caseId,
+            tenantId,
+            workspaceId,
+            JSON.stringify({ reason: blockReason ?? 'Fraud detected', recommendation }),
+            fraudRisk === 'critical' ? 'critical' : 'high',
+            JSON.stringify({ fraudRisk, signals, confidence, agentRunId: runId }),
+            now,
+            now,
+          );
+        } catch { /* non-critical */ }
       }
     }
 
     const costCredits = Math.ceil(tokensUsed / 1000);
+
     return {
       success: true,
       confidence,

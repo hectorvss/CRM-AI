@@ -1,16 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Order, OrderTab } from '../types';
 import CaseHeader from './CaseHeader';
-import { casesApi, ordersApi, paymentsApi } from '../api/client';
+import { ordersApi } from '../api/client';
 import { useApi } from '../api/hooks';
-import type { Page } from '../types';
 
 type RightTab = 'details' | 'copilot';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
-
-interface OrdersProps {
-  onNavigate?: NavigateFn;
-}
 
 const formatDate = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
@@ -39,7 +33,7 @@ const ORDERS: Order[] = [
     currency: 'USD',
     country: 'USA',
     channel: 'Shopify',
-  orderStatus: 'Delivered',
+    orderStatus: 'Delivered',
     paymentStatus: 'Captured',
     fulfillmentStatus: 'Delivered',
     returnStatus: 'Not returned',
@@ -321,15 +315,14 @@ const ORDERS: Order[] = [
   }
 ];
 
-export default function Orders({ onNavigate }: OrdersProps) {
+export default function Orders() {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<OrderTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   // Load orders from API, fall back to static data on error
-  const { data: apiOrders, loading, error: ordersError } = useApi(
+  const { data: apiOrders, loading } = useApi(
     () => ordersApi.list(activeTab !== 'all' ? { tab: activeTab } : {}),
     [activeTab],
     []
@@ -364,8 +357,6 @@ export default function Orders({ onNavigate }: OrdersProps) {
     systemStates: typeof o.system_states === 'object' && o.system_states ? o.system_states : {
       oms: 'Unknown', psp: 'Unknown', wms: 'Unknown', carrier: 'Unknown', canonical: 'Unknown'
     },
-    canonicalContext: o.canonical_context || o.canonicalContext || null,
-    canonical_context: o.canonical_context || o.canonicalContext || null,
     relatedCases: Array.isArray(o.related_cases) ? o.related_cases.map((c: any) => ({
       id: c.case_number || c.id,
       type: c.type || 'Case',
@@ -383,15 +374,6 @@ export default function Orders({ onNavigate }: OrdersProps) {
   // Use API orders if available, otherwise fall back to static
   const rawOrders = (apiOrders && apiOrders.length > 0) ? apiOrders.map(mapApiOrder) : ORDERS;
   const orders = rawOrders;
-
-  const handleCancelOrder = async (id: string) => {
-    try {
-      await ordersApi.cancel(id, 'User requested cancellation via UI');
-      setActionMessage(`Cancellation request sent for ${id}`);
-    } catch (e) {
-      setActionMessage(`Failed to cancel order ${id}`);
-    }
-  };
 
 
   const filteredOrders = orders.filter(o => {
@@ -414,6 +396,16 @@ export default function Orders({ onNavigate }: OrdersProps) {
         o.summary.toLowerCase().includes('return')
       );
     }
+    
+  const handleCancelOrder = async (id: string) => {
+    try {
+      await ordersApi.cancel(id, 'User requested cancellation via UI');
+      alert('Cancellation request sent');
+    } catch (e) {
+      alert('Failed to cancel order');
+    }
+  };
+
     if (activeTab === 'refunds') {
       return (
         o.refundStatus !== 'N/A' && o.refundStatus !== 'Not issued' ||
@@ -439,68 +431,6 @@ export default function Orders({ onNavigate }: OrdersProps) {
       setSelectedId(filteredOrders[0].id);
     }
   }, [activeTab, filteredOrders, selectedId]);
-
-  const selectedOrderCaseId = selectedOrder?.relatedCases?.[0]?.id || null;
-  const selectedOrderPaymentId =
-    (selectedOrder as any)?.canonicalContext?.case_state?.identifiers?.payment_ids?.[0]
-    || (selectedOrder as any)?.canonical_context?.case_state?.identifiers?.payment_ids?.[0]
-    || (selectedOrder as any)?.canonicalContext?.identifiers?.payment_ids?.[0]
-    || (selectedOrder as any)?.canonical_context?.identifiers?.payment_ids?.[0]
-    || null;
-
-  const handleApplyToComposer = () => {
-    if (!selectedOrderCaseId) {
-      setActionMessage('No linked case found for this order.');
-      return;
-    }
-    onNavigate?.('inbox', selectedOrderCaseId);
-    setActionMessage(`Opened ${selectedOrderCaseId} in Inbox.`);
-  };
-
-  const handleStartRefund = async () => {
-    if (!selectedOrder) {
-      setActionMessage('Select an order first.');
-      return;
-    }
-    try {
-      let paymentId = selectedOrderPaymentId;
-      if (!paymentId) {
-        const candidatePayments = await paymentsApi.list({ q: selectedOrder.orderId });
-        paymentId = candidatePayments[0]?.id || null;
-      }
-      if (!paymentId) {
-        setActionMessage('No refundable payment found for this order.');
-        return;
-      }
-      await paymentsApi.refund(paymentId, {
-        reason: `Refund started from order ${selectedOrder.orderId}`,
-      });
-      setActionMessage(`Refund created for payment ${paymentId}.`);
-      onNavigate?.('payments');
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : 'Failed to start refund.');
-    }
-  };
-
-  const handleAddNote = async () => {
-    if (!selectedOrder) {
-      setActionMessage('Select an order first.');
-      return;
-    }
-    if (!selectedOrderCaseId) {
-      setActionMessage('No linked case found to add a note.');
-      return;
-    }
-    try {
-      await casesApi.addInternalNote(
-        selectedOrderCaseId,
-        `Order ${selectedOrder.orderId}: manual follow-up added from the Orders screen.`
-      );
-      setActionMessage(`Internal note added to ${selectedOrderCaseId}.`);
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : 'Failed to add note.');
-    }
-  };
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -546,18 +476,6 @@ export default function Orders({ onNavigate }: OrdersProps) {
             </button>
           </div>
         </div>
-
-        {(ordersError || actionMessage) && (
-          <div className="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-card dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
-            <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-lg mt-0.5">error</span>
-              <div className="min-w-0">
-                <div className="font-semibold">Orders action status</div>
-                <div className="text-xs opacity-90">{actionMessage || ordersError}</div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Main Content Area: Three Panes */}
         <div className="flex-1 flex overflow-hidden">
@@ -796,34 +714,8 @@ export default function Orders({ onNavigate }: OrdersProps) {
                         <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed italic mb-3">
                           "Hi {selectedOrder.customerName.split(' ')[0]}, I'm checking the status of your order {selectedOrder.orderId}. It's currently {selectedOrder.orderStatus} and we're working to get it to you as soon as possible."
                         </p>
-                        <button onClick={handleApplyToComposer} className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
+                        <button className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
                           Apply to Composer
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                          <span className="material-symbols-outlined text-lg text-gray-600">do_not_disturb_on</span>
-                          Order Actions
-                        </h3>
-                        <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Persistent</span>
-                      </div>
-                      <div className="space-y-2">
-                        <button
-                          onClick={() => handleCancelOrder(selectedOrder.id)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800/30 transition-colors"
-                        >
-                          <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">cancel</span> Cancel Order</span>
-                          <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                        </button>
-                        <button
-                          onClick={handleStartRefund}
-                          className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-800/30 transition-colors hover:bg-red-100 dark:hover:bg-red-900/20"
-                        >
-                          <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">currency_exchange</span> Start Refund</span>
-                          <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                         </button>
                       </div>
                     </div>
@@ -922,17 +814,13 @@ export default function Orders({ onNavigate }: OrdersProps) {
                     </button>
                     <div className="space-y-2 mt-2">
                       {selectedOrder.relatedCases.length > 0 ? selectedOrder.relatedCases.map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => onNavigate?.('case_graph', item.id)}
-                          className="w-full text-left p-2 rounded border border-gray-100 dark:border-gray-800 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                        >
+                        <div key={item.id} className="p-2 rounded border border-gray-100 dark:border-gray-800 flex items-center justify-between">
                           <div className="flex flex-col min-w-0">
                             <span className="text-xs font-bold text-gray-900 dark:text-white truncate">{item.id}</span>
                             <span className="text-[10px] text-gray-500 truncate">{item.type}</span>
                           </div>
                           <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-[10px] text-gray-500 flex-shrink-0">{item.status}</span>
-                        </button>
+                        </div>
                       )) : (
                         <p className="text-xs text-gray-400 italic p-2">No related cases found.</p>
                       )}
@@ -946,7 +834,7 @@ export default function Orders({ onNavigate }: OrdersProps) {
                         <span className="material-symbols-outlined text-lg text-gray-600">sticky_note_2</span>
                         Internal Notes
                       </h3>
-                      <button onClick={handleAddNote} className="text-xs text-secondary font-bold hover:underline">+ Add Note</button>
+                      <button className="text-xs text-secondary font-bold hover:underline">+ Add Note</button>
                     </div>
                     <div className="space-y-3">
                       <div className="p-3 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-100 dark:border-yellow-800/20">

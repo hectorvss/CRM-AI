@@ -202,7 +202,7 @@ export default function Payments() {
 
   // Fetch canonical payment contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
-  const { data: apiPayments, refetch, error: paymentsError } = useApi(() => paymentsApi.list(), [], []);
+  const { data: apiPayments, refetch } = useApi(() => paymentsApi.list(), [], []);
   const refundMutation = useMutation<{ id: string; amount?: number; reason: string }, any>(
     ({ id, amount, reason }) => paymentsApi.refund(id, { amount, reason }),
   );
@@ -260,7 +260,7 @@ export default function Payments() {
     return p.tab === activeTab;
   });
 
-  const selectedPayment = filteredPayments.find(p => p.id === selectedId) || filteredPayments[0] || null;
+  const selectedPayment = filteredPayments.find(p => p.id === selectedId) || filteredPayments[0];
 
   useEffect(() => {
     if (filteredPayments.length > 0 && !filteredPayments.find(p => p.id === selectedId)) {
@@ -327,11 +327,6 @@ export default function Payments() {
         </div>
 
         {/* Main Content Area: Three Panes */}
-        {paymentsError && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {paymentsError}
-          </div>
-        )}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Pane: List */}
           <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-blue-600/5">

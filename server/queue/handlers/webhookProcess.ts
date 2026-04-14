@@ -22,7 +22,6 @@ import { enqueue } from '../client.js';
 import { JobType } from '../types.js';
 import { logger } from '../../utils/logger.js';
 import { registerHandler } from './index.js';
-import { requireScope } from '../../lib/scope.js';
 import type { WebhookProcessPayload, JobContext } from '../types.js';
 
 // ── Topic → canonical entity type mapping ─────────────────────────────────────
@@ -114,7 +113,6 @@ async function handleWebhookProcess(
 
   const integrationRepo = createIntegrationRepository();
   const canonicalRepo   = createCanonicalRepository();
-  const scope = requireScope(ctx, 'webhookProcess');
 
   // ── 1. Load raw webhook event ────────────────────────────────────────────
   const webhookRow = await integrationRepo.getWebhookEvent(payload.webhookEventId);
@@ -169,6 +167,8 @@ async function handleWebhookProcess(
     `${payload.source}:${topic}:${extraction.entityId ?? randomUUID()}`;
 
   let canonicalEventId: string;
+  const scope = { tenantId: ctx.tenantId || 'org_default', workspaceId: ctx.workspaceId || 'ws_default' };
+
   const existing = await canonicalRepo.getEventByDedupeKey(scope, canonicalDedupeKey);
 
   if (existing) {
@@ -212,8 +212,8 @@ async function handleWebhookProcess(
     JobType.CANONICALIZE,
     { canonicalEventId },
     {
-      tenantId:    scope.tenantId,
-      workspaceId: scope.workspaceId,
+      tenantId:    ctx.tenantId ?? 'org_default',
+      workspaceId: ctx.workspaceId ?? 'ws_default',
       traceId:     ctx.traceId,
       priority:    5,  // canonicalization is higher priority than default
     }

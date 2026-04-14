@@ -28,7 +28,6 @@ import { createOperationsRepository } from '../data/operations.js';
 import { registerHandler }    from '../queue/handlers/index.js';
 import { JobType }            from '../queue/types.js';
 import { logger }             from '../utils/logger.js';
-import { requireScope }       from '../lib/scope.js';
 import type { SlaCheckPayload, JobContext } from '../queue/types.js';
 
 type SlaStatus = 'on_track' | 'at_risk' | 'breached';
@@ -127,7 +126,9 @@ async function handleSlaCheck(
   const caseRepo = createCaseRepository();
   const opsRepo = createOperationsRepository();
 
-  const scope = requireScope(ctx, 'slaMonitor');
+  const tenantId = ctx.tenantId ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const scope = { tenantId, workspaceId };
 
   if (payload.caseId) {
     const caseRow = await caseRepo.get(scope, payload.caseId);

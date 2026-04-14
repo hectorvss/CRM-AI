@@ -41,7 +41,6 @@ import { JobType }            from '../queue/types.js';
 import { registerHandler }    from '../queue/handlers/index.js';
 import { logger }             from '../utils/logger.js';
 import { buildContextWindow } from './contextWindow.js';
-import { requireScope }       from '../lib/scope.js';
 import type { ResolutionPlanPayload, JobContext } from '../queue/types.js';
 
 // ── Approval thresholds ────────────────────────────────────────────────────────
@@ -226,10 +225,11 @@ async function handleResolutionPlan(
   });
 
   const db          = getDb();
-  const { tenantId, workspaceId } = requireScope(ctx, 'resolutionPlanner');
+  const tenantId    = ctx.tenantId    ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
 
   // ── 1. Load case ──────────────────────────────────────────────────────────
-  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(payload.caseId, tenantId, workspaceId) as any;
+  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ?').get(payload.caseId) as any;
   if (!caseRow) {
     log.warn('Case not found for resolution planning');
     return;
@@ -245,13 +245,13 @@ async function handleResolutionPlan(
   const issues = issueIds.length > 0
     ? db.prepare(`
         SELECT * FROM reconciliation_issues
-        WHERE tenant_id = ? AND workspace_id = ? AND id IN (${issueIds.map(() => '?').join(',')}) AND status = 'open'
-      `).all(tenantId, workspaceId, ...issueIds) as any[]
+        WHERE id IN (${issueIds.map(() => '?').join(',')}) AND status = 'open'
+      `).all(...issueIds) as any[]
     : db.prepare(`
         SELECT * FROM reconciliation_issues
-        WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? AND status = 'open'
+        WHERE case_id = ? AND status = 'open'
         ORDER BY severity DESC
-      `).all(payload.caseId, tenantId, workspaceId) as any[];
+      `).all(payload.caseId) as any[];
 
   if (issues.length === 0) {
     log.info('No open reconciliation issues, nothing to plan');
@@ -261,7 +261,7 @@ async function handleResolutionPlan(
   log.info('Generating resolution plan', { issueCount: issues.length });
 
   // ── 3. Build context for Gemini ───────────────────────────────────────────
-  const contextWindow = await buildContextWindow(payload.caseId, tenantId, workspaceId);
+  const contextWindow = await buildContextWindow(payload.caseId, tenantId);
   if (!contextWindow) {
     log.warn('No context window available for resolution planning');
     return;
@@ -307,8 +307,8 @@ async function handleResolutionPlan(
     UPDATE cases SET
       resolution_state = 'planned',
       updated_at       = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(payload.caseId, tenantId, workspaceId);
+    WHERE id = ?
+  `).run(payload.caseId);
 
   log.info('Execution plan created', { planId, steps: plan.steps.length });
 

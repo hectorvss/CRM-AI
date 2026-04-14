@@ -1,15 +1,7 @@
-import React, { useCallback, useState } from 'react';
-import { useApi } from '../../api/hooks';
-import { billingApi, workspacesApi } from '../../api/client';
+import React, { useState } from 'react';
 
 export default function PlansTab() {
-  const { data: workspace, refetch: refetchWorkspace } = useApi(workspacesApi.currentContext);
-  const orgId = workspace?.org_id;
-  const { data: subscription, refetch: refetchSubscription } = useApi(() => (orgId ? billingApi.subscription(orgId) : Promise.resolve(null)), [orgId], null);
   const [isAnnual, setIsAnnual] = useState(true);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const currentPlanKey = String(subscription?.plan_id || workspace?.plan_id || 'starter').toLowerCase();
 
   const plans = [
     {
@@ -18,8 +10,8 @@ export default function PlansTab() {
       monthlyPrice: 49,
       annualPrice: 42, // ~15% discount
       bestFor: 'For small teams getting started with AI-assisted support operations',
-        cta: 'Current Plan',
-        isCurrent: currentPlanKey === 'starter',
+      cta: 'Current Plan',
+      isCurrent: true,
       capacityExplanation: '5,000 AI credits per month. Equivalent to resolving ~500 standard cases or drafting ~2,500 replies.',
       models: ['GPT-4o mini', 'Claude 3.5 Haiku', 'Gemini 1.5 Flash'],
       bullets: [
@@ -36,8 +28,7 @@ export default function PlansTab() {
       annualPrice: 109,
       bestFor: 'For growing support and ops teams using AI every day',
       cta: 'Upgrade to Growth',
-        isRecommended: true,
-        isCurrent: currentPlanKey === 'growth',
+      isRecommended: true,
       capacityExplanation: '20,000 AI credits per month. Equivalent to resolving ~2,000 complex cases or automating full workflows.',
       models: ['GPT-4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro'],
       bullets: [
@@ -53,8 +44,7 @@ export default function PlansTab() {
       monthlyPrice: 299,
       annualPrice: 254,
       bestFor: 'For advanced teams managing high-volume, multi-workflow operations',
-        cta: 'Upgrade to Scale',
-        isCurrent: currentPlanKey === 'scale',
+      cta: 'Upgrade to Scale',
       capacityExplanation: '60,000 AI credits per month. Equivalent to resolving ~6,000 complex cases across multiple languages and systems.',
       models: ['GPT-4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro', 'Custom Fine-tuned Models'],
       bullets: [
@@ -70,8 +60,7 @@ export default function PlansTab() {
       monthlyPrice: 'Custom',
       annualPrice: 'Custom',
       bestFor: 'For organizations with custom capacity, governance, and enterprise needs',
-        cta: 'Talk to Sales',
-        isCurrent: currentPlanKey === 'business',
+      cta: 'Talk to Sales',
       capacityExplanation: 'Custom AI credit allocation tailored to your specific enterprise volume and security requirements.',
       models: ['All Premium Models', 'Bring Your Own Model (BYOM)', 'On-premise deployment options'],
       bullets: [
@@ -83,30 +72,8 @@ export default function PlansTab() {
     }
   ];
 
-  const applyPlan = useCallback(async (planId: string) => {
-    if (!orgId) return;
-    setIsSaving(true);
-    setStatusMessage(null);
-    try {
-      await billingApi.changePlan(orgId, planId);
-      setStatusMessage(`Plan changed to ${planId}.`);
-      refetchWorkspace();
-      refetchSubscription();
-    } catch (error: any) {
-      setStatusMessage(error?.message || 'Unable to update plan.');
-    } finally {
-      setIsSaving(false);
-    }
-  }, [orgId, refetchSubscription, refetchWorkspace]);
-
   return (
     <div className="space-y-8">
-      {statusMessage && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
-          {statusMessage}
-        </div>
-      )}
-
       {/* Current Plan State */}
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
@@ -116,16 +83,14 @@ export default function PlansTab() {
         <div className="p-6 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white capitalize">{currentPlanKey.replace(/_/g, ' ')} plan</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Starter Plan</h3>
               <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30">Active</span>
             </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Includes {subscription?.credits_included ?? 5000} AI credits and {subscription?.seats_included ?? 3} seats.
-              </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Includes 5,000 AI credits and 3 seats. Renews on Nov 12, 2024.</p>
           </div>
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setStatusMessage('Use the Seats tab to add seats with a saved change.')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Add Seats</button>
-            <button type="button" onClick={() => setStatusMessage('Use the Credits tab to buy credit packs with a saved change.')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Buy Credits</button>
+            <button className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Add Seats</button>
+            <button className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Buy Credits</button>
           </div>
         </div>
       </section>
@@ -208,11 +173,7 @@ export default function PlansTab() {
                   </div>
 
                   {/* CTA */}
-                  <button
-                    type="button"
-                    onClick={() => plan.isCurrent ? setStatusMessage(`${plan.name} is already active.`) : void applyPlan(String(plan.name).toLowerCase())}
-                    disabled={isSaving || plan.isCurrent}
-                    className={`w-full py-3 rounded-xl text-sm font-bold transition-all mt-auto disabled:cursor-not-allowed disabled:opacity-50 ${
+                  <button className={`w-full py-3 rounded-xl text-sm font-bold transition-all mt-auto ${
                     plan.isCurrent 
                       ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-default'
                       : plan.isRecommended

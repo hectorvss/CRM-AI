@@ -27,7 +27,6 @@ import { registerHandler } from '../queue/handlers/index.js';
 import { logger } from '../utils/logger.js';
 import { getOrCreateCase, linkEntityToCase } from './caseFactory.js';
 import { triggerAgents } from '../agents/orchestrator.js';
-import { requireScope } from '../lib/scope.js';
 import type { IntentRoutePayload, JobContext } from '../queue/types.js';
 
 // ── Intent taxonomy ────────────────────────────────────────────────────────────
@@ -135,9 +134,7 @@ RESPONSE SCHEMA (return only this JSON, no markdown):
 
 function buildEntityContext(
   canonicalEntityType: string,
-  canonicalEntityId: string,
-  tenantId: string,
-  workspaceId: string,
+  canonicalEntityId: string
 ): { context: string; localEntityId: string | null } {
   const db = getDb();
   const lines: string[] = [];
@@ -145,8 +142,8 @@ function buildEntityContext(
 
   if (canonicalEntityType === 'order') {
     const order = db.prepare(
-      'SELECT * FROM orders WHERE tenant_id = ? AND workspace_id = ? AND (external_order_id = ? OR id = ?) LIMIT 1'
-    ).get(tenantId, workspaceId, canonicalEntityId, canonicalEntityId) as any;
+      'SELECT * FROM orders WHERE external_order_id = ? OR id = ? LIMIT 1'
+    ).get(canonicalEntityId, canonicalEntityId) as any;
 
     if (order) {
       localEntityId = order.id;
@@ -158,8 +155,8 @@ function buildEntityContext(
 
   } else if (canonicalEntityType === 'payment' || canonicalEntityType === 'refund') {
     const payment = db.prepare(
-      'SELECT * FROM payments WHERE tenant_id = ? AND workspace_id = ? AND (external_payment_id = ? OR id = ?) LIMIT 1'
-    ).get(tenantId, workspaceId, canonicalEntityId, canonicalEntityId) as any;
+      'SELECT * FROM payments WHERE external_payment_id = ? OR id = ? LIMIT 1'
+    ).get(canonicalEntityId, canonicalEntityId) as any;
 
     if (payment) {
       localEntityId = payment.id;
@@ -173,9 +170,9 @@ function buildEntityContext(
       `SELECT c.*, li.external_id as ext_id, li.system
        FROM customers c
        JOIN linked_identities li ON li.customer_id = c.id
-       WHERE c.tenant_id = ? AND c.workspace_id = ? AND (li.external_id = ? OR c.id = ?)
+       WHERE li.external_id = ? OR c.id = ?
        LIMIT 1`
-    ).get(tenantId, workspaceId, canonicalEntityId, canonicalEntityId) as any;
+    ).get(canonicalEntityId, canonicalEntityId) as any;
 
     if (customer) {
       localEntityId = customer.id;
@@ -203,12 +200,13 @@ async function handleIntentRoute(
   });
 
   const db          = getDb();
-  const { tenantId, workspaceId } = requireScope(ctx, 'intentRouter');
+  const tenantId    = ctx.tenantId    ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? 'ws_default';
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
   const event = db.prepare(
-    'SELECT * FROM canonical_events WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
-  ).get(payload.canonicalEventId, tenantId, workspaceId) as any;
+    'SELECT * FROM canonical_events WHERE id = ?'
+  ).get(payload.canonicalEventId) as any;
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -226,9 +224,7 @@ async function handleIntentRoute(
   // ── 2. Build entity context for Gemini ───────────────────────────────────
   const { context: entityContext, localEntityId } = buildEntityContext(
     event.canonical_entity_type,
-    event.canonical_entity_id,
-    tenantId,
-    workspaceId,
+    event.canonical_entity_id
   );
 
   // ── 3. Find the message content to classify ──────────────────────────────

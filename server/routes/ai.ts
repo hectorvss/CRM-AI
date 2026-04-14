@@ -6,12 +6,11 @@ import { config } from '../config.js';
 import { extractMultiTenant, type MultiTenantRequest } from '../middleware/multiTenant.js';
 import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
 import { getCaseCanonicalState } from '../services/canonicalState.js';
-import { createAIRepository, createAgentRepository, createKnowledgeRepository } from '../data/index.js';
+import { createAIRepository, createKnowledgeRepository } from '../data/index.js';
 import { sendError } from '../http/errors.js';
 
 const router = Router();
 const aiRepo = createAIRepository();
-const agentRepo = createAgentRepository();
 const knowledgeRepo = createKnowledgeRepository();
 
 router.use(extractMultiTenant);
@@ -97,36 +96,9 @@ function buildFallbackCopilotAnswer(question: string, contextText: string, canon
   };
 }
 
-function summarizeStudioAgents(agents: any[]) {
-  const categories = new Map<string, { key: string; title: string; total: number; active: number; locked: number; agents: any[] }>();
-
-  for (const agent of agents) {
-    const key = String(agent.category || 'uncategorized');
-    const title = key.toUpperCase().replace(/_/g, ' ');
-    const current = categories.get(key) ?? { key, title, total: 0, active: 0, locked: 0, agents: [] };
-    current.total += 1;
-    if (agent.is_active) current.active += 1;
-    if (agent.is_locked) current.locked += 1;
-    current.agents.push({
-      id: agent.id,
-      slug: agent.slug,
-      name: agent.name,
-      category: agent.category,
-      is_active: agent.is_active,
-      is_locked: agent.is_locked,
-      version_status: agent.version_status ?? null,
-      version_number: agent.version_number ?? null,
-      rollout_percentage: agent.rollout_percentage ?? 0,
-    });
-    categories.set(key, current);
-  }
-
-  return Array.from(categories.values()).sort((left, right) => left.title.localeCompare(right.title));
-}
-
 async function buildKnowledgePrompt(agentSlug: string, scope: { tenantId: string; workspaceId: string }, caseContext: any) {
   const knowledgeProfile = await aiRepo.getAgentKnowledgeProfile(scope, agentSlug);
-  return await resolveAgentKnowledgeBundle({
+  return resolveAgentKnowledgeBundle({
     tenantId: scope.tenantId,
     workspaceId: scope.workspaceId,
     knowledgeProfile,
@@ -194,55 +166,6 @@ Return ONLY valid JSON, no markdown or explanation.`;
   } catch (err: any) {
     console.error('AI diagnose error:', err);
     res.status(500).json({ error: err.message });
-  }
-});
-
-router.get('/studio', async (req: MultiTenantRequest, res) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const [stats, agents, connectorCapabilities, policies] = await Promise.all([
-      aiRepo.getStats(scope),
-      agentRepo.list(scope),
-      agentRepo.listConnectorCapabilities(scope),
-      knowledgeRepo.listPolicies(scope),
-    ]);
-
-    const categorySummary = summarizeStudioAgents(agents);
-    const selectedAgent = agents[0] ?? null;
-
-    res.json({
-      data: agents,
-      agents,
-      selected_agent_id: selectedAgent?.id ?? null,
-      stats,
-      categories: categorySummary,
-      connector_capabilities: connectorCapabilities,
-      policy_count: policies.length,
-      overview: {
-        total_agents: agents.length,
-        active_agents: agents.filter((agent: any) => agent.is_active).length,
-        locked_agents: agents.filter((agent: any) => agent.is_locked).length,
-        categories: categorySummary.length,
-      },
-    });
-  } catch (error) {
-    console.error('Error fetching AI studio data:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
-  }
-});
-
-router.get('/agents', async (req: MultiTenantRequest, res) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const agents = await agentRepo.list(scope);
-    res.json({
-      data: agents,
-      agents,
-      total: agents.length,
-    });
-  } catch (error) {
-    console.error('Error fetching AI agents:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
 });
 

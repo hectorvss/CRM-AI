@@ -26,33 +26,7 @@ function nodeStatusMap(status: string): 'healthy' | 'warning' | 'critical' {
   return 'healthy';
 }
 
-function pageFromBranchKey(key?: string | null): Page | null {
-  if (!key) return null;
-  const normalized = key.toLowerCase();
-  if (normalized.includes('payment')) return 'payments';
-  if (normalized.includes('return')) return 'returns';
-  if (normalized.includes('order') || normalized.includes('fulfillment') || normalized.includes('shipping') || normalized.includes('warehouse')) return 'orders';
-  if (normalized.includes('approval') || normalized.includes('policy')) return 'approvals';
-  if (normalized.includes('workflow') || normalized.includes('agent')) return 'workflows';
-  if (normalized.includes('knowledge') || normalized.includes('article')) return 'knowledge';
-  if (normalized.includes('integration') || normalized.includes('connector') || normalized.includes('webhook')) return 'tools_integrations';
-  return null;
-}
-
-function pageFromText(text?: string | null): Page | null {
-  if (!text) return null;
-  const value = text.toLowerCase();
-  if (/(refund|payment|psp|charge|settlement|invoice|captured|authorized|dispute)/.test(value)) return 'payments';
-  if (/(return|rma|replacement|exchange)/.test(value)) return 'returns';
-  if (/(fulfill|warehouse|shipping|shipment|order|oms|packing|tracking|delivery|inventory|cancel)/.test(value)) return 'orders';
-  if (/(approval|manager|policy|review|authorization|approve|reject)/.test(value)) return 'approvals';
-  if (/(workflow|automation|orchestration|run|agent)/.test(value)) return 'workflows';
-  if (/(knowledge|article|policy bundle|kb|documentation)/.test(value)) return 'knowledge';
-  if (/(connector|integration|webhook|stripe|shopify|intercom)/.test(value)) return 'tools_integrations';
-  return null;
-}
-
-export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange: (page: Page) => void; focusCaseId?: string | null }) {
+export default function CaseGraph({ onPageChange }: { onPageChange: (page: Page) => void }) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [graphView, setGraphView] = useState<'tree' | 'timeline' | 'resolve'>('tree');
@@ -77,14 +51,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   useEffect(() => {
     if (!selectedId && cases.length > 0) setSelectedId(cases[0].id);
   }, [cases, selectedId]);
-
-  useEffect(() => {
-    if (!focusCaseId || !cases.length) return;
-    const target = cases.find((c) => c.id === focusCaseId || c.orderId === focusCaseId || c.customerName === focusCaseId);
-    if (target && target.id !== selectedId) {
-      setSelectedId(target.id);
-    }
-  }, [cases, focusCaseId, selectedId]);
 
   // ── Fetch case graph (branches + timeline) ──────────────────────
   const { data: graphData } = useApi(
@@ -189,33 +155,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     conflictSeverity: caseResolve?.conflict?.severity || null,
     recommendation: caseResolve?.conflict?.recommended_action || stateData?.case?.ai_recommended_action || 'Awaiting recommendation.',
   }), [stateData, caseResolve]);
-
-  const impactedModule = useMemo<Page>(() => {
-    const textCandidates = [
-      caseResolve?.conflict?.source_of_truth,
-      caseResolve?.conflict?.root_cause,
-      caseResolve?.conflict?.recommended_action,
-      caseResolve?.conflict?.summary,
-      stateData?.case?.type,
-      stateData?.case?.ai_diagnosis,
-      stateData?.case?.ai_root_cause,
-      stateData?.case?.ai_recommended_action,
-    ];
-
-    for (const candidate of textCandidates) {
-      const page = pageFromText(candidate);
-      if (page) return page;
-    }
-
-    const strongestBranch = branches.find(branch => branch.status === 'critical')
-      || branches.find(branch => branch.status === 'warning')
-      || branches[0];
-
-    const branchPage = pageFromBranchKey(strongestBranch?.id || strongestBranch?.label);
-    if (branchPage) return branchPage;
-
-    return strongestBranch?.page || 'case_graph';
-  }, [branches, caseResolve, stateData]);
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -476,7 +415,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                     </div>
                     <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
                     <p className="text-xs bg-white/50 dark:bg-black/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic mb-3">{copilotData.recommendation}</p>
-                    <button onClick={() => onPageChange(impactedModule)} className="w-full py-2 bg-secondary text-white rounded-lg text-xs font-bold hover:opacity-90 flex items-center justify-center gap-2">
+                    <button onClick={() => onPageChange('payments')} className="w-full py-2 bg-secondary text-white rounded-lg text-xs font-bold hover:opacity-90 flex items-center justify-center gap-2">
                       View Impacted Module
                       <span className="material-symbols-outlined text-sm">arrow_forward</span>
                     </button>

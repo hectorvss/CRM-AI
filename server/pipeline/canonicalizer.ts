@@ -25,7 +25,6 @@ import { JobType } from '../queue/types.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { logger } from '../utils/logger.js';
 import type { CanonicalizePayload, JobContext } from '../queue/types.js';
-import { requireScope } from '../lib/scope.js';
 import type {
   CanonicalOrder,
   CanonicalPayment,
@@ -50,7 +49,7 @@ async function handleCanonicalize(
   const canonicalRepo = createCanonicalRepository();
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
-  const scope = requireScope(ctx, 'canonicalizer');
+  const scope = { tenantId: ctx.tenantId || 'org_default', workspaceId: ctx.workspaceId || 'ws_default' };
   const event = await canonicalRepo.getEventById(scope, payload.canonicalEventId);
 
   if (!event) {
@@ -62,6 +61,9 @@ async function handleCanonicalize(
     log.debug('Already canonicalized, skipping');
     return;
   }
+
+  const tenantId    = ctx.tenantId    ?? event.tenant_id    ?? 'org_default';
+  const workspaceId = ctx.workspaceId ?? event.workspace_id ?? 'ws_default';
 
   log.info('Canonicalizing event', {
     source:     event.source_system,
@@ -135,7 +137,7 @@ async function handleCanonicalize(
   enqueue(
     JobType.INTENT_ROUTE,
     { canonicalEventId: payload.canonicalEventId },
-    { tenantId: scope.tenantId, workspaceId: scope.workspaceId, traceId: ctx.traceId, priority: 5 }
+    { tenantId, workspaceId, traceId: ctx.traceId, priority: 5 }
   );
 
   log.debug('INTENT_ROUTE enqueued');
