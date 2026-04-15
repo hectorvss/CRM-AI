@@ -1562,7 +1562,7 @@ function listCasesSqlite(scope: CaseScope, filters: CaseFilters) {
       ? db.prepare(`SELECT status, fulfillment_status FROM orders WHERE tenant_id = ? AND id IN (${parsed.order_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.order_ids)
       : [];
     const payments: any[] = parsed.payment_ids?.length
-      ? db.prepare(`SELECT status, refund_status FROM payments WHERE tenant_id = ? AND id IN (${parsed.payment_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.payment_ids)
+      ? db.prepare(`SELECT status FROM payments WHERE tenant_id = ? AND id IN (${parsed.payment_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.payment_ids)
       : [];
     const returns: any[] = parsed.return_ids?.length
       ? db.prepare(`SELECT status FROM returns WHERE tenant_id = ? AND id IN (${parsed.return_ids.map(() => '?').join(',')}) LIMIT 1`).all(scope.tenantId, ...parsed.return_ids)
@@ -1584,7 +1584,7 @@ function listCasesSqlite(scope: CaseScope, filters: CaseFilters) {
           order: orders[0]?.status || 'N/A',
           payment: payments[0]?.status || 'N/A',
           fulfillment: orders[0]?.fulfillment_status || 'N/A',
-          refund: refunds[0]?.status || returns[0]?.refund_status || payments[0]?.refund_status || 'N/A',
+          refund: refunds[0]?.status || returns[0]?.refund_status || 'N/A',
           approval: parsed.approval_state || 'not_required',
         },
       conflict_summary: {
