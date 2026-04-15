@@ -1296,7 +1296,6 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     caseStatusHistoryResult,
     orderEventsResult,
     returnEventsResult,
-    workflowRunStepsResult,
     caseKnowledgeLinksResult,
     connectorsResult,
     agentsResult,
@@ -1325,7 +1324,6 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     supabase.from('case_status_history').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
     caseRow.order_ids?.length ? supabase.from('order_events').select('*').in('order_id', caseRow.order_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
     caseRow.return_ids?.length ? supabase.from('return_events').select('*').in('return_id', caseRow.return_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
-    supabase.from('workflow_run_steps').select('*').eq('tenant_id', scope.tenantId).order('started_at', { ascending: false }),
     supabase.from('case_knowledge_links').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId),
     supabase.from('connectors').select('*').eq('tenant_id', scope.tenantId),
     supabase.from('agents').select('*').eq('tenant_id', scope.tenantId),
@@ -1338,9 +1336,15 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     supabase.from('canonical_events').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('occurred_at', { ascending: false }),
   ]);
 
-  for (const result of [customerResult, conversationResult, ordersResult, paymentsResult, returnsResult, refundsResult, approvalsResult, issuesResult, linksResult, draftsResult, notesResult, messagesResult, userResult, teamResult, caseStatusHistoryResult, orderEventsResult, returnEventsResult, workflowRunStepsResult, caseKnowledgeLinksResult, connectorsResult, agentsResult, executionPlansResult, toolActionAttemptsResult, policyRulesResult, policyEvaluationsResult, webhookEventsResult, workflowRunsResult, canonicalEventsResult]) {
+  for (const result of [customerResult, conversationResult, ordersResult, paymentsResult, returnsResult, refundsResult, approvalsResult, issuesResult, linksResult, draftsResult, notesResult, messagesResult, userResult, teamResult, caseStatusHistoryResult, orderEventsResult, returnEventsResult, caseKnowledgeLinksResult, connectorsResult, agentsResult, executionPlansResult, toolActionAttemptsResult, policyRulesResult, policyEvaluationsResult, webhookEventsResult, workflowRunsResult, canonicalEventsResult]) {
     if (result?.error) throw result.error;
   }
+
+  const workflowRunIds = compactStrings((workflowRunsResult.data ?? []).map((row: any) => row.id));
+  const workflowRunStepsResult = workflowRunIds.length
+    ? await supabase.from('workflow_run_steps').select('*').in('workflow_run_id', workflowRunIds).order('started_at', { ascending: false })
+    : Promise.resolve({ data: [], error: null } as any);
+  if (workflowRunStepsResult?.error) throw workflowRunStepsResult.error;
 
   const relatedCaseIds = compactStrings((linksResult.data ?? []).map((row: any) => row.linked_case_id));
   const linkedCases = relatedCaseIds.length
