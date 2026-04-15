@@ -335,6 +335,111 @@ export function buildCaseTimelineFromRows(rows: any): CanonicalTimelineEntry[] {
     });
   });
 
+  rows.workflowRuns?.forEach((run: any) => {
+    timeline.push({
+      id: `workflow_run:${run.id}`,
+      entry_type: 'workflow_run',
+      type: run.status || 'workflow_run',
+      domain: 'workflows',
+      actor: 'workflow',
+      content: `Workflow ${run.status} (${run.trigger_type || 'manual'})`,
+      occurred_at: run.started_at || run.ended_at || run.created_at,
+      icon: 'schema',
+      severity: toCanonicalHealth(run.status),
+      source: 'workflows',
+    });
+  });
+
+  rows.workflowRunSteps?.forEach((step: any) => {
+    timeline.push({
+      id: `workflow_step:${step.id}`,
+      entry_type: 'workflow_run_step',
+      type: step.status || 'workflow_run_step',
+      domain: 'workflows',
+      actor: step.node_type || 'workflow',
+      content: `${step.node_id || step.id}: ${step.status || 'pending'}`,
+      occurred_at: step.started_at || step.ended_at || step.created_at,
+      icon: 'schema',
+      severity: toCanonicalHealth(step.status),
+      source: step.node_type || 'workflow',
+    });
+  });
+
+  rows.agentRuns?.forEach((run: any) => {
+    timeline.push({
+      id: `agent_run:${run.id}`,
+      entry_type: 'agent_run',
+      type: run.status || 'agent_run',
+      domain: 'ai_studio',
+      actor: run.agent_id || 'agent',
+      content: `${run.agent_id || 'agent'} ${run.status || 'running'}${run.trigger_event ? ` · ${run.trigger_event}` : ''}`,
+      occurred_at: run.started_at || run.ended_at || run.finished_at || run.created_at,
+      icon: 'smart_toy',
+      severity: toCanonicalHealth(run.status),
+      source: run.agent_id || 'ai_studio',
+    });
+  });
+
+  rows.executionPlans?.forEach((plan: any) => {
+    timeline.push({
+      id: `execution_plan:${plan.id}`,
+      entry_type: 'execution_plan',
+      type: plan.status || 'execution_plan',
+      domain: 'approvals',
+      actor: plan.generated_by || 'system',
+      content: `Execution plan ${plan.status || 'created'}${plan.approval_request_id ? ` for ${plan.approval_request_id}` : ''}`,
+      occurred_at: plan.generated_at || plan.started_at || plan.completed_at,
+      icon: 'fact_check',
+      severity: toCanonicalHealth(plan.status),
+      source: 'execution_plans',
+    });
+  });
+
+  rows.policyEvaluations?.forEach((evaluation: any) => {
+    timeline.push({
+      id: `policy:${evaluation.id}`,
+      entry_type: 'policy_evaluation',
+      type: evaluation.decision || 'policy_evaluation',
+      domain: 'approvals',
+      actor: evaluation.entity_type || 'policy',
+      content: evaluation.reason || evaluation.decision || 'Policy evaluation recorded',
+      occurred_at: evaluation.created_at,
+      icon: 'policy',
+      severity: toCanonicalHealth(evaluation.decision),
+      source: evaluation.entity_type || 'policy',
+    });
+  });
+
+  rows.toolActionAttempts?.forEach((attempt: any) => {
+    timeline.push({
+      id: `tool:${attempt.id}`,
+      entry_type: 'tool_action_attempt',
+      type: attempt.status || 'tool_action_attempt',
+      domain: 'workflows',
+      actor: attempt.tool || 'tool',
+      content: `${attempt.tool || 'tool'}.${attempt.action || 'action'} ${attempt.status || 'pending'}`,
+      occurred_at: attempt.started_at || attempt.ended_at || attempt.created_at,
+      icon: 'terminal',
+      severity: toCanonicalHealth(attempt.status),
+      source: attempt.tool || 'tools',
+    });
+  });
+
+  rows.webhookEvents?.forEach((event: any) => {
+    timeline.push({
+      id: `webhook:${event.id}`,
+      entry_type: 'webhook_event',
+      type: event.event_type || 'webhook_event',
+      domain: 'integrations',
+      actor: event.source_system || 'webhook',
+      content: `Webhook ${event.event_type || 'received'} (${event.status || 'received'})`,
+      occurred_at: event.received_at || event.processed_at,
+      icon: 'webhook',
+      severity: toCanonicalHealth(event.status),
+      source: event.source_system || 'webhook',
+    });
+  });
+
   rows.refunds?.forEach((refund: any) => {
     timeline.push({
       id: `refund:${refund.id}`,
@@ -407,11 +512,13 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
     refunds = [],
     approvals = [],
     workflowRuns = [],
+    workflowRunSteps = [],
     caseKnowledgeLinks = [],
     knowledgeArticles = [],
     connectors = [],
     agents = [],
     agentVersions = [],
+    agentRuns = [],
   } = rows;
 
   const orderBranch: SystemStatusBranch = {
@@ -520,16 +627,35 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
         timestamp: caseRow.updated_at,
       }];
 
+  const workflowStepsByRunId = new Map<string, any[]>();
+  for (const step of workflowRunSteps) {
+    if (!step.workflow_run_id) continue;
+    workflowStepsByRunId.set(step.workflow_run_id, [...(workflowStepsByRunId.get(step.workflow_run_id) || []), step]);
+  }
   const workflowNodes: CanonicalNode[] = workflowRuns.length > 0
-    ? workflowRuns.map((run: any) => ({
-        id: run.id,
-        label: run.trigger_type || 'workflow',
-        status: toCanonicalHealth(run.status),
-        source: 'workflow',
-        context: run.status,
-        value: run.current_node_id || run.status,
-        timestamp: run.started_at,
-      }))
+    ? workflowRuns.flatMap((run: any) => {
+        const steps = workflowStepsByRunId.get(run.id) || [];
+        return [
+          {
+            id: run.id,
+            label: run.trigger_type || 'workflow',
+            status: toCanonicalHealth(run.status),
+            source: 'workflow',
+            context: run.status,
+            value: run.current_node_id || run.status,
+            timestamp: run.started_at,
+          },
+          ...steps.map((step: any, index: number) => ({
+            id: `${run.id}:step:${step.id || index}`,
+            label: step.node_id || step.node_type || `step ${index + 1}`,
+            status: toCanonicalHealth(step.status),
+            source: step.node_type || 'workflow',
+            context: step.output?.summary || step.error || step.status,
+            value: step.status,
+            timestamp: step.started_at || step.ended_at || step.created_at,
+          })),
+        ];
+      })
     : [{
         id: `${caseRow.id}:execution`,
         label: 'Execution',
@@ -604,7 +730,12 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
     existing.push(version);
     versionsByAgent.set(version.agent_id, existing);
   });
-  const aiStudioNodes: CanonicalNode[] = (agents || []).map((agent: any) => {
+  const agentRunsByAgentId = new Map<string, any[]>();
+  for (const run of agentRuns) {
+    if (!run.agent_id) continue;
+    agentRunsByAgentId.set(run.agent_id, [...(agentRunsByAgentId.get(run.agent_id) || []), run]);
+  }
+  const aiStudioNodes: CanonicalNode[] = (agents || []).flatMap((agent: any) => {
     const currentVersion = agent.current_version_id ? versionById.get(agent.current_version_id) : null;
     const fallbackVersion = versionsByAgent.get(agent.id)?.[0] || null;
     const version = currentVersion || fallbackVersion;
@@ -616,7 +747,9 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
         : versionStatus === 'rejected' || versionStatus === 'deprecated' || versionStatus === 'blocked'
           ? 'critical'
           : 'pending';
-    return {
+    const runSummary = agentRunsByAgentId.get(agent.id) || [];
+    return [
+      {
       id: agent.id,
       label: agent.name,
       status,
@@ -624,7 +757,17 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
       context: `v${version?.version_number || 1} · perms ${Object.keys(version?.permission_profile || {}).length} · reasoning ${Object.keys(version?.reasoning_profile || {}).length} · safety ${Object.keys(version?.safety_profile || {}).length} · knowledge ${Object.keys(version?.knowledge_profile || {}).length}`,
       value: version?.id || agent.current_version_id || agent.slug,
       timestamp: version?.published_at || agent.updated_at || agent.created_at,
-    };
+      },
+      ...runSummary.map((run: any, index: number) => ({
+        id: `${agent.id}:run:${run.id || index}`,
+        label: `${agent.name} run`,
+        status: toCanonicalHealth(run.status),
+        source: 'agent_run',
+        context: run.summary || run.error_message || run.error || run.status,
+        value: run.trigger_event || run.status,
+        timestamp: run.started_at || run.ended_at || run.finished_at || run.created_at,
+      })),
+    ];
   });
 
   return {

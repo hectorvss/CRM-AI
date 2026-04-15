@@ -165,6 +165,18 @@ function buildTimeline(bundle: any) {
       severity: branchHealthFromStatus(step.status || 'warning'),
       source: 'workflows',
     })),
+    ...(bundle.agent_runs ?? []).map((run: any) => ({
+      id: run.id,
+      entry_type: 'agent_run',
+      type: run.status || 'agent_run',
+      domain: 'ai_studio',
+      actor: run.agent_id || 'agent',
+      content: `${run.agent_id || 'agent'} ${run.status || 'running'}${run.trigger_event ? ` · ${run.trigger_event}` : ''}`,
+      occurred_at: run.started_at || run.ended_at || run.finished_at || run.created_at,
+      icon: 'smart_toy',
+      severity: branchHealthFromStatus(run.status || 'warning'),
+      source: run.agent_id || 'ai_studio',
+    })),
     ...(bundle.refunds ?? []).map((refund: any) => ({
       id: refund.id,
       entry_type: 'refund',
@@ -1181,8 +1193,8 @@ function buildResolveView(bundle: any) {
   const approvalRequests = bundle.approvals ?? [];
   const executionPlan = bundle.execution_plans?.find((plan: any) => plan.id === bundle.case.active_execution_plan_id || plan.id === approvalRequests[0]?.execution_plan_id) || bundle.execution_plans?.[0] || null;
   const relevantTimeline = state.timeline.filter((entry: any) =>
-    ['case_status_history', 'reconciliation_issue', 'approval_request', 'policy_evaluation', 'execution_plan', 'workflow_run', 'workflow_run_step', 'order_event', 'return_event', 'refund', 'webhook_event']
-      .includes(entry.entry_type),
+    ['case_status_history', 'reconciliation_issue', 'approval_request', 'policy_evaluation', 'execution_plan', 'workflow_run', 'workflow_run_step', 'agent_run', 'order_event', 'return_event', 'refund', 'webhook_event']
+        .includes(entry.entry_type),
   );
   return {
     case_id: bundle.case.id,
@@ -1305,6 +1317,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     policyEvaluationsResult,
     webhookEventsResult,
     workflowRunsResult,
+    agentRunsResult,
     canonicalEventsResult,
   ] = await Promise.all([
     caseRow.customer_id ? supabase.from('customers').select('*').eq('id', caseRow.customer_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
@@ -1333,10 +1346,11 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     supabase.from('policy_evaluations').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
     supabase.from('webhook_events').select('*').eq('tenant_id', scope.tenantId).order('received_at', { ascending: false }),
     supabase.from('workflow_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('started_at', { ascending: false }),
+    supabase.from('agent_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('started_at', { ascending: false }),
     supabase.from('canonical_events').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('occurred_at', { ascending: false }),
   ]);
 
-  for (const result of [customerResult, conversationResult, ordersResult, paymentsResult, returnsResult, refundsResult, approvalsResult, issuesResult, linksResult, draftsResult, notesResult, messagesResult, userResult, teamResult, caseStatusHistoryResult, orderEventsResult, returnEventsResult, caseKnowledgeLinksResult, connectorsResult, agentsResult, executionPlansResult, toolActionAttemptsResult, policyRulesResult, policyEvaluationsResult, webhookEventsResult, workflowRunsResult, canonicalEventsResult]) {
+  for (const result of [customerResult, conversationResult, ordersResult, paymentsResult, returnsResult, refundsResult, approvalsResult, issuesResult, linksResult, draftsResult, notesResult, messagesResult, userResult, teamResult, caseStatusHistoryResult, orderEventsResult, returnEventsResult, caseKnowledgeLinksResult, connectorsResult, agentsResult, executionPlansResult, toolActionAttemptsResult, policyRulesResult, policyEvaluationsResult, webhookEventsResult, workflowRunsResult, agentRunsResult, canonicalEventsResult]) {
     if (result?.error) throw result.error;
   }
 
@@ -1412,6 +1426,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     webhook_events: webhookEventsResult.data ?? [],
     agent_versions: agentVersions,
     workflow_runs: workflowRunsResult.data ?? [],
+    agent_runs: agentRunsResult.data ?? [],
     canonical_events: canonicalEventsResult.data ?? [],
   };
 }
@@ -1491,6 +1506,7 @@ function fetchCaseBundleSqlite(scope: CaseScope, caseId: string) {
   const policyEvaluations = db.prepare(`SELECT * FROM policy_evaluations WHERE case_id = ? AND tenant_id = ? ORDER BY created_at DESC`).all(caseId, scope.tenantId);
   const webhookEvents = db.prepare(`SELECT * FROM webhook_events WHERE tenant_id = ? ORDER BY received_at DESC`).all(scope.tenantId);
   const workflowRuns = db.prepare(`SELECT * FROM workflow_runs WHERE case_id = ? AND tenant_id = ? ORDER BY started_at DESC`).all(caseId, scope.tenantId);
+  const agentRuns = db.prepare(`SELECT * FROM agent_runs WHERE case_id = ? AND tenant_id = ? ORDER BY started_at DESC`).all(caseId, scope.tenantId);
   const canonicalEvents = db.prepare(`SELECT * FROM canonical_events WHERE case_id = ? AND tenant_id = ? ORDER BY occurred_at DESC`).all(caseId, scope.tenantId);
 
   return {
@@ -1522,6 +1538,7 @@ function fetchCaseBundleSqlite(scope: CaseScope, caseId: string) {
     policy_evaluations: policyEvaluations.map(parseRow),
     webhook_events: webhookEvents.map(parseRow),
     workflow_runs: workflowRuns.map(parseRow),
+    agent_runs: agentRuns.map(parseRow),
     canonical_events: canonicalEvents.map(parseRow),
   };
 }

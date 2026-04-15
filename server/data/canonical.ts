@@ -48,7 +48,7 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     orders, payments, returns,
     approvals, workflowRuns, reconciliationIssues, linkedCases,
     messages, internalNotes, statusHistory, canonicalEvents,
-    orderEvents, returnEvents
+    orderEvents, returnEvents, agentRuns
   ] = await Promise.all([
     orderIds.length ? supabase.from('orders').select('*').in('id', orderIds) : Promise.resolve({ data: [] }),
     paymentIds.length ? supabase.from('payments').select('*').in('id', paymentIds) : Promise.resolve({ data: [] }),
@@ -62,7 +62,8 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     supabase.from('case_status_history').select('*').eq('case_id', caseId).order('created_at', { ascending: true }),
     supabase.from('canonical_events').select('*').eq('case_id', caseId).order('occurred_at', { ascending: true }),
     orderIds.length ? supabase.from('order_events').select('*').in('order_id', orderIds).order('time', { ascending: true }) : Promise.resolve({ data: [] }),
-    returnIds.length ? supabase.from('return_events').select('*').in('return_id', returnIds).order('time', { ascending: true }) : Promise.resolve({ data: [] })
+    returnIds.length ? supabase.from('return_events').select('*').in('return_id', returnIds).order('time', { ascending: true }) : Promise.resolve({ data: [] }),
+    supabase.from('agent_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('started_at', { ascending: true }),
   ]);
 
   const [refundsByPaymentRes, refundsByOrderRes, refundsByCustomerRes] = await Promise.all([
@@ -85,6 +86,12 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
   if ((refundsByPaymentRes as any).error) throw (refundsByPaymentRes as any).error;
   if ((refundsByOrderRes as any).error) throw (refundsByOrderRes as any).error;
   if ((refundsByCustomerRes as any).error) throw (refundsByCustomerRes as any).error;
+
+  const workflowRunIds = Array.from(new Set((workflowRuns.data || []).map((row: any) => row.id).filter(Boolean)));
+  const workflowRunStepsRes = workflowRunIds.length > 0
+    ? await supabase.from('workflow_run_steps').select('*').in('workflow_run_id', workflowRunIds).order('started_at', { ascending: true })
+    : { data: [], error: null } as any;
+  if (workflowRunStepsRes.error) throw workflowRunStepsRes.error;
 
   const knowledgeArticleIds = Array.from(new Set((caseKnowledgeLinksRes.data || []).map((link: any) => link.article_id).filter(Boolean)));
   const knowledgeArticlesRes = knowledgeArticleIds.length > 0
@@ -131,6 +138,8 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     canonicalEvents: canonicalEvents.data || [],
     orderEvents: orderEvents.data || [],
     returnEvents: returnEvents.data || [],
+    agentRuns: agentRuns.data || [],
+    workflowRunSteps: workflowRunStepsRes.data || [],
     refunds: Array.from(new Map([
       ...(refundsByPaymentRes.data || []),
       ...(refundsByOrderRes.data || []),
@@ -194,6 +203,14 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
 
   const workflowRuns = db.prepare(`
     SELECT * FROM workflow_runs
+    WHERE case_id = ? AND tenant_id = ?
+    ORDER BY started_at DESC
+  `).all(caseId, scope.tenantId).map(parseRow);
+  const workflowRunSteps = workflowRuns.length > 0
+    ? db.prepare(`SELECT * FROM workflow_run_steps WHERE workflow_run_id IN (${workflowRuns.map(() => '?').join(',')}) ORDER BY started_at ASC`).all(...workflowRuns.map((run: any) => run.id)).map(parseRow)
+    : [];
+  const agentRuns = db.prepare(`
+    SELECT * FROM agent_runs
     WHERE case_id = ? AND tenant_id = ?
     ORDER BY started_at DESC
   `).all(caseId, scope.tenantId).map(parseRow);
@@ -314,6 +331,8 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
     canonicalEvents,
     orderEvents,
     returnEvents,
+    workflowRunSteps,
+    agentRuns,
     refunds: Array.from(new Map([...refundsByPayment, ...refundsByOrder, ...refundsByCustomer].map((refund: any) => [refund.id, refund])).values()),
     caseKnowledgeLinks,
     knowledgeArticles,
