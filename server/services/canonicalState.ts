@@ -737,7 +737,6 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
             timestamp: caseRow.updated_at,
           }],
     },
-    },
   };
 }
 
@@ -938,11 +937,12 @@ export async function buildCaseListSummary(caseId: string, tenantId: string, wor
     latest_message_preview: state.channel_context.latest_message_preview,
     channel_context: state.channel_context,
     system_status_summary: {
-      orders: state.systems.orders.status,
-      payments: state.systems.payments.status,
-      returns: state.systems.returns.status,
+      order: state.systems.orders.status,
+      payment: state.systems.payments.status,
+      refund: state.systems.refunds.status,
+      return: state.systems.returns.status,
       fulfillment: state.systems.fulfillment.status,
-      approvals: state.systems.approvals.status,
+      approval: state.systems.approvals.status,
     },
     conflict_summary: state.conflict,
   };
