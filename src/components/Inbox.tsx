@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Conversation, Channel, CaseTab, Message } from '../types';
 import { aiApi, casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
@@ -32,6 +32,16 @@ const truncateMiddle = (value?: string | null, max = 18) => {
   const tail = Math.floor((max - 1) / 2);
   return `${value.slice(0, head)}…${value.slice(-tail)}`;
 };
+
+const normalizeMessageText = (value?: string | null) =>
+  (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+const fingerprintMessage = (message: Message) =>
+  [
+    message.type || 'unknown',
+    normalizeMessageText(message.sender),
+    normalizeMessageText(message.content),
+  ].join('|');
 
 const CONVERSATIONS: Conversation[] = [
   {
@@ -379,6 +389,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   const [isCopilotSending, setIsCopilotSending] = useState(false);
   const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+  const submitLockRef = useRef(false);
 
   // Fetch canonical cases from the backend. Static fixtures are no longer used
   // as runtime data, so every visible case comes from the simulated API/DB flow.
@@ -413,11 +424,11 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
       brand: 'Acme Store',
       caseType: c.type || 'General',
       riskLevel: c.risk_level === 'high' || c.risk_level === 'critical' ? 'High' : c.risk_level === 'medium' ? 'Medium' : 'Low',
-      orderStatus: titleCase(c.system_status_summary?.orders || 'N/A'),
-      paymentStatus: titleCase(c.system_status_summary?.payments || 'N/A'),
+      orderStatus: titleCase(c.system_status_summary?.order || c.system_status_summary?.orders || 'N/A'),
+      paymentStatus: titleCase(c.system_status_summary?.payment || c.system_status_summary?.payments || 'N/A'),
       fulfillmentStatus: titleCase(c.system_status_summary?.fulfillment || 'N/A'),
-      refundStatus: titleCase(c.system_status_summary?.returns || 'N/A'),
-      approvalStatus: titleCase(c.approval_state || 'N/A'),
+      refundStatus: titleCase(c.system_status_summary?.refund || c.system_status_summary?.returns || 'N/A'),
+      approvalStatus: titleCase(c.system_status_summary?.approval || c.approval_state || 'N/A'),
       context: c.conflict_summary?.root_cause || c.ai_diagnosis || '',
       assignedTeam: c.assigned_team_name || 'Support',
       lastSync: '1m ago',
@@ -458,7 +469,14 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
       time: formatTime(msg.sent_at),
     })) || selectedBaseConv.messages || [];
     const localMessages = localMessagesByCase[selectedBaseConv.id] || [];
-    const knownIds = new Set(apiMessages.map((message: Message) => message.id));
+    const knownFingerprints = new Set(apiMessages.map((message: Message) => fingerprintMessage(message)));
+    const mergedMessages = [...apiMessages, ...localMessages].filter((message, index, list) => {
+      const signature = fingerprintMessage(message);
+      if (knownFingerprints.has(signature) && index >= apiMessages.length) {
+        return false;
+      }
+      return list.findIndex(item => fingerprintMessage(item) === signature) === index;
+    });
     return {
     ...selectedBaseConv,
     orderId: caseState?.related?.orders?.[0]?.external_order_id || caseState?.identifiers?.order_ids?.[0] || selectedBaseConv.orderId,
@@ -472,10 +490,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
       type: linked.type || 'Case',
       status: titleCase(linked.status || 'open'),
     })) || selectedBaseConv.relatedCases,
-    messages: [
-      ...apiMessages,
-      ...localMessages.filter(message => !knownIds.has(message.id)),
-    ],
+    messages: mergedMessages,
   };
   })() : undefined;
 
@@ -550,8 +565,9 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   };
 
   const handleSubmit = async () => {
-    if (!selectedConv || !composerText.trim() || isSubmitting) return;
+    if (!selectedConv || !composerText.trim() || isSubmitting || submitLockRef.current) return;
 
+    submitLockRef.current = true;
     setIsSubmitting(true);
     setActionError(null);
     try {
@@ -592,12 +608,12 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
       }
       setComposerText('');
       setRefreshKey(key => key + 1);
-      window.setTimeout(() => setRefreshKey(key => key + 1), 900);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Inbox action failed');
       console.error('Inbox action failed:', error);
     } finally {
       setIsSubmitting(false);
+      submitLockRef.current = false;
     }
   };
 

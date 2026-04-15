@@ -234,7 +234,7 @@ class SupabaseJobRepository implements JobRepository {
   }
 }
 
-let instance: JobRepository | null = null;
+var instance: JobRepository | null = null;
 
 export function createJobRepository(): JobRepository {
   if (instance) return instance;

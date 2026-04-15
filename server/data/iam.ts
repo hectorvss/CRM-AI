@@ -26,6 +26,11 @@ export interface IAMRepository {
     role?: string;
     isSystem?: number;
   }): Promise<void>;
+  updateUser(id: string, updates: {
+    name?: string;
+    avatarUrl?: string | null;
+    preferences?: Record<string, any>;
+  }): Promise<void>;
   listWorkspaceUsers(tenantId: string, workspaceId: string): Promise<any[]>;
 
   // Members
@@ -99,9 +104,34 @@ class SQLiteIAMRepository implements IAMRepository {
   async createUser(data: any) {
     const db = getDb();
     db.prepare(`
-      INSERT INTO users (id, email, name, role, is_system)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(data.id, data.email, data.name, data.role || 'agent', data.isSystem || 0);
+      INSERT INTO users (id, email, name, role, is_system, preferences)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(data.id, data.email, data.name, data.role || 'agent', data.isSystem || 0, JSON.stringify(data.preferences || {}));
+  }
+
+  async updateUser(id: string, updates: any) {
+    const db = getDb();
+    const fields = [];
+    const params = [];
+
+    if (typeof updates.name === 'string') {
+      fields.push('name = ?');
+      params.push(updates.name);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'avatarUrl')) {
+      fields.push('avatar_url = ?');
+      params.push(updates.avatarUrl ?? null);
+    }
+
+    if (updates.preferences) {
+      fields.push('preferences = ?');
+      params.push(JSON.stringify(updates.preferences));
+    }
+
+    if (fields.length === 0) return;
+    params.push(id);
+    db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...params);
   }
 
   async listWorkspaceUsers(tenantId: string, workspaceId: string) {
@@ -272,8 +302,31 @@ class SupabaseIAMRepository implements IAMRepository {
       email: data.email,
       name: data.name,
       role: data.role || 'agent',
-      is_system: data.isSystem ? 1 : 0
+      is_system: data.isSystem ? 1 : 0,
+      preferences: data.preferences || {}
     });
+    if (error) throw error;
+  }
+
+  async updateUser(id: string, updates: any) {
+    const supabase = getSupabaseAdmin();
+    const toUpdate: Record<string, any> = {};
+
+    if (typeof updates.name === 'string') {
+      toUpdate.name = updates.name;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'avatarUrl')) {
+      toUpdate.avatar_url = updates.avatarUrl ?? null;
+    }
+
+    if (updates.preferences) {
+      toUpdate.preferences = updates.preferences;
+    }
+
+    if (Object.keys(toUpdate).length === 0) return;
+
+    const { error } = await supabase.from('users').update(toUpdate).eq('id', id);
     if (error) throw error;
   }
 

@@ -65,6 +65,39 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     returnIds.length ? supabase.from('return_events').select('*').in('return_id', returnIds).order('time', { ascending: true }) : Promise.resolve({ data: [] })
   ]);
 
+  const [refundsByPaymentRes, refundsByOrderRes, refundsByCustomerRes] = await Promise.all([
+    paymentIds.length ? supabase.from('refunds').select('*').in('payment_id', paymentIds).order('created_at', { ascending: true }) : Promise.resolve({ data: [] } as any),
+    orderIds.length ? supabase.from('refunds').select('*').in('order_id', orderIds).order('created_at', { ascending: true }) : Promise.resolve({ data: [] } as any),
+    caseRow.customer_id ? supabase.from('refunds').select('*').eq('customer_id', caseRow.customer_id).order('created_at', { ascending: true }) : Promise.resolve({ data: [] } as any),
+  ]);
+
+  const [caseKnowledgeLinksRes, connectorsRes, agentsRes, agentVersionsRes] = await Promise.all([
+    supabase.from('case_knowledge_links').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('relevance_score', { ascending: false }),
+    supabase.from('connectors').select('*').eq('tenant_id', scope.tenantId).order('updated_at', { ascending: false }),
+    supabase.from('agents').select('*').eq('tenant_id', scope.tenantId).order('updated_at', { ascending: false }),
+    supabase.from('agent_versions').select('*').eq('tenant_id', scope.tenantId).order('published_at', { ascending: false }).order('version_number', { ascending: false }),
+  ]);
+
+  if (caseKnowledgeLinksRes.error) throw caseKnowledgeLinksRes.error;
+  if (connectorsRes.error) throw connectorsRes.error;
+  if (agentsRes.error) throw agentsRes.error;
+  if (agentVersionsRes.error) throw agentVersionsRes.error;
+  if ((refundsByPaymentRes as any).error) throw (refundsByPaymentRes as any).error;
+  if ((refundsByOrderRes as any).error) throw (refundsByOrderRes as any).error;
+  if ((refundsByCustomerRes as any).error) throw (refundsByCustomerRes as any).error;
+
+  const knowledgeArticleIds = Array.from(new Set((caseKnowledgeLinksRes.data || []).map((link: any) => link.article_id).filter(Boolean)));
+  const knowledgeArticlesRes = knowledgeArticleIds.length > 0
+    ? await supabase
+        .from('knowledge_articles')
+        .select('*')
+        .eq('tenant_id', scope.tenantId)
+        .eq('workspace_id', scope.workspaceId)
+        .in('id', knowledgeArticleIds)
+    : { data: [], error: null } as any;
+
+  if (knowledgeArticlesRes.error) throw knowledgeArticlesRes.error;
+
   return {
     caseRow: {
       ...caseRow,
@@ -97,7 +130,17 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     statusHistory: statusHistory.data || [],
     canonicalEvents: canonicalEvents.data || [],
     orderEvents: orderEvents.data || [],
-    returnEvents: returnEvents.data || []
+    returnEvents: returnEvents.data || [],
+    refunds: Array.from(new Map([
+      ...(refundsByPaymentRes.data || []),
+      ...(refundsByOrderRes.data || []),
+      ...(refundsByCustomerRes.data || []),
+    ].map((refund: any) => [refund.id, refund])).values()),
+    caseKnowledgeLinks: caseKnowledgeLinksRes.data || [],
+    knowledgeArticles: knowledgeArticlesRes.data || [],
+    connectors: connectorsRes.data || [],
+    agents: agentsRes.data || [],
+    agentVersions: agentVersionsRes.data || [],
   };
 }
 
@@ -208,6 +251,53 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
     ? db.prepare(`SELECT * FROM return_events WHERE tenant_id = ? AND return_id IN (${returnIds.map(() => '?').join(',')}) ORDER BY time ASC`).all(scope.tenantId, ...returnIds).map(parseRow)
     : [];
 
+  const refundsByPayment = paymentIds.length > 0
+    ? db.prepare(`SELECT * FROM refunds WHERE tenant_id = ? AND payment_id IN (${paymentIds.map(() => '?').join(',')}) ORDER BY created_at ASC`).all(scope.tenantId, ...paymentIds).map(parseRow)
+    : [];
+  const refundsByOrder = orderIds.length > 0
+    ? db.prepare(`SELECT * FROM refunds WHERE tenant_id = ? AND order_id IN (${orderIds.map(() => '?').join(',')}) ORDER BY created_at ASC`).all(scope.tenantId, ...orderIds).map(parseRow)
+    : [];
+  const refundsByCustomer = parsedCase.customer_id
+    ? db.prepare(`SELECT * FROM refunds WHERE tenant_id = ? AND customer_id = ? ORDER BY created_at ASC`).all(scope.tenantId, parsedCase.customer_id).map(parseRow)
+    : [];
+
+  const caseKnowledgeLinks = db.prepare(`
+    SELECT ckl.*, ka.title AS article_title, ka.content AS article_content, ka.status AS article_status,
+           ka.type AS article_type, ka.updated_at AS article_updated_at, ka.created_at AS article_created_at
+    FROM case_knowledge_links ckl
+    JOIN knowledge_articles ka ON ka.id = ckl.article_id
+    WHERE ckl.case_id = ? AND ckl.tenant_id = ?
+    ORDER BY ckl.relevance_score DESC, ckl.created_at ASC
+  `).all(caseId, scope.tenantId).map(parseRow);
+
+  const knowledgeArticles = caseKnowledgeLinks.map((link: any) => ({
+    id: link.article_id,
+    title: link.article_title,
+    content: link.article_content,
+    status: link.article_status,
+    type: link.article_type,
+    updated_at: link.article_updated_at,
+    created_at: link.article_created_at,
+  }));
+
+  const connectors = db.prepare(`
+    SELECT * FROM connectors
+    WHERE tenant_id = ?
+    ORDER BY updated_at DESC
+  `).all(scope.tenantId).map(parseRow);
+
+  const agents = db.prepare(`
+    SELECT * FROM agents
+    WHERE tenant_id = ?
+    ORDER BY updated_at DESC
+  `).all(scope.tenantId).map(parseRow);
+
+  const agentVersions = db.prepare(`
+    SELECT * FROM agent_versions
+    WHERE tenant_id = ?
+    ORDER BY published_at DESC, version_number DESC
+  `).all(scope.tenantId).map(parseRow);
+
   return {
     caseRow: parsedCase,
     orders,
@@ -224,6 +314,12 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
     canonicalEvents,
     orderEvents,
     returnEvents,
+    refunds: Array.from(new Map([...refundsByPayment, ...refundsByOrder, ...refundsByCustomer].map((refund: any) => [refund.id, refund])).values()),
+    caseKnowledgeLinks,
+    knowledgeArticles,
+    connectors,
+    agents,
+    agentVersions,
   };
 }
 

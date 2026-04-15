@@ -30,6 +30,9 @@ function nodeStatusMap(status: string): 'healthy' | 'warning' | 'critical' {
 function pageFromBranchKey(key?: string | null): Page | null {
   if (!key) return null;
   const normalized = key.toLowerCase();
+  if (normalized.includes('conversation') || normalized.includes('message') || normalized.includes('note')) return 'inbox';
+  if (normalized.includes('reconciliation')) return 'reports';
+  if (normalized.includes('linked')) return 'case_graph';
   if (normalized.includes('payment')) return 'payments';
   if (normalized.includes('return')) return 'returns';
   if (normalized.includes('order') || normalized.includes('fulfillment') || normalized.includes('shipping') || normalized.includes('warehouse')) return 'orders';
@@ -112,6 +115,8 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
       orders: 'orders', payments: 'payments', returns: 'returns',
       fulfillment: 'orders', approvals: 'approvals', workflows: 'workflows',
       knowledge: 'knowledge', integrations: 'tools_integrations',
+      refunds: 'payments',
+      conversation: 'inbox', notes: 'inbox', linked_cases: 'case_graph', reconciliation: 'reports',
     };
     return graphData.branches.map((b: any) => ({
       id: b.id,

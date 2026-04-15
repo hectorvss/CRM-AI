@@ -143,12 +143,6 @@ export default function Knowledge() {
     }
   }, [editorMode, editorOpen, selectedArticle]);
 
-  useEffect(() => {
-    if (!selectedArticleId && library.length > 0) {
-      setSelectedArticleId(library[0].id);
-    }
-  }, [library, selectedArticleId]);
-
   const articleData = selectedArticle
     ? {
         id: selectedArticle.id,

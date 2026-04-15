@@ -15,7 +15,14 @@ import type {
   EnqueueOptions,
 } from './types.js';
 
-const jobRepo = createJobRepository();
+let jobRepo: ReturnType<typeof createJobRepository> | null = null;
+
+function getJobRepo() {
+  if (!jobRepo) {
+    jobRepo = createJobRepository();
+  }
+  return jobRepo;
+}
 
 /**
  * Persists a job via the repository.
@@ -37,7 +44,7 @@ export async function enqueue<T extends JobType>(
   const runAt = new Date(Date.now() + delayMs).toISOString();
 
   try {
-    await jobRepo.enqueue({
+    await getJobRepo().enqueue({
       id,
       type,
       payload,
@@ -80,15 +87,15 @@ export async function enqueueUrgent<T extends JobType>(
 
 /** Fetch a single job row by ID */
 export async function getJob(id: string): Promise<any> {
-  return jobRepo.getJob(id);
+  return getJobRepo().getJob(id);
 }
 
 /** Count jobs by status */
 export async function countJobs(): Promise<Record<string, number>> {
-  return jobRepo.countJobs();
+  return getJobRepo().countJobs();
 }
 
 /** Manually re-enqueue a dead job */
 export async function retryDeadJob(id: string): Promise<boolean> {
-  return jobRepo.retryDeadJob(id);
+  return getJobRepo().retryDeadJob(id);
 }

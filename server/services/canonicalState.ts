@@ -58,6 +58,7 @@ export interface CaseCanonicalState {
     order_ids: string[];
     payment_ids: string[];
     return_ids: string[];
+    refund_ids: string[];
     external_refs: string[];
   };
   case: any;
@@ -77,6 +78,7 @@ export interface CaseCanonicalState {
     orders: any[];
     payments: any[];
     returns: any[];
+    refunds: any[];
     approvals: any[];
     reconciliation_issues: any[];
     linked_cases: any[];
@@ -224,7 +226,7 @@ function parseStates(input: any): Record<string, any> {
 function toCanonicalHealth(value: string | null | undefined): CanonicalHealth {
   const normalized = (value || '').toLowerCase();
   if (!normalized) return 'pending';
-  if (['healthy', 'ok', 'success', 'completed', 'paid', 'captured', 'fulfilled', 'delivered', 'approved', 'received', 'synced'].includes(normalized)) return 'healthy';
+  if (['healthy', 'ok', 'success', 'completed', 'paid', 'captured', 'fulfilled', 'delivered', 'approved', 'received', 'synced', 'settled', 'refunded', 'published', 'connected', 'authorized'].includes(normalized)) return 'healthy';
   if (['resolved', 'closed'].includes(normalized)) return 'resolved';
   if (['pending', 'new', 'queued', 'requested', 'review', 'in_review', 'awaiting_approval', 'in_transit', 'waiting'].includes(normalized)) return 'pending';
   if (['warning', 'at_risk', 'medium', 'disputed', 'inspection_failed'].includes(normalized)) return 'warning';
@@ -333,6 +335,21 @@ export function buildCaseTimelineFromRows(rows: any): CanonicalTimelineEntry[] {
     });
   });
 
+  rows.refunds?.forEach((refund: any) => {
+    timeline.push({
+      id: `refund:${refund.id}`,
+      entry_type: 'refund',
+      type: refund.type || 'refund',
+      domain: 'payments',
+      actor: refund.initiated_by,
+      content: `Refund ${refund.status} for ${refund.external_refund_id || refund.id}`,
+      occurred_at: refund.created_at || refund.updated_at,
+      icon: 'payments',
+      severity: toCanonicalHealth(refund.status),
+      source: refund.initiated_by_type,
+    });
+  });
+
   rows.canonicalEvents?.forEach((event: any) => {
     timeline.push({
       id: `canonical:${event.id}`,
@@ -382,7 +399,20 @@ export function buildCaseTimelineFromRows(rows: any): CanonicalTimelineEntry[] {
 }
 
 function buildBranches(rows: any): Record<string, SystemStatusBranch> {
-  const { caseRow, orders = [], payments = [], returns = [], approvals = [], workflowRuns = [] } = rows;
+  const {
+    caseRow,
+    orders = [],
+    payments = [],
+    returns = [],
+    refunds = [],
+    approvals = [],
+    workflowRuns = [],
+    caseKnowledgeLinks = [],
+    knowledgeArticles = [],
+    connectors = [],
+    agents = [],
+    agentVersions = [],
+  } = rows;
 
   const orderBranch: SystemStatusBranch = {
     key: 'orders',
@@ -435,6 +465,24 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
       context: ret.summary || ret.return_reason || ret.status,
       value: ret.status,
       timestamp: ret.updated_at || ret.created_at,
+    })),
+  };
+
+  const refundBranch: SystemStatusBranch = {
+    key: 'refunds',
+    label: 'Refunds',
+    status: worstStatus(refunds.map((refund: any) => statusFromFlags(Boolean(refund.has_conflict) || Boolean(refund.conflict_detected), refund.risk_level, refund.status))),
+    source_of_truth: 'PSP / Finance',
+    summary: refunds[0]?.summary || null,
+    identifiers: compact(refunds.flatMap((refund: any) => [refund.id, refund.external_refund_id, refund.idempotency_key, refund.approval_request_id])),
+    nodes: refunds.map((refund: any) => ({
+      id: refund.id,
+      label: refund.external_refund_id || refund.id,
+      status: statusFromFlags(Boolean(refund.has_conflict) || Boolean(refund.conflict_detected), refund.risk_level, refund.status),
+      source: refund.initiated_by_type || refund.initiated_by || 'refunds',
+      context: refund.summary || refund.reason || refund.status,
+      value: refund.status,
+      timestamp: refund.updated_at || refund.created_at,
     })),
   };
 
@@ -493,38 +541,97 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
       }];
 
   const evidenceRefs = Array.isArray(caseRow.ai_evidence_refs) ? caseRow.ai_evidence_refs : [];
-  const knowledgeNodes: CanonicalNode[] = evidenceRefs.length > 0
-    ? evidenceRefs.map((ref: string, index: number) => ({
-        id: `${caseRow.id}:knowledge:${index}`,
-        label: ref,
-        status: 'healthy' as CanonicalHealth,
-        source: 'knowledge',
-        context: 'AI evidence reference',
-        value: ref,
-        timestamp: caseRow.updated_at,
-      }))
-    : [{
-        id: `${caseRow.id}:knowledge`,
-        label: 'Knowledge coverage',
-        status: caseRow.ai_diagnosis ? 'pending' : 'warning',
-        source: 'knowledge',
-        context: caseRow.ai_diagnosis ? 'Diagnosis exists without explicit citations' : 'No knowledge citation registered',
-        value: null,
-        timestamp: caseRow.updated_at,
-      }];
+  const knowledgeArticlesById = new Map((knowledgeArticles || []).map((article: any) => [article.id, article]));
+  const knowledgeLinkNodes: CanonicalNode[] = (caseKnowledgeLinks || []).map((link: any) => {
+    const article = knowledgeArticlesById.get(link.article_id);
+    const articleStatus = (article?.status || 'draft').toLowerCase();
+    return {
+      id: article?.id || link.article_id,
+      label: article?.title || link.article_title || link.article_id,
+      status: articleStatus === 'published' ? 'healthy' : articleStatus === 'review' || articleStatus === 'needs_review' ? 'warning' : 'pending',
+      source: 'knowledge',
+      context: article?.content || `Linked article · relevance ${Math.round(Number(link.relevance_score || 0) * 100)}%`,
+      value: articleStatus,
+      timestamp: article?.updated_at || article?.created_at || link.created_at || caseRow.updated_at,
+    };
+  });
+  const evidenceNodes: CanonicalNode[] = evidenceRefs.map((ref: string, index: number) => ({
+    id: `${caseRow.id}:knowledge:${index}`,
+    label: ref,
+    status: 'healthy' as CanonicalHealth,
+    source: 'knowledge',
+    context: 'AI evidence reference',
+    value: ref,
+    timestamp: caseRow.updated_at,
+  }));
+  const knowledgeNodes: CanonicalNode[] = knowledgeLinkNodes.length > 0
+    ? [...knowledgeLinkNodes, ...evidenceNodes]
+    : evidenceNodes.length > 0
+      ? evidenceNodes
+      : [{
+          id: `${caseRow.id}:knowledge`,
+          label: 'Knowledge coverage',
+          status: caseRow.ai_diagnosis ? 'pending' : 'warning',
+          source: 'knowledge',
+          context: caseRow.ai_diagnosis ? 'Diagnosis exists without explicit citations' : 'No knowledge citation registered',
+          value: null,
+          timestamp: caseRow.updated_at,
+        }];
 
-  const integrationSystems = compact([
+  const connectorNodes: CanonicalNode[] = (connectors || []).map((connector: any) => ({
+    id: connector.id,
+    label: connector.name || connector.system,
+    status: connector.status === 'connected' ? 'healthy' : connector.status === 'syncing' || connector.status === 'degraded' ? 'warning' : 'pending',
+    source: 'integration',
+    context: `${connector.system || connector.name} · ${connector.auth_type || 'unknown auth'}`,
+    value: connector.status,
+    timestamp: connector.updated_at || connector.last_health_check_at || caseRow.updated_at,
+  }));
+  const observedIntegrationSystems = compact([
     caseRow.source_system,
     caseRow.source_channel,
     ...orders.flatMap((order: any) => Object.keys(parseStates(order.system_states))),
     ...payments.flatMap((payment: any) => [payment.psp, ...Object.keys(parseStates(payment.system_states))]),
     ...returns.flatMap((ret: any) => Object.keys(parseStates(ret.system_states))),
+    ...connectorNodes.map(node => node.value as string),
+    ...connectorNodes.map(node => node.label),
   ]);
+
+  const versionById = new Map((agentVersions || []).map((version: any) => [version.id, version]));
+  const versionsByAgent = new Map<string, any[]>();
+  (agentVersions || []).forEach((version: any) => {
+    const existing = versionsByAgent.get(version.agent_id) || [];
+    existing.push(version);
+    versionsByAgent.set(version.agent_id, existing);
+  });
+  const aiStudioNodes: CanonicalNode[] = (agents || []).map((agent: any) => {
+    const currentVersion = agent.current_version_id ? versionById.get(agent.current_version_id) : null;
+    const fallbackVersion = versionsByAgent.get(agent.id)?.[0] || null;
+    const version = currentVersion || fallbackVersion;
+    const versionStatus = (version?.status || (agent.is_active ? 'published' : 'draft')).toLowerCase();
+    const status: CanonicalHealth = versionStatus === 'published'
+      ? 'healthy'
+      : versionStatus === 'draft' || versionStatus === 'pending_review'
+        ? 'warning'
+        : versionStatus === 'rejected' || versionStatus === 'deprecated' || versionStatus === 'blocked'
+          ? 'critical'
+          : 'pending';
+    return {
+      id: agent.id,
+      label: agent.name,
+      status,
+      source: agent.category || 'agent',
+      context: `v${version?.version_number || 1} · perms ${Object.keys(version?.permission_profile || {}).length} · reasoning ${Object.keys(version?.reasoning_profile || {}).length} · safety ${Object.keys(version?.safety_profile || {}).length} · knowledge ${Object.keys(version?.knowledge_profile || {}).length}`,
+      value: version?.id || agent.current_version_id || agent.slug,
+      timestamp: version?.published_at || agent.updated_at || agent.created_at,
+    };
+  });
 
   return {
     orders: orderBranch,
     payments: paymentBranch,
     returns: returnBranch,
+    refunds: refundBranch,
     fulfillment: {
       key: 'fulfillment',
       label: 'Fulfillment',
@@ -557,26 +664,79 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
       label: 'Knowledge',
       status: worstStatus(knowledgeNodes.map(node => node.status)),
       source_of_truth: 'Knowledge Base',
-      summary: caseRow.ai_root_cause || null,
-      identifiers: compact(evidenceRefs),
+      summary: knowledgeLinkNodes[0]?.label || caseRow.ai_root_cause || null,
+      identifiers: compact([
+        ...knowledgeNodes.map(node => node.id),
+        ...evidenceRefs,
+      ]),
       nodes: knowledgeNodes,
     },
     integrations: {
       key: 'integrations',
       label: 'Integrations',
-      status: integrationSystems.length > 0 ? 'healthy' : 'warning',
+      status: worstStatus([
+        ...connectorNodes.map(node => node.status),
+        ...(observedIntegrationSystems.length > 0 ? ['healthy'] : ['warning']),
+      ]),
       source_of_truth: 'Connector Registry',
-      summary: integrationSystems.length > 0 ? `${integrationSystems.length} systems touched` : 'No connected systems detected',
-      identifiers: integrationSystems,
-      nodes: integrationSystems.map(system => ({
-        id: `${caseRow.id}:integration:${system}`,
-        label: system,
-        status: 'healthy',
-        source: 'integration',
-        context: 'Observed in case state',
-        value: system,
-        timestamp: caseRow.updated_at,
-      })),
+      summary: connectorNodes.length > 0
+        ? `${connectorNodes.length} connectors · ${observedIntegrationSystems.length} observed systems`
+        : observedIntegrationSystems.length > 0
+          ? `${observedIntegrationSystems.length} observed systems`
+          : 'No connected systems detected',
+      identifiers: compact([
+        ...observedIntegrationSystems,
+        ...connectorNodes.map(node => node.id),
+      ]),
+      nodes: connectorNodes.length > 0
+        ? [
+            ...connectorNodes,
+            ...observedIntegrationSystems
+              .filter(system => !connectorNodes.some(node => node.label.toLowerCase() === system.toLowerCase()))
+              .map(system => ({
+                id: `${caseRow.id}:integration:${system}`,
+                label: system,
+                status: 'healthy' as CanonicalHealth,
+                source: 'integration',
+                context: 'Observed in case state',
+                value: system,
+                timestamp: caseRow.updated_at,
+              })),
+          ]
+        : observedIntegrationSystems.map(system => ({
+            id: `${caseRow.id}:integration:${system}`,
+            label: system,
+            status: 'healthy' as CanonicalHealth,
+            source: 'integration',
+            context: 'Observed in case state',
+            value: system,
+            timestamp: caseRow.updated_at,
+          })),
+    },
+    ai_studio: {
+      key: 'ai_studio',
+      label: 'AI Studio',
+      status: worstStatus(aiStudioNodes.map(node => node.status)),
+      source_of_truth: 'Agent Catalog',
+      summary: aiStudioNodes.length > 0
+        ? `${aiStudioNodes.length} agents live`
+        : 'No agents configured',
+      identifiers: compact([
+        ...agents.map((agent: any) => agent.slug),
+        ...agentVersions.map((version: any) => version.id),
+      ]),
+      nodes: aiStudioNodes.length > 0
+        ? aiStudioNodes
+        : [{
+            id: `${caseRow.id}:ai_studio`,
+            label: 'AI Studio',
+            status: 'warning',
+            source: 'agent-catalog',
+            context: 'No agent catalog rows found',
+            value: null,
+            timestamp: caseRow.updated_at,
+          }],
+    },
     },
   };
 }
@@ -607,6 +767,7 @@ export async function getCaseCanonicalState(caseId: string, tenantId: string, wo
       order_ids: Array.isArray(caseRow.order_ids) ? caseRow.order_ids : [],
       payment_ids: Array.isArray(caseRow.payment_ids) ? caseRow.payment_ids : [],
       return_ids: Array.isArray(caseRow.return_ids) ? caseRow.return_ids : [],
+      refund_ids: compact((rows.refunds || []).map((refund: any) => refund.id)),
       external_refs: compact([
         conversation?.external_thread_id,
         ...(rows.orders || []).map((order: any) => order.external_order_id),
@@ -650,6 +811,7 @@ export async function getCaseCanonicalState(caseId: string, tenantId: string, wo
       orders: rows.orders || [],
       payments: rows.payments || [],
       returns: rows.returns || [],
+      refunds: rows.refunds || [],
       approvals: rows.approvals || [],
       reconciliation_issues: rows.reconciliationIssues || [],
       linked_cases: rows.linkedCases || [],
@@ -923,6 +1085,7 @@ export async function buildCaseResolveView(caseId: string, tenantId: string, wor
     ...state.identifiers.order_ids.map(value => ({ label: 'Order ID', value, source: 'orders' })),
     ...state.identifiers.payment_ids.map(value => ({ label: 'Payment ID', value, source: 'payments' })),
     ...state.identifiers.return_ids.map(value => ({ label: 'Return ID', value, source: 'returns' })),
+    ...(state.identifiers.refund_ids || []).map(value => ({ label: 'Refund ID', value, source: 'refunds' })),
     ...state.identifiers.external_refs.map(value => ({ label: 'External Ref', value, source: 'integration' })),
   ];
 
