@@ -256,15 +256,7 @@ export default function Payments() {
   });
 
   const payments = Array.isArray(apiPayments) ? apiPayments.map(mapApiPayment) : [];
-
-  if (paymentsLoading && payments.length === 0) {
-    return (
-      <LoadingState
-        title="Loading payments"
-        message="Fetching canonical payment data from Supabase."
-      />
-    );
-  }
+  const isInitialPaymentsLoading = paymentsLoading && payments.length === 0;
 
   const filteredPayments = payments.filter(p => {
     if (activeTab === 'all') return true;
@@ -296,6 +288,15 @@ export default function Payments() {
     setActionMessage(result.message || 'Refund request persisted.');
     refetch();
   };
+
+  if (isInitialPaymentsLoading) {
+    return (
+      <LoadingState
+        title="Loading payments"
+        message="Fetching canonical payment data from Supabase."
+      />
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">

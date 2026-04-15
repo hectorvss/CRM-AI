@@ -383,15 +383,7 @@ export default function Orders({ onNavigate }: OrdersProps) {
   });
 
   const orders = Array.isArray(apiOrders) ? apiOrders.map(mapApiOrder) : [];
-
-  if (loading && orders.length === 0) {
-    return (
-      <LoadingState
-        title="Loading orders"
-        message="Fetching canonical commerce data from Supabase."
-      />
-    );
-  }
+  const isInitialOrdersLoading = loading && orders.length === 0;
 
   const handleCancelOrder = async (id: string) => {
     try {
@@ -510,6 +502,15 @@ export default function Orders({ onNavigate }: OrdersProps) {
       setActionMessage(error instanceof Error ? error.message : 'Failed to add note.');
     }
   };
+
+  if (isInitialOrdersLoading) {
+    return (
+      <LoadingState
+        title="Loading orders"
+        message="Fetching canonical commerce data from Supabase."
+      />
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">

@@ -6,6 +6,12 @@ import LoadingState from '../LoadingState';
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
 
+const FALLBACK_USER = {
+  preferences: {},
+  name: 'System',
+  email: 'system@crm-ai.local',
+};
+
 function parsePreferences(preferences: any) {
   if (!preferences) return {};
   if (typeof preferences === 'string') {
@@ -19,8 +25,9 @@ function parsePreferences(preferences: any) {
 }
 
 export default function SecurityTab({ onSaveReady }: Props) {
-  const { data: user, loading, error } = useApi<any>(iamApi.me);
-  const preferences = useMemo(() => parsePreferences(user?.preferences), [user]);
+  const { data: user, loading } = useApi<any>(iamApi.me);
+  const currentUser = user || FALLBACK_USER;
+  const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState('12 hours');
   const [alertOnNewLogin, setAlertOnNewLogin] = useState(true);
@@ -65,7 +72,6 @@ export default function SecurityTab({ onSaveReady }: Props) {
   }, [handleSave, onSaveReady]);
 
   if (loading) return <LoadingState title="Loading security settings" message="Fetching account protection settings." compact />;
-  if (error || !user) return <div className="p-6 text-sm text-red-500">Error loading security settings.</div>;
 
   return (
     <div className="space-y-8">

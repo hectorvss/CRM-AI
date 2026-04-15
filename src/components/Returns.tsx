@@ -319,15 +319,7 @@ export default function Returns() {
     () => (Array.isArray(apiReturns) ? apiReturns.map(mapApiReturn) : []),
     [apiReturns],
   );
-
-  if (returnsLoading && returns.length === 0) {
-    return (
-      <LoadingState
-        title="Loading returns"
-        message="Fetching canonical return data from Supabase."
-      />
-    );
-  }
+  const isInitialReturnsLoading = returnsLoading && returns.length === 0;
 
   const filteredReturns = useMemo(() => returns.filter(r => {
     if (activeTab === 'all') return true;
@@ -345,6 +337,15 @@ export default function Returns() {
       setSelectedId(filteredReturns[0].id);
     }
   }, [activeTab, filteredReturns, selectedId]);
+
+  if (isInitialReturnsLoading) {
+    return (
+      <LoadingState
+        title="Loading returns"
+        message="Fetching canonical return data from Supabase."
+      />
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">

@@ -332,15 +332,6 @@ export default function Customers({ onNavigate }: CustomersProps) {
 
   const isSelectedCustomerLoading = Boolean(selectedCustomerId && customerStateLoading && !apiSelectedState);
 
-  if (customersLoading && customers.length === 0) {
-    return (
-      <LoadingState
-        title="Loading customers"
-        message="Fetching canonical customer profiles from Supabase."
-      />
-    );
-  }
-
   const visibleCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return customers;
@@ -1243,32 +1234,41 @@ export default function Customers({ onNavigate }: CustomersProps) {
     );
   };
 
+  if (customersLoading && customers.length === 0) {
+    return (
+      <LoadingState
+        title="Loading customers"
+        message="Fetching canonical customer profiles from Supabase."
+      />
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
         <AnimatePresence mode="wait">
-        {selectedCustomerId ? (
-          <motion.div
-            key="profile"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
-            {renderProfileView()}
-          </motion.div>
-        ) : (
-          <motion.div
-            key="list"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
-            {renderListView()}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          {selectedCustomerId ? (
+            <motion.div
+              key="profile"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              {renderProfileView()}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="list"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              {renderListView()}
+            </motion.div>
+          )}
+        </AnimatePresence>
       <AnimatePresence>
         {isCreateCustomerOpen && (
           <motion.div
