@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { workflowsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import type { Page } from '../types';
+import LoadingState from './LoadingState';
 
 type WorkflowView = 'list' | 'builder' | 'new';
 type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
@@ -191,7 +192,7 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
   const filters = ['All', 'Orders', 'Refunds', 'Returns', 'Approvals', 'Conflicts', 'Escalations'];
 
   // Fetch from API, fallback to static
-  const { data: apiWorkflows, error: workflowsError } = useApi(() => workflowsApi.list(), [], []);
+  const { data: apiWorkflows, loading: workflowsLoading, error: workflowsError } = useApi(() => workflowsApi.list(), [], []);
   const createWorkflow = useMutation((payload: Record<string, any>) => workflowsApi.create(payload));
   const updateWorkflow = useMutation((payload: { id: string; body: Record<string, any> }) => workflowsApi.update(payload.id, payload.body));
   const publishWorkflow = useMutation((id: string) => workflowsApi.publish(id));
@@ -213,7 +214,11 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
     statusMessage: w.health_message || undefined,
   });
 
-  const workflows = (apiWorkflows && apiWorkflows.length > 0) ? apiWorkflows.map(mapApiWorkflow) : mockWorkflows;
+  const workflows = Array.isArray(apiWorkflows) ? apiWorkflows.map(mapApiWorkflow) : [];
+
+  if (workflowsLoading && workflows.length === 0) {
+    return <LoadingState title="Loading workflows" message="Fetching live workflow definitions from Supabase." />;
+  }
 
   const handleWorkflowClick = (wf: Workflow) => {
     setActionMessage(null);

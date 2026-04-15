@@ -350,24 +350,13 @@ async function findCaseByLinkedEntitySupabase(scope: CanonicalScope, entityType:
     .select('id, case_number, type, status, customer_id, conversation_id')
     .eq('tenant_id', scope.tenantId)
     .eq('workspace_id', scope.workspaceId)
-    .filter(column, 'cs', `{"${entityId}"}`) // Assuming jsonb array contains
+    .contains(column, [entityId])
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    // try literal filter if it's text[]
-    const { data: data2, error: error2 } = await supabase
-      .from('cases')
-      .select('id, case_number, type, status, customer_id, conversation_id')
-      .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId)
-      .contains(column, [entityId])
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error2) throw error2;
-    return data2;
+    throw error;
   }
   return data;
 }

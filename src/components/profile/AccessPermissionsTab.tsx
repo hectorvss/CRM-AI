@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 const DOMAINS = [
   ['Inbox', 'inbox.read'],
@@ -26,7 +27,7 @@ export default function AccessPermissionsTab() {
   const rolePermissions = Array.isArray(role?.permissions) ? role.permissions : [];
   const permissions = useMemo(() => new Set<string>(user?.context?.permissions || rolePermissions || []), [rolePermissions, user?.context?.permissions]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading access permissions...</div>;
+  if (loading) return <LoadingState title="Loading access permissions" message="Checking your live role membership and access matrix." compact />;
   if (error || !user) return <div className="p-6 text-sm text-red-500">Error loading access permissions.</div>;
 
   const currentRoleName = role?.name || user?.memberships?.[0]?.role_name || user?.role || 'Unknown';

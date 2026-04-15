@@ -43,7 +43,7 @@ router.get('/current/context', async (req: MultiTenantRequest, res) => {
 // Get workspace details by ID
 router.get('/:id', async (req: MultiTenantRequest, res) => {
   try {
-    const workspace = await workspaceRepository.getById(req.params.id);
+    const workspace = await workspaceRepository.getById(req.params.id, req.tenantId);
     if (!workspace) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
     res.json(workspace);
   } catch (error) {
@@ -67,8 +67,9 @@ router.patch('/:id/settings', requirePermission('settings.write'), async (req: M
     const existing = await workspaceRepository.getById(req.params.id, req.tenantId);
     if (!existing) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
 
-    await workspaceRepository.updateSettings(req.params.id, settings);
-    const updated = await workspaceRepository.getById(req.params.id);
+    const resolvedWorkspaceId = existing.id || req.params.id;
+    await workspaceRepository.updateSettings(resolvedWorkspaceId, settings);
+    const updated = await workspaceRepository.getById(resolvedWorkspaceId, req.tenantId);
     res.json(updated);
   } catch (error) {
     console.error('Error updating workspace settings:', error);
@@ -86,7 +87,7 @@ router.get('/:id/members', requirePermission('members.read'), async (req: MultiT
     const workspace = await workspaceRepository.getById(req.params.id, req.tenantId);
     if (!workspace) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
 
-    const members = await iamRepository.listWorkspaceMembers(req.tenantId, req.params.id);
+    const members = await iamRepository.listWorkspaceMembers(req.tenantId, workspace.id || req.params.id);
     res.json(members);
   } catch (error) {
     console.error('Error fetching workspace members:', error);
@@ -104,8 +105,9 @@ router.get('/:id/feature-flags', async (req: MultiTenantRequest, res) => {
     const workspace = await workspaceRepository.getById(req.params.id, req.tenantId);
     if (!workspace) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
 
-    const flags = await workspaceRepository.listFeatureFlags(req.tenantId, req.params.id);
-    res.json({ workspace_id: req.params.id, plan_id: workspace.plan_id, flags });
+    const resolvedWorkspaceId = workspace.id || req.params.id;
+    const flags = await workspaceRepository.listFeatureFlags(req.tenantId, resolvedWorkspaceId);
+    res.json({ workspace_id: resolvedWorkspaceId, plan_id: workspace.plan_id, flags });
   } catch (error) {
     console.error('Error fetching workspace feature flags:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
@@ -127,16 +129,17 @@ router.patch('/:id/feature-flags/:featureKey', requirePermission('settings.write
   try {
     const workspace = await workspaceRepository.getById(req.params.id, req.tenantId);
     if (!workspace) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
+    const resolvedWorkspaceId = workspace.id || req.params.id;
 
     await workspaceRepository.updateFeatureFlag({
       tenantId: req.tenantId,
-      workspaceId: req.params.id,
+      workspaceId: resolvedWorkspaceId,
       featureKey,
       isEnabled: is_enabled,
       userId: req.userId
     });
 
-    const flags = await workspaceRepository.listFeatureFlags(req.tenantId, req.params.id);
+    const flags = await workspaceRepository.listFeatureFlags(req.tenantId, resolvedWorkspaceId);
     const updated = flags.find(f => f.feature_key === featureKey);
     res.json(updated);
   } catch (error) {

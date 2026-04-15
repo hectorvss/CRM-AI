@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
@@ -88,7 +89,7 @@ export default function NotificationsTab({ onSaveReady }: Props) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading notification settings...</div>;
+  if (loading) return <LoadingState title="Loading notification settings" message="Fetching your workspace notification preferences." compact />;
   if (error) return <div className="p-6 text-sm text-red-500">Error loading notification settings.</div>;
 
   return (

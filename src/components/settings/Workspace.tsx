@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi, workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 
@@ -103,9 +104,7 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (loading) {
-    return <div className="p-6 text-sm text-gray-500">Loading workspace data...</div>;
-  }
+  if (loading) return <LoadingState title="Loading workspace data" message="Fetching workspace settings and profile data." compact />;
 
   return (
     <div className="space-y-8">

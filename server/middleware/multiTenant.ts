@@ -99,7 +99,7 @@ export async function resolveTenantWorkspaceContext(
 ): Promise<ResolvedTenantContext> {
   const workspaceRepo = createWorkspaceRepository();
 
-  if (tenantId && workspaceId) {
+  if (tenantId && workspaceId && workspaceId !== 'ws_default') {
     return {
       tenantId,
       workspaceId,
@@ -108,6 +108,17 @@ export async function resolveTenantWorkspaceContext(
   }
 
   try {
+    if (tenantId && workspaceId === 'ws_default') {
+      const workspace = await workspaceRepo.getById(workspaceId, tenantId);
+      if (workspace) {
+        return {
+          tenantId: workspace.org_id || tenantId,
+          workspaceId: workspace.id,
+          userId: userId || 'system',
+        };
+      }
+    }
+
     if (tenantId && !workspaceId) {
       const matchingWorkspace = await workspaceRepo.findByOrg(tenantId);
       if (matchingWorkspace) {

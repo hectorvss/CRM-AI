@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 
@@ -47,13 +48,9 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (loading) {
-    return <div className="p-6 text-sm text-gray-500">Loading profile data...</div>;
-  }
+  if (loading) return <LoadingState title="Loading profile data" message="Fetching your account details and memberships." compact />;
 
-  if (error || !user) {
-    return <div className="p-6 text-sm text-red-500">Error loading profile data.</div>;
-  }
+  if (error || !user) return <div className="p-6 text-sm text-red-500">Error loading profile data.</div>;
 
   return (
     <div className="space-y-8">

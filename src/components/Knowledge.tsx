@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { mockArticleDetails } from './KnowledgeData';
 import { knowledgeApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
+import LoadingState from './LoadingState';
 
 type KnowledgeTab = 'library' | 'gaps' | 'test';
 
@@ -92,8 +93,8 @@ export default function Knowledge() {
   const [draftType, setDraftType] = useState<KnowledgeItem['type']>('ARTICLE');
   const [draftStatus, setDraftStatus] = useState<'Published' | 'Draft'>('Draft');
 
-  const { data: apiArticles, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
-  const { data: selectedArticle, refetch: refetchSelectedArticle } = useApi(
+  const { data: apiArticles, loading: articlesLoading, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const { data: selectedArticle, loading: selectedArticleLoading, refetch: refetchSelectedArticle } = useApi(
     () => (selectedArticleId ? knowledgeApi.getArticle(selectedArticleId) : Promise.resolve(null)),
     [selectedArticleId],
     null,
@@ -117,7 +118,7 @@ export default function Knowledge() {
     health: a.health === 'stale' ? 'Stale' : 'OK',
   });
 
-  const library = (apiArticles && apiArticles.length > 0) ? apiArticles.map(mapApiArticle) : mockLibrary;
+  const library = Array.isArray(apiArticles) ? apiArticles.map(mapApiArticle) : [];
   const selectedMockArticle = selectedArticleId ? mockArticleDetails[selectedArticleId] : null;
 
   const toArray = <T,>(value: unknown, fallback: T[] = []): T[] => (
@@ -145,14 +146,23 @@ export default function Knowledge() {
     }
   }, [editorMode, editorOpen, selectedArticle, selectedMockArticle]);
 
+  useEffect(() => {
+    if (!selectedArticleId && library.length > 0) {
+      setSelectedArticleId(library[0].id);
+    }
+  }, [library, selectedArticleId]);
+
+  if (articlesLoading || (selectedArticleId && selectedArticleLoading && !selectedArticle)) {
+    return <LoadingState title="Loading knowledge" message="Fetching live knowledge articles from Supabase." />;
+  }
+
   const articleData = selectedArticle
     ? {
-        ...(selectedMockArticle ?? {}),
         id: selectedArticle.id,
-        title: selectedArticle.title || selectedMockArticle?.title || 'Untitled',
-        type: ((selectedArticle.type || selectedMockArticle?.type || 'article').toString().toUpperCase()),
-        owner: selectedArticle.owner_name || selectedMockArticle?.owner || 'Unknown',
-        ownerInitials: (selectedArticle.owner_name || selectedMockArticle?.owner || 'UN')
+        title: selectedArticle.title || 'Untitled',
+        type: (selectedArticle.type || 'article').toString().toUpperCase(),
+        owner: selectedArticle.owner_name || 'Unknown',
+        ownerInitials: (selectedArticle.owner_name || 'UN')
           .split(' ')
           .map((n: string) => n[0])
           .join('')
@@ -160,25 +170,25 @@ export default function Knowledge() {
           .toUpperCase(),
         lastUpdated: selectedArticle.updated_at
           ? new Date(selectedArticle.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          : selectedMockArticle?.lastUpdated || '-',
-        domain: selectedArticle.domain_name || selectedMockArticle?.domain || 'General',
-        scope: selectedArticle.status === 'published' ? 'Published' : (selectedMockArticle?.scope || 'Draft'),
-        reviewOwner: selectedMockArticle?.reviewOwner || selectedArticle.owner_name || 'Unknown',
-        purpose: selectedMockArticle?.purpose || selectedArticle.content?.slice?.(0, 220) || '',
+          : '-',
+        domain: selectedArticle.domain_name || 'General',
+        scope: selectedArticle.status === 'published' ? 'Published' : 'Draft',
+        reviewOwner: selectedArticle.owner_name || 'Unknown',
+        purpose: selectedArticle.content?.slice?.(0, 220) || '',
         content: typeof selectedArticle.content === 'string'
           ? <p className="whitespace-pre-wrap">{selectedArticle.content}</p>
-          : selectedMockArticle?.content || <p className="whitespace-pre-wrap">{String(selectedArticle.content ?? '')}</p>,
-        aiCitationPreview: selectedMockArticle?.aiCitationPreview ?? {
+          : <p className="whitespace-pre-wrap">{String(selectedArticle.content ?? '')}</p>,
+        aiCitationPreview: {
           text: selectedArticle.content?.slice?.(0, 180) || '',
           sources: [selectedArticle.title || 'Knowledge article'],
         },
-        aiPerformance: toArray(selectedMockArticle?.aiPerformance, []),
-        linkedWorkflows: toArray(selectedMockArticle?.linkedWorkflows, []),
-        linkedApprovals: toArray(selectedMockArticle?.linkedApprovals, []),
-        linkedModules: toArray(selectedMockArticle?.linkedModules, []),
-        gaps: toArray(selectedMockArticle?.gaps, []),
+        aiPerformance: [],
+        linkedWorkflows: [],
+        linkedApprovals: [],
+        linkedModules: [],
+        gaps: [],
       }
-    : selectedMockArticle;
+    : null;
 
   const openCreateEditor = () => {
     setEditorMode('create');

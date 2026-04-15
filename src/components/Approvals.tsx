@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import CaseHeader from './CaseHeader';
 import { approvalsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
+import LoadingState from './LoadingState';
 
 type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
@@ -181,7 +182,7 @@ export default function Approvals() {
   const [filter, setFilter] = useState<ApprovalStatus>('pending');
 
   // Fetch from API, fallback to static
-  const { data: apiApprovals, refetch } = useApi(() => approvalsApi.list(), [], []);
+  const { data: apiApprovals, loading: approvalsLoading, refetch } = useApi(() => approvalsApi.list(), [], []);
   
   const { mutate: decide, loading: deciding } = useMutation(
     ({ id, decision, note, decided_by }: { id: string, decision: 'approved' | 'rejected', note?: string, decided_by?: string }) => 
@@ -221,9 +222,11 @@ export default function Approvals() {
     avatarColor: a.risk_level === 'high' ? 'red' : a.risk_level === 'medium' ? 'orange' : 'blue',
   });
 
-  const approvals = (apiApprovals && apiApprovals.length > 0)
-    ? apiApprovals.map(mapApiApproval)
-    : mockApprovals;
+  const approvals = Array.isArray(apiApprovals) ? apiApprovals.map(mapApiApproval) : [];
+
+  if (approvalsLoading && approvals.length === 0) {
+    return <LoadingState title="Loading approvals" message="Fetching live approval requests from Supabase." />;
+  }
 
   const selectedItem = approvals.find(item => item.id === selectedId);
 

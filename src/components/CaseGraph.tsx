@@ -5,6 +5,7 @@ import TreeGraph from './TreeGraph';
 import { casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import type { GraphBranch } from './TreeGraph';
+import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
 type ResolveTab = 'overview' | 'identifiers' | 'policy' | 'execution';
@@ -59,7 +60,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const [resolveTab, setResolveTab] = useState<ResolveTab>('overview');
 
   // ── Fetch case list ──────────────────────────────────────────────
-  const { data: apiCases } = useApi(() => casesApi.list(), [], []);
+  const { data: apiCases, loading: casesLoading } = useApi(() => casesApi.list(), [], []);
   const cases = useMemo(() => (apiCases || []).map((c: any) => ({
     id: c.id,
     orderId: Array.isArray(c.order_ids) && c.order_ids.length > 0 ? c.order_ids[0] : c.case_number,
@@ -87,19 +88,19 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   }, [cases, focusCaseId, selectedId]);
 
   // ── Fetch case graph (branches + timeline) ──────────────────────
-  const { data: graphData } = useApi(
+  const { data: graphData, loading: graphLoading } = useApi(
     () => selectedId ? casesApi.graph(selectedId) : Promise.resolve(null),
     [selectedId]
   );
 
   // ── Fetch case resolve data ─────────────────────────────────────
-  const { data: resolveData } = useApi(
+  const { data: resolveData, loading: resolveLoading } = useApi(
     () => selectedId ? casesApi.resolve(selectedId) : Promise.resolve(null),
     [selectedId]
   );
 
   // ── Fetch case state ────────────────────────────────────────────
-  const { data: stateData } = useApi(
+  const { data: stateData, loading: stateLoading } = useApi(
     () => selectedId ? casesApi.state(selectedId) : Promise.resolve(null),
     [selectedId]
   );
@@ -248,6 +249,13 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
           {/* ── Left Panel: Case List ────────────────────────────── */}
           <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
             <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
+              {casesLoading && cases.length === 0 && (
+                <LoadingState
+                  title="Loading cases"
+                  message="Fetching canonical case data from Supabase."
+                  compact
+                />
+              )}
               {cases.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                   <span className="material-symbols-outlined text-4xl mb-3">inbox</span>
@@ -292,7 +300,13 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
 
             {graphView === 'tree' ? (
               <div className="flex-1 flex items-center justify-center relative bg-white dark:bg-card-dark">
-                {branches.length > 0 ? (
+                {(graphLoading || resolveLoading || stateLoading) && !graphData && !resolveData && !stateData ? (
+                  <LoadingState
+                    title="Loading case graph"
+                    message="Fetching live graph, resolve and state data."
+                    compact
+                  />
+                ) : branches.length > 0 ? (
                   <TreeGraph onNavigate={onPageChange} branches={branches} rootData={rootData} />
                 ) : (
                   <div className="flex flex-col items-center justify-center text-gray-400">
@@ -305,6 +319,14 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
               </div>
             ) : graphView === 'timeline' ? (
               <div className="flex-1 overflow-y-auto custom-scrollbar p-8 pt-20 relative bg-[#F8F9FA] dark:bg-card-dark">
+                {(graphLoading || resolveLoading || stateLoading) && timeline.length === 0 ? (
+                  <LoadingState
+                    title="Loading timeline"
+                    message="Fetching case history from Supabase."
+                    compact
+                  />
+                ) : (
+                  <>
                 {timeline.length > 0 && (
                   <div className="absolute left-[31px] top-24 bottom-6 w-0.5 bg-gray-200 dark:bg-gray-700"></div>
                 )}
@@ -337,10 +359,19 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                     </div>
                   ))}
                 </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto custom-scrollbar p-8 pt-20 relative bg-[#F8F9FA] dark:bg-card-dark">
-                <div className="space-y-6">
+                {(graphLoading || resolveLoading || stateLoading) && !resolveData && !stateData ? (
+                  <LoadingState
+                    title="Loading resolve view"
+                    message="Fetching conflict, policy and execution context from Supabase."
+                    compact
+                  />
+                ) : (
+                  <div className="space-y-6">
                   <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
                     <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{caseResolve?.conflict?.title || 'Resolve Case'}</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{caseResolve?.conflict?.summary || 'No active blocker registered.'}</p>
@@ -448,7 +479,8 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                       </div>
                     </div>
                   )}
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

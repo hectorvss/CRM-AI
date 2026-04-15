@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SubTab = 'members' | 'teams' | 'roles' | 'templates' | 'audit';
 type SaveHandler = (() => Promise<void> | void) | null;
@@ -146,7 +147,7 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
     }
   };
 
-  if (membersLoading || rolesLoading) return <div className="p-6 text-sm text-gray-500">Loading members and roles...</div>;
+  if (membersLoading || rolesLoading) return <LoadingState title="Loading members and roles" message="Synchronizing workspace IAM data." compact />;
   if (membersError || rolesError) return <div className="p-6 text-sm text-red-500">Error loading members or roles.</div>;
 
   return (

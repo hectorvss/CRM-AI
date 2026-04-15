@@ -1025,7 +1025,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                     handleSubmit();
                   }
                 }}
-                className="w-full bg-transparent border-0 focus:ring-0 text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2"
+                className="w-full bg-transparent border-0 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 shadow-none focus:shadow-none text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2 appearance-none"
                 placeholder={composeMode === 'reply' ? `Write your reply to ${selectedConv.contactName}...` : `Write an internal note for ${selectedConv.contactName}...`}
               ></textarea>
               <div className="flex justify-between items-center px-2 pt-1">
@@ -1039,7 +1039,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                     onClick={handleSubmit}
                     disabled={isSubmitting || !composerText.trim()}
                     className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-                      composeMode === 'reply' && selectedConv.channel === 'email' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-black dark:bg-white text-white dark:text-black hover:opacity-90'
+                      composeMode === 'reply' && selectedConv.channel === 'email' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-indigo-600 text-white hover:bg-indigo-700'
                     }`}
                   >
                     {isSubmitting ? 'Sending...' : composeMode === 'reply' ? 'Send' : 'Save note'}

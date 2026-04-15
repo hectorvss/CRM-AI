@@ -321,17 +321,34 @@ class SupabaseIAMRepository implements IAMRepository {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('members')
-      .select('*, users(email, name, avatar_url), roles(name)')
+      .select('*, users(email, name, avatar_url)')
       .eq('tenant_id', tenantId)
       .eq('workspace_id', workspaceId)
       .order('joined_at', { ascending: false });
     if (error) throw error;
+
+    const roleIds = [...new Set((data || []).map((member: any) => member.role_id).filter((roleId: unknown): roleId is string => typeof roleId === 'string' && roleId.length > 0))];
+    const roleMap = new Map<string, string>();
+
+    if (roleIds.length > 0) {
+      const { data: roles, error: roleError } = await supabase
+        .from('roles')
+        .select('id, name')
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .in('id', roleIds);
+      if (roleError) throw roleError;
+      (roles || []).forEach((role: any) => {
+        roleMap.set(role.id, role.name);
+      });
+    }
+
     return (data || []).map(m => ({
       ...m,
       email: m.users?.email,
       name: m.users?.name,
       avatar_url: m.users?.avatar_url,
-      role_name: m.roles?.name
+      role_name: roleMap.get(m.role_id) || m.role_id || 'Unknown'
     }));
   }
 

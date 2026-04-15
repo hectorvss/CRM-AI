@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { billingApi, workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
@@ -85,7 +86,7 @@ export default function BillingUsageTab({ onSaveReady }: Props) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (workspaceLoading) return <div className="p-6 text-sm text-gray-500">Loading billing usage...</div>;
+  if (workspaceLoading) return <LoadingState title="Loading billing usage" message="Fetching plan, seats and ledger data." compact />;
   if (workspaceError) return <div className="p-6 text-sm text-red-500">Error loading billing usage.</div>;
 
   const seatsIncluded = subscription?.seats_included ?? 3;
