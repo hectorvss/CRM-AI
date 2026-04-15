@@ -63,7 +63,10 @@ function buildOrderTab(row: any): string {
 
 async function enrichOrder(row: any, tenantId: string, workspaceId: string): Promise<any> {
   const parsed = parseRow(row) as any;
-  const context = await getOrderCanonicalContext(parsed.id, tenantId, workspaceId);
+  const context = await getOrderCanonicalContext(parsed.id, tenantId, workspaceId).catch(error => {
+    console.warn('[commerce] order canonical context fallback', { orderId: parsed.id, error });
+    return null;
+  });
   const caseState = context?.case_state;
   const systems = caseState?.systems;
   const primaryPayment = caseState?.related.payments?.[0];
@@ -146,7 +149,10 @@ function buildPaymentTab(row: any): string {
 
 async function enrichPayment(row: any, tenantId: string, workspaceId: string): Promise<any> {
   const parsed = parseRow(row) as any;
-  const context = await getPaymentCanonicalContext(parsed.id, tenantId, workspaceId);
+  const context = await getPaymentCanonicalContext(parsed.id, tenantId, workspaceId).catch(error => {
+    console.warn('[commerce] payment canonical context fallback', { paymentId: parsed.id, error });
+    return null;
+  });
   const caseState = context?.case_state;
   const systems = caseState?.systems;
   const primaryReturn = caseState?.related.returns?.[0];
@@ -217,7 +223,10 @@ function buildReturnTab(row: any): string {
 
 async function enrichReturn(row: any, tenantId: string, workspaceId: string): Promise<any> {
   const parsed = parseRow(row) as any;
-  const context = await getReturnCanonicalContext(parsed.id, tenantId, workspaceId);
+  const context = await getReturnCanonicalContext(parsed.id, tenantId, workspaceId).catch(error => {
+    console.warn('[commerce] return canonical context fallback', { returnId: parsed.id, error });
+    return null;
+  });
   const caseState = context?.case_state;
   const systems = caseState?.systems;
   const primaryPayment = caseState?.related.payments?.[0];
@@ -304,7 +313,14 @@ async function listOrdersSqlite(scope: CommerceScope, filters: OrderFilters): Pr
   query += ' ORDER BY o.updated_at DESC';
 
   const rows = db.prepare(query).all(...params);
-  return Promise.all(rows.map((row: any) => enrichOrder(row, scope.tenantId, scope.workspaceId)));
+  return Promise.all(rows.map(async (row: any) => {
+    try {
+      return await enrichOrder(row, scope.tenantId, scope.workspaceId);
+    } catch (error) {
+      console.warn('[commerce] order enrichment fallback', { orderId: row?.id, error });
+      return parseRow(row);
+    }
+  }));
 }
 
 async function getOrderSqlite(scope: CommerceScope, orderId: string): Promise<any | null> {
@@ -530,7 +546,14 @@ async function listOrdersSupabase(scope: CommerceScope, filters: OrderFilters): 
     };
   });
 
-  return Promise.all(rows.map((row: any) => enrichOrder(row, scope.tenantId, scope.workspaceId)));
+  return Promise.all(rows.map(async (row: any) => {
+    try {
+      return await enrichOrder(row, scope.tenantId, scope.workspaceId);
+    } catch (error) {
+      console.warn('[commerce] order enrichment fallback', { orderId: row?.id, error });
+      return parseRow(row);
+    }
+  }));
 }
 
 async function getOrderSupabase(scope: CommerceScope, orderId: string): Promise<any | null> {
@@ -554,26 +577,31 @@ async function getOrderSupabase(scope: CommerceScope, orderId: string): Promise<
     customer_email: customer?.canonical_email ?? null,
   };
 
-  const context = await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId);
+  const context = await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId).catch(error => {
+    console.warn('[commerce] order detail canonical context fallback', { orderId, error });
+    return null;
+  });
 
   const [eventsResult, casesResult] = await Promise.all([
     supabase
       .from('order_events')
       .select('*')
       .eq('order_id', orderId)
-      .order('time', { ascending: true }),
+      .order('time', { ascending: true })
+      .catch(error => ({ data: [], error })),
     supabase
       .from('cases')
       .select('id, case_number, status, type')
       .like('order_ids', `%${orderId}%`)
       .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId),
+      .eq('workspace_id', scope.workspaceId)
+      .catch(error => ({ data: [], error })),
   ]);
 
-  if (eventsResult.error) throw eventsResult.error;
-  if (casesResult.error) throw casesResult.error;
-
-  const enriched = await enrichOrder(flatOrder, scope.tenantId, scope.workspaceId);
+  const enriched = await enrichOrder(flatOrder, scope.tenantId, scope.workspaceId).catch(error => {
+    console.warn('[commerce] order detail enrichment fallback', { orderId, error });
+    return flatOrder;
+  });
   return {
     ...enriched,
     events: context?.case_state
@@ -631,7 +659,14 @@ async function listPaymentsSupabase(scope: CommerceScope, filters: PaymentFilter
     };
   });
 
-  return Promise.all(rows.map((row: any) => enrichPayment(row, scope.tenantId, scope.workspaceId)));
+  return Promise.all(rows.map(async (row: any) => {
+    try {
+      return await enrichPayment(row, scope.tenantId, scope.workspaceId);
+    } catch (error) {
+      console.warn('[commerce] payment enrichment fallback', { paymentId: row?.id, error });
+      return parseRow(row);
+    }
+  }));
 }
 
 async function getPaymentSupabase(scope: CommerceScope, paymentId: string): Promise<any | null> {
@@ -656,8 +691,13 @@ async function getPaymentSupabase(scope: CommerceScope, paymentId: string): Prom
   };
 
   const context = await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId);
+  const enriched = await enrichPayment(flatPayment, scope.tenantId, scope.workspaceId).catch(error => {
+    console.warn('[commerce] payment detail enrichment fallback', { paymentId, error });
+    return flatPayment;
+  });
+
   return {
-    ...(await enrichPayment(flatPayment, scope.tenantId, scope.workspaceId)),
+    ...enriched,
     canonical_context: context,
   };
 }
@@ -705,7 +745,14 @@ async function listReturnsSupabase(scope: CommerceScope, filters: ReturnFilters)
     };
   });
 
-  return Promise.all(rows.map((row: any) => enrichReturn(row, scope.tenantId, scope.workspaceId)));
+  return Promise.all(rows.map(async (row: any) => {
+    try {
+      return await enrichReturn(row, scope.tenantId, scope.workspaceId);
+    } catch (error) {
+      console.warn('[commerce] return enrichment fallback', { returnId: row?.id, error });
+      return parseRow(row);
+    }
+  }));
 }
 
 async function getReturnSupabase(scope: CommerceScope, returnId: string): Promise<any | null> {
@@ -738,7 +785,10 @@ async function getReturnSupabase(scope: CommerceScope, returnId: string): Promis
 
   if (eventsError) throw eventsError;
 
-  const enriched = await enrichReturn(flatReturn, scope.tenantId, scope.workspaceId);
+  const enriched = await enrichReturn(flatReturn, scope.tenantId, scope.workspaceId).catch(error => {
+    console.warn('[commerce] return detail enrichment fallback', { returnId, error });
+    return flatReturn;
+  });
   return {
     ...enriched,
     events: context?.case_state

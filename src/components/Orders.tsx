@@ -3,6 +3,7 @@ import { Order, OrderTab } from '../types';
 import CaseHeader from './CaseHeader';
 import { casesApi, ordersApi, paymentsApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import LoadingState from './LoadingState';
 import type { Page } from '../types';
 
 type RightTab = 'details' | 'copilot';
@@ -28,6 +29,7 @@ const formatRelativeLabel = (value?: string | null) => {
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ORDERS: Order[] = [
   {
     id: '1',
@@ -380,9 +382,16 @@ export default function Orders({ onNavigate }: OrdersProps) {
     }))
   });
 
-  // Use API orders if available, otherwise fall back to static
-  const rawOrders = (apiOrders && apiOrders.length > 0) ? apiOrders.map(mapApiOrder) : ORDERS;
-  const orders = rawOrders;
+  const orders = Array.isArray(apiOrders) ? apiOrders.map(mapApiOrder) : [];
+
+  if (loading && orders.length === 0) {
+    return (
+      <LoadingState
+        title="Loading orders"
+        message="Fetching canonical commerce data from Supabase."
+      />
+    );
+  }
 
   const handleCancelOrder = async (id: string) => {
     try {

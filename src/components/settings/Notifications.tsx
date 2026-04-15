@@ -6,6 +6,13 @@ import LoadingState from '../LoadingState';
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
 
+const fallbackWorkspace = {
+  id: 'ws_default',
+  name: 'CRM AI Workspace',
+  slug: 'crm-ai',
+  settings: {},
+};
+
 function parseSettings(settings: any) {
   if (!settings) return {};
   if (typeof settings === 'string') {
@@ -15,9 +22,9 @@ function parseSettings(settings: any) {
 }
 
 export default function NotificationsTab({ onSaveReady }: Props) {
-  const { data: workspaces, loading, error } = useApi<any[]>(workspacesApi.list);
-  const workspace = workspaces?.[0] || null;
-  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace]);
+  const { data: workspace, loading, error } = useApi<any>(workspacesApi.currentContext);
+  const workspaceRecord = workspace || fallbackWorkspace;
+  const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [inAppNotifications, setInAppNotifications] = useState(true);
   const [approvalRequests, setApprovalRequests] = useState(true);
@@ -51,7 +58,10 @@ export default function NotificationsTab({ onSaveReady }: Props) {
   }, [workspaceSettings]);
 
   const handleSave = useCallback(async () => {
-    if (!workspace?.id) throw new Error('Workspace not loaded');
+    if (!workspace?.id) {
+      setStatusMessage('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
     setIsSaving(true);
     setStatusMessage(null);
     try {
@@ -90,10 +100,14 @@ export default function NotificationsTab({ onSaveReady }: Props) {
   }, [handleSave, onSaveReady]);
 
   if (loading) return <LoadingState title="Loading notification settings" message="Fetching your workspace notification preferences." compact />;
-  if (error) return <div className="p-6 text-sm text-red-500">Error loading notification settings.</div>;
 
   return (
     <div className="space-y-8">
+      {error && (
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/30 dark:bg-amber-900/15 dark:text-amber-300">
+          Workspace context is still settling. Showing safe local defaults until Supabase responds.
+        </div>
+      )}
       {statusMessage && <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">{statusMessage}</div>}
 
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">

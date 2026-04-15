@@ -3,6 +3,7 @@ import { Return, ReturnTab, OrderTimelineEvent } from '../types';
 import CaseHeader from './CaseHeader';
 import { returnsApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
 
@@ -22,6 +23,7 @@ const formatRelativeLabel = (value?: string | null) => {
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const RETURNS: Return[] = [
   {
     id: '1',
@@ -261,7 +263,7 @@ export default function Returns() {
 
   // Fetch canonical return contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
-  const { data: apiReturns, error: returnsError } = useApi(() => returnsApi.list(), [], []);
+  const { data: apiReturns, loading: returnsLoading, error: returnsError } = useApi(() => returnsApi.list(), [], []);
 
   const mapApiReturn = (r: any): Return => ({
     id: r.id,
@@ -314,9 +316,18 @@ export default function Returns() {
   });
 
   const returns = useMemo(
-    () => (apiReturns && apiReturns.length > 0) ? apiReturns.map(mapApiReturn) : [],
+    () => (Array.isArray(apiReturns) ? apiReturns.map(mapApiReturn) : []),
     [apiReturns],
   );
+
+  if (returnsLoading && returns.length === 0) {
+    return (
+      <LoadingState
+        title="Loading returns"
+        message="Fetching canonical return data from Supabase."
+      />
+    );
+  }
 
   const filteredReturns = useMemo(() => returns.filter(r => {
     if (activeTab === 'all') return true;

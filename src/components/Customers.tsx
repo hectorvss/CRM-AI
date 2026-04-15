@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { customersApi, paymentsApi, policyApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import LoadingState from './LoadingState';
 import type { Page } from '../types';
 
 type CustomerTab = 'all_activity' | 'conversations' | 'orders' | 'system_logs';
@@ -132,6 +133,7 @@ function normalizeReconciliation(raw?: any): NonNullable<Customer['reconciliatio
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mockCustomers: Customer[] = [
   {
     id: 'C-101',
@@ -267,8 +269,8 @@ export default function Customers({ onNavigate }: CustomersProps) {
 
   // Fetch canonical customers from the backend. The visual mock list is kept
   // only as historical reference data, never as runtime source.
-  const { data: apiCustomers, error: customersError } = useApi(() => customersApi.list(), [], []);
-  const { data: apiSelectedState, error: customerStateError } = useApi(
+  const { data: apiCustomers, loading: customersLoading, error: customersError } = useApi(() => customersApi.list(), [], []);
+  const { data: apiSelectedState, loading: customerStateLoading, error: customerStateError } = useApi(
     () => selectedCustomerId ? customersApi.state(selectedCustomerId) : Promise.resolve(null),
     [selectedCustomerId]
   );
@@ -327,6 +329,17 @@ export default function Customers({ onNavigate }: CustomersProps) {
     }
     return [];
   }, [apiCustomers]);
+
+  const isSelectedCustomerLoading = Boolean(selectedCustomerId && customerStateLoading && !apiSelectedState);
+
+  if (customersLoading && customers.length === 0) {
+    return (
+      <LoadingState
+        title="Loading customers"
+        message="Fetching canonical customer profiles from Supabase."
+      />
+    );
+  }
 
   const visibleCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -774,6 +787,14 @@ export default function Customers({ onNavigate }: CustomersProps) {
   );
 
   const renderProfileView = () => {
+    if (isSelectedCustomerLoading) {
+      return (
+        <LoadingState
+          title="Loading customer"
+          message="Fetching live customer state from Supabase."
+        />
+      );
+    }
     if (!selectedCustomer) return null;
 
     return (

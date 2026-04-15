@@ -327,9 +327,13 @@ export const workspacesApi = {
   currentContext: () => request<any>('/workspaces/current/context'),
   get: (id: string) => request<any>(`/workspaces/${id}`),
   update: (id: string, payload: Record<string, any>) =>
-    request<any>(`/workspaces/${id}`, {
+    request<any>(`/workspaces/${id}/settings`, {
       method: 'PATCH',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        settings: (payload && typeof payload === 'object' && 'settings' in payload)
+          ? (payload as Record<string, any>).settings
+          : payload,
+      }),
     }),
   updateSettings: (id: string, settings: Record<string, any>) =>
     request<any>(`/workspaces/${id}/settings`, {

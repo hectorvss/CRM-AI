@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Payment, PaymentTab, OrderTimelineEvent } from '../types';
 import { paymentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
+import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
 
@@ -21,6 +22,7 @@ const formatRelativeLabel = (value?: string | null) => {
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const PAYMENTS: Payment[] = [
   {
     id: '1',
@@ -202,7 +204,7 @@ export default function Payments() {
 
   // Fetch canonical payment contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
-  const { data: apiPayments, refetch, error: paymentsError } = useApi(() => paymentsApi.list(), [], []);
+  const { data: apiPayments, loading: paymentsLoading, refetch, error: paymentsError } = useApi(() => paymentsApi.list(), [], []);
   const refundMutation = useMutation<{ id: string; amount?: number; reason: string }, any>(
     ({ id, amount, reason }) => paymentsApi.refund(id, { amount, reason }),
   );
@@ -253,7 +255,16 @@ export default function Payments() {
     chargebackAmount: p.chargeback_amount ? `$${p.chargeback_amount}` : undefined,
   });
 
-  const payments = (apiPayments && apiPayments.length > 0) ? apiPayments.map(mapApiPayment) : [];
+  const payments = Array.isArray(apiPayments) ? apiPayments.map(mapApiPayment) : [];
+
+  if (paymentsLoading && payments.length === 0) {
+    return (
+      <LoadingState
+        title="Loading payments"
+        message="Fetching canonical payment data from Supabase."
+      />
+    );
+  }
 
   const filteredPayments = payments.filter(p => {
     if (activeTab === 'all') return true;

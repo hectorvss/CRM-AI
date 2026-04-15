@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { mockArticleDetails } from './KnowledgeData';
 import { knowledgeApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
@@ -20,6 +19,7 @@ interface KnowledgeItem {
   health: 'OK' | 'Stale';
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mockLibrary: KnowledgeItem[] = [
   {
     id: 'KB-1024',
@@ -119,16 +119,13 @@ export default function Knowledge() {
   });
 
   const library = Array.isArray(apiArticles) ? apiArticles.map(mapApiArticle) : [];
-  const selectedMockArticle = selectedArticleId ? mockArticleDetails[selectedArticleId] : null;
-
-  const toArray = <T,>(value: unknown, fallback: T[] = []): T[] => (
-    Array.isArray(value) ? value : fallback
-  );
+  const isInitialLibraryLoading = articlesLoading && library.length === 0;
+  const isSelectedArticleLoading = Boolean(selectedArticleId && selectedArticleLoading && !selectedArticle);
 
   useEffect(() => {
     if (!editorOpen) return;
 
-    const source = selectedArticle ?? selectedMockArticle;
+    const source = selectedArticle;
 
     if (editorMode === 'edit' && source) {
       setDraftTitle(source.title || '');
@@ -144,17 +141,13 @@ export default function Knowledge() {
       setDraftType('ARTICLE');
       setDraftStatus('Draft');
     }
-  }, [editorMode, editorOpen, selectedArticle, selectedMockArticle]);
+  }, [editorMode, editorOpen, selectedArticle]);
 
   useEffect(() => {
     if (!selectedArticleId && library.length > 0) {
       setSelectedArticleId(library[0].id);
     }
   }, [library, selectedArticleId]);
-
-  if (articlesLoading || (selectedArticleId && selectedArticleLoading && !selectedArticle)) {
-    return <LoadingState title="Loading knowledge" message="Fetching live knowledge articles from Supabase." />;
-  }
 
   const articleData = selectedArticle
     ? {
@@ -239,7 +232,16 @@ export default function Knowledge() {
 
   const renderLibrary = () => (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-6">
-      <div className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden flex flex-col relative">
+        {isInitialLibraryLoading && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/75 dark:bg-gray-950/75 backdrop-blur-sm">
+            <LoadingState
+              title="Loading knowledge"
+              message="Fetching live knowledge articles from Supabase."
+              compact
+            />
+          </div>
+        )}
         {/* Header / Search / Filters */}
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-4 bg-gray-50/50 dark:bg-gray-800/20">
           <div className="relative w-64 flex-shrink-0">
@@ -264,7 +266,7 @@ export default function Knowledge() {
             <span className="material-symbols-outlined text-lg">filter_list</span>
           </button>
         </div>
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto min-h-[420px]">
           <table className="w-full border-collapse">
             <thead className="bg-white dark:bg-card-dark sticky top-0 z-10">
               <tr className="text-left border-b border-gray-100 dark:border-gray-800">
@@ -339,6 +341,13 @@ export default function Knowledge() {
                   </td>
                 </tr>
               ))}
+              {!isInitialLibraryLoading && library.length === 0 && (
+                <tr>
+                  <td className="px-6 py-10 text-sm text-gray-500 dark:text-gray-400" colSpan={7}>
+                    No knowledge articles found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -347,7 +356,20 @@ export default function Knowledge() {
   );
 
   const renderArticleDetail = () => {
-    if (!articleData) return null;
+    if (isSelectedArticleLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center px-8 py-12 bg-white dark:bg-background-dark">
+          <LoadingState
+            title="Loading article"
+            message="Fetching live article content from Supabase."
+          />
+        </div>
+      );
+    }
+
+    if (!articleData) {
+      return null;
+    }
 
     return (
       <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-background-dark">

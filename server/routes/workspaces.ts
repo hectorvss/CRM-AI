@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import { sendError } from '../http/errors.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
@@ -53,7 +53,7 @@ router.get('/:id', async (req: MultiTenantRequest, res) => {
 });
 
 // Update workspace settings
-router.patch('/:id/settings', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+async function updateWorkspaceSettingsHandler(req: MultiTenantRequest, res: Response) {
   if (!req.tenantId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant context is missing');
   }
@@ -75,7 +75,10 @@ router.patch('/:id/settings', requirePermission('settings.write'), async (req: M
     console.error('Error updating workspace settings:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
   }
-});
+}
+
+router.patch('/:id/settings', requirePermission('settings.write'), updateWorkspaceSettingsHandler);
+router.patch('/:id', requirePermission('settings.write'), updateWorkspaceSettingsHandler);
 
 // List members for a workspace
 router.get('/:id/members', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
