@@ -1,7 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Conversation, Channel, CaseTab, Message } from '../types';
 import { aiApi, casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
+
+// ── Lightweight emoji picker data ──────────────────────────────────────────
+const EMOJI_GROUPS = [
+  { label: 'Smileys', emojis: ['😊','😄','😂','🤣','😍','🥰','😎','🤔','😅','😬','🙄','😭','😤','😡','🤯','🤗','👍','👎','🙏','✅','❌','⚠️','🔥','💡','📎','🖇️','📷','📧','⏰','🔔'] },
+];
+
+type Attachment = { id: string; name: string; size: number; type: string; dataUrl?: string; file: File };
+
+const COMMON_EMOJIS = ['😊','😄','😂','🤣','😍','🥰','😎','🤔','😅','😬','🙄','😭','😤','😡','🤯','🤗','👍','👎','🙏','✅','❌','⚠️','🔥','💡','❤️','💙','💚','💛','🎉','🎊','📎','🖇️','📷','📧','⏰','🔔','💬','📝','🔗','✍️','📌','🚀','⭐','💎','🏆'];
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 type RightTab = 'details' | 'copilot';
 type ComposeMode = 'reply' | 'internal';
@@ -390,7 +405,13 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const [showCaseSummary, setShowCaseSummary] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const submitLockRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   // Fetch canonical cases from the backend. Static fixtures are no longer used
   // as runtime data, so every visible case comes from the simulated API/DB flow.
@@ -557,6 +578,71 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
     setComposerText('');
   }, [selectedInboxView?.latest_draft?.id, selectedId]);
 
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEmojiPicker]);
+
+  // Reset attachments when switching cases
+  useEffect(() => { setAttachments([]); setShowEmojiPicker(false); }, [selectedId]);
+
+  const handleFilesSelected = useCallback((files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAttachments(prev => [...prev, {
+          id: `att-${Date.now()}-${Math.random()}`,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          dataUrl: file.type.startsWith('image/') ? (e.target?.result as string) : undefined,
+          file,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const removeAttachment = (id: string) => setAttachments(prev => prev.filter(a => a.id !== id));
+
+  const insertEmoji = (emoji: string) => {
+    const el = textareaRef.current;
+    if (!el) { setComposerText(prev => prev + emoji); return; }
+    const start = el.selectionStart ?? composerText.length;
+    const end = el.selectionEnd ?? composerText.length;
+    const next = composerText.slice(0, start) + emoji + composerText.slice(end);
+    setComposerText(next);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + emoji.length, start + emoji.length); });
+    setShowEmojiPicker(false);
+  };
+
+  const applyFormat = (tag: 'bold' | 'italic' | 'link') => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const selected = composerText.slice(start, end);
+    let replacement = '';
+    if (tag === 'bold') replacement = `**${selected || 'bold text'}**`;
+    else if (tag === 'italic') replacement = `_${selected || 'italic text'}_`;
+    else if (tag === 'link') {
+      const url = window.prompt('Enter URL:', 'https://');
+      if (!url) return;
+      replacement = `[${selected || 'link text'}](${url})`;
+    }
+    const next = composerText.slice(0, start) + replacement + composerText.slice(end);
+    setComposerText(next);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + replacement.length, start + replacement.length); });
+  };
+
   const handleApplyDraft = () => {
     const draft = selectedInboxView?.latest_draft?.content;
     if (draft) {
@@ -582,6 +668,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
       ],
     }));
     setComposerText('');
+    setAttachments([]);
     setActionError(null);
 
     // ── Background API call (non-blocking) ────────────────────────────────
@@ -906,11 +993,11 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
 
             {/* Conflict Detection (if any) */}
             {selectedConv.conflictDetected && (
-              <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800/30 rounded-lg p-3 flex items-start gap-3">
-                <span className="material-symbols-outlined text-red-500 text-lg">warning</span>
+              <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-lg p-3 flex items-start gap-3 border-l-4 border-l-red-500 shadow-card">
+                <span className="material-symbols-outlined text-red-500 text-[18px] flex-shrink-0 mt-0.5">warning</span>
                 <div>
-                  <h4 className="text-xs font-bold text-red-800 dark:text-red-400 uppercase tracking-wider mb-1">Conflict Detected</h4>
-                  <p className="text-xs text-red-700 dark:text-red-300">{selectedConv.conflictDetected}</p>
+                  <h4 className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-0.5">Conflict Detected</h4>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{selectedConv.conflictDetected}</p>
                 </div>
               </div>
             )}
@@ -933,17 +1020,17 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
               if (msg.type === 'internal') {
                 return (
                   <div key={msg.id} className="flex space-x-3 my-4">
-                    <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 flex-shrink-0 border border-yellow-200">
+                    <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 flex-shrink-0 border border-gray-200 dark:border-gray-600">
                       <span className="material-symbols-outlined text-sm">lock</span>
                     </div>
                     <div className="space-y-1 max-w-[85%] w-full">
-                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/30 p-3 rounded-xl rounded-tl-none relative">
+                      <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 border-l-4 border-l-amber-400 p-3 rounded-xl rounded-tl-none shadow-card">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-bold text-yellow-800 dark:text-yellow-500 uppercase tracking-wide">Internal Note • {msg.sender}</span>
-                          <span className="text-xs text-yellow-600/70">{msg.time}</span>
+                          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Internal Note · {msg.sender}</span>
+                          <span className="text-xs text-gray-400">{msg.time}</span>
                         </div>
-                        <p className="text-sm text-yellow-900 dark:text-yellow-100 leading-relaxed italic whitespace-pre-wrap break-words">
-                          "{msg.content}"
+                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
+                          {msg.content}
                         </p>
                       </div>
                     </div>
@@ -980,15 +1067,13 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
               return (
                 <div key={msg.id} className={`flex space-x-3 my-4 ${isRight ? 'flex-row-reverse space-x-reverse' : ''}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
-                    isAI ? 'bg-secondary' : isRight ? 'bg-blue-500' : 'bg-pink-500'
+                    isAI ? 'bg-secondary' : isRight ? 'bg-gray-700 dark:bg-gray-600' : 'bg-gray-400 dark:bg-gray-500'
                   }`}>
-                    {isAI ? <span className="material-symbols-outlined text-sm">smart_toy</span> : msg.sender.split(' ').map(n => n[0]).join('')}
+                    {isAI ? <span className="material-symbols-outlined text-sm">smart_toy</span> : msg.sender.split(' ').map((n: string) => n[0]).join('')}
                   </div>
                   <div className={`space-y-1 max-w-[85%] ${isRight ? 'text-right' : ''}`}>
-                    <div className={`p-4 rounded-2xl shadow-card border ${
-                      isRight 
-                        ? "bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800/30 rounded-tr-none" 
-                        : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-tl-none"
+                    <div className={`p-4 rounded-2xl shadow-card border bg-white dark:bg-card-dark border-gray-100 dark:border-gray-700 ${
+                      isRight ? 'rounded-tr-none' : 'rounded-tl-none'
                     }`}>
                       {isAI && <div className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">AI Suggestion</div>}
                       <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
@@ -1004,53 +1089,125 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
 
           {/* Reply Area */}
           <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all">
-              <div className="flex items-center space-x-2 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 px-2">
-                <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><span className="material-symbols-outlined text-lg">format_bold</span></button>
-                <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><span className="material-symbols-outlined text-lg">format_italic</span></button>
-                <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><span className="material-symbols-outlined text-lg">link</span></button>
-                <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
+            {/* Hidden file inputs */}
+            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => handleFilesSelected(e.target.files)} />
+            <input ref={imageInputRef} type="file" multiple accept="image/*" className="hidden" onChange={e => handleFilesSelected(e.target.files)} />
+
+            <div className={`bg-white dark:bg-card-dark border rounded-xl p-2 transition-all focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary shadow-card ${
+              composeMode === 'internal' ? 'border-amber-200 dark:border-amber-800/40' : 'border-gray-200 dark:border-gray-700'
+            }`}>
+              {/* Toolbar */}
+              <div className="flex items-center gap-1 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 px-1">
+                <button title="Bold" onClick={() => applyFormat('bold')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                  <span className="material-symbols-outlined text-[18px]">format_bold</span>
+                </button>
+                <button title="Italic" onClick={() => applyFormat('italic')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                  <span className="material-symbols-outlined text-[18px]">format_italic</span>
+                </button>
+                <button title="Insert link" onClick={() => applyFormat('link')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                  <span className="material-symbols-outlined text-[18px]">link</span>
+                </button>
+                <div className="h-4 w-px bg-gray-200 dark:bg-gray-600 mx-1"></div>
+                {/* Mode toggle */}
                 <button
                   onClick={() => setComposeMode(mode => mode === 'reply' ? 'internal' : 'reply')}
-                  className={`relative inline-flex items-center h-5 rounded-full w-9 transition-colors focus:outline-none ${composeMode === 'reply' ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'}`}
-                  id="toggle"
+                  className={`relative inline-flex items-center h-5 rounded-full w-9 flex-shrink-0 transition-colors focus:outline-none ${composeMode === 'reply' ? 'bg-secondary' : 'bg-amber-400'}`}
                 >
-                  <span className={`inline-block w-3 h-3 transform bg-white rounded-full transition-transform ${composeMode === 'reply' ? 'translate-x-5' : 'translate-x-1'}`}></span>
+                  <span className={`inline-block w-3 h-3 transform bg-white rounded-full shadow transition-transform ${composeMode === 'reply' ? 'translate-x-5' : 'translate-x-1'}`}></span>
                 </button>
-                <span className={`text-xs font-medium ${composeMode === 'reply' ? 'text-blue-600' : 'text-gray-500'}`}>
+                <span className={`text-xs font-medium flex-shrink-0 ${composeMode === 'reply' ? 'text-secondary' : 'text-amber-600 dark:text-amber-400'}`}>
                   {composeMode === 'reply' ? `Reply as ${selectedConv.channel === 'email' ? 'Email' : selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 'Web Chat'}` : 'Internal Note'}
                 </span>
-                <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500 flex items-center gap-1 ml-auto">
-                  <span className="material-symbols-outlined text-lg">sentiment_satisfied</span>
-                </button>
+                {/* Emoji picker trigger */}
+                <div className="ml-auto relative" ref={emojiPickerRef}>
+                  <button
+                    title="Emoji"
+                    onClick={() => setShowEmojiPicker(prev => !prev)}
+                    className={`p-1.5 rounded transition-colors ${showEmojiPicker ? 'bg-gray-100 dark:bg-gray-700 text-secondary' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">sentiment_satisfied</span>
+                  </button>
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-full right-0 mb-2 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3 z-50">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Emojis</p>
+                      <div className="grid grid-cols-8 gap-1">
+                        {COMMON_EMOJIS.map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => insertEmoji(emoji)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base transition-colors"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Textarea */}
               <textarea
+                ref={textareaRef}
                 value={composerText}
-                onChange={(event) => setComposerText(event.target.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                    event.preventDefault();
-                    handleSubmit();
-                  }
+                onChange={e => setComposerText(e.target.value)}
+                onKeyDown={e => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
                 }}
-                className="w-full bg-transparent border-0 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 shadow-none focus:shadow-none text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2 appearance-none"
+                className="w-full bg-transparent border-0 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 shadow-none text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2 appearance-none"
                 placeholder={composeMode === 'reply' ? `Write your reply to ${selectedConv.contactName}...` : `Write an internal note for ${selectedConv.contactName}...`}
-              ></textarea>
+              />
+
+              {/* Attachment previews */}
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-2 pb-2">
+                  {attachments.map(att => (
+                    <div key={att.id} className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg px-2 py-1 text-xs max-w-[160px] group">
+                      {att.dataUrl ? (
+                        <img src={att.dataUrl} alt={att.name} className="w-5 h-5 rounded object-cover flex-shrink-0" />
+                      ) : (
+                        <span className="material-symbols-outlined text-[16px] text-gray-500 flex-shrink-0">description</span>
+                      )}
+                      <span className="truncate text-gray-700 dark:text-gray-300">{att.name}</span>
+                      <span className="text-gray-400 flex-shrink-0">{formatFileSize(att.size)}</span>
+                      <button onClick={() => removeAttachment(att.id)} className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 ml-0.5">
+                        <span className="material-symbols-outlined text-[14px]">close</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Bottom bar */}
               <div className="flex justify-between items-center px-2 pt-1">
-                <div className="flex space-x-2">
-                  <button className="text-gray-400 hover:text-gray-600"><span className="material-symbols-outlined text-xl">attach_file</span></button>
-                  <button className="text-gray-400 hover:text-gray-600"><span className="material-symbols-outlined text-xl">image</span></button>
+                <div className="flex items-center gap-1">
+                  <button
+                    title="Attach file"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">attach_file</span>
+                  </button>
+                  <button
+                    title="Attach image"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">image</span>
+                  </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">Press ⌘ + Enter to send</span>
+                  <span className="text-xs text-gray-400 hidden sm:inline">Press ⌘ + Enter to send</span>
                   <button
                     onClick={handleSubmit}
-                    disabled={isSubmitting || !composerText.trim()}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-                      composeMode === 'reply' && selectedConv.channel === 'email' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    disabled={!composerText.trim() && attachments.length === 0}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      composeMode === 'internal'
+                        ? 'bg-amber-500 text-white hover:bg-amber-600'
+                        : 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100'
                     }`}
                   >
-                    {isSubmitting ? 'Sending...' : composeMode === 'reply' ? 'Send' : 'Save note'}
+                    {composeMode === 'reply' ? 'Send' : 'Save note'}
                   </button>
                 </div>
               </div>
@@ -1160,17 +1317,17 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
 
                     {/* ── Collapsible case brief ──────────────────────── */}
                     {showCaseSummary && (
-                      <div className="mx-3 mt-2.5 mb-0 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800/30 p-3 text-xs space-y-2 flex-shrink-0">
+                      <div className="mx-3 mt-2.5 mb-0 bg-white dark:bg-card-dark rounded-xl border border-gray-100 dark:border-gray-700 p-3 text-xs space-y-2 flex-shrink-0 shadow-card">
                         <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{selectedConv.context || 'Canonical analysis pending.'}</p>
                         {selectedConv.conflictDetected && (
-                          <div className="flex items-start gap-1.5 bg-red-50 dark:bg-red-900/20 rounded-lg p-2 border border-red-100 dark:border-red-800/30 text-red-700 dark:text-red-400">
-                            <span className="material-symbols-outlined text-[13px] flex-shrink-0 mt-0.5">warning</span>
+                          <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700 border-l-4 border-l-red-500 text-gray-600 dark:text-gray-400">
+                            <span className="material-symbols-outlined text-red-500 text-[13px] flex-shrink-0 mt-0.5">warning</span>
                             <span>{selectedConv.conflictDetected}</span>
                           </div>
                         )}
                         {selectedConv.recommendedNextAction && (
-                          <div className="flex items-start gap-1.5 bg-white/60 dark:bg-black/20 rounded-lg p-2 border border-purple-100 dark:border-purple-800/30 text-secondary">
-                            <span className="material-symbols-outlined text-[13px] flex-shrink-0 mt-0.5">bolt</span>
+                          <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700 border-l-4 border-l-secondary">
+                            <span className="material-symbols-outlined text-secondary text-[13px] flex-shrink-0 mt-0.5">bolt</span>
                             <span className="italic text-gray-600 dark:text-gray-400">{selectedConv.recommendedNextAction}</span>
                           </div>
                         )}
@@ -1198,7 +1355,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                             <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
                               message.role === 'user'
                                 ? 'bg-gray-900 text-white border-gray-900 rounded-br-sm'
-                                : 'bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200 border-purple-100 dark:border-purple-800/30 rounded-bl-sm'
+                                : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
                             }`}>
                               <p className="whitespace-pre-wrap">{message.content}</p>
                               <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-white/60' : 'text-gray-400'}`}>{message.time}</span>
@@ -1211,10 +1368,10 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                           <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
                             <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
                           </div>
-                          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/30 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-secondary/70 animate-bounce [animation-delay:-0.3s]"></span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-secondary/70 animate-bounce [animation-delay:-0.15s]"></span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-secondary/70 animate-bounce"></span>
+                          <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5 shadow-card">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce"></span>
                           </div>
                         </div>
                       )}
