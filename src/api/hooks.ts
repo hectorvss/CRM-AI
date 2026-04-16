@@ -30,6 +30,7 @@ export function useApi<T>(
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
     setError(null);
+    setData(fallback ?? null);
 
     fetcher()
       .then(result => {
