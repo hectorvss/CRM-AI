@@ -993,7 +993,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
 
             {/* Conflict Detection (if any) */}
             {selectedConv.conflictDetected && (
-              <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-lg p-3 flex items-start gap-3 border-l-4 border-l-red-500 shadow-card">
+              <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-lg p-3 flex items-start gap-3 shadow-card">
                 <span className="material-symbols-outlined text-red-500 text-[18px] flex-shrink-0 mt-0.5">warning</span>
                 <div>
                   <h4 className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-0.5">Conflict Detected</h4>
@@ -1024,7 +1024,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                       <span className="material-symbols-outlined text-sm">lock</span>
                     </div>
                     <div className="space-y-1 max-w-[85%] w-full">
-                      <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 border-l-4 border-l-amber-400 p-3 rounded-xl rounded-tl-none shadow-card">
+                      <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 p-3 rounded-xl rounded-tl-none shadow-card">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Internal Note · {msg.sender}</span>
                           <span className="text-xs text-gray-400">{msg.time}</span>
@@ -1204,7 +1204,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                     className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                       composeMode === 'internal'
                         ? 'bg-amber-500 text-white hover:bg-amber-600'
-                        : 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
                     }`}
                   >
                     {composeMode === 'reply' ? 'Send' : 'Save note'}
@@ -1245,14 +1245,11 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                       : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-lg">smart_toy</span>
+                  <span className="material-symbols-outlined text-lg">chat_bubble</span>
                   Copilot
                 </button>
                 <div className="flex items-center gap-1 ml-auto">
-                  <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                    <span className="material-symbols-outlined text-[20px]">settings</span>
-                  </button>
-                  <button 
+                  <button
                     onClick={() => setIsRightSidebarOpen(false)}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
                     title="Hide Sidebar"
@@ -1320,13 +1317,13 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                       <div className="mx-3 mt-2.5 mb-0 bg-white dark:bg-card-dark rounded-xl border border-gray-100 dark:border-gray-700 p-3 text-xs space-y-2 flex-shrink-0 shadow-card">
                         <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{selectedConv.context || 'Canonical analysis pending.'}</p>
                         {selectedConv.conflictDetected && (
-                          <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700 border-l-4 border-l-red-500 text-gray-600 dark:text-gray-400">
+                          <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                             <span className="material-symbols-outlined text-red-500 text-[13px] flex-shrink-0 mt-0.5">warning</span>
                             <span>{selectedConv.conflictDetected}</span>
                           </div>
                         )}
                         {selectedConv.recommendedNextAction && (
-                          <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700 border-l-4 border-l-secondary">
+                          <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700">
                             <span className="material-symbols-outlined text-secondary text-[13px] flex-shrink-0 mt-0.5">bolt</span>
                             <span className="italic text-gray-600 dark:text-gray-400">{selectedConv.recommendedNextAction}</span>
                           </div>
@@ -1354,7 +1351,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                             )}
                             <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
                               message.role === 'user'
-                                ? 'bg-gray-900 text-white border-gray-900 rounded-br-sm'
+                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600 rounded-br-sm'
                                 : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
                             }`}>
                               <p className="whitespace-pre-wrap">{message.content}</p>
