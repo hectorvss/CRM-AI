@@ -1385,10 +1385,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                         ))
                       )}
                       {isCopilotSending && (
-                        <div className="flex justify-start items-end gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
-                            <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
-                          </div>
+                        <div className="flex justify-start">
                           <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5 shadow-card">
                             <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]"></span>
                             <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]"></span>
