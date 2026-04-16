@@ -971,12 +971,20 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
 
           {/* Chat Messages */}
           <div className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar ${
-            selectedConv.channel === 'whatsapp' 
-              ? "bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-opacity-10 dark:bg-opacity-5" 
+            selectedConv.channel === 'whatsapp'
+              ? "bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-opacity-10 dark:bg-opacity-5"
               : "bg-gray-50/30 dark:bg-black/20"
           }`}>
+            {inboxViewLoading && !selectedInboxView && (
+              <div className="flex items-center justify-center h-full">
+                <LoadingState
+                  title="Loading messages"
+                  message="Fetching conversation history."
+                />
+              </div>
+            )}
             {/* Operational Status Summary */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 shadow-card flex flex-wrap gap-4 items-center justify-between mb-2">
+            <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 shadow-card flex flex-wrap gap-4 items-center justify-between mb-2 ${inboxViewLoading && !selectedInboxView ? 'hidden' : ''}`}>
               <div className="flex flex-wrap gap-4">
                 <div className="flex flex-col">
                   <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Order</span>
@@ -1006,7 +1014,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
             </div>
 
             {/* Conflict Detection (if any) */}
-            {selectedConv.conflictDetected && (
+            {!inboxViewLoading && selectedConv.conflictDetected && (
               <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-lg p-3 flex items-start gap-3 shadow-card">
                 <span className="material-symbols-outlined text-red-500 text-[18px] flex-shrink-0 mt-0.5">warning</span>
                 <div>
@@ -1016,11 +1024,13 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
               </div>
             )}
 
-            <div className="flex justify-center">
-              <span className="text-xs text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-card">Today, 08:15 AM</span>
-            </div>
+            {!inboxViewLoading && (
+              <div className="flex justify-center">
+                <span className="text-xs text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-card">Today, 08:15 AM</span>
+              </div>
+            )}
 
-            {selectedConv.messages?.map((msg) => {
+            {!inboxViewLoading && selectedConv.messages?.map((msg) => {
               if (msg.type === 'system') {
                 return (
                   <div key={msg.id} className="flex justify-center my-2">
