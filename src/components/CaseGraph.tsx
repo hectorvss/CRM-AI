@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { Page } from '../types';
 import TreeGraph from './TreeGraph';
 import { casesApi } from '../api/client';

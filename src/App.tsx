@@ -20,7 +20,7 @@ import PageErrorBoundary from './components/PageErrorBoundary';
 import { Page } from './types';
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('case_graph');
+  const [currentPage, setCurrentPage] = useState<Page>('inbox');
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [focusCaseId, setFocusCaseId] = useState<string | null>(null);
 
