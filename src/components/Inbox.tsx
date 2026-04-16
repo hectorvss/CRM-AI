@@ -389,6 +389,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   const [isCopilotSending, setIsCopilotSending] = useState(false);
   const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showCaseSummary, setShowCaseSummary] = useState(false);
   const submitLockRef = useRef(false);
 
   // Fetch canonical cases from the backend. Static fixtures are no longer used
@@ -565,52 +566,43 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   };
 
   const handleSubmit = async () => {
-    if (!selectedConv || !composerText.trim() || isSubmitting || submitLockRef.current) return;
+    if (!selectedConv || !composerText.trim() || submitLockRef.current) return;
 
+    const content = composerText.trim();
+    const optimisticId = composeMode === 'internal' ? `local-note-${Date.now()}` : `local-reply-${Date.now()}`;
+
+    // ── Optimistic update: show message instantly ──────────────────────────
+    setLocalMessagesByCase(current => ({
+      ...current,
+      [selectedConv.id]: [
+        ...(current[selectedConv.id] || []),
+        composeMode === 'internal'
+          ? { id: optimisticId, type: 'internal' as const, sender: 'Internal Note', content, time: formatTime(new Date().toISOString()) }
+          : { id: optimisticId, type: 'agent' as const, sender: 'Alex Morgan', content, time: formatTime(new Date().toISOString()), status: 'sent' },
+      ],
+    }));
+    setComposerText('');
+    setActionError(null);
+
+    // ── Background API call (non-blocking) ────────────────────────────────
     submitLockRef.current = true;
     setIsSubmitting(true);
-    setActionError(null);
     try {
-      const content = composerText.trim();
       if (composeMode === 'internal') {
-        const result = await casesApi.addInternalNote(selectedConv.id, content);
-        const message = result?.message;
-        setLocalMessagesByCase(current => ({
-          ...current,
-          [selectedConv.id]: [
-            ...(current[selectedConv.id] || []),
-            {
-              id: message?.id || `local-note-${Date.now()}`,
-              type: 'internal',
-              sender: message?.sender_name || 'Internal Note',
-              content,
-              time: formatTime(message?.sent_at || new Date().toISOString()),
-            },
-          ],
-        }));
+        await casesApi.addInternalNote(selectedConv.id, content);
       } else {
-        const result = await casesApi.reply(selectedConv.id, content, selectedInboxView?.latest_draft?.id);
-        const message = result?.message;
-        setLocalMessagesByCase(current => ({
-          ...current,
-          [selectedConv.id]: [
-            ...(current[selectedConv.id] || []),
-            {
-              id: message?.id || result?.message_id || `local-reply-${Date.now()}`,
-              type: 'agent',
-              sender: message?.sender_name || 'Alex Morgan',
-              content,
-              time: formatTime(message?.sent_at || new Date().toISOString()),
-              status: 'sent',
-            },
-          ],
-        }));
+        await casesApi.reply(selectedConv.id, content, selectedInboxView?.latest_draft?.id);
       }
-      setComposerText('');
       setRefreshKey(key => key + 1);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Inbox action failed');
+      setActionError(error instanceof Error ? error.message : 'Failed to send. Please try again.');
       console.error('Inbox action failed:', error);
+      // Roll back the optimistic message on failure
+      setLocalMessagesByCase(current => ({
+        ...current,
+        [selectedConv.id]: (current[selectedConv.id] || []).filter(m => m.id !== optimisticId),
+      }));
+      setComposerText(content);
     } finally {
       setIsSubmitting(false);
       submitLockRef.current = false;
@@ -1114,109 +1106,118 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
               </div>
 
               {/* Tab Content */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className={`flex-1 min-h-0 ${rightTab === 'copilot' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
                 {rightTab === 'copilot' ? (
-                  <div className="p-4 flex flex-col gap-5">
-                    {/* Copilot Case Summary */}
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-lg shadow-secondary/20">
-                        <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+                  <div className="flex flex-col h-full min-h-0">
+
+                    {/* ── Command toolbar ─────────────────────────────── */}
+                    <div className="px-3 pt-3 pb-2.5 flex items-center gap-2 flex-wrap border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
+                      {/* Summary toggle */}
+                      <button
+                        onClick={() => setShowCaseSummary(prev => !prev)}
+                        title="Toggle case brief"
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
+                          showCaseSummary
+                            ? 'bg-purple-100 dark:bg-purple-900/30 text-secondary border-purple-200 dark:border-purple-700'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">description</span>
+                        Brief
+                      </button>
+
+                      {/* Draft reply command */}
+                      <button
+                        onClick={() => {
+                          const draft = selectedInboxView?.latest_draft?.content || getSuggestedReply(selectedConv);
+                          if (draft) { setComposeMode('reply'); setComposerText(draft); }
+                        }}
+                        title="Load AI draft into composer"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary transition-all"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">edit_note</span>
+                        Draft
+                      </button>
+
+                      {/* Sentiment pill */}
+                      <div className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/30">
+                        <span className="material-symbols-outlined text-[13px]">sentiment_neutral</span>
+                        Neutral
                       </div>
-                      <div className="flex flex-col gap-3 max-w-[85%] w-full">
-                        <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-3 px-4 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30 shadow-sm">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="material-symbols-outlined text-secondary text-lg">description</span>
-                            <h4 className="font-bold text-xs uppercase tracking-wider text-secondary">Case Summary</h4>
-                          </div>
-                          <p className="leading-relaxed mb-4 text-gray-700 dark:text-gray-300">{selectedConv.context}</p>
-                          
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="material-symbols-outlined text-red-500 text-lg">warning</span>
-                            <h4 className="font-bold text-xs uppercase tracking-wider text-red-600 dark:text-red-400">Conflict Detection</h4>
-                          </div>
-                          <div className={`p-2.5 rounded border text-xs mb-4 ${
-                            selectedConv.conflictDetected 
-                              ? 'bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-800/30 text-red-700 dark:text-red-400' 
-                              : 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30 text-green-700 dark:text-green-400'
-                          }`}>
-                            {selectedConv.conflictDetected || 'No major conflicts detected in system logs.'}
-                          </div>
 
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="material-symbols-outlined text-secondary text-lg">bolt</span>
-                            <h4 className="font-bold text-xs uppercase tracking-wider text-secondary">Recommended Action</h4>
-                          </div>
-                          <p className="text-xs bg-white/60 dark:bg-black/30 p-2.5 rounded border border-purple-100 dark:border-purple-800/30 italic text-gray-600 dark:text-gray-400">
-                            {selectedConv.recommendedNextAction}
-                          </p>
-                        </div>
-                        
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-card">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-gray-400 text-lg">chat_bubble</span>
-                              <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500">Suggested Reply</h4>
-                            </div>
-                            <span className="text-[10px] font-bold text-secondary bg-purple-50 dark:bg-purple-900/30 px-2 py-0.5 rounded-full">AI Powered</span>
-                          </div>
-                          <div className="relative group">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic mb-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                              {selectedInboxView?.latest_draft?.content || getSuggestedReply(selectedConv)}
-                            </p>
-                            <button
-                              onClick={handleApplyDraft}
-                              className="w-full py-2.5 bg-secondary text-white text-xs font-bold rounded-xl hover:bg-secondary/90 transition-all shadow-lg shadow-secondary/20 flex items-center justify-center gap-2"
-                            >
-                              <span className="material-symbols-outlined text-sm">content_copy</span>
-                              Apply to Composer
-                            </button>
-                          </div>
-                        </div>
+                      {/* Risk pill */}
+                      <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                        selectedConv.riskLevel === 'High'
+                          ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800/30'
+                          : selectedConv.riskLevel === 'Medium'
+                          ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border-yellow-100 dark:border-yellow-800/30'
+                          : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-100 dark:border-green-800/30'
+                      }`}>
+                        <span className="material-symbols-outlined text-[13px]">trending_up</span>
+                        {selectedConv.riskLevel || 'Low'}
+                      </div>
+                    </div>
 
-                        {/* Extra AI Insights */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-blue-50 dark:bg-blue-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-800/30">
-                            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-1">Sentiment</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="material-symbols-outlined text-blue-500 text-sm">sentiment_neutral</span>
-                              <span className="text-xs font-bold text-blue-900 dark:text-blue-200">Neutral</span>
-                            </div>
+                    {/* ── Collapsible case brief ──────────────────────── */}
+                    {showCaseSummary && (
+                      <div className="mx-3 mt-2.5 mb-0 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800/30 p-3 text-xs space-y-2 flex-shrink-0">
+                        <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{selectedConv.context || 'Canonical analysis pending.'}</p>
+                        {selectedConv.conflictDetected && (
+                          <div className="flex items-start gap-1.5 bg-red-50 dark:bg-red-900/20 rounded-lg p-2 border border-red-100 dark:border-red-800/30 text-red-700 dark:text-red-400">
+                            <span className="material-symbols-outlined text-[13px] flex-shrink-0 mt-0.5">warning</span>
+                            <span>{selectedConv.conflictDetected}</span>
                           </div>
-                          <div className="bg-orange-50 dark:bg-orange-900/10 p-3 rounded-xl border border-orange-100 dark:border-orange-800/30">
-                            <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest block mb-1">Risk Score</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="material-symbols-outlined text-orange-500 text-sm">trending_up</span>
-                              <span className="text-xs font-bold text-orange-900 dark:text-orange-200">{selectedConv.riskLevel}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {copilotMessages.length > 0 && (
-                          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-card overflow-hidden">
-                            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
-                              <span className="material-symbols-outlined text-secondary text-lg">forum</span>
-                              <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500">Copilot Chat</h4>
-                            </div>
-                            <div className="p-3 space-y-3 max-h-72 overflow-y-auto custom-scrollbar">
-                              {copilotMessages.map(message => (
-                                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
-                                    message.role === 'user'
-                                      ? 'bg-gray-900 text-white border-gray-900 rounded-br-sm'
-                                      : 'bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200 border-purple-100 dark:border-purple-800/30 rounded-bl-sm'
-                                  }`}>
-                                    <p className="whitespace-pre-wrap">{message.content}</p>
-                                    <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-white/60' : 'text-gray-400'}`}>{message.time}</span>
-                                  </div>
-                                </div>
-                              ))}
-                              {isCopilotSending && (
-                                <div className="text-xs text-gray-400 px-2 py-1">Copilot is reading the canonical state...</div>
-                              )}
-                            </div>
+                        )}
+                        {selectedConv.recommendedNextAction && (
+                          <div className="flex items-start gap-1.5 bg-white/60 dark:bg-black/20 rounded-lg p-2 border border-purple-100 dark:border-purple-800/30 text-secondary">
+                            <span className="material-symbols-outlined text-[13px] flex-shrink-0 mt-0.5">bolt</span>
+                            <span className="italic text-gray-600 dark:text-gray-400">{selectedConv.recommendedNextAction}</span>
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {/* ── Chat messages ───────────────────────────────── */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
+                      {copilotMessages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center py-10">
+                          <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3 border border-purple-100 dark:border-purple-800/30 shadow-sm">
+                            <span className="material-symbols-outlined text-secondary text-2xl">auto_awesome</span>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Ask me anything about this case</p>
+                          <p className="text-[11px] text-gray-400 max-w-[200px] leading-relaxed">I have full context: orders, payments, conflicts and history.</p>
+                        </div>
+                      ) : (
+                        copilotMessages.map(message => (
+                          <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start items-end gap-2'}`}>
+                            {message.role === 'assistant' && (
+                              <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
+                                <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
+                              </div>
+                            )}
+                            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
+                              message.role === 'user'
+                                ? 'bg-gray-900 text-white border-gray-900 rounded-br-sm'
+                                : 'bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200 border-purple-100 dark:border-purple-800/30 rounded-bl-sm'
+                            }`}>
+                              <p className="whitespace-pre-wrap">{message.content}</p>
+                              <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-white/60' : 'text-gray-400'}`}>{message.time}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {isCopilotSending && (
+                        <div className="flex justify-start items-end gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
+                            <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
+                          </div>
+                          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/30 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-secondary/70 animate-bounce [animation-delay:-0.3s]"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-secondary/70 animate-bounce [animation-delay:-0.15s]"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-secondary/70 animate-bounce"></span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1361,8 +1362,8 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                 )}
               </div>
 
-              {/* Copilot Input Area (always visible at bottom) */}
-              <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
+              {/* Copilot Input Area — only for Copilot tab */}
+              {rightTab === 'copilot' && <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark flex-shrink-0">
                 <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
                   <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
                   <input
@@ -1390,7 +1391,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                     </button>
                   </div>
                 </div>
-              </div>
+              </div>}
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gray-50/50 dark:bg-black/10">
