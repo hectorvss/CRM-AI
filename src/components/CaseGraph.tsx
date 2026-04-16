@@ -568,7 +568,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
           </div>
 
           {/* ── Right Panel: Details / Copilot ───────────────────── */}
-          <div className="w-80 border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-card-dark flex flex-col overflow-hidden">
+          <div className="w-80 lg:w-96 border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-card-dark flex flex-col overflow-hidden">
             {/* Tabs */}
             <div className="flex items-center border-b border-gray-100 dark:border-gray-800 px-2 flex-shrink-0">
               <button
