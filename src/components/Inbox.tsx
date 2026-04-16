@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Conversation, Channel, CaseTab, Message } from '../types';
 import { aiApi, casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import LoadingState from './LoadingState';
 
 // ── Lightweight emoji picker data ──────────────────────────────────────────
 const EMOJI_GROUPS = [
@@ -415,8 +416,8 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
 
   // Fetch canonical cases from the backend. Static fixtures are no longer used
   // as runtime data, so every visible case comes from the simulated API/DB flow.
-  const { data: apiCases, error: casesError } = useApi(() => casesApi.list(), [refreshKey], []);
-  const { data: selectedInboxView, error: inboxError } = useApi(
+  const { data: apiCases, loading: casesLoading, error: casesError } = useApi(() => casesApi.list(), [refreshKey], []);
+  const { data: selectedInboxView, loading: inboxViewLoading, error: inboxError } = useApi(
     () => selectedId ? casesApi.inboxView(selectedId) : Promise.resolve(null),
     [selectedId, refreshKey]
   );
@@ -853,8 +854,14 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
         {/* Left Pane: Conversation List */}
         <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
           <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
-            {filteredConversations.length > 0 ? (
-              filteredConversations.map((conv) => (
+            {casesLoading && conversations.length === 0 && (
+              <LoadingState
+                title="Loading cases"
+                message="Fetching cases from Supabase."
+                compact
+              />
+            )}
+            {!casesLoading && filteredConversations.length > 0 && filteredConversations.map((conv) => (
                 <div
                   key={conv.id}
                   onClick={() => setSelectedId(conv.id)}
@@ -889,8 +896,8 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                     {conv.conflictDetected && <span className="bg-red-50 text-red-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-red-200">Conflict</span>}
                   </div>
                 </div>
-              ))
-            ) : (
+            ))}
+            {!casesLoading && filteredConversations.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                 <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">inbox</span>
                 <p className="text-sm text-gray-500 font-medium">
@@ -905,7 +912,14 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
         </div>
 
         {/* Middle Pane: Chat Window */}
-        {selectedConv ? (
+        {casesLoading && conversations.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center bg-white dark:bg-card-dark border-r border-gray-100 dark:border-gray-700">
+            <LoadingState
+              title="Loading inbox"
+              message="Fetching your cases from Supabase."
+            />
+          </div>
+        ) : selectedConv ? (
           <div className={`flex-1 flex flex-col min-w-0 relative border-r border-gray-100 dark:border-gray-700 ${
             selectedConv.channel === 'whatsapp' ? 'bg-[#efeae2] dark:bg-[#0b141a]' : 'bg-white dark:bg-card-dark'
           }`}>
