@@ -1530,7 +1530,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                       }
                     }}
                     disabled={!selectedConv || isCopilotSending}
-                    className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:opacity-50"
+                    className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:opacity-50"
                     placeholder="Ask Copilot about this case..."
                     type="text"
                   />
