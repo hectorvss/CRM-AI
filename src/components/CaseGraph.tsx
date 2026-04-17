@@ -79,17 +79,49 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const [showCaseBrief, setShowCaseBrief] = useState(false);
   const copilotBottomRef = useRef<HTMLDivElement>(null);
   const copilotInputRef = useRef<HTMLInputElement>(null);
+  const welcomeSentForRef = useRef<string | null>(null);
 
   // Reset chat when case changes
   useEffect(() => {
     setCopilotMessages([]);
     setShowCaseBrief(false);
+    welcomeSentForRef.current = null;
   }, [selectedId]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     copilotBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [copilotMessages, isCopilotSending]);
+
+  // Auto-welcome when state data loads for the selected case
+  useEffect(() => {
+    if (!selectedId || !stateData) return;
+    if (welcomeSentForRef.current === selectedId) return;
+    welcomeSentForRef.current = selectedId;
+
+    const name = selectedCase?.customerName;
+    const caseNum = selectedCase?.orderId;
+    const parts: string[] = [];
+
+    if (name) {
+      parts.push(`I've loaded the full state for ${name}${caseNum ? ` (${caseNum})` : ''}.`);
+    }
+    const summary = stateData?.case?.ai_diagnosis || resolveData?.conflict?.summary;
+    if (summary) parts.push(summary);
+    const rootCause = resolveData?.conflict?.root_cause || stateData?.case?.ai_root_cause;
+    if (rootCause) parts.push(`Root cause: ${rootCause}`);
+    const conflict = resolveData?.conflict?.title;
+    if (conflict) parts.push(`Active blocker: ${conflict}`);
+    parts.push('What would you like to dig into?');
+
+    setCopilotMessages([{
+      id: `welcome-${selectedId}`,
+      role: 'assistant',
+      content: parts.join('\n\n'),
+      time: nowTime(),
+    }]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, stateData, resolveData]);
 
   // ── Fetch case list ──────────────────────────────────────────────
   const { data: apiCases, loading: casesLoading } = useApi(() => casesApi.list(), [], []);
@@ -233,6 +265,26 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const riskLevel = rootData.riskLevel || selectedCase?.riskLevel || 'low';
   const riskLabel = typeof riskLevel === 'string' ? riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1).toLowerCase() : 'Low';
 
+  // ── Suggested question chips ────────────────────────────────────
+  const suggestedQuestions = useMemo(() => {
+    const qs: string[] = [];
+    if (copilotBrief.conflict) qs.push("What's causing the conflict?");
+    else qs.push("What's the current status?");
+    qs.push("What should I do next?");
+    if (impactedBranches.some(b => b.label?.toLowerCase().includes('payment'))) {
+      qs.push("What's wrong with the payment?");
+    } else if (impactedBranches.some(b => b.label?.toLowerCase().includes('return'))) {
+      qs.push("What's the return status?");
+    } else {
+      qs.push("Walk me through this case");
+    }
+    if (riskLabel.toLowerCase() === 'high' || riskLabel.toLowerCase() === 'critical') {
+      qs.push("Why is this high risk?");
+    }
+    return qs.slice(0, 4);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [copilotBrief.conflict, impactedBranches, riskLabel]);
+
   const impactedModule = useMemo<Page>(() => {
     const textCandidates = [
       caseResolve?.conflict?.source_of_truth,
@@ -261,9 +313,9 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   }, [branches, caseResolve, stateData]);
 
   // ── Copilot submit ──────────────────────────────────────────────
-  const handleCopilotSubmit = useCallback(async () => {
-    if (!selectedId || !copilotInput.trim() || isCopilotSending) return;
-    const question = copilotInput.trim();
+  const handleCopilotSubmit = useCallback(async (questionOverride?: string) => {
+    const question = (questionOverride !== undefined ? questionOverride : copilotInput).trim();
+    if (!selectedId || !question || isCopilotSending) return;
     const userMsg: CopilotMessage = { id: `u-${Date.now()}`, role: 'user', content: question, time: nowTime() };
     const history = copilotMessages.map(m => ({ role: m.role, content: m.content }));
 
@@ -297,7 +349,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     } finally {
       setIsCopilotSending(false);
     }
-  }, [selectedId, copilotInput, isCopilotSending, copilotMessages]);
+  }, [selectedId, copilotInput, isCopilotSending, copilotMessages, copilotBrief, impactedBranches]);
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -666,29 +718,51 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                   <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
                     {copilotMessages.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full text-center py-10">
-                        <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3 border border-purple-100 dark:border-purple-800/30 shadow-sm">
-                          <span className="material-symbols-outlined text-secondary text-2xl">auto_awesome</span>
+                        <div className={`w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3 border border-purple-100 dark:border-purple-800/30 shadow-sm`}>
+                          <span className={`material-symbols-outlined text-secondary text-2xl ${stateLoading ? 'animate-pulse' : ''}`}>auto_awesome</span>
                         </div>
-                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Ask me anything about this case</p>
-                        <p className="text-[11px] text-gray-400 max-w-[200px] leading-relaxed">I have full context: graph state, conflicts, blockers and history.</p>
+                        {stateLoading ? (
+                          <p className="text-sm text-gray-400">Reading case data...</p>
+                        ) : (
+                          <>
+                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Ask me anything about this case</p>
+                            <p className="text-[11px] text-gray-400 max-w-[200px] leading-relaxed">I have full context: graph state, conflicts, blockers and history.</p>
+                          </>
+                        )}
                       </div>
                     ) : (
-                      copilotMessages.map(message => (
-                        <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start items-end gap-2'}`}>
-                          {message.role === 'assistant' && (
-                            <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
-                              <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
+                      copilotMessages.map((message, idx) => (
+                        <React.Fragment key={message.id}>
+                          <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start items-end gap-2'}`}>
+                            {message.role === 'assistant' && (
+                              <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
+                                <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
+                              </div>
+                            )}
+                            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
+                              message.role === 'user'
+                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600 rounded-br-sm'
+                                : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
+                            }`}>
+                              <p className="whitespace-pre-wrap">{message.content}</p>
+                              <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-gray-500' : 'text-gray-400'}`}>{message.time}</span>
+                            </div>
+                          </div>
+                          {/* Suggested chips after welcome */}
+                          {message.role === 'assistant' && idx === 0 && copilotMessages.length === 1 && !isCopilotSending && (
+                            <div className="flex flex-wrap gap-1.5 pl-8 pt-0.5">
+                              {suggestedQuestions.map(q => (
+                                <button
+                                  key={q}
+                                  onClick={() => handleCopilotSubmit(q)}
+                                  className="text-[11px] px-2.5 py-1.5 rounded-full border border-secondary/30 text-secondary hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-secondary transition-all font-medium"
+                                >
+                                  {q}
+                                </button>
+                              ))}
                             </div>
                           )}
-                          <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
-                            message.role === 'user'
-                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600 rounded-br-sm'
-                              : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
-                          }`}>
-                            <p className="whitespace-pre-wrap">{message.content}</p>
-                            <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-gray-500' : 'text-gray-400'}`}>{message.time}</span>
-                          </div>
-                        </div>
+                        </React.Fragment>
                       ))
                     )}
                     {isCopilotSending && (

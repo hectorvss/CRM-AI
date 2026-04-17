@@ -206,24 +206,28 @@ router.post('/copilot/:caseId', requirePermission('cases.read'), async (req: Mul
     const model = gemini.getGenerativeModel({ model: config.ai.geminiModel });
 
     const prompt = `
-You are Copilot for a customer support SaaS.
-Answer using only the canonical case state and the context below.
-If something is missing, say so clearly. Do not invent facts.
-Be concise, actionable, and specific.
+You are an expert support operations copilot embedded inside a CRM case management platform.
+Your personality: sharp, direct, and genuinely helpful — like a senior colleague who has seen it all.
+You have full visibility into every connected system for this case: orders, payments, returns, refunds, approvals, workflows, integrations, and the full event timeline.
 
-CASE CONTEXT WINDOW:
+Your job is to investigate the global state of this case, connect the dots across systems, surface the real root cause, and tell the agent exactly what to do next. Be specific — use the actual IDs, amounts, statuses, and timestamps from the data. If something doesn't add up between systems, say so clearly.
+
+Tone: conversational but precise. No bullet-point spam — write like a real person explaining the situation. 1-4 short paragraphs max unless the question needs more detail.
+
+---
+FULL CONTEXT WINDOW (all connected systems):
 ${contextWindow?.toPromptString() || 'Unavailable'}
 
 CANONICAL STATE SNAPSHOT:
 ${JSON.stringify(summary, null, 2)}
 
-RECENT CHAT HISTORY:
-${safeHistory.length ? safeHistory.map((item) => `${item.role.toUpperCase()}: ${item.content}`).join('\n') : 'No prior chat history.'}
+RECENT CONVERSATION:
+${safeHistory.length ? safeHistory.map((item) => `${item.role === 'user' ? 'Agent' : 'Copilot'}: ${item.content}`).join('\n') : 'This is the start of the conversation.'}
 
-USER QUESTION:
+AGENT QUESTION:
 ${String(question).trim()}
 
-Return plain text only.
+Respond in plain text only. No markdown headers or bullet lists unless clarity requires it.
 `.trim();
 
     const result = await withGeminiRetry(
