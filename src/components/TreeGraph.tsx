@@ -154,19 +154,20 @@ export default function TreeGraph({ onNavigate, branches, rootData }: TreeGraphP
           viewBox={`0 0 ${svgW} ${svgH}`}
           style={{ overflow: 'visible' }}
         >
-          {/* ── Lines root → branch ───────────────────────────── */}
+          {/* ── Lines root → branch (color = branch status) ──── */}
           {layout.map(branch => (
             <path
               key={`r-${branch.id}`}
               d={`M ${rootX + rootW} ${rootMidY} C ${rootX + rootW + 60} ${rootMidY}, ${branchX - 60} ${branch.bY}, ${branchX} ${branch.bY}`}
               fill="none"
-              stroke={hoveredBranch === branch.id ? statusBorder(branch.status) : (branch.status === 'critical' ? '#fecaca' : '#e2e8f0')}
-              strokeWidth={branch.status === 'critical' ? 2.5 : 1.5}
+              stroke={statusColor(branch.status)}
+              strokeWidth={branch.status === 'critical' ? 2.5 : branch.status === 'warning' ? 2 : 1.5}
               strokeDasharray={branch.status === 'critical' ? '6,3' : '0'}
+              opacity={0.45}
             />
           ))}
 
-          {/* ── Lines branch → nodes ──────────────────────────── */}
+          {/* ── Lines branch → nodes (color = node status) ───── */}
           {layout.map(branch => {
             const startY = branch.bY - ((branch.nodes.length - 1) * nodeSpacing) / 2;
             return branch.nodes.map((node, ni) => {
@@ -176,8 +177,10 @@ export default function TreeGraph({ onNavigate, branches, rootData }: TreeGraphP
                   key={`n-${node.id}`}
                   d={`M ${branchX + branchW} ${branch.bY} C ${branchX + branchW + 40} ${branch.bY}, ${nodeX - 40} ${nY}, ${nodeX} ${nY + nodeH / 2}`}
                   fill="none"
-                  stroke={hoveredBranch === branch.id ? statusBorder(branch.status) : '#f1f5f9'}
-                  strokeWidth={1}
+                  stroke={statusColor(node.status)}
+                  strokeWidth={node.status === 'critical' ? 2 : node.status === 'warning' ? 1.5 : 1}
+                  strokeDasharray={node.status === 'critical' ? '5,3' : '0'}
+                  opacity={0.5}
                 />
               );
             });
