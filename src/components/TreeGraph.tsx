@@ -154,34 +154,59 @@ export default function TreeGraph({ onNavigate, branches, rootData }: TreeGraphP
           viewBox={`0 0 ${svgW} ${svgH}`}
           style={{ overflow: 'visible' }}
         >
-          {/* ── Lines root → branch (color = branch status) ──── */}
-          {layout.map(branch => (
-            <path
-              key={`r-${branch.id}`}
-              d={`M ${rootX + rootW} ${rootMidY} C ${rootX + rootW + 60} ${rootMidY}, ${branchX - 60} ${branch.bY}, ${branchX} ${branch.bY}`}
-              fill="none"
-              stroke={statusColor(branch.status)}
-              strokeWidth={branch.status === 'critical' ? 2.5 : branch.status === 'warning' ? 2 : 1.5}
-              strokeDasharray={branch.status === 'critical' ? '6,3' : '0'}
-              opacity={0.45}
-            />
-          ))}
+          {/* ── Lines root → branch (glow on hover) ─────────── */}
+          {layout.map(branch => {
+            const isHov = hoveredBranch === branch.id;
+            const d = `M ${rootX + rootW} ${rootMidY} C ${rootX + rootW + 60} ${rootMidY}, ${branchX - 60} ${branch.bY}, ${branchX} ${branch.bY}`;
+            return (
+              <g key={`r-${branch.id}`}>
+                {isHov && (
+                  <path d={d} fill="none" stroke={statusColor(branch.status)} strokeWidth={12} opacity={0.12} strokeLinecap="round" />
+                )}
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={statusColor(branch.status)}
+                  strokeWidth={isHov ? 3 : (branch.status === 'critical' ? 2.5 : branch.status === 'warning' ? 2 : 1.5)}
+                  strokeDasharray={branch.status === 'critical' ? '6,3' : '0'}
+                  opacity={isHov ? 1 : 0.45}
+                  style={{ transition: 'opacity 0.15s, stroke-width 0.15s' }}
+                />
+              </g>
+            );
+          })}
 
-          {/* ── Lines branch → nodes (color = node status) ───── */}
+          {/* ── Lines branch → nodes (color = node status, glow on hover) ── */}
           {layout.map(branch => {
             const startY = branch.bY - ((branch.nodes.length - 1) * nodeSpacing) / 2;
             return branch.nodes.map((node, ni) => {
               const nY = startY + ni * nodeSpacing;
+              const isHov = hoveredNode === node.id;
+              const d = `M ${branchX + branchW} ${branch.bY} C ${branchX + branchW + 40} ${branch.bY}, ${nodeX - 40} ${nY}, ${nodeX} ${nY + nodeH / 2}`;
               return (
-                <path
-                  key={`n-${node.id}`}
-                  d={`M ${branchX + branchW} ${branch.bY} C ${branchX + branchW + 40} ${branch.bY}, ${nodeX - 40} ${nY}, ${nodeX} ${nY + nodeH / 2}`}
-                  fill="none"
-                  stroke={statusColor(node.status)}
-                  strokeWidth={node.status === 'critical' ? 2 : node.status === 'warning' ? 1.5 : 1}
-                  strokeDasharray={node.status === 'critical' ? '5,3' : '0'}
-                  opacity={0.5}
-                />
+                <g key={`n-${node.id}`}>
+                  {/* Glow layer — only visible on hover */}
+                  {isHov && (
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke={statusColor(node.status)}
+                      strokeWidth={10}
+                      opacity={0.15}
+                      strokeLinecap="round"
+                    />
+                  )}
+                  {/* Main line */}
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke={statusColor(node.status)}
+                    strokeWidth={isHov ? 2.5 : (node.status === 'critical' ? 2 : node.status === 'warning' ? 1.5 : 1)}
+                    strokeDasharray={node.status === 'critical' ? '5,3' : '0'}
+                    opacity={isHov ? 1 : 0.5}
+                    style={{ transition: 'opacity 0.15s, stroke-width 0.15s' }}
+                  />
+                </g>
               );
             });
           })}
