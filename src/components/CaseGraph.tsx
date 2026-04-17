@@ -281,10 +281,17 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
         time: nowTime(),
       }]);
     } catch {
+      const fallbackParts = [
+        copilotBrief.summary,
+        copilotBrief.rootCause ? `Root cause: ${copilotBrief.rootCause}` : null,
+        copilotBrief.conflict ? `Conflict: ${copilotBrief.conflict}` : null,
+        copilotBrief.recommendation ? `Recommended action: ${copilotBrief.recommendation}` : null,
+        impactedBranches.length ? `Impacted: ${impactedBranches.map(b => b.label).join(', ')}` : null,
+      ].filter(Boolean).join('\n\n');
       setCopilotMessages(prev => [...prev, {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: 'Unable to reach Copilot right now. Check that the API server is running.',
+        content: fallbackParts || 'No canonical data available for this case yet.',
         time: nowTime(),
       }]);
     } finally {
@@ -405,7 +412,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                 ) : (
                   <>
                     {timeline.length > 0 && (
-                      <div className="absolute left-[31px] top-24 bottom-6 w-0.5 bg-gray-200 dark:bg-gray-700"></div>
+                      <div className="absolute left-[55px] top-20 bottom-6 w-0.5 bg-gray-200 dark:bg-gray-700"></div>
                     )}
                     <div className="space-y-6">
                       {timeline.length === 0 && (
@@ -739,15 +746,32 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                     </div>
                     <div className="mt-4">
                       <span className="text-[10px] uppercase tracking-wider text-gray-500 block mb-2">Impacted Branches</span>
-                      <div className="flex flex-wrap gap-2">
-                        {impactedBranches.map(branch => (
-                          <span key={branch.id} className={`flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-1 rounded border ${branch.status === 'critical' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
-                            <span className="material-symbols-outlined text-[12px]">{branch.icon}</span>
-                            {branch.label}
-                          </span>
-                        ))}
-                        {!impactedBranches.length && <span className="text-xs text-gray-500 italic">No impacted branches</span>}
-                      </div>
+                      {impactedBranches.length ? (
+                        <div className="space-y-1.5">
+                          {impactedBranches.map(branch => (
+                            <button
+                              key={branch.id}
+                              onClick={() => onPageChange(branch.page)}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group shadow-sm"
+                            >
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${branch.status === 'critical' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-orange-50 dark:bg-orange-900/20'}`}>
+                                <span className={`material-symbols-outlined text-[15px] ${branch.status === 'critical' ? 'text-red-500' : 'text-orange-500'}`}>{branch.icon}</span>
+                              </div>
+                              <span className="flex-1 text-xs font-semibold text-gray-700 dark:text-gray-300 text-left">{branch.label}</span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className={`w-1.5 h-1.5 rounded-full ${branch.status === 'critical' ? 'bg-red-500' : 'bg-orange-400'}`} />
+                                <span className={`text-[10px] font-bold uppercase ${branch.status === 'critical' ? 'text-red-500' : 'text-orange-500'}`}>{branch.status}</span>
+                              </div>
+                              <span className="material-symbols-outlined text-[14px] text-gray-300 group-hover:text-gray-500 transition-colors">chevron_right</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                          All branches healthy
+                        </div>
+                      )}
                     </div>
                   </div>
 
