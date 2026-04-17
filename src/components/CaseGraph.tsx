@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Page } from '../types';
 import TreeGraph from './TreeGraph';
-import { casesApi } from '../api/client';
+import { casesApi, aiApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import type { GraphBranch } from './TreeGraph';
 import LoadingState from './LoadingState';
@@ -324,7 +324,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     setIsCopilotSending(true);
 
     try {
-      const result = await casesApi.copilot(selectedId, question, history);
+      const result = await aiApi.copilot(selectedId, question, history);
       const answer = result?.answer || 'No response available.';
       setCopilotMessages(prev => [...prev, {
         id: `a-${Date.now()}`,
@@ -333,17 +333,20 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
         time: nowTime(),
       }]);
     } catch {
-      const fallbackParts = [
-        copilotBrief.summary,
-        copilotBrief.rootCause ? `Root cause: ${copilotBrief.rootCause}` : null,
-        copilotBrief.conflict ? `Conflict: ${copilotBrief.conflict}` : null,
-        copilotBrief.recommendation ? `Recommended action: ${copilotBrief.recommendation}` : null,
-        impactedBranches.length ? `Impacted: ${impactedBranches.map(b => b.label).join(', ')}` : null,
-      ].filter(Boolean).join('\n\n');
+      const localParts = [
+        copilotBrief.summary && copilotBrief.summary !== 'No AI summary yet.' ? copilotBrief.summary : null,
+        copilotBrief.rootCause && copilotBrief.rootCause !== 'Pending analysis.' ? `Root cause: ${copilotBrief.rootCause}` : null,
+        copilotBrief.conflict ? `Active blocker: ${copilotBrief.conflict}` : null,
+        copilotBrief.recommendation ? `Recommendation: ${copilotBrief.recommendation}` : null,
+        impactedBranches.length ? `Impacted systems: ${impactedBranches.map(b => b.label).join(', ')}` : null,
+      ].filter(Boolean);
+      const fallbackContent = localParts.length
+        ? `The AI server isn't reachable right now, but here's what the canonical state shows:\n\n${localParts.join('\n\n')}`
+        : 'The AI server is currently unreachable and there is no local canonical data for this case yet.';
       setCopilotMessages(prev => [...prev, {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: fallbackParts || 'No canonical data available for this case yet.',
+        content: fallbackContent,
         time: nowTime(),
       }]);
     } finally {
