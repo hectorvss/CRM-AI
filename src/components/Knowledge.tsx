@@ -39,17 +39,6 @@ type KnowledgeDraftState = {
   domainId: string;
   ownerUserId: string;
   reviewCycleDays: string;
-  summary: string;
-  policy: string;
-  allowed: string;
-  blocked: string;
-  escalation: string;
-  evidence: string;
-  agentNotes: string;
-  examples: string;
-  keywords: string;
-  linkedWorkflows: string;
-  linkedApprovals: string;
 };
 
 const emptyDraft: KnowledgeDraftState = {
@@ -60,17 +49,6 @@ const emptyDraft: KnowledgeDraftState = {
   domainId: '',
   ownerUserId: '',
   reviewCycleDays: '90',
-  summary: '',
-  policy: '',
-  allowed: '',
-  blocked: '',
-  escalation: '',
-  evidence: '',
-  agentNotes: '',
-  examples: '',
-  keywords: '',
-  linkedWorkflows: '',
-  linkedApprovals: '',
 };
 
 const splitLines = (value: string) => value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -105,6 +83,131 @@ const normalizeSheet = (value: unknown, content: string): KnowledgeSheet => {
     agent_notes: Array.isArray(structured.agent_notes) ? structured.agent_notes.map((item: any) => String(item ?? '').trim()).filter(Boolean) : [],
     examples: Array.isArray(structured.examples) ? structured.examples.map((item: any) => String(item ?? '').trim()).filter(Boolean) : [],
     keywords: Array.isArray(structured.keywords) ? structured.keywords.map((item: any) => String(item ?? '').trim()).filter(Boolean) : [],
+  };
+};
+
+const sectionAliases: Record<string, keyof KnowledgeSheet> = {
+  summary: 'summary',
+  overview: 'summary',
+  context: 'summary',
+  policy: 'policy',
+  'policy statement': 'policy',
+  statement: 'policy',
+  allowed: 'allowed',
+  permitted: 'allowed',
+  blocked: 'blocked',
+  disallowed: 'blocked',
+  escalation: 'escalation',
+  escalations: 'escalation',
+  evidence: 'evidence',
+  citations: 'evidence',
+  sources: 'evidence',
+  'agent notes': 'agent_notes',
+  notes: 'agent_notes',
+  examples: 'examples',
+  example: 'examples',
+  keywords: 'keywords',
+  tags: 'keywords',
+};
+
+const normalizeSectionKey = (heading: string): keyof KnowledgeSheet | null => {
+  const cleaned = heading.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+  for (const [needle, section] of Object.entries(sectionAliases)) {
+    if (cleaned === needle || cleaned.startsWith(`${needle} `) || cleaned.includes(` ${needle} `)) {
+      return section;
+    }
+  }
+  return null;
+};
+
+const parseItems = (lines: string[], commaSeparated = false) => {
+  const collected = lines.flatMap((line) => {
+    const cleaned = line.replace(/^[-*•]+\s*/, '').replace(/^\d+[.)]\s*/, '').trim();
+    if (!cleaned) return [];
+    if (commaSeparated) {
+      return cleaned.split(/[;,]/g).map((item) => item.trim()).filter(Boolean);
+    }
+    return [cleaned];
+  });
+  return collected;
+};
+
+const buildKnowledgeSheetFromNarrative = (content: string, fallback?: Partial<KnowledgeSheet> | null): KnowledgeSheet => {
+  const empty: KnowledgeSheet = {
+    summary: '',
+    policy: '',
+    allowed: [],
+    blocked: [],
+    escalation: [],
+    evidence: [],
+    agent_notes: [],
+    examples: [],
+    keywords: [],
+  };
+
+  const lines = content.split(/\r?\n/);
+  const sections: Record<keyof KnowledgeSheet, string[]> = {
+    summary: [],
+    policy: [],
+    allowed: [],
+    blocked: [],
+    escalation: [],
+    evidence: [],
+    agent_notes: [],
+    examples: [],
+    keywords: [],
+  };
+
+  let current: keyof KnowledgeSheet | null = null;
+  let sawHeading = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const headingMatch = line.match(/^\s{0,3}(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      const section = normalizeSectionKey(headingMatch[2]);
+      current = section;
+      sawHeading = sawHeading || Boolean(section);
+      continue;
+    }
+
+    if (!current) {
+      sections.policy.push(line);
+      continue;
+    }
+
+    sections[current].push(line);
+  }
+
+  const paragraphSummary = content
+    .split(/\n\s*\n/)
+    .map((part) => part.replace(/\s+/g, ' ').trim())
+    .find(Boolean) ?? '';
+
+  const summary = sections.summary.join('\n').trim() || fallback?.summary?.trim() || paragraphSummary.slice(0, 220);
+  const policy = sections.policy.join('\n').trim() || fallback?.policy?.trim() || content.trim();
+
+  const lists = {
+    allowed: parseItems(sections.allowed),
+    blocked: parseItems(sections.blocked),
+    escalation: parseItems(sections.escalation),
+    evidence: parseItems(sections.evidence),
+    agent_notes: parseItems(sections.agent_notes),
+    examples: parseItems(sections.examples),
+    keywords: parseItems(sections.keywords, true),
+  };
+
+  return {
+    ...empty,
+    summary,
+    policy,
+    allowed: lists.allowed.length ? lists.allowed : (fallback?.allowed ?? []),
+    blocked: lists.blocked.length ? lists.blocked : (fallback?.blocked ?? []),
+    escalation: lists.escalation.length ? lists.escalation : (fallback?.escalation ?? []),
+    evidence: lists.evidence.length ? lists.evidence : (fallback?.evidence ?? []),
+    agent_notes: lists.agent_notes.length ? lists.agent_notes : (fallback?.agent_notes ?? []),
+    examples: lists.examples.length ? lists.examples : (fallback?.examples ?? []),
+    keywords: lists.keywords.length ? lists.keywords : (fallback?.keywords ?? []),
   };
 };
 
@@ -212,12 +315,9 @@ export default function Knowledge() {
   const isSelectedArticleLoading = Boolean(selectedArticleId && selectedArticleLoading && !selectedArticle);
 
   useEffect(() => {
-    if (!editorOpen) return;
-
     const source = selectedArticle;
 
-    if (editorMode === 'edit' && source) {
-      const sheet = normalizeSheet(source.content_structured, String(source.content ?? ''));
+    if (selectedArticleId && source) {
       setDraft({
         title: source.title || '',
         content: typeof source.content === 'string' ? source.content : asString(source.content ?? ''),
@@ -226,25 +326,14 @@ export default function Knowledge() {
         domainId: source.domain_id || '',
         ownerUserId: source.owner_user_id || '',
         reviewCycleDays: String(source.review_cycle_days ?? 90),
-        summary: sheet.summary,
-        policy: sheet.policy,
-        allowed: joinLines(sheet.allowed),
-        blocked: joinLines(sheet.blocked),
-        escalation: joinLines(sheet.escalation),
-        evidence: joinLines(sheet.evidence),
-        agentNotes: joinLines(sheet.agent_notes),
-        examples: joinLines(sheet.examples),
-        keywords: joinLines(sheet.keywords),
-        linkedWorkflows: joinLines(Array.isArray(source.linked_workflow_ids) ? source.linked_workflow_ids : []),
-        linkedApprovals: joinLines(Array.isArray(source.linked_approval_policy_ids) ? source.linked_approval_policy_ids : []),
       });
       return;
     }
 
-    if (editorMode === 'create') {
+    if (editorOpen && editorMode === 'create') {
       setDraft(emptyDraft);
     }
-  }, [editorMode, editorOpen, selectedArticle]);
+  }, [editorMode, editorOpen, selectedArticle, selectedArticleId]);
 
   const articleData = selectedArticle
     ? {
@@ -288,6 +377,15 @@ export default function Knowledge() {
   const handleSaveArticle = async () => {
     if (!draft.title.trim() || !draft.content.trim()) return;
 
+    const existingSheet = selectedArticle ? normalizeSheet(selectedArticle.content_structured, String(selectedArticle.content ?? '')) : null;
+    const contentStructured = buildKnowledgeSheetFromNarrative(draft.content, existingSheet);
+    const linkedWorkflowIds = selectedArticle && Array.isArray(selectedArticle.linked_workflow_ids)
+      ? selectedArticle.linked_workflow_ids
+      : [];
+    const linkedApprovalPolicyIds = selectedArticle && Array.isArray(selectedArticle.linked_approval_policy_ids)
+      ? selectedArticle.linked_approval_policy_ids
+      : [];
+
     const payload = {
       title: draft.title,
       content: draft.content,
@@ -296,19 +394,9 @@ export default function Knowledge() {
       domain_id: draft.domainId || null,
       owner_user_id: draft.ownerUserId || null,
       review_cycle_days: Number(draft.reviewCycleDays) || 90,
-      content_structured: {
-        summary: draft.summary.trim(),
-        policy: draft.policy.trim(),
-        allowed: splitLines(draft.allowed),
-        blocked: splitLines(draft.blocked),
-        escalation: splitLines(draft.escalation),
-        evidence: splitLines(draft.evidence),
-        agent_notes: splitLines(draft.agentNotes),
-        examples: splitLines(draft.examples),
-        keywords: splitLines(draft.keywords),
-      },
-      linked_workflow_ids: splitLines(draft.linkedWorkflows),
-      linked_approval_policy_ids: splitLines(draft.linkedApprovals),
+      content_structured: contentStructured,
+      linked_workflow_ids: linkedWorkflowIds,
+      linked_approval_policy_ids: linkedApprovalPolicyIds,
     };
 
     if (editorMode === 'create') {
@@ -470,6 +558,110 @@ export default function Knowledge() {
     }
 
     if (!articleData) return null;
+
+    const liveDraft = {
+      title: draft.title || articleData.title,
+      content: draft.content || articleData.content,
+      type: draft.type || (articleData.type as KnowledgeItem['type']),
+      status: draft.status || articleData.scope,
+      domainId: draft.domainId || articleData.domainId,
+      ownerUserId: draft.ownerUserId || articleData.ownerUserId,
+      reviewCycleDays: draft.reviewCycleDays || String(articleData.reviewCycleDays),
+    };
+
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-background-dark">
+        <div className="flex items-center gap-3 px-8 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-card-dark flex-shrink-0">
+          <button
+            onClick={() => setSelectedArticleId(null)}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            <span className="material-symbols-outlined text-lg">arrow_back</span>
+            Back to library
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">Knowledge sheet</p>
+            <h2 className="mt-1 truncate text-lg font-semibold text-gray-900 dark:text-white">{liveDraft.title}</h2>
+          </div>
+          <button
+            onClick={handleSaveArticle}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            <span className="material-symbols-outlined text-lg">save</span>
+            Save
+          </button>
+          <button onClick={handlePublishSelected} className="inline-flex items-center gap-2 rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200">
+            <span className="material-symbols-outlined text-lg">publish</span>
+            Publish
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-8">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+            <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+              <span className="rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1">{liveDraft.type}</span>
+              <span className="rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1">{liveDraft.status}</span>
+              <span className="rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1">Review {liveDraft.reviewCycleDays}d</span>
+              <span className="rounded-md border border-gray-200 dark:border-gray-700 px-2 py-1">#{articleData.id}</span>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Title</span>
+                <input
+                  value={liveDraft.title}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
+                  className="w-full border-0 border-b border-gray-200 bg-transparent px-0 py-2 text-3xl font-semibold tracking-tight text-gray-900 outline-none transition-colors placeholder:text-gray-300 focus:border-black dark:border-gray-700 dark:text-white dark:focus:border-white"
+                />
+              </label>
+              <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                <span>Owner: {articleData.owner}</span>
+                <span>Domain: {articleData.domain}</span>
+                <span>Updated: {articleData.lastUpdated}</span>
+                <span>Owner ID: {liveDraft.ownerUserId || '—'}</span>
+              </div>
+            </div>
+
+            <label className="block">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Policy narrative</span>
+              <textarea
+                value={liveDraft.content}
+                onChange={(e) => setDraft((prev) => ({ ...prev, content: e.target.value }))}
+                rows={22}
+                className="min-h-[55vh] w-full rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm leading-7 text-gray-800 outline-none transition-colors placeholder:text-gray-300 focus:border-black dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:focus:border-white"
+                placeholder="Write the policy as a narrative. The structured sheet is derived from this text."
+              />
+            </label>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+              <p>This body is what the agents read first. The structured sheet is derived from the same text.</p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDraft((prev) => ({ ...prev, status: 'Draft' }))}
+                  className={`rounded-lg border px-3 py-2 font-medium transition-colors ${
+                    liveDraft.status === 'Draft'
+                      ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  Draft
+                </button>
+                <button
+                  onClick={() => setDraft((prev) => ({ ...prev, status: 'Published' }))}
+                  className={`rounded-lg border px-3 py-2 font-medium transition-colors ${
+                    liveDraft.status === 'Published'
+                      ? 'border-gray-900 text-gray-900 dark:border-white dark:text-white'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  Published
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
 
     const Section = ({ title, items, tone = 'gray' }: { title: string; items: string[]; tone?: 'gray' | 'emerald' | 'amber' | 'rose' }) => (
       <section className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-card-dark p-5">
@@ -979,11 +1171,19 @@ export default function Knowledge() {
                 <div className="grid gap-4 lg:grid-cols-3">
                   <label className="lg:col-span-2">
                     <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Title</span>
-                    <input value={draft.title} onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                    <input
+                      value={draft.title}
+                      onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
                   </label>
                   <label>
                     <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Type</span>
-                    <select value={draft.type} onChange={(e) => setDraft((prev) => ({ ...prev, type: e.target.value as KnowledgeItem['type'] }))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none">
+                    <select
+                      value={draft.type}
+                      onChange={(e) => setDraft((prev) => ({ ...prev, type: e.target.value as KnowledgeItem['type'] }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none"
+                    >
                       <option value="ARTICLE">Article</option>
                       <option value="POLICY">Policy</option>
                       <option value="SNIPPET">Snippet</option>
@@ -995,64 +1195,54 @@ export default function Knowledge() {
                 <div className="grid gap-4 lg:grid-cols-3">
                   <label>
                     <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Domain</span>
-                    <select value={draft.domainId} onChange={(e) => setDraft((prev) => ({ ...prev, domainId: e.target.value }))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none">
+                    <select
+                      value={draft.domainId}
+                      onChange={(e) => setDraft((prev) => ({ ...prev, domainId: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none"
+                    >
                       <option value="">General</option>
                       {domainOptions.map((domain: any) => <option key={domain.id} value={domain.id}>{domain.name}</option>)}
                     </select>
                   </label>
                   <label>
                     <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Owner user id</span>
-                    <input value={draft.ownerUserId} onChange={(e) => setDraft((prev) => ({ ...prev, ownerUserId: e.target.value }))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="user_alex" />
+                    <input
+                      value={draft.ownerUserId}
+                      onChange={(e) => setDraft((prev) => ({ ...prev, ownerUserId: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      placeholder="user_alex"
+                    />
                   </label>
                   <label>
                     <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Review cycle days</span>
-                    <input type="number" min="7" value={draft.reviewCycleDays} onChange={(e) => setDraft((prev) => ({ ...prev, reviewCycleDays: e.target.value }))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                    <input
+                      type="number"
+                      min="7"
+                      value={draft.reviewCycleDays}
+                      onChange={(e) => setDraft((prev) => ({ ...prev, reviewCycleDays: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    />
                   </label>
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Summary</span>
-                    <textarea value={draft.summary} onChange={(e) => setDraft((prev) => ({ ...prev, summary: e.target.value }))} rows={4} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Policy statement</span>
-                    <textarea value={draft.policy} onChange={(e) => setDraft((prev) => ({ ...prev, policy: e.target.value }))} rows={4} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {[
-                    ['Allowed', 'allowed'],
-                    ['Blocked', 'blocked'],
-                    ['Escalation', 'escalation'],
-                    ['Evidence', 'evidence'],
-                    ['Agent notes', 'agentNotes'],
-                    ['Examples', 'examples'],
-                    ['Keywords', 'keywords'],
-                    ['Linked workflows', 'linkedWorkflows'],
-                    ['Linked approvals', 'linkedApprovals'],
-                  ].map(([label, key]) => (
-                    <label key={key} className="block">
-                      <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">{label}</span>
-                      <textarea
-                        value={(draft as any)[key]}
-                        onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value } as KnowledgeDraftState))}
-                        rows={4}
-                        className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
-                      />
-                    </label>
-                  ))}
                 </div>
 
                 <label className="block">
-                  <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Content</span>
-                  <textarea value={draft.content} onChange={(e) => setDraft((prev) => ({ ...prev, content: e.target.value }))} rows={12} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                  <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Narrative policy body</span>
+                  <textarea
+                    value={draft.content}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, content: e.target.value }))}
+                    rows={16}
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-4 text-sm leading-7 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    placeholder="Write the policy as a narrative. Optional section headings can still be parsed into the structured sheet."
+                  />
                 </label>
 
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold text-gray-600 dark:text-gray-300">Status</span>
-                  <select value={draft.status} onChange={(e) => setDraft((prev) => ({ ...prev, status: e.target.value as 'Published' | 'Draft' }))} className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none">
+                  <select
+                    value={draft.status}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, status: e.target.value as 'Published' | 'Draft' }))}
+                    className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-3 text-sm text-gray-900 dark:text-white outline-none"
+                  >
                     <option value="Draft">Draft</option>
                     <option value="Published">Published</option>
                   </select>
