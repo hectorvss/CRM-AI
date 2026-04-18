@@ -63,6 +63,8 @@ function getLatestAgentVersionSqlite(db: any, agentId: string, status?: string) 
 }
 
 function getAgentWithVersionSqlite(db: any, agentId: string, tenantId: string) {
+  const catalog = getCatalogEntryBySlug(agentId);
+  const preferredId = catalog?.id ?? agentId;
   let row = db.prepare(`
     SELECT a.*, av.id as version_id, av.version_number, av.status as version_status,
            av.rollout_percentage, av.permission_profile, av.reasoning_profile,
@@ -70,16 +72,29 @@ function getAgentWithVersionSqlite(db: any, agentId: string, tenantId: string) {
     FROM agents a
     LEFT JOIN agent_versions av ON a.current_version_id = av.id
     WHERE a.id = ? AND a.tenant_id = ?
-  `).get(agentId, tenantId) as any;
+  `).get(preferredId, tenantId) as any;
+
+  if (!row) {
+    row = db.prepare(`
+      SELECT a.*, av.id as version_id, av.version_number, av.status as version_status,
+             av.rollout_percentage, av.permission_profile, av.reasoning_profile,
+             av.safety_profile, av.knowledge_profile, av.capabilities, av.published_at
+      FROM agents a
+      LEFT JOIN agent_versions av ON a.current_version_id = av.id
+      WHERE a.slug = ? AND a.tenant_id = ? AND a.is_active = 1
+      ORDER BY a.is_system DESC, a.created_at ASC
+      LIMIT 1
+    `).get(agentId, tenantId) as any;
+  }
 
   if (!row) return null;
 
   if (!row.version_id || row.version_status !== 'published') {
-    const fallback = getLatestAgentVersionSqlite(db, agentId, 'published');
+    const fallback = getLatestAgentVersionSqlite(db, row.id, 'published');
     if (fallback) {
       try {
         db.prepare('UPDATE agents SET current_version_id = ?, updated_at = ? WHERE id = ?')
-          .run(fallback.id, new Date().toISOString(), agentId);
+          .run(fallback.id, new Date().toISOString(), row.id);
       } catch { /* non-critical */ }
       row = { ...row, ...fallback, version_id: fallback.id, version_status: fallback.status };
     }
@@ -104,13 +119,38 @@ async function getLatestAgentVersionSupabase(agentId: string, status?: string) {
 
 async function getAgentWithVersionSupabase(agentId: string, tenantId: string) {
   const supabase = getSupabaseAdmin();
-  const { data: agent, error } = await supabase
-    .from('agents')
-    .select('*')
-    .eq('id', agentId)
-    .eq('tenant_id', tenantId)
-    .maybeSingle();
-  if (error) throw error;
+  let agent: any = null;
+  const catalog = getCatalogEntryBySlug(agentId);
+  const idCandidates = Array.from(new Set([catalog?.id, agentId].filter(Boolean))) as string[];
+
+  for (const id of idCandidates) {
+    const { data, error } = await supabase
+      .from('agents')
+      .select('*')
+      .eq('id', id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) {
+      agent = data;
+      break;
+    }
+  }
+
+  if (!agent) {
+    const { data, error } = await supabase
+      .from('agents')
+      .select('*')
+      .eq('slug', agentId)
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .order('is_system', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (error) throw error;
+    agent = data?.[0] ?? null;
+  }
+
   if (!agent) return null;
 
   let version: any = null;
@@ -125,13 +165,13 @@ async function getAgentWithVersionSupabase(agentId: string, tenantId: string) {
   }
 
   if (!version || version.status !== 'published') {
-    const fallback = await getLatestAgentVersionSupabase(agentId, 'published');
+    const fallback = await getLatestAgentVersionSupabase(agent.id, 'published');
     if (fallback) {
       version = fallback;
       await supabase
         .from('agents')
         .update({ current_version_id: fallback.id, updated_at: new Date().toISOString() })
-        .eq('id', agentId)
+        .eq('id', agent.id)
         .eq('tenant_id', tenantId);
     }
   }

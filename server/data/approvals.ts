@@ -4,6 +4,7 @@ import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 import { buildCaseState, createCaseRepository } from './cases.js';
+import { applyPostApprovalDecision } from '../services/postApproval.js';
 
 export interface ApprovalScope {
   tenantId: string;
@@ -244,7 +245,21 @@ async function decideApprovalSupabase(scope: ApprovalScope, approvalId: string, 
     .eq('workspace_id', scope.workspaceId);
   if (caseError) throw caseError;
 
-  return { success: true, decision: input.decision, caseId: approval.case_id, executionPlanId: approval.execution_plan_id || null };
+  const postApproval = await applyPostApprovalDecision(
+    { tenantId: scope.tenantId, workspaceId: scope.workspaceId },
+    approval,
+    input.decision,
+    decisionBy,
+    input.note,
+  );
+
+  return {
+    success: true,
+    decision: input.decision,
+    caseId: approval.case_id,
+    executionPlanId: approval.execution_plan_id || null,
+    postApproval,
+  };
 }
 
 async function decideApprovalSqlite(scope: ApprovalScope, approvalId: string, input: { decision: 'approved' | 'rejected'; note?: string; decided_by?: string }) {
@@ -291,7 +306,21 @@ async function decideApprovalSqlite(scope: ApprovalScope, approvalId: string, in
     priority: input.decision === 'rejected' ? 'high' : approval.priority,
   });
 
-  return { success: true, decision: input.decision, caseId: approval.case_id, executionPlanId: approval.execution_plan_id || null };
+  const postApproval = await applyPostApprovalDecision(
+    { tenantId: scope.tenantId, workspaceId: scope.workspaceId },
+    approval,
+    input.decision,
+    decisionBy,
+    input.note,
+  );
+
+  return {
+    success: true,
+    decision: input.decision,
+    caseId: approval.case_id,
+    executionPlanId: approval.execution_plan_id || null,
+    postApproval,
+  };
 }
 
 function listApprovalsSqlite(scope: ApprovalScope, filters: { status?: string; risk_level?: string; assigned_to?: string }) {

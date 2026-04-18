@@ -81,7 +81,7 @@ router.post('/:id/decide', async (req: MultiTenantRequest, res) => {
 
     if (!result) return res.status(404).json({ error: 'Not found' });
 
-    if (decision === 'approved' && result.executionPlanId) {
+    if (decision === 'approved' && result.executionPlanId && result.postApproval?.shouldEnqueueExecution) {
       await enqueue(
         JobType.RESOLUTION_EXECUTE,
         { executionPlanId: result.executionPlanId, mode: 'ai' },
@@ -94,7 +94,7 @@ router.post('/:id/decide', async (req: MultiTenantRequest, res) => {
       );
     }
 
-    res.json({ success: true, decision, caseId: result.caseId });
+    res.json({ success: true, decision, caseId: result.caseId, postApproval: result.postApproval ?? null });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     logger.error('Error deciding approval:', error);

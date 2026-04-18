@@ -55,6 +55,7 @@ export interface IAMRepository {
   getRoleById(id: string, tenantId: string, workspaceId: string): Promise<any>;
   getRoleByName(name: string, tenantId: string, workspaceId: string): Promise<any>;
   listRoles(tenantId: string, workspaceId: string): Promise<any[]>;
+  getPermissionKeys(roleId: string): Promise<string[]>;
   createRole(data: {
     id: string;
     workspaceId: string;
@@ -244,6 +245,16 @@ class SQLiteIAMRepository implements IAMRepository {
       const insertRolePerm = db.prepare(`INSERT OR IGNORE INTO role_permissions (role_id, permission_key) VALUES (?, ?)`);
       updates.permissions.forEach((pk: string) => insertRolePerm.run(id, pk));
     }
+  }
+
+  async getPermissionKeys(roleId: string) {
+    const db = getDb();
+    const rows = db.prepare('SELECT permission_key FROM role_permissions WHERE role_id = ? ORDER BY permission_key').all(roleId) as any[];
+    if (rows.length > 0) return rows.map((row) => row.permission_key).filter(Boolean);
+
+    const role = db.prepare('SELECT permissions FROM roles WHERE id = ?').get(roleId) as any;
+    const permissions = parseRow(role)?.permissions;
+    return Array.isArray(permissions) ? permissions : [];
   }
 }
 
@@ -518,6 +529,27 @@ class SupabaseIAMRepository implements IAMRepository {
       }));
       await supabase.from('role_permissions').insert(perms);
     }
+  }
+
+  async getPermissionKeys(roleId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('role_permissions')
+      .select('permission_key')
+      .eq('role_id', roleId)
+      .order('permission_key', { ascending: true });
+    if (error) throw error;
+    if ((data || []).length > 0) {
+      return (data || []).map((row: any) => row.permission_key).filter(Boolean);
+    }
+
+    const { data: role, error: roleError } = await supabase
+      .from('roles')
+      .select('permissions')
+      .eq('id', roleId)
+      .maybeSingle();
+    if (roleError) throw roleError;
+    return Array.isArray(role?.permissions) ? role.permissions : [];
   }
 }
 

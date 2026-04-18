@@ -16,6 +16,8 @@ export interface CanonicalRepository {
   getInternalNotes(scope: CanonicalScope, caseId: string, limit?: number): Promise<any[]>;
   getApprovalWithContext(scope: CanonicalScope, approvalId: string): Promise<any>;
   getAuditTrail(scope: CanonicalScope, caseId: string, approvalId: string): Promise<any[]>;
+  getEventByDedupeKey(scope: CanonicalScope, dedupeKey: string): Promise<any | null>;
+  createEvent(scope: CanonicalScope, data: any): Promise<any>;
   updateEventStatus(scope: CanonicalScope, eventId: string, updates: any): Promise<void>;
 }
 
@@ -559,7 +561,58 @@ async function updateEventStatusSupabase(scope: CanonicalScope, eventId: string,
   if (error) throw error;
 }
 
-function updateEventStatusSqlite(scope: CanonicalScope, eventId: string, updates: any) {
+async function getEventByDedupeKeySupabase(scope: CanonicalScope, dedupeKey: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('canonical_events')
+    .select('*')
+    .eq('dedupe_key', dedupeKey)
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function createEventSupabase(scope: CanonicalScope, data: any) {
+  const supabase = getSupabaseAdmin();
+  const payload = {
+    id: data.id ?? crypto.randomUUID(),
+    ...data,
+    tenant_id: scope.tenantId,
+    workspace_id: data.workspace_id ?? scope.workspaceId,
+    occurred_at: data.occurred_at ?? new Date().toISOString(),
+    ingested_at: data.ingested_at ?? new Date().toISOString(),
+    status: data.status ?? 'received',
+  };
+  const { error } = await supabase.from('canonical_events').insert(payload);
+  if (error) throw error;
+  return payload;
+}
+
+function getEventByDedupeKeySqlite(scope: CanonicalScope, dedupeKey: string) {
+  const db = getDb();
+  return parseRow(db.prepare('SELECT * FROM canonical_events WHERE dedupe_key = ? AND tenant_id = ? AND workspace_id = ?').get(dedupeKey, scope.tenantId, scope.workspaceId));
+}
+
+function createEventSqlite(scope: CanonicalScope, data: any) {
+  const db = getDb();
+  const payload = {
+    id: data.id ?? crypto.randomUUID(),
+    ...data,
+    tenant_id: scope.tenantId,
+    workspace_id: data.workspace_id ?? scope.workspaceId,
+    occurred_at: data.occurred_at ?? new Date().toISOString(),
+    ingested_at: data.ingested_at ?? new Date().toISOString(),
+    status: data.status ?? 'received',
+  };
+  const fields = Object.keys(payload);
+  db.prepare(`INSERT INTO canonical_events (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`)
+    .run(...Object.values(payload).map((value) => value && typeof value === 'object' ? JSON.stringify(value) : value));
+  return payload;
+}
+
+async function updateEventStatusSqlite(scope: CanonicalScope, eventId: string, updates: any) {
   const db = getDb();
   const fields = Object.keys(updates).map(k => `${k} = ?`);
   const params = Object.values(updates);
@@ -577,6 +630,8 @@ export function createCanonicalRepository(): CanonicalRepository {
       getInternalNotes: getInternalNotesSupabase,
       getApprovalWithContext: getApprovalWithContextSupabase,
       getAuditTrail: getAuditTrailSupabase,
+      getEventByDedupeKey: getEventByDedupeKeySupabase,
+      createEvent: createEventSupabase,
       updateEventStatus: updateEventStatusSupabase,
     };
   }
@@ -589,6 +644,8 @@ export function createCanonicalRepository(): CanonicalRepository {
     getInternalNotes: async (scope, caseId, limit) => getInternalNotesSqlite(scope, caseId, limit),
     getApprovalWithContext: async (scope, approvalId) => getApprovalWithContextSqlite(scope, approvalId),
     getAuditTrail: async (scope, caseId, approvalId) => getAuditTrailSqlite(scope, caseId, approvalId),
+    getEventByDedupeKey: async (scope, dedupeKey) => getEventByDedupeKeySqlite(scope, dedupeKey),
+    createEvent: async (scope, data) => createEventSqlite(scope, data),
     updateEventStatus: updateEventStatusSqlite,
   };
 }

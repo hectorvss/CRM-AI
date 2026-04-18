@@ -24,6 +24,7 @@ function buildConflictSummary(bundle: any) {
     severity: bundle.case.conflict_severity || issue?.severity || bundle.case.risk_level || 'warning',
     root_cause: bundle.case.ai_root_cause || issue?.summary || null,
     recommended_action: bundle.case.ai_recommended_action || issue?.recommended_action || null,
+    source_of_truth: issue?.source_of_truth || issue?.system || null,
   };
 }
 
@@ -1357,7 +1358,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
   const workflowRunIds = compactStrings((workflowRunsResult.data ?? []).map((row: any) => row.id));
   const workflowRunStepsResult = workflowRunIds.length
     ? await supabase.from('workflow_run_steps').select('*').in('workflow_run_id', workflowRunIds).order('started_at', { ascending: false })
-    : Promise.resolve({ data: [], error: null } as any);
+    : { data: [], error: null } as any;
   if (workflowRunStepsResult?.error) throw workflowRunStepsResult.error;
 
   const relatedCaseIds = compactStrings((linksResult.data ?? []).map((row: any) => row.linked_case_id));
@@ -1722,9 +1723,26 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
 }
 export interface CaseRepository {
   list(scope: CaseScope, filters: CaseFilters): Promise<any[]>;
+  get(scope: CaseScope, caseId: string): Promise<any | null>;
   getBundle(scope: CaseScope, caseId: string): Promise<any | null>;
   update(scope: CaseScope, id: string, updates: any): Promise<void>;
   addStatusHistory(scope: CaseScope, data: any): Promise<void>;
+  getConversation(scope: CaseScope, conversationId: string): Promise<any | null>;
+  getConversationByChannel(scope: CaseScope, customerId: string, channel: string): Promise<any | null>;
+  createConversation(scope: CaseScope, data: any): Promise<void>;
+  updateConversation(scope: CaseScope, conversationId: string, updates: any): Promise<void>;
+  getMessageByExternalId(scope: CaseScope, conversationId: string, externalMessageId: string): Promise<any | null>;
+  createMessage(scope: CaseScope, data: any): Promise<void>;
+  updateMessage(scope: CaseScope, messageId: string, updates: any): Promise<void>;
+  updateDraft(scope: CaseScope, draftId: string, updates: any): Promise<void>;
+  getExecutionPlan(scope: CaseScope, executionPlanId: string): Promise<any | null>;
+  updateExecutionPlan(scope: CaseScope, executionPlanId: string, updates: any): Promise<void>;
+  getPreviousStatusFromHistory(scope: CaseScope, caseId: string, changedBy: string): Promise<string | null>;
+  reopenReconciliationIssues(scope: CaseScope, caseId: string): Promise<void>;
+  listOpenCasesWithSLA(scope: CaseScope, limit: number): Promise<any[]>;
+  listExpiredApprovals(scope: CaseScope, now: string): Promise<any[]>;
+  expireApprovals(scope: CaseScope, now: string): Promise<{ changes: number }>;
+  updateCasesForExpiredApprovals(scope: CaseScope): Promise<void>;
   updateConflictState(scope: CaseScope, caseId: string, hasConflict: boolean, severity: string | null): Promise<void>;
   findOpenCase(scope: CaseScope, customerId: string | null, type: string, windowHours: number): Promise<string | null>;
   getNextCaseNumber(scope: CaseScope): Promise<string>;
@@ -1757,6 +1775,10 @@ class SQLiteCaseRepository implements CaseRepository {
   async list(scope: CaseScope, filters: CaseFilters) {
     return listCasesSqlite(scope, filters);
   }
+  async get(scope: CaseScope, caseId: string) {
+    const db = getDb();
+    return parseRow(db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(caseId, scope.tenantId, scope.workspaceId));
+  }
   async getBundle(scope: CaseScope, caseId: string) {
     return fetchCaseBundleSqlite(scope, caseId);
   }
@@ -1773,6 +1795,101 @@ class SQLiteCaseRepository implements CaseRepository {
       INSERT INTO case_status_history (id, case_id, from_status, to_status, changed_by, reason, tenant_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `).run(crypto.randomUUID(), data.caseId, data.fromStatus, data.toStatus, data.changedBy, data.reason || null, scope.tenantId);
+  }
+  async getConversation(scope: CaseScope, conversationId: string) {
+    const db = getDb();
+    return parseRow(db.prepare('SELECT * FROM conversations WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(conversationId, scope.tenantId, scope.workspaceId));
+  }
+  async getConversationByChannel(scope: CaseScope, customerId: string, channel: string) {
+    const db = getDb();
+    return parseRow(db.prepare(`
+      SELECT * FROM conversations
+      WHERE customer_id = ? AND channel = ? AND status = 'open' AND tenant_id = ? AND workspace_id = ?
+      ORDER BY last_message_at DESC LIMIT 1
+    `).get(customerId, channel, scope.tenantId, scope.workspaceId));
+  }
+  async createConversation(scope: CaseScope, data: any) {
+    const db = getDb();
+    const fields = Object.keys(data);
+    db.prepare(`INSERT INTO conversations (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`)
+      .run(...Object.values(data).map((value) => value && typeof value === 'object' ? JSON.stringify(value) : value));
+  }
+  async updateConversation(scope: CaseScope, conversationId: string, updates: any) {
+    const db = getDb();
+    const payload = { ...updates, updated_at: new Date().toISOString() };
+    const fields = Object.keys(payload);
+    db.prepare(`UPDATE conversations SET ${fields.map((field) => `${field} = ?`).join(', ')} WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
+      .run(...Object.values(payload), conversationId, scope.tenantId, scope.workspaceId);
+  }
+  async getMessageByExternalId(scope: CaseScope, conversationId: string, externalMessageId: string) {
+    const db = getDb();
+    return parseRow(db.prepare('SELECT * FROM messages WHERE conversation_id = ? AND external_message_id = ? AND tenant_id = ?').get(conversationId, externalMessageId, scope.tenantId));
+  }
+  async createMessage(scope: CaseScope, data: any) {
+    const db = getDb();
+    const fields = Object.keys(data);
+    db.prepare(`INSERT INTO messages (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`)
+      .run(...Object.values(data).map((value) => value && typeof value === 'object' ? JSON.stringify(value) : value));
+  }
+  async updateMessage(scope: CaseScope, messageId: string, updates: any) {
+    const db = getDb();
+    const fields = Object.keys(updates);
+    if (!fields.length) return;
+    db.prepare(`UPDATE messages SET ${fields.map((field) => `${field} = ?`).join(', ')} WHERE id = ? AND tenant_id = ?`)
+      .run(...Object.values(updates), messageId, scope.tenantId);
+  }
+  async updateDraft(scope: CaseScope, draftId: string, updates: any) {
+    const db = getDb();
+    const fields = Object.keys(updates);
+    if (!fields.length) return;
+    db.prepare(`UPDATE draft_replies SET ${fields.map((field) => `${field} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
+      .run(...Object.values(updates), draftId, scope.tenantId, scope.workspaceId);
+  }
+  async getExecutionPlan(scope: CaseScope, executionPlanId: string) {
+    const db = getDb();
+    return parseRow(db.prepare('SELECT * FROM execution_plans WHERE id = ? AND tenant_id = ?').get(executionPlanId, scope.tenantId));
+  }
+  async updateExecutionPlan(scope: CaseScope, executionPlanId: string, updates: any) {
+    const db = getDb();
+    const fields = Object.keys(updates);
+    if (!fields.length) return;
+    db.prepare(`UPDATE execution_plans SET ${fields.map((field) => `${field} = ?`).join(', ')} WHERE id = ? AND tenant_id = ?`)
+      .run(...Object.values(updates), executionPlanId, scope.tenantId);
+  }
+  async getPreviousStatusFromHistory(scope: CaseScope, caseId: string, changedBy: string) {
+    const db = getDb();
+    const row = db.prepare('SELECT from_status FROM case_status_history WHERE case_id = ? AND tenant_id = ? AND changed_by = ? ORDER BY created_at DESC LIMIT 1')
+      .get(caseId, scope.tenantId, changedBy) as any;
+    return row?.from_status ?? null;
+  }
+  async reopenReconciliationIssues(scope: CaseScope, caseId: string) {
+    const db = getDb();
+    db.prepare("UPDATE reconciliation_issues SET status = 'open', resolved_at = NULL WHERE case_id = ? AND tenant_id = ?").run(caseId, scope.tenantId);
+  }
+  async listOpenCasesWithSLA(scope: CaseScope, limit: number) {
+    const db = getDb();
+    return db.prepare(`SELECT * FROM cases WHERE tenant_id = ? AND workspace_id = ? AND status NOT IN ('resolved','closed','cancelled') ORDER BY updated_at DESC LIMIT ?`)
+      .all(scope.tenantId, scope.workspaceId, limit).map(parseRow);
+  }
+  async listExpiredApprovals(scope: CaseScope, now: string) {
+    const db = getDb();
+    return db.prepare("SELECT * FROM approval_requests WHERE tenant_id = ? AND workspace_id = ? AND status = 'pending' AND expires_at IS NOT NULL AND expires_at < ?")
+      .all(scope.tenantId, scope.workspaceId, now).map(parseRow);
+  }
+  async expireApprovals(scope: CaseScope, now: string) {
+    const db = getDb();
+    const result = db.prepare("UPDATE approval_requests SET status = 'expired', updated_at = ? WHERE tenant_id = ? AND workspace_id = ? AND status = 'pending' AND expires_at IS NOT NULL AND expires_at < ?")
+      .run(now, scope.tenantId, scope.workspaceId, now);
+    return { changes: result.changes };
+  }
+  async updateCasesForExpiredApprovals(scope: CaseScope) {
+    const db = getDb();
+    db.prepare(`
+      UPDATE cases SET approval_state = 'expired', execution_state = 'idle', updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = ? AND workspace_id = ? AND active_approval_request_id IN (
+        SELECT id FROM approval_requests WHERE tenant_id = ? AND workspace_id = ? AND status = 'expired'
+      )
+    `).run(scope.tenantId, scope.workspaceId, scope.tenantId, scope.workspaceId);
   }
   async updateConflictState(scope: CaseScope, caseId: string, hasConflict: boolean, severity: string | null) {
     await updateConflictStateSqlite(scope, caseId, hasConflict, severity);
@@ -1866,6 +1983,18 @@ class SupabaseCaseRepository implements CaseRepository {
   async list(scope: CaseScope, filters: CaseFilters) {
     return listCasesSupabase(scope, filters);
   }
+  async get(scope: CaseScope, caseId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('cases')
+      .select('*')
+      .eq('id', caseId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
   async getBundle(scope: CaseScope, caseId: string) {
     return fetchCaseBundleSupabase(scope, caseId);
   }
@@ -1892,6 +2021,185 @@ class SupabaseCaseRepository implements CaseRepository {
       tenant_id: scope.tenantId,
       created_at: new Date().toISOString()
     });
+    if (error) throw error;
+  }
+  async getConversation(scope: CaseScope, conversationId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('id', conversationId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+  async getConversationByChannel(scope: CaseScope, customerId: string, channel: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('customer_id', customerId)
+      .eq('channel', channel)
+      .eq('status', 'open')
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .order('last_message_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+  async createConversation(scope: CaseScope, data: any) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('conversations').insert({ ...data, tenant_id: scope.tenantId, workspace_id: scope.workspaceId });
+    if (error) throw error;
+  }
+  async updateConversation(scope: CaseScope, conversationId: string, updates: any) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('conversations')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', conversationId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId);
+    if (error) throw error;
+  }
+  async getMessageByExternalId(scope: CaseScope, conversationId: string, externalMessageId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .eq('external_message_id', externalMessageId)
+      .eq('tenant_id', scope.tenantId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+  async createMessage(scope: CaseScope, data: any) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('messages').insert({ ...data, tenant_id: scope.tenantId });
+    if (error) throw error;
+  }
+  async updateMessage(scope: CaseScope, messageId: string, updates: any) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('messages')
+      .update(updates)
+      .eq('id', messageId)
+      .eq('tenant_id', scope.tenantId);
+    if (error) throw error;
+  }
+  async updateDraft(scope: CaseScope, draftId: string, updates: any) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('draft_replies')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', draftId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId);
+    if (error) throw error;
+  }
+  async getExecutionPlan(scope: CaseScope, executionPlanId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('execution_plans')
+      .select('*')
+      .eq('id', executionPlanId)
+      .eq('tenant_id', scope.tenantId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+  async updateExecutionPlan(scope: CaseScope, executionPlanId: string, updates: any) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('execution_plans')
+      .update(updates)
+      .eq('id', executionPlanId)
+      .eq('tenant_id', scope.tenantId);
+    if (error) throw error;
+  }
+  async getPreviousStatusFromHistory(scope: CaseScope, caseId: string, changedBy: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('case_status_history')
+      .select('from_status')
+      .eq('case_id', caseId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('changed_by', changedBy)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.from_status ?? null;
+  }
+  async reopenReconciliationIssues(scope: CaseScope, caseId: string) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('reconciliation_issues')
+      .update({ status: 'open', resolved_at: null })
+      .eq('case_id', caseId)
+      .eq('tenant_id', scope.tenantId);
+    if (error) throw error;
+  }
+  async listOpenCasesWithSLA(scope: CaseScope, limit: number) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('cases')
+      .select('*')
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .not('status', 'in', '("resolved","closed","cancelled")')
+      .order('updated_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data ?? [];
+  }
+  async listExpiredApprovals(scope: CaseScope, now: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('approval_requests')
+      .select('*')
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .eq('status', 'pending')
+      .not('expires_at', 'is', null)
+      .lt('expires_at', now);
+    if (error) throw error;
+    return data ?? [];
+  }
+  async expireApprovals(scope: CaseScope, now: string) {
+    const expired = await this.listExpiredApprovals(scope, now);
+    if (!expired.length) return { changes: 0 };
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('approval_requests')
+      .update({ status: 'expired', updated_at: now })
+      .in('id', expired.map((approval: any) => approval.id))
+      .eq('tenant_id', scope.tenantId);
+    if (error) throw error;
+    return { changes: expired.length };
+  }
+  async updateCasesForExpiredApprovals(scope: CaseScope) {
+    const supabase = getSupabaseAdmin();
+    const { data: expired, error: expiredError } = await supabase
+      .from('approval_requests')
+      .select('id')
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .eq('status', 'expired');
+    if (expiredError) throw expiredError;
+    const ids = (expired ?? []).map((approval: any) => approval.id);
+    if (!ids.length) return;
+    const { error } = await supabase
+      .from('cases')
+      .update({ approval_state: 'expired', execution_state: 'idle', updated_at: new Date().toISOString() })
+      .in('active_approval_request_id', ids)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId);
     if (error) throw error;
   }
   async updateConflictState(scope: CaseScope, caseId: string, hasConflict: boolean, severity: string | null) {

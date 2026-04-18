@@ -114,7 +114,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
   const integrationRepo = createIntegrationRepository();
 
   try {
-    const existing = await integrationRepo.getWebhookEventByDedupeKey(dedupeKey);
+    const existing = await integrationRepo.getWebhookEventByDedupeKey({ tenantId: await resolveTenantIdForStripe() || '' }, dedupeKey);
 
     if (existing) {
       logger.debug('Stripe webhook: duplicate, ignoring', { stripeEventId, eventType });
@@ -132,9 +132,8 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    await integrationRepo.createWebhookEvent({
+    await integrationRepo.createWebhookEvent({ tenantId }, {
       id: eventId,
-      tenantId,
       sourceSystem: 'stripe',
       eventType,
       rawPayload: rawBody,

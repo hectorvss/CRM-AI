@@ -24,6 +24,10 @@ export interface JobRepository {
     attempts?: number;
     error?: string | null;
   }): Promise<void>;
+  rescheduleJob(id: string, updates: {
+    runAt: string;
+    error?: string | null;
+  }): Promise<void>;
 
   countJobs(): Promise<Record<string, number>>;
   retryDeadJob(id: string): Promise<boolean>;
@@ -85,6 +89,19 @@ class SQLiteJobRepository implements JobRepository {
 
     params.push(id);
     db.prepare(`UPDATE jobs SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+  }
+
+  async rescheduleJob(id: string, updates: { runAt: string; error?: string | null }) {
+    const db = getDb();
+    db.prepare(`
+      UPDATE jobs
+      SET status = 'pending',
+          run_at = ?,
+          started_at = NULL,
+          finished_at = NULL,
+          error = ?
+      WHERE id = ?
+    `).run(updates.runAt, updates.error ?? null, id);
   }
 
   async countJobs() {
@@ -197,6 +214,21 @@ class SupabaseJobRepository implements JobRepository {
     if (updates.error !== undefined) toUpdate.error = updates.error;
 
     const { error } = await supabase.from('jobs').update(toUpdate).eq('id', id);
+    if (error) throw error;
+  }
+
+  async rescheduleJob(id: string, updates: { runAt: string; error?: string | null }) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('jobs')
+      .update({
+        status: 'pending',
+        run_at: updates.runAt,
+        started_at: null,
+        finished_at: null,
+        error: updates.error ?? null,
+      })
+      .eq('id', id);
     if (error) throw error;
   }
 

@@ -102,7 +102,7 @@ shopifyWebhookRouter.post('/', async (req: Request, res: Response) => {
   const integrationRepo = createIntegrationRepository();
 
   try {
-    const existing = await integrationRepo.getWebhookEventByDedupeKey(dedupeKey);
+    const existing = await integrationRepo.getWebhookEventByDedupeKey({ tenantId: await resolveTenantIdForShopify() || '' }, dedupeKey);
 
     if (existing) {
       logger.debug('Shopify webhook: duplicate, ignoring', { dedupeKey, topic });
@@ -120,9 +120,8 @@ shopifyWebhookRouter.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    await integrationRepo.createWebhookEvent({
+    await integrationRepo.createWebhookEvent({ tenantId }, {
       id: eventId,
-      tenantId,
       sourceSystem: 'shopify',
       eventType: topic,
       rawPayload: rawBody,

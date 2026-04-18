@@ -71,6 +71,27 @@ const ROUTING_TABLE: Record<TriggerEvent, string[]> = {
     'audit-logger',                 // record conflict detection audit event
   ],
 
+  approval_approved: [
+    'approval-gatekeeper',           // release the approval gate
+    'workflow-runtime-agent',        // advance workflow past human review
+    'resolution-executor',           // execute or stage approved resolution
+    'returns-agent',                 // unblock return lifecycle
+    'stripe-connector',              // prepare approved credit/refund writeback
+    'shopify-connector',             // prepare approved replacement/order writeback
+    'oms-erp-agent',                 // align back-office state
+    'customer-communication-agent',  // decide customer update objective
+    'composer-translator',           // draft approved outcome message
+    'audit-logger',                 // record approval release audit event
+  ],
+
+  approval_rejected: [
+    'approval-gatekeeper',           // stop the blocked action
+    'workflow-runtime-agent',        // close workflow branch
+    'customer-communication-agent',  // decide rejection update objective
+    'composer-translator',           // draft policy-grounded rejection message
+    'audit-logger',                 // record rejection audit event
+  ],
+
   case_resolved: [
     'qa-policy-check',              // final compliance check
     'report-generator',             // generate resolution summary report

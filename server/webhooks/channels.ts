@@ -150,7 +150,7 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
           const eventId = randomUUID();
           const now     = new Date().toISOString();
 
-          await integrationRepo.createCanonicalEvent({
+          await integrationRepo.createCanonicalEvent({ tenantId: context.tenantId }, {
             id: eventId,
             source_system: 'whatsapp',
             source_entity_type: 'customer',
@@ -274,7 +274,7 @@ emailWebhookRouter.post('/', async (req: Request, res: Response) => {
     const eventId = randomUUID();
     const now     = new Date().toISOString();
 
-    await integrationRepo.createCanonicalEvent({
+    await integrationRepo.createCanonicalEvent({ tenantId: context.tenantId }, {
       id: eventId,
       source_system: 'email',
       source_entity_type: 'customer',

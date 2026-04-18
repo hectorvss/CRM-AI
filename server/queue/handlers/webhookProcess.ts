@@ -117,7 +117,7 @@ async function handleWebhookProcess(
   const scope = requireScope(ctx, 'webhookProcess');
 
   // ── 1. Load raw webhook event ────────────────────────────────────────────
-  const webhookRow = await integrationRepo.getWebhookEvent(payload.webhookEventId);
+  const webhookRow = await integrationRepo.getWebhookEvent(scope, payload.webhookEventId);
 
   if (!webhookRow) {
     log.warn('Webhook event not found in DB — may have been deleted');
@@ -135,7 +135,7 @@ async function handleWebhookProcess(
     parsedBody = JSON.parse(webhookRow.raw_payload || payload.rawBody);
   } catch {
     log.warn('Webhook has invalid JSON body — marking as failed to avoid loop');
-    await integrationRepo.updateWebhookEventStatus(payload.webhookEventId, 'failed');
+    await integrationRepo.updateWebhookEventStatus(scope, payload.webhookEventId, 'failed');
     return;
   }
 
@@ -205,7 +205,9 @@ async function handleWebhookProcess(
   }
 
   // ── 6. Mark webhook_event as processed ───────────────────────────────────
-  await integrationRepo.updateWebhookEventStatus(payload.webhookEventId, 'processed', canonicalEventId);
+  await integrationRepo.updateWebhookEventStatus(scope, payload.webhookEventId, 'processed', {
+    canonical_event_id: canonicalEventId,
+  });
 
   // ── 7. Enqueue CANONICALIZE job ───────────────────────────────────────────
   enqueue(
