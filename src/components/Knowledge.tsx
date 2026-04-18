@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { knowledgeApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
@@ -41,6 +41,13 @@ type KnowledgeDraftState = {
   reviewCycleDays: string;
 };
 
+type ImportedFileKind = 'pdf' | 'markdown' | 'text';
+type ImportedFileState = {
+  name: string;
+  kind: ImportedFileKind;
+  characters: number;
+};
+
 const emptyDraft: KnowledgeDraftState = {
   title: '',
   content: '',
@@ -50,6 +57,8 @@ const emptyDraft: KnowledgeDraftState = {
   ownerUserId: '',
   reviewCycleDays: '90',
 };
+
+const fileAccept = '.pdf,.md,.markdown,text/markdown,application/pdf';
 
 const splitLines = (value: string) => value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 const joinLines = (items?: string[] | null) => (items ?? []).join('\n');
@@ -211,6 +220,27 @@ const buildKnowledgeSheetFromNarrative = (content: string, fallback?: Partial<Kn
   };
 };
 
+const stripMarkdown = (value: string) => value
+  .replace(/^#{1,6}\s+/gm, '')
+  .replace(/^>\s?/gm, '')
+  .replace(/[*_`]/g, '')
+  .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const guessTitleFromContent = (content: string, fallbackName: string) => {
+  const heading = content.split(/\r?\n/).find((line) => /^#{1,3}\s+\S/.test(line.trim()));
+  if (heading) return heading.replace(/^#{1,3}\s+/, '').trim();
+  const firstLine = content.split(/\r?\n/).find((line) => line.trim());
+  if (firstLine && firstLine.length <= 90) return stripMarkdown(firstLine);
+  return fallbackName.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim() || 'Untitled knowledge';
+};
+
+const parseMarkdownTitle = (content: string) => {
+  const heading = content.split(/\r?\n/).find((line) => /^#{1,3}\s+\S/.test(line.trim()));
+  return heading ? heading.replace(/^#{1,3}\s+/, '').trim() : '';
+};
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mockLibrary: KnowledgeItem[] = [
   {
@@ -281,6 +311,10 @@ export default function Knowledge() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
   const [draft, setDraft] = useState<KnowledgeDraftState>(emptyDraft);
+  const [importedFile, setImportedFile] = useState<ImportedFileState | null>(null);
+  const [importingFile, setImportingFile] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: apiArticles, loading: articlesLoading, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
   const { data: apiDomains } = useApi(() => knowledgeApi.listDomains(), [], []);
@@ -366,12 +400,88 @@ export default function Knowledge() {
   const openCreateEditor = () => {
     setEditorMode('create');
     setDraft(emptyDraft);
+    setImportedFile(null);
+    setImportError(null);
     setEditorOpen(true);
   };
 
   const openEditEditor = () => {
     setEditorMode('edit');
+    setImportedFile(null);
+    setImportError(null);
     setEditorOpen(true);
+  };
+
+  const openFilePicker = () => {
+    setImportError(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleImportedFile = async (file: File) => {
+    if (!file) return;
+    setImportingFile(true);
+    setImportError(null);
+
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      let content = '';
+      let kind: ImportedFileKind = 'text';
+
+      if (file.type === 'application/pdf' || ext === 'pdf') {
+        const pdfjs = await import('pdfjs-dist/build/pdf.mjs');
+        const data = await file.arrayBuffer();
+        const document = await pdfjs.getDocument({ data, disableWorker: true }).promise;
+        const pages: string[] = [];
+
+        for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+          const page = await document.getPage(pageNumber);
+          const text = await page.getTextContent();
+          const pageText = (text.items as Array<{ str?: string }>).map((item) => item.str ?? '').join(' ').replace(/\s+/g, ' ').trim();
+          if (pageText) pages.push(pageText);
+        }
+
+        content = pages.join('\n\n').trim();
+        kind = 'pdf';
+      } else {
+        content = (await file.text()).trim();
+        kind = ext === 'md' || ext === 'markdown' ? 'markdown' : 'text';
+      }
+
+      if (!content) {
+        throw new Error('No se ha podido extraer texto del archivo.');
+      }
+
+      const title = guessTitleFromContent(content, file.name);
+      const nextType: KnowledgeItem['type'] = /policy/i.test(file.name) || /^#{1,3}\s+policy\b/i.test(content) ? 'POLICY' : 'ARTICLE';
+
+      setDraft((prev) => ({
+        ...prev,
+        title,
+        content,
+        type: nextType,
+        status: 'Draft',
+      }));
+      setImportedFile({
+        name: file.name,
+        kind,
+        characters: content.length,
+      });
+      setEditorMode(selectedArticleId ? 'edit' : 'create');
+      setEditorOpen(true);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'No hemos podido importar el archivo.');
+    } finally {
+      setImportingFile(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await handleImportedFile(file);
   };
 
   const handleSaveArticle = async () => {
@@ -620,6 +730,39 @@ export default function Knowledge() {
                 <span>Updated: {articleData.lastUpdated}</span>
                 <span>Owner ID: {liveDraft.ownerUserId || '—'}</span>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 dark:border-gray-700 dark:bg-gray-900/40">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined mt-0.5 text-lg text-gray-500 dark:text-gray-400">tips_and_updates</span>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Write this like guidance, not like a form.</p>
+                    <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
+                      A clear policy reads well as one flowing narrative. Small headings are fine when they help the agents extract the structure.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={openFilePicker}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-800"
+                >
+                  <span className="material-symbols-outlined text-[18px]">upload_file</span>
+                  Import source
+                </button>
+              </div>
+              {importedFile && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                  <span className="rounded-md border border-gray-200 px-2 py-1 dark:border-gray-700">{importedFile.kind.toUpperCase()}</span>
+                  <span>{importedFile.name}</span>
+                  <span>·</span>
+                  <span>{importedFile.characters.toLocaleString()} characters extracted</span>
+                </div>
+              )}
+              {importError && (
+                <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">{importError}</p>
+              )}
             </div>
 
             <label className="block">
@@ -1087,16 +1230,27 @@ export default function Knowledge() {
                 <div className="px-6 py-4 flex items-center justify-between">
                   <div>
                     <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Knowledge</h1>
-                    <p className="text-xs text-gray-500 mt-0.5">Create and maintain content the AI can cite</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Write policies as narrative, then let the structure follow the text.</p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center px-3 py-1 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-800/30">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-2"></span>
-                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">AI citations required</span>
+                    <div className="flex items-center px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-900 dark:bg-white mr-2"></span>
+                      <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200 uppercase tracking-widest">Narrative first</span>
                     </div>
                     <div className="flex items-center px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-2"></span>
-                      <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-widest">Stale items: 6</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-2"></span>
+                      <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-widest">Import PDF or Markdown</span>
+                    </div>
+                    <div className="relative group">
+                      <button
+                        type="button"
+                        onClick={openFilePicker}
+                        disabled={importingFile}
+                        className="px-4 py-2.5 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 text-xs font-bold rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-lg">upload_file</span>
+                        {importingFile ? 'Importing...' : 'Import'}
+                      </button>
                     </div>
                     <div className="relative group">
                       <button
@@ -1126,6 +1280,14 @@ export default function Knowledge() {
                 </div>
               </div>
             </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={fileAccept}
+              className="hidden"
+              onChange={handleFileInputChange}
+            />
 
             {/* Tab Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -1166,6 +1328,35 @@ export default function Knowledge() {
                 >
                   <span className="material-symbols-outlined">close</span>
                 </button>
+              </div>
+              <div className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 px-6 py-4 dark:bg-gray-800/20">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">Drafting mode</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      Start from plain language. Upload PDF or Markdown when the source already exists.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openFilePicker}
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-800"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">upload_file</span>
+                    Import file
+                  </button>
+                </div>
+                {importedFile && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                    <span className="rounded-md border border-gray-200 px-2 py-1 dark:border-gray-700">{importedFile.kind.toUpperCase()}</span>
+                    <span>{importedFile.name}</span>
+                    <span>·</span>
+                    <span>{importedFile.characters.toLocaleString()} characters extracted</span>
+                  </div>
+                )}
+                {importError && (
+                  <p className="mt-3 text-xs text-rose-600 dark:text-rose-400">{importError}</p>
+                )}
               </div>
               <div className="space-y-6 px-6 py-5 max-h-[78vh] overflow-y-auto custom-scrollbar">
                 <div className="grid gap-4 lg:grid-cols-3">
