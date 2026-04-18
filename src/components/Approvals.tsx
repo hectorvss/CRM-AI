@@ -126,10 +126,7 @@ export default function Approvals() {
   }, [approvals, filter, query]);
 
   const selectedDetails = selectedContext?.approval || selectedApproval;
-  const systems = selectedContext?.case_state?.systems ? Object.values(selectedContext.case_state.systems) : [];
   const timeline = Array.isArray(selectedContext?.case_state?.timeline) ? selectedContext.case_state.timeline.slice(-6).reverse() : [];
-  const messageCount = Array.isArray(selectedContext?.messages) ? selectedContext.messages.length : 0;
-  const noteCount = Array.isArray(selectedContext?.internal_notes) ? selectedContext.internal_notes.length : 0;
 
   const handleDecision = async (decision: Decision) => {
     if (!selectedApproval) return;
@@ -179,8 +176,8 @@ export default function Approvals() {
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
           {error && <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/30 dark:bg-amber-900/15 dark:text-amber-300">Unable to load approvals: {error}</div>}
 
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-            <section className="xl:col-span-5 bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+          <div className="space-y-6">
+            <section className="w-full bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Queue</h2>
                 <span className="text-xs text-gray-500">{filteredApprovals.length} items</span>
@@ -210,128 +207,97 @@ export default function Approvals() {
               </div>
             </section>
 
-            <section className="xl:col-span-7 space-y-6">
-              {!selectedApproval ? (
-                <div className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Details</h2>
-                    <span className="material-symbols-outlined text-gray-400 text-lg">rule</span>
-                  </div>
-                  <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Select an approval to inspect the case context and make a decision.</div>
-                </div>
-              ) : (
-                <AnimatePresence mode="wait">
-                  <motion.div key={selectedApproval.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-6">
-                    <section className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <h2 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{titleCase(selectedApproval.action_type || 'Approval')} · {selectedApproval.case_number || selectedApproval.id}</h2>
-                          <p className="text-xs text-gray-500 mt-0.5 truncate">{selectedApproval.customer_name || 'Unknown customer'} {selectedApproval.customer_segment ? `· ${titleCase(selectedApproval.customer_segment)}` : ''}</p>
-                        </div>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${getStatusStyles(selectedApproval.status)}`}>{titleCase(selectedApproval.status || 'pending')}</span>
-                      </div>
-                      <div className="p-5 grid grid-cols-2 gap-4 text-sm">
-                        <div><p className="text-xs text-gray-500">Case</p><p className="mt-1 font-medium text-gray-900 dark:text-white">{selectedApproval.case_number || 'N/A'}</p></div>
-                        <div><p className="text-xs text-gray-500">Risk</p><p className="mt-1 font-medium text-gray-900 dark:text-white">{titleCase(selectedApproval.risk_level || 'unknown')}</p></div>
-                        <div><p className="text-xs text-gray-500">Assigned to</p><p className="mt-1 font-medium text-gray-900 dark:text-white">{selectedApproval.assigned_user_name || selectedApproval.assigned_to || 'Unassigned'}</p></div>
-                        <div><p className="text-xs text-gray-500">Execution plan</p><p className="mt-1 font-medium text-gray-900 dark:text-white">{selectedApproval.execution_plan_id || 'None'}</p></div>
-                        <div><p className="text-xs text-gray-500">Created</p><p className="mt-1 font-medium text-gray-900 dark:text-white">{formatDate(selectedApproval.created_at)}</p></div>
-                        <div><p className="text-xs text-gray-500">Due</p><p className="mt-1 font-medium text-gray-900 dark:text-white">{formatDate(selectedApproval.expires_at)}</p></div>
-                      </div>
-                    </section>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <section className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Backend Context</h3><span className="material-symbols-outlined text-gray-400 text-lg">dataset</span></div>
-                        <div className="p-5 space-y-3 text-sm">
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Conversation</span><span className="text-gray-900 dark:text-white text-right">{selectedContext?.conversation?.subject || selectedContext?.conversation?.id || 'N/A'}</span></div>
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Messages</span><span className="text-gray-900 dark:text-white">{messageCount}</span></div>
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Internal notes</span><span className="text-gray-900 dark:text-white">{noteCount}</span></div>
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Linked approvals</span><span className="text-gray-900 dark:text-white">{Array.isArray(selectedContext?.evidence?.approvals) ? selectedContext!.evidence!.approvals!.length : 0}</span></div>
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Reconciliation issues</span><span className="text-gray-900 dark:text-white">{Array.isArray(selectedContext?.evidence?.reconciliation_issues) ? selectedContext!.evidence!.reconciliation_issues!.length : 0}</span></div>
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Linked cases</span><span className="text-gray-900 dark:text-white">{Array.isArray(selectedContext?.evidence?.linked_cases) ? selectedContext!.evidence!.linked_cases!.length : 0}</span></div>
-                        </div>
-                      </section>
-                      <section className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Case State</h3><span className="material-symbols-outlined text-gray-400 text-lg">lan</span></div>
-                        <div className="p-5 space-y-3">
-                          {systems.length ? systems.map((system: any) => (
-                            <div key={system.key} className="flex items-start justify-between gap-4 border-b border-gray-100 dark:border-gray-800 pb-3 last:border-b-0 last:pb-0">
-                              <div><p className="text-sm font-medium text-gray-900 dark:text-white">{system.label}</p><p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{system.summary}</p></div>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${getStatusStyles(system.status)}`}>{titleCase(system.status || 'warning')}</span>
-                            </div>
-                          )) : <p className="text-sm text-gray-500 dark:text-gray-400">No case state returned yet.</p>}
-                        </div>
-                      </section>
+            {selectedApproval ? (
+              <AnimatePresence mode="wait">
+                <motion.section key={selectedApproval.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="w-full bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{titleCase(selectedApproval.action_type || 'Approval')} · {selectedApproval.case_number || selectedApproval.id}</h2>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{selectedApproval.customer_name || 'Unknown customer'} {selectedApproval.customer_segment ? `· ${titleCase(selectedApproval.customer_segment)}` : ''}</p>
                     </div>
-
-                    <section className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Timeline</h3><span className="material-symbols-outlined text-gray-400 text-lg">schedule</span></div>
-                      <div className="p-5 space-y-4">
-                        {timeline.length ? timeline.map((entry: any) => (
-                          <div key={entry.id} className="flex items-start gap-3">
-                            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
-                              <span className="material-symbols-outlined text-[16px]">{entry.icon || 'radio_button_checked'}</span>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-gray-900 dark:text-white">{entry.domain || 'event'}</p><span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(entry.occurred_at)}</span></div>
-                              <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">{entry.content}</p>
-                            </div>
-                          </div>
-                        )) : <p className="text-sm text-gray-500 dark:text-gray-400">No timeline entries available.</p>}
-                      </div>
-                    </section>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <section className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Decision Note</h3><span className="material-symbols-outlined text-gray-400 text-lg">edit_note</span></div>
-                        <div className="p-5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${getStatusStyles(selectedApproval.status)}`}>{titleCase(selectedApproval.status || 'pending')}</span>
+                  </div>
+                  <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    <div className="lg:col-span-1 space-y-5">
+                      <section className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                          <h3 className="text-xs font-semibold text-gray-900 dark:text-white">Request</h3>
+                          <span className="material-symbols-outlined text-gray-400 text-[18px]">fact_check</span>
+                        </div>
+                        <div className="p-4 space-y-3 text-sm">
+                          <div className="flex justify-between gap-4"><span className="text-gray-500">Case</span><span className="text-gray-900 dark:text-white text-right">{selectedApproval.case_number || 'N/A'}</span></div>
+                          <div className="flex justify-between gap-4"><span className="text-gray-500">Risk</span><span className="text-gray-900 dark:text-white">{titleCase(selectedApproval.risk_level || 'unknown')}</span></div>
+                          <div className="flex justify-between gap-4"><span className="text-gray-500">Assigned to</span><span className="text-gray-900 dark:text-white text-right">{selectedApproval.assigned_user_name || selectedApproval.assigned_to || 'Unassigned'}</span></div>
+                          <div className="flex justify-between gap-4"><span className="text-gray-500">Team</span><span className="text-gray-900 dark:text-white text-right">{selectedApproval.assigned_team_id || 'Operations'}</span></div>
+                          <div className="flex justify-between gap-4"><span className="text-gray-500">Execution plan</span><span className="text-gray-900 dark:text-white text-right">{selectedApproval.execution_plan_id || 'None'}</span></div>
+                          <div className="flex justify-between gap-4"><span className="text-gray-500">Due</span><span className="text-gray-900 dark:text-white text-right">{formatDate(selectedApproval.expires_at)}</span></div>
+                        </div>
+                      </section>
+                      <section className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                          <h3 className="text-xs font-semibold text-gray-900 dark:text-white">Decision note</h3>
+                          <span className="material-symbols-outlined text-gray-400 text-[18px]">edit_note</span>
+                        </div>
+                        <div className="p-4">
                           <textarea value={decisionNote} onChange={e => setDecisionNote(e.target.value)} className="w-full min-h-28 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 outline-none focus:border-gray-400 dark:focus:border-gray-500" placeholder="Add a short note explaining the decision." />
                           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">This note is saved with the approval record and case history.</p>
                         </div>
                       </section>
-                      <section className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Request Details</h3><span className="material-symbols-outlined text-gray-400 text-lg">fact_check</span></div>
-                        <div className="p-5 space-y-3 text-sm">
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Action</span><span className="text-gray-900 dark:text-white text-right">{titleCase(selectedApproval.action_type || 'Approval')}</span></div>
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Amount</span><span className="text-gray-900 dark:text-white">{formatMoney(selectedApproval.action_payload?.amount)}</span></div>
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Assigned team</span><span className="text-gray-900 dark:text-white text-right">{selectedApproval.assigned_team_id || 'Operations'}</span></div>
-                          <div className="flex justify-between gap-4"><span className="text-gray-500">Policy reason</span><span className="text-gray-900 dark:text-white text-right">{extractSummary(selectedApproval)}</span></div>
+                    </div>
+
+                    <div className="lg:col-span-2 space-y-5">
+                      <section className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                          <h3 className="text-xs font-semibold text-gray-900 dark:text-white">Timeline</h3>
+                          <span className="material-symbols-outlined text-gray-400 text-[18px]">schedule</span>
+                        </div>
+                        <div className="p-4 space-y-4">
+                          {timeline.length ? timeline.map((entry: any) => (
+                            <div key={entry.id} className="flex items-start gap-3">
+                              <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+                                <span className="material-symbols-outlined text-[16px]">{entry.icon || 'radio_button_checked'}</span>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-gray-900 dark:text-white">{entry.domain || 'event'}</p><span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(entry.occurred_at)}</span></div>
+                                <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">{entry.content}</p>
+                              </div>
+                            </div>
+                          )) : <p className="text-sm text-gray-500 dark:text-gray-400">No timeline entries available.</p>}
+                        </div>
+                      </section>
+
+                      <section className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                          <h3 className="text-xs font-semibold text-gray-900 dark:text-white">Decision</h3>
+                          <span className="material-symbols-outlined text-gray-400 text-[18px]">gavel</span>
+                        </div>
+                        <div className="p-4">
+                          {selectedApproval.status !== 'pending' ? (
+                            <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                              This approval is already {titleCase(selectedApproval.status || 'processed')}{selectedApproval.decision_by ? ` by ${selectedApproval.decision_by}` : ''}.
+                              {selectedApproval.decision_note ? <span className="block mt-1">Note: {selectedApproval.decision_note}</span> : null}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-3">
+                              {decisionError && <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/30 dark:bg-rose-900/15 dark:text-rose-300">{decisionError}</div>}
+                              <div className="flex flex-wrap gap-3">
+                                <button type="button" onClick={() => void handleDecision('rejected')} disabled={deciding} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"><span className="material-symbols-outlined text-[18px]">close</span>Reject</button>
+                                <button type="button" onClick={() => void handleDecision('approved')} disabled={deciding} className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-200"><span className="material-symbols-outlined text-[18px]">check</span>Approve</button>
+                              </div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">The decision updates the approval record, the case history, and the linked execution plan if one exists.</p>
+                            </div>
+                          )}
                         </div>
                       </section>
                     </div>
-
-                    <section className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Action</h3><span className="material-symbols-outlined text-gray-400 text-lg">gavel</span></div>
-                      <div className="p-5">
-                        {selectedApproval.status !== 'pending' ? (
-                          <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                            This approval is already {titleCase(selectedApproval.status || 'processed')}{selectedApproval.decision_by ? ` by ${selectedApproval.decision_by}` : ''}{selectedApproval.decision_note ? `.` : '.'}
-                            {selectedApproval.decision_note ? <span className="block mt-1">Note: {selectedApproval.decision_note}</span> : null}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-3">
-                            {decisionError && <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/30 dark:bg-rose-900/15 dark:text-rose-300">{decisionError}</div>}
-                            <div className="flex flex-wrap gap-3">
-                              <button type="button" onClick={() => void handleDecision('rejected')} disabled={deciding} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"><span className="material-symbols-outlined text-[18px]">close</span>Reject</button>
-                              <button type="button" onClick={() => void handleDecision('approved')} disabled={deciding} className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-200"><span className="material-symbols-outlined text-[18px]">check</span>Approve</button>
-                            </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">The decision updates the approval record, the case history, and the linked execution plan if one exists.</p>
-                          </div>
-                        )}
-                      </div>
-                    </section>
-
-                    {(contextLoading || contextError) && (
-                      <section className="bg-white dark:bg-card-dark rounded-lg border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Backend Load</h3><span className="material-symbols-outlined text-gray-400 text-lg">sync</span></div>
-                        <div className="p-5 text-sm text-gray-500 dark:text-gray-400">{contextLoading ? 'Loading the full case context from the backend.' : contextError}</div>
-                      </section>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              )}
-            </section>
+                  </div>
+                </motion.section>
+              </AnimatePresence>
+            ) : (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-card-dark px-5 py-8 text-sm text-gray-500 dark:text-gray-400">
+                Select an approval to inspect the request and make a decision.
+              </div>
+            )}
           </div>
         </div>
       </div>
