@@ -3,11 +3,6 @@ import cors from 'cors';
 import path from 'path';
 import { mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-
-// Load env before config so config can read process.env
-dotenv.config({ path: '.env.local' });
-dotenv.config();
 
 import { config } from './config.js';
 import { logger } from './utils/logger.js';

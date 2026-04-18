@@ -550,6 +550,23 @@ function getAuditTrailSqlite(scope: CanonicalScope, caseId: string, approvalId: 
   `).all(scope.tenantId, caseId, approvalId).map(parseRow);
 }
 
+async function updateEventStatusSupabase(scope: CanonicalScope, eventId: string, updates: any) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('canonical_events')
+    .update({ ...updates, processed_at: new Date().toISOString() })
+    .eq('id', eventId);
+  if (error) throw error;
+}
+
+function updateEventStatusSqlite(scope: CanonicalScope, eventId: string, updates: any) {
+  const db = getDb();
+  const fields = Object.keys(updates).map(k => `${k} = ?`);
+  const params = Object.values(updates);
+  params.push(eventId);
+  db.prepare(`UPDATE canonical_events SET ${fields.join(', ')}, processed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
+}
+
 export function createCanonicalRepository(): CanonicalRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
@@ -560,14 +577,7 @@ export function createCanonicalRepository(): CanonicalRepository {
       getInternalNotes: getInternalNotesSupabase,
       getApprovalWithContext: getApprovalWithContextSupabase,
       getAuditTrail: getAuditTrailSupabase,
-      updateEventStatus: async (scope, eventId, updates) => {
-        const supabase = getSupabaseAdmin();
-        const { error } = await supabase
-          .from('canonical_events')
-          .update({ ...updates, processed_at: new Date().toISOString() })
-          .eq('id', eventId);
-        if (error) throw error;
-      }
+      updateEventStatus: updateEventStatusSupabase,
     };
   }
 
@@ -579,12 +589,6 @@ export function createCanonicalRepository(): CanonicalRepository {
     getInternalNotes: async (scope, caseId, limit) => getInternalNotesSqlite(scope, caseId, limit),
     getApprovalWithContext: async (scope, approvalId) => getApprovalWithContextSqlite(scope, approvalId),
     getAuditTrail: async (scope, caseId, approvalId) => getAuditTrailSqlite(scope, caseId, approvalId),
-    updateEventStatus: async (scope, eventId, updates) => {
-      const db = getDb();
-      const fields = Object.keys(updates).map(k => `${k} = ?`);
-      const params = Object.values(updates);
-      params.push(eventId);
-      db.prepare(`UPDATE canonical_events SET ${fields.join(', ')}, processed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
-    }
+    updateEventStatus: updateEventStatusSqlite,
   };
 }

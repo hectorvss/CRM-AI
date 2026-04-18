@@ -1,3 +1,9 @@
+import dotenv from 'dotenv';
+
+// Load env here so every importer sees the same values, even under ESM.
+dotenv.config({ path: '.env.local' });
+dotenv.config();
+
 /**
  * server/config.ts
  *

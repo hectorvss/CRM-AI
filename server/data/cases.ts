@@ -2,7 +2,7 @@ import { getDb } from '../db/client.js';
 import { parseRow } from '../db/utils.js';
 import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { buildSlaView, canonicalHealth, compactStrings } from './shared.js';
+import { buildSlaView, canonicalHealth, compactStrings, asArray } from './shared.js';
 
 export interface CaseScope {
   tenantId: string;
@@ -1322,9 +1322,9 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
   ] = await Promise.all([
     caseRow.customer_id ? supabase.from('customers').select('*').eq('id', caseRow.customer_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
     supabase.from('conversations').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('last_message_at', { ascending: false }).limit(1).maybeSingle(),
-    caseRow.order_ids?.length ? supabase.from('orders').select('*').in('id', caseRow.order_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
-    caseRow.payment_ids?.length ? supabase.from('payments').select('*').in('id', caseRow.payment_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
-    caseRow.return_ids?.length ? supabase.from('returns').select('*').in('id', caseRow.return_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.order_ids).length ? supabase.from('orders').select('*').in('id', asArray<string>(caseRow.order_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.payment_ids).length ? supabase.from('payments').select('*').in('id', asArray<string>(caseRow.payment_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.return_ids).length ? supabase.from('returns').select('*').in('id', asArray<string>(caseRow.return_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
     supabase.from('refunds').select('*').eq('tenant_id', scope.tenantId),
     supabase.from('approval_requests').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
     supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('detected_at', { ascending: false }),
@@ -1335,8 +1335,8 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     caseRow.assigned_user_id ? supabase.from('users').select('name, email').eq('id', caseRow.assigned_user_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
     caseRow.assigned_team_id ? supabase.from('teams').select('name').eq('id', caseRow.assigned_team_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
     supabase.from('case_status_history').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
-    caseRow.order_ids?.length ? supabase.from('order_events').select('*').in('order_id', caseRow.order_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
-    caseRow.return_ids?.length ? supabase.from('return_events').select('*').in('return_id', caseRow.return_ids).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.order_ids).length ? supabase.from('order_events').select('*').in('order_id', asArray<string>(caseRow.order_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.return_ids).length ? supabase.from('return_events').select('*').in('return_id', asArray<string>(caseRow.return_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
     supabase.from('case_knowledge_links').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId),
     supabase.from('connectors').select('*').eq('tenant_id', scope.tenantId),
     supabase.from('agents').select('*').eq('tenant_id', scope.tenantId),
@@ -1373,9 +1373,9 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     ? ((await supabase.from('agent_versions').select('*').in('id', agentVersionIds).eq('tenant_id', scope.tenantId)).data ?? [])
     : [];
   const refundSourceIds = compactStrings([
-    ...(caseRow.payment_ids ?? []),
-    ...(caseRow.order_ids ?? []),
-    ...(caseRow.return_ids ?? []),
+    ...asArray<string>(caseRow.payment_ids),
+    ...asArray<string>(caseRow.order_ids),
+    ...asArray<string>(caseRow.return_ids),
     caseRow.customer_id,
   ]);
   const refunds = (refundsResult.data ?? []).filter((row: any) => !refundSourceIds.length
@@ -1639,9 +1639,9 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
   const rows = data ?? [];
   const caseIds = rows.map((row) => row.id);
   const customerIds = compactStrings(rows.map((row) => row.customer_id));
-  const orderIds = compactStrings(rows.flatMap((row) => row.order_ids ?? []));
-  const paymentIds = compactStrings(rows.flatMap((row) => row.payment_ids ?? []));
-  const returnIds = compactStrings(rows.flatMap((row) => row.return_ids ?? []));
+  const orderIds = compactStrings(rows.flatMap((row) => asArray<string>(row.order_ids)));
+  const paymentIds = compactStrings(rows.flatMap((row) => asArray<string>(row.payment_ids)));
+  const returnIds = compactStrings(rows.flatMap((row) => asArray<string>(row.return_ids)));
   const userIds = compactStrings(rows.map((row) => row.assigned_user_id));
   const teamIds = compactStrings(rows.map((row) => row.assigned_team_id));
 
@@ -1688,10 +1688,10 @@ async function listCasesSupabase(scope: CaseScope, filters: CaseFilters) {
     .map((row) => {
       const customer = row.customer_id ? customers.get(row.customer_id) : null;
       const latestMessage = latestMessageByCase.get(row.id);
-      const relatedOrders = (row.order_ids ?? []).map((id: string) => orders.get(id)).filter(Boolean);
-      const relatedPayments = (row.payment_ids ?? []).map((id: string) => payments.get(id)).filter(Boolean);
-      const relatedReturns = (row.return_ids ?? []).map((id: string) => returns.get(id)).filter(Boolean);
-      const refund = refunds.find((item: any) => [item.payment_id, item.order_id, item.customer_id].some((value) => [ ...(row.payment_ids ?? []), ...(row.order_ids ?? []), row.customer_id ].includes(value)));
+      const relatedOrders = asArray<string>(row.order_ids).map((id: string) => orders.get(id)).filter(Boolean);
+      const relatedPayments = asArray<string>(row.payment_ids).map((id: string) => payments.get(id)).filter(Boolean);
+      const relatedReturns = asArray<string>(row.return_ids).map((id: string) => returns.get(id)).filter(Boolean);
+      const refund = refunds.find((item: any) => [item.payment_id, item.order_id, item.customer_id].some((value) => [ ...asArray<string>(row.payment_ids), ...asArray<string>(row.order_ids), row.customer_id ].includes(value)));
       return {
         ...row,
         customer_name: customer?.canonical_name || null,
