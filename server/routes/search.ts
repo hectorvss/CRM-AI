@@ -1,4 +1,7 @@
 import { Router, Response } from 'express';
+import { getDb } from '../db/client.js';
+import { getDatabaseProvider } from '../db/provider.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
@@ -38,7 +41,6 @@ function asResult(type: string, row: any, title: string, subtitle?: string | nul
 }
 
 async function searchSupabase(tenantId: string, workspaceId: string, q: string): Promise<SearchResult[]> {
-  const { getSupabaseAdmin } = await import('../db/supabase.js');
   const supabase = getSupabaseAdmin();
   const term = `%${q.replace(/[%_]/g, '\\$&')}%`;
   const [cases, customers, orders, payments, returnsRows, knowledge] = await Promise.all([
@@ -64,8 +66,7 @@ async function searchSupabase(tenantId: string, workspaceId: string, q: string):
   ];
 }
 
-async function searchSqlite(tenantId: string, workspaceId: string, q: string): Promise<SearchResult[]> {
-  const { getDb } = await import('../db/client.js');
+function searchSqlite(tenantId: string, workspaceId: string, q: string): SearchResult[] {
   const db = getDb();
   const term = `%${q}%`;
   const cases = db.prepare(`
@@ -113,10 +114,9 @@ router.get('/', requirePermission('cases.read'), async (req: MultiTenantRequest,
   try {
     const q = normalizeTerm(req, res);
     if (!q) return;
-    const { getDatabaseProvider } = await import('../db/provider.js');
     const results = getDatabaseProvider() === 'supabase'
       ? await searchSupabase(req.tenantId!, req.workspaceId!, q)
-      : await searchSqlite(req.tenantId!, req.workspaceId!, q);
+      : searchSqlite(req.tenantId!, req.workspaceId!, q);
     res.json(results);
   } catch (error) {
     console.error('Search error:', error);
