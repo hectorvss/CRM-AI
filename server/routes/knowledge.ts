@@ -66,6 +66,7 @@ router.post('/articles', async (req: MultiTenantRequest, res) => {
       const {
         title,
         content,
+        content_structured = null,
       } = req.body;
       if (!title || !content) {
         return res.status(400).json({ error: 'title and content are required' });
@@ -90,6 +91,7 @@ router.post('/articles', async (req: MultiTenantRequest, res) => {
       review_cycle_days = 90,
       linked_workflow_ids = [],
       linked_approval_policy_ids = [],
+      content_structured = null,
     } = req.body;
 
     if (!title || !content) {
@@ -104,10 +106,10 @@ router.post('/articles', async (req: MultiTenantRequest, res) => {
     const id = randomUUID();
     db.prepare(`
       INSERT INTO knowledge_articles (
-        id, tenant_id, workspace_id, domain_id, title, content, type, status,
+        id, tenant_id, workspace_id, domain_id, title, content, content_structured, type, status,
         owner_user_id, review_cycle_days, last_reviewed_at, next_review_at,
         version, linked_workflow_ids, linked_approval_policy_ids, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
     `).run(
       id,
       tenantId,
@@ -115,6 +117,7 @@ router.post('/articles', async (req: MultiTenantRequest, res) => {
       domain_id,
       title,
       content,
+      content_structured ? JSON.stringify(content_structured) : null,
       type,
       status,
       resolvedOwner,
@@ -214,10 +217,11 @@ router.put('/articles/:id', async (req: MultiTenantRequest, res) => {
       ? (Number(existing.version) || 1) + 1
       : Number(existing.version) || 1;
     const now = new Date().toISOString();
+    const mergedStructured = merged.content_structured ?? existing.content_structured ?? null;
 
     db.prepare(`
       UPDATE knowledge_articles
-      SET domain_id = ?, title = ?, content = ?, type = ?, status = ?,
+      SET domain_id = ?, title = ?, content = ?, content_structured = ?, type = ?, status = ?,
           owner_user_id = ?, review_cycle_days = ?, version = ?,
           linked_workflow_ids = ?, linked_approval_policy_ids = ?, updated_at = ?
       WHERE id = ? AND tenant_id = ? AND workspace_id = ?
@@ -225,6 +229,7 @@ router.put('/articles/:id', async (req: MultiTenantRequest, res) => {
       merged.domain_id ?? null,
       merged.title,
       merged.content,
+      mergedStructured ? JSON.stringify(mergedStructured) : null,
       merged.type ?? 'article',
       merged.status ?? existing.status,
       resolvedOwner,

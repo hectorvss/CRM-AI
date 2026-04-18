@@ -786,7 +786,7 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
           )
         `);
         db.exec('CREATE INDEX IF NOT EXISTS idx_customer_activity_customer ON customer_activity(customer_id, occurred_at)');
-      },
+      }
     },
   },
 

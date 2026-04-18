@@ -36,6 +36,18 @@ export interface KnowledgeProfile {
   hard_blocks?: string[];
 }
 
+export interface KnowledgeSheet {
+  summary: string;
+  policy: string;
+  allowed: string[];
+  blocked: string[];
+  escalation: string[];
+  evidence: string[];
+  agent_notes: string[];
+  examples: string[];
+  keywords: string[];
+}
+
 export interface KnowledgeArticleView {
   id: string;
   title: string;
@@ -54,6 +66,7 @@ export interface KnowledgeArticleView {
   relevance_score: number;
   blocked_reason?: string;
   excerpt?: string;
+  sheet: KnowledgeSheet;
 }
 
 export interface AgentKnowledgeBundle {
@@ -190,6 +203,45 @@ function summarizeContent(content: string): string {
   return `${compact.slice(0, 217)}...`;
 }
 
+function asArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? '').trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeKnowledgeSheet(article: any): KnowledgeSheet {
+  const raw = article?.content_structured;
+  const structured = typeof raw === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return {};
+        }
+      })()
+    : (raw ?? {});
+  const summary = String(structured.summary ?? structured.overview ?? summarizeContent(article.content ?? '')).trim();
+  const policy = String(structured.policy ?? structured.policy_statement ?? article.content ?? '').trim();
+  return {
+    summary: summary || summarizeContent(article.content ?? ''),
+    policy: policy || summarizeContent(article.content ?? ''),
+    allowed: asArray(structured.allowed ?? structured.allowed_actions),
+    blocked: asArray(structured.blocked ?? structured.blocked_actions),
+    escalation: asArray(structured.escalation ?? structured.escalation_rules),
+    evidence: asArray(structured.evidence ?? structured.required_evidence),
+    agent_notes: asArray(structured.agent_notes ?? structured.agent_instructions),
+    examples: asArray(structured.examples),
+    keywords: asArray(structured.keywords),
+  };
+}
+
 function matchesAny(text: string, phrases: string[]): boolean {
   return phrases.some((phrase) => phrase && text.includes(phrase.toLowerCase()));
 }
@@ -259,11 +311,23 @@ function buildPromptContext(documents: KnowledgeArticleView[]): string {
   return documents
     .slice(0, 6)
     .map((doc, index) => {
+      const structuredSections = [
+        doc.sheet.summary ? `Summary: ${doc.sheet.summary}` : null,
+        doc.sheet.policy ? `Policy: ${doc.sheet.policy}` : null,
+        doc.sheet.allowed.length ? `Allowed:\n- ${doc.sheet.allowed.join('\n- ')}` : null,
+        doc.sheet.blocked.length ? `Blocked:\n- ${doc.sheet.blocked.join('\n- ')}` : null,
+        doc.sheet.escalation.length ? `Escalation:\n- ${doc.sheet.escalation.join('\n- ')}` : null,
+        doc.sheet.evidence.length ? `Evidence:\n- ${doc.sheet.evidence.join('\n- ')}` : null,
+        doc.sheet.agent_notes.length ? `Agent Notes:\n- ${doc.sheet.agent_notes.join('\n- ')}` : null,
+        doc.sheet.examples.length ? `Examples:\n- ${doc.sheet.examples.join('\n- ')}` : null,
+        doc.sheet.keywords.length ? `Keywords: ${doc.sheet.keywords.join(', ')}` : null,
+      ].filter(Boolean).join('\n');
+
       const payload = doc.content_mode === 'metadata'
         ? `Title: ${doc.title}\nType: ${doc.type}\nDomain: ${doc.domain_name ?? 'General'}`
         : doc.content_mode === 'summary'
-          ? `Title: ${doc.title}\nSummary: ${doc.excerpt ?? summarizeContent(doc.content)}`
-          : `Title: ${doc.title}\nContent:\n${doc.content}`;
+          ? `Title: ${doc.title}\nSummary: ${doc.excerpt ?? doc.sheet.summary}`
+          : `Title: ${doc.title}\n${structuredSections || `Content:\n${doc.content}`}`;
 
       return `## Policy ${index + 1}\n${payload}`;
     })
@@ -329,6 +393,7 @@ export function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): A
       relevance_score: relevanceScore,
       blocked_reason: blockedReason ?? undefined,
       excerpt: summarizeContent(article.content),
+      sheet: normalizeKnowledgeSheet(article),
     };
 
     if (blockedReason || contentMode === 'none') {
@@ -429,6 +494,7 @@ export async function resolveAgentKnowledgeBundleAsync(options: ResolveKnowledge
       relevance_score: relevanceScore,
       blocked_reason: blockedReason ?? undefined,
       excerpt: summarizeContent(article.content ?? ''),
+      sheet: normalizeKnowledgeSheet(article),
     };
 
     if (blockedReason || contentMode === 'none') {

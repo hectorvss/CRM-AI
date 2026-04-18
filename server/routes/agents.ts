@@ -12,6 +12,7 @@ import { sendError } from '../http/errors.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { createAgentRepository, createIntegrationRepository } from '../data/index.js';
+import { resolveAgentKnowledgeBundleAsync } from '../services/agentKnowledge.js';
 
 const router = Router();
 router.use(extractMultiTenant);
@@ -63,6 +64,39 @@ router.get('/:idOrSlug', requirePermission('agents.read'), async (req: MultiTena
   } catch (error) {
     console.error('Error fetching agent:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch agent');
+  }
+});
+
+router.get('/:id/knowledge-access', requirePermission('agents.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const agent = await agentRepository.getEffectiveAgent({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, req.params.id);
+    if (!agent) return sendError(res, 404, 'AGENT_NOT_FOUND', 'Agent not found');
+
+    const caseContext = typeof req.query.caseId === 'string'
+      ? await agentRepository.getCaseKnowledgeContext({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, req.query.caseId)
+      : null;
+
+    const bundle = await resolveAgentKnowledgeBundleAsync({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      knowledgeProfile: agent.knowledge_profile ?? null,
+      caseContext: caseContext ?? undefined,
+    });
+
+    res.json({
+      ok: true,
+      agent: {
+        id: agent.id,
+        slug: agent.slug,
+        name: agent.name,
+        version_id: agent.version_id ?? null,
+      },
+      caseContext,
+      bundle,
+    });
+  } catch (error) {
+    console.error('Error fetching agent knowledge access:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch agent knowledge access');
   }
 });
 

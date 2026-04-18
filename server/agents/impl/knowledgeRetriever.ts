@@ -25,11 +25,15 @@ interface ArticleRow {
   type: string;
   domain_id: string;
   citation_count: number;
+  content_structured?: Record<string, unknown> | string | null;
 }
 
 function scoreArticle(article: ArticleRow, signals: string[]): number {
   let score = 0;
-  const text = (article.title + ' ' + article.content).toLowerCase();
+  const structured = typeof article.content_structured === 'string'
+    ? article.content_structured.toLowerCase()
+    : JSON.stringify(article.content_structured ?? {}).toLowerCase();
+  const text = `${article.title} ${article.content} ${structured}`.toLowerCase();
 
   for (const signal of signals) {
     if (article.title.toLowerCase().includes(signal)) score += 3;
@@ -38,6 +42,7 @@ function scoreArticle(article: ArticleRow, signals: string[]): number {
 
   if (article.type === 'sop') score += 2;
   if (article.type === 'policy') score += 1;
+  if (structured.includes('allowed') || structured.includes('blocked') || structured.includes('escalation')) score += 1;
   score += Math.min(article.citation_count / 10, 2);
   return score;
 }
@@ -66,7 +71,7 @@ export const knowledgeRetrieverImpl: AgentImplementation = {
       ? await (async () => {
           const { data, error } = await supabase!
             .from('knowledge_articles')
-            .select('id, title, content, type, domain_id, citation_count')
+            .select('id, title, content, content_structured, type, domain_id, citation_count')
             .eq('tenant_id', tenantId)
             .eq('workspace_id', workspaceId)
             .eq('status', 'published')
@@ -75,7 +80,7 @@ export const knowledgeRetrieverImpl: AgentImplementation = {
           return (data ?? []) as ArticleRow[];
         })()
       : db!.prepare(`
-          SELECT id, title, content, type, domain_id, citation_count
+          SELECT id, title, content, content_structured, type, domain_id, citation_count
           FROM knowledge_articles
           WHERE tenant_id = ? AND workspace_id = ? AND status = 'published'
           LIMIT 100
