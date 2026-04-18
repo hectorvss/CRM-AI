@@ -93,35 +93,10 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     copilotBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [copilotMessages, isCopilotSending]);
 
-  // Auto-welcome when state data loads for the selected case
-  useEffect(() => {
-    if (!selectedId || !stateData) return;
-    if (welcomeSentForRef.current === selectedId) return;
-    welcomeSentForRef.current = selectedId;
-
-    const name = selectedCase?.customerName;
-    const caseNum = selectedCase?.orderId;
-    const parts: string[] = [];
-
-    if (name) {
-      parts.push(`I've loaded the full state for ${name}${caseNum ? ` (${caseNum})` : ''}.`);
-    }
-    const summary = stateData?.case?.ai_diagnosis || resolveData?.conflict?.summary;
-    if (summary) parts.push(summary);
-    const rootCause = resolveData?.conflict?.root_cause || stateData?.case?.ai_root_cause;
-    if (rootCause) parts.push(`Root cause: ${rootCause}`);
-    const conflict = resolveData?.conflict?.title;
-    if (conflict) parts.push(`Active blocker: ${conflict}`);
-    parts.push('What would you like to dig into?');
-
-    setCopilotMessages([{
-      id: `welcome-${selectedId}`,
-      role: 'assistant',
-      content: parts.join('\n\n'),
-      time: nowTime(),
-    }]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, stateData, resolveData]);
+  // NOTE: Auto-welcome effect is defined further down, AFTER `stateData`,
+  // `resolveData`, and `selectedCase` are declared. Declaring it here
+  // would hit a Temporal Dead Zone when the deps array is evaluated,
+  // producing "Cannot access 'X' before initialization" at runtime.
 
   // ── Fetch case list ──────────────────────────────────────────────
   const { data: apiCases, loading: casesLoading } = useApi(() => casesApi.list(), [], []);
@@ -261,6 +236,38 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   }), [stateData, caseResolve]);
 
   const selectedCase = useMemo(() => cases.find(c => c.id === selectedId), [cases, selectedId]);
+
+  // Auto-welcome when state data loads for the selected case.
+  // Placed here (after stateData/resolveData/selectedCase) to avoid TDZ
+  // errors at module evaluation time in production bundles.
+  useEffect(() => {
+    if (!selectedId || !stateData) return;
+    if (welcomeSentForRef.current === selectedId) return;
+    welcomeSentForRef.current = selectedId;
+
+    const name = selectedCase?.customerName;
+    const caseNum = selectedCase?.orderId;
+    const parts: string[] = [];
+
+    if (name) {
+      parts.push(`I've loaded the full state for ${name}${caseNum ? ` (${caseNum})` : ''}.`);
+    }
+    const summary = stateData?.case?.ai_diagnosis || resolveData?.conflict?.summary;
+    if (summary) parts.push(summary);
+    const rootCause = resolveData?.conflict?.root_cause || stateData?.case?.ai_root_cause;
+    if (rootCause) parts.push(`Root cause: ${rootCause}`);
+    const conflict = resolveData?.conflict?.title;
+    if (conflict) parts.push(`Active blocker: ${conflict}`);
+    parts.push('What would you like to dig into?');
+
+    setCopilotMessages([{
+      id: `welcome-${selectedId}`,
+      role: 'assistant',
+      content: parts.join('\n\n'),
+      time: nowTime(),
+    }]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, stateData, resolveData]);
 
   const riskLevel = rootData.riskLevel || selectedCase?.riskLevel || 'low';
   const riskLabel = typeof riskLevel === 'string' ? riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1).toLowerCase() : 'Low';
