@@ -22,7 +22,7 @@
 
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { createIntegrationRepository } from '../data/integrations.js';
+import { createCanonicalRepository } from '../data/canonical.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { config }  from '../config.js';
@@ -99,7 +99,7 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
   // Respond immediately — Meta retries if no 200 within 20 s
   res.status(200).send('ok');
 
-  const integrationRepo = createIntegrationRepository();
+    const canonicalRepo = createCanonicalRepository();
   const context = await resolveTenantWorkspaceContext(
     req.headers['x-tenant-id'] as string | undefined,
     req.headers['x-workspace-id'] as string | undefined,
@@ -131,7 +131,7 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
 
           // Deduplicate by externalMessageId
           const dedupeKey = `whatsapp:message:${externalMessageId}`;
-          const existing = await (integrationRepo as any).getCanonicalEventByDedupeKey?.(dedupeKey);
+          const existing = await canonicalRepo.getEventByDedupeKey(context, dedupeKey);
 
           if (existing) {
             logger.debug('WhatsApp: duplicate message, skipping', { externalMessageId });
@@ -150,7 +150,7 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
           const eventId = randomUUID();
           const now     = new Date().toISOString();
 
-          await integrationRepo.createCanonicalEvent({
+          await canonicalRepo.createEvent(context, {
             id: eventId,
             source_system: 'whatsapp',
             source_entity_type: 'customer',
@@ -168,7 +168,7 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
             updated_at: now,
           });
 
-          enqueue(
+          await enqueue(
             JobType.CHANNEL_INGEST,
             { canonicalEventId: eventId, channel: 'whatsapp', rawMessageId: externalMessageId },
             { tenantId: context.tenantId, workspaceId: context.workspaceId, traceId: eventId, priority: 3 },
@@ -221,7 +221,7 @@ emailWebhookRouter.post('/', async (req: Request, res: Response) => {
   // Respond immediately
   res.status(200).send('ok');
 
-  const integrationRepo = createIntegrationRepository();
+    const canonicalRepo = createCanonicalRepository();
   const context = await resolveTenantWorkspaceContext(
     req.headers['x-tenant-id'] as string | undefined,
     req.headers['x-workspace-id'] as string | undefined,
@@ -253,7 +253,7 @@ emailWebhookRouter.post('/', async (req: Request, res: Response) => {
     const senderEmail = (emailMatch[1] ?? from).trim().toLowerCase();
 
     const dedupeKey = `email:message:${externalMessageId}`;
-    const existing = await (integrationRepo as any).getCanonicalEventByDedupeKey?.(dedupeKey);
+    const existing = await canonicalRepo.getEventByDedupeKey(context, dedupeKey);
 
     if (existing) {
       logger.debug('Email: duplicate message, skipping', { externalMessageId });
@@ -274,7 +274,7 @@ emailWebhookRouter.post('/', async (req: Request, res: Response) => {
     const eventId = randomUUID();
     const now     = new Date().toISOString();
 
-    await integrationRepo.createCanonicalEvent({
+    await canonicalRepo.createEvent(context, {
       id: eventId,
       source_system: 'email',
       source_entity_type: 'customer',
@@ -292,7 +292,7 @@ emailWebhookRouter.post('/', async (req: Request, res: Response) => {
       updated_at: now,
     });
 
-    enqueue(
+    await enqueue(
       JobType.CHANNEL_INGEST,
       { canonicalEventId: eventId, channel: 'email', rawMessageId: externalMessageId },
       { tenantId: context.tenantId, workspaceId: context.workspaceId, traceId: eventId, priority: 3 },

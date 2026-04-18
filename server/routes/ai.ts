@@ -15,7 +15,7 @@ import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { buildCaseState, buildResolveView } from '../data/cases.js';
 import { buildContextWindow } from '../pipeline/contextWindow.js';
-import { createAIRepository, createAgentRepository, createCaseRepository } from '../data/index.js';
+import { createAIRepository, createAgentRepository, createCaseRepository, createIntegrationRepository, createPolicyRepository } from '../data/index.js';
 
 const router = Router();
 router.use(extractMultiTenant);
@@ -23,6 +23,8 @@ router.use(extractMultiTenant);
 const aiRepository = createAIRepository();
 const agentRepository = createAgentRepository();
 const caseRepository = createCaseRepository();
+const integrationRepository = createIntegrationRepository();
+const policyRepository = createPolicyRepository();
 
 function normalizeCopilotHistory(history: Array<{ role: string; content: string }> = []) {
   return history
@@ -82,6 +84,71 @@ function buildFallbackCopilotAnswer(state: ReturnType<typeof buildCaseState>) {
   ].filter(Boolean).join('\n');
 }
 
+router.get('/studio', requirePermission('agents.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const [agents, connectors, connectorCapabilities, stats] = await Promise.all([
+      agentRepository.listAgents(scope),
+      integrationRepository.listConnectors({ tenantId: req.tenantId! }),
+      agentRepository.listConnectorCapabilities(scope),
+      aiRepository.getStats(scope),
+    ]);
+
+    res.json({
+      agents,
+      connectors,
+      connector_capabilities: connectorCapabilities,
+      stats,
+      runtime: {
+        model: config.ai.geminiModel,
+        gemini_configured: Boolean(config.ai.geminiApiKey),
+      },
+    });
+  } catch (error) {
+    console.error('AI studio error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/agents', requirePermission('agents.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const agents = await agentRepository.listAgents({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      userId: req.userId,
+    });
+    res.json(agents);
+  } catch (error) {
+    console.error('AI agents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/policy-check', requirePermission('approvals.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const action = String(req.body?.action || req.body?.action_type || 'review').trim();
+    const context = req.body?.context && typeof req.body.context === 'object' ? req.body.context : {};
+    const entityType = String(req.body?.entity_type || context.entity_type || 'case').trim();
+    const caseId = req.body?.case_id || context.case_id || null;
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const result = await policyRepository.evaluate(scope, entityType, action, context, caseId);
+
+    res.json({
+      ok: true,
+      decision: result.finalDecision,
+      requiresApproval: result.requiresApproval,
+      requires_approval: result.requiresApproval,
+      reasons: [result.reason || 'No active rule matched.'],
+      reason: result.reason,
+      matchedRules: result.matchedRules,
+      matched_rules: result.matchedRules,
+    });
+  } catch (error) {
+    console.error('AI policy check error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ── GET /api/ai/stats ─────────────────────────────────────────────────────────
 
 router.get('/stats', requirePermission('audit.read'), async (req: MultiTenantRequest, res) => {
@@ -107,7 +174,7 @@ router.post('/diagnose/:caseId', requirePermission('cases.write'), async (req: M
       return;
     }
 
-    const jobId = enqueue(
+    const jobId = await enqueue(
       JobType.AI_DIAGNOSE,
       { caseId, profile },
       {
@@ -138,7 +205,7 @@ router.post('/draft/:caseId', requirePermission('cases.write'), async (req: Mult
       return;
     }
 
-    const jobId = enqueue(
+    const jobId = await enqueue(
       JobType.AI_DRAFT,
       { caseId, profile, agentSlug },
       {

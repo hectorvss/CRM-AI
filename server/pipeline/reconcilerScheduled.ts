@@ -39,7 +39,7 @@ async function handleReconcileScheduled(
   log.info('Scheduled reconciliation sweep', { casesFound: staleCases.length, limit });
 
   for (const c of staleCases) {
-    enqueue(
+    await enqueue(
       JobType.RECONCILE_CASE,
       { caseId: c.id },
       { tenantId: c.tenant_id, workspaceId, traceId: ctx.traceId, priority: 8 },

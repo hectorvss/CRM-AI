@@ -406,7 +406,7 @@ async function handleReconcileCase(
 
   // ── 9. Enqueue resolution planning if there are open issues ─────────────
   if (newIssueIds.length > 0) {
-    enqueue(
+      await enqueue(
       JobType.RESOLUTION_PLAN,
       { caseId: payload.caseId, reconciliationIssueIds: newIssueIds },
       { tenantId, workspaceId, traceId: ctx.traceId, priority: 6 },
@@ -414,7 +414,7 @@ async function handleReconcileCase(
     log.debug('Enqueued RESOLUTION_PLAN', { issueCount: newIssueIds.length });
 
     // Fire agent chain for conflict analysis
-    triggerAgents('conflicts_detected', payload.caseId, {
+      await triggerAgents('conflicts_detected', payload.caseId, {
       tenantId,
       workspaceId,
       traceId: ctx.traceId,

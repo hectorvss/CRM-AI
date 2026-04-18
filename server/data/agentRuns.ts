@@ -45,15 +45,75 @@ function listRunsSqlite(scope: AgentRunScope, agentId: string, limit: number) {
 
 export interface AgentRunRepository {
   list(scope: AgentRunScope, agentId: string, limit: number): Promise<any[]>;
+  create(scope: AgentRunScope, data: any): Promise<string>;
+  update(scope: AgentRunScope, runId: string, updates: any): Promise<void>;
+}
+
+function toSqliteValue(value: any) {
+  if (value === undefined) return null;
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return value;
 }
 
 export function createAgentRunRepository(): AgentRunRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
       list: listRunsSupabase,
+      create: async (scope, data) => {
+        const supabase = getSupabaseAdmin();
+        const payload = {
+          tenant_id: scope.tenantId,
+          workspace_id: scope.workspaceId,
+          outcome_status: data.status === 'running' ? 'running' : data.status || 'completed',
+          ...data,
+        };
+        const { error } = await supabase.from('agent_runs').insert(payload);
+        if (error) throw error;
+        return payload.id;
+      },
+      update: async (scope, runId, updates) => {
+        const supabase = getSupabaseAdmin();
+        const payload = {
+          ...updates,
+          outcome_status: updates.status ?? updates.outcome_status,
+          ended_at: updates.ended_at ?? updates.finished_at,
+        };
+        const { error } = await supabase
+          .from('agent_runs')
+          .update(payload)
+          .eq('id', runId)
+          .eq('tenant_id', scope.tenantId)
+          .eq('workspace_id', scope.workspaceId);
+        if (error) throw error;
+      },
     };
   }
   return {
     list: async (scope, agentId, limit) => listRunsSqlite(scope, agentId, limit),
+    create: async (scope, data) => {
+      const db = getDb();
+      const payload = {
+        tenant_id: scope.tenantId,
+        workspace_id: scope.workspaceId,
+        outcome_status: data.status === 'running' ? 'running' : data.status || 'completed',
+        ...data,
+      };
+      const fields = Object.keys(payload).filter((key) => payload[key] !== undefined);
+      db.prepare(`INSERT INTO agent_runs (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`)
+        .run(...fields.map((key) => toSqliteValue(payload[key])));
+      return payload.id;
+    },
+    update: async (scope, runId, updates) => {
+      const db = getDb();
+      const payload = {
+        ...updates,
+        outcome_status: updates.status ?? updates.outcome_status,
+        ended_at: updates.ended_at ?? updates.finished_at,
+      };
+      const fields = Object.keys(payload).filter((key) => payload[key] !== undefined);
+      if (!fields.length) return;
+      db.prepare(`UPDATE agent_runs SET ${fields.map((key) => `${key} = ?`).join(', ')} WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
+        .run(...fields.map((key) => toSqliteValue(payload[key])), runId, scope.tenantId, scope.workspaceId);
+    },
   };
 }

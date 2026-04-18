@@ -39,6 +39,7 @@ import sseRouter from './routes/sse.js';
 import demoRouter from './routes/demo.js';
 import policyRouter from './routes/policy.js';
 import reconciliationRouter from './routes/reconciliation.js';
+import searchRouter from './routes/search.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
@@ -134,11 +135,12 @@ app.use('/api/sse', sseRouter);
 app.use('/api/demo', demoRouter);
 app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
+app.use('/api/search', searchRouter);
 
 // ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {
   const integrationHealth = await integrationRegistry.healthCheck();
-  const queueCounts       = countJobs();
+  const queueCounts       = await countJobs();
   const worker            = workerStatus();
   const databaseStatus    = await getDatabaseConnectivityStatus();
 

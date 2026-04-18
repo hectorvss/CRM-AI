@@ -9,6 +9,11 @@
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+import dotenv from 'dotenv';
+
+dotenv.config({ path: '.env.local' });
+dotenv.config();
+
 export interface Config {
   /** Runtime environment */
   env: 'development' | 'production' | 'test';

@@ -116,7 +116,7 @@ async function handleCanonicalize(
   });
 
   // ── 4. Enqueue INTENT_ROUTE ──────────────────────────────────────────────
-  enqueue(
+  await enqueue(
     JobType.INTENT_ROUTE,
     { canonicalEventId: payload.canonicalEventId },
     { tenantId: scope.tenantId, workspaceId: scope.workspaceId, traceId: ctx.traceId, priority: 5 }

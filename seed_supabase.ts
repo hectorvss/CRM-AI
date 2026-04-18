@@ -1,14 +1,19 @@
-
 import { createClient } from '@supabase/supabase-js';
-import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
+import { AGENT_CATALOG, type AgentCatalogEntry } from './server/agents/catalog.js';
 
 dotenv.config({ path: '.env.local' });
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-const tenantId = 'tenant_1'; // Standard default tenant for this SaaS
+const supabaseUrl = process.env.SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Profile presets
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required to seed Supabase.');
+}
+
+const supabase = createClient(supabaseUrl, serviceRoleKey);
+const tenantId = process.env.DEFAULT_TENANT_ID ?? 'org_default';
+
 const READ_ONLY_PERMS = {
   canCallShopify: false,
   canCallStripe: false,
@@ -46,34 +51,6 @@ const SUPERVISOR_PERMS = {
   maxAutonomousRefundAmount: 500,
 };
 
-const FAST_REASONING = {
-  model: 'gemini-2.0-flash',
-  temperature: 0.1,
-  maxOutputTokens: 1024,
-  useJsonMode: true,
-};
-
-const BALANCED_REASONING = {
-  model: 'gemini-2.0-flash',
-  temperature: 0.2,
-  maxOutputTokens: 2048,
-  useJsonMode: true,
-};
-
-const THOROUGH_REASONING = {
-  model: 'gemini-3.1-pro-preview',
-  temperature: 0.1,
-  maxOutputTokens: 4096,
-  useJsonMode: true,
-};
-
-const CREATIVE_REASONING = {
-  model: 'gemini-2.0-flash',
-  temperature: 0.4,
-  maxOutputTokens: 3072,
-  useJsonMode: true,
-};
-
 const STANDARD_SAFETY = {
   requiresHumanApproval: false,
   maxConsecutiveFailures: 5,
@@ -98,172 +75,139 @@ const CRITICAL_SAFETY = {
   alwaysApproveActions: ['issue_refund', 'cancel_order', 'block_customer', 'send_external_message'],
 };
 
-const AGENTS = [
-  {
-    id: 'agent_supervisor',
-    slug: 'supervisor',
-    name: 'Supervisor',
-    description: 'Top-level orchestration agent. Oversees other agents and escalates when needed.',
-    category: 'orchestration',
-    is_system: 1, is_locked: 1,
-    permissions: SUPERVISOR_PERMS,
-    reasoning: THOROUGH_REASONING,
-    safety: CRITICAL_SAFETY,
-  },
-  {
-    id: 'agent_approval_gk',
-    slug: 'approval-gatekeeper',
-    name: 'Approval Gatekeeper',
-    description: 'Determines when human approval is required before executing a resolution plan.',
-    category: 'orchestration',
-    is_system: 1, is_locked: 0,
-    permissions: ANALYSIS_PERMS,
-    reasoning: BALANCED_REASONING,
-    safety: STRICT_SAFETY,
-  },
-  {
-    id: 'agent_qa',
-    slug: 'qa-policy-check',
-    name: 'QA / Policy Check',
-    description: 'Validates resolution plans against company policies and compliance requirements.',
-    category: 'orchestration',
-    is_system: 1, is_locked: 0,
-    permissions: ANALYSIS_PERMS,
-    reasoning: BALANCED_REASONING,
-    safety: STRICT_SAFETY,
-  },
-  {
-    id: 'agent_channel_ingest',
-    slug: 'channel-ingest',
-    name: 'Channel Ingest',
-    description: 'Ingests messages from WhatsApp, email, SMS and web-chat channels.',
-    category: 'ingest',
-    is_system: 1, is_locked: 0,
-    permissions: READ_ONLY_PERMS,
-    reasoning: FAST_REASONING,
-    safety: STANDARD_SAFETY,
-  },
-  {
-    id: 'agent_canonicalizer',
-    slug: 'canonicalizer',
-    name: 'Canonicalizer',
-    description: 'Normalizes raw webhook events into canonical case entities.',
-    category: 'ingest',
-    is_system: 1, is_locked: 0,
-    permissions: READ_ONLY_PERMS,
-    reasoning: FAST_REASONING,
-    safety: STANDARD_SAFETY,
-  },
-  {
-    id: 'agent_intent_router',
-    slug: 'intent-router',
-    name: 'Intent Router',
-    description: 'Classifies customer intent and routes to the appropriate case type.',
-    category: 'ingest',
-    is_system: 1, is_locked: 0,
-    permissions: ANALYSIS_PERMS,
-    reasoning: FAST_REASONING,
-    safety: STANDARD_SAFETY,
-  },
-  {
-    id: 'agent_reconciliation',
-    slug: 'reconciliation-agent',
-    name: 'Reconciliation Agent',
-    description: 'Detects and flags multi-system state conflicts across orders, payments and returns.',
-    category: 'resolution',
-    is_system: 1, is_locked: 1,
-    permissions: RESOLUTION_PERMS,
-    reasoning: BALANCED_REASONING,
-    safety: STRICT_SAFETY,
-  },
-  {
-    id: 'agent_case_resolution',
-    slug: 'case-resolution-planner',
-    name: 'Case Resolution Planner',
-    description: 'Generates step-by-step execution plans to resolve detected conflicts.',
-    category: 'resolution',
-    is_system: 1, is_locked: 0,
-    permissions: RESOLUTION_PERMS,
-    reasoning: THOROUGH_REASONING,
-    safety: STRICT_SAFETY,
-  },
-  {
-    id: 'agent_executor',
-    slug: 'resolution-executor',
-    name: 'Resolution Executor',
-    description: 'Executes approved resolution plans with rollback support.',
-    category: 'resolution',
-    is_system: 1, is_locked: 0,
-    permissions: RESOLUTION_PERMS,
-    reasoning: BALANCED_REASONING,
-    safety: CRITICAL_SAFETY,
-  },
-  {
-    id: 'agent_draft_reply',
-    slug: 'draft-reply-agent',
-    name: 'Draft Reply Agent',
-    description: 'Generates AI-drafted customer replies tuned to tone and case context.',
-    category: 'communication',
-    is_system: 1, is_locked: 0,
-    permissions: COMMUNICATION_PERMS,
-    reasoning: CREATIVE_REASONING,
-    safety: STRICT_SAFETY,
-  },
-  {
-    id: 'agent_audit',
-    slug: 'audit-observability',
-    name: 'Audit & Observability',
-    description: 'Comprehensive audit logging for all system events and agent actions.',
-    category: 'observability',
-    is_system: 1, is_locked: 1,
-    permissions: READ_ONLY_PERMS,
-    reasoning: FAST_REASONING,
-    safety: STANDARD_SAFETY,
-  },
-  {
-    id: 'agent_shopify',
-    slug: 'shopify-connector',
-    name: 'Shopify Connector',
-    description: 'Reads and writes Shopify order, fulfillment and customer data.',
-    category: 'connectors',
-    is_system: 1, is_locked: 0,
-    permissions: { ...RESOLUTION_PERMS, canCallStripe: false },
-    reasoning: FAST_REASONING,
-    safety: STRICT_SAFETY,
-  },
-  {
-    id: 'agent_stripe',
-    slug: 'stripe-connector',
-    name: 'Stripe Connector',
-    description: 'Reads and writes Stripe payment intents, refunds and disputes.',
-    category: 'connectors',
-    is_system: 1, is_locked: 0,
-    permissions: { ...RESOLUTION_PERMS, canCallShopify: false },
-    reasoning: FAST_REASONING,
-    safety: CRITICAL_SAFETY,
-  },
+function reasoningFor(entry: AgentCatalogEntry) {
+  if (entry.modelTier === 'none') {
+    return {
+      model: null,
+      temperature: 0,
+      maxOutputTokens: 0,
+      useJsonMode: false,
+    };
+  }
+
+  if (entry.modelTier === 'advanced') {
+    return {
+      model: 'gemini-3.1-pro-preview',
+      temperature: entry.slug === 'composer-translator' ? 0.4 : 0.1,
+      maxOutputTokens: 4096,
+      useJsonMode: true,
+    };
+  }
+
+  return {
+    model: 'gemini-2.5-pro',
+    temperature: entry.runtimeKind === 'llm' ? 0.2 : 0.1,
+    maxOutputTokens: 2048,
+    useJsonMode: true,
+  };
+}
+
+function permissionsFor(entry: AgentCatalogEntry) {
+  if (entry.slug === 'supervisor') return SUPERVISOR_PERMS;
+  if (entry.slug === 'shopify-connector') return { ...RESOLUTION_PERMS, canCallStripe: false };
+  if (entry.slug === 'stripe-connector') return { ...RESOLUTION_PERMS, canCallShopify: false };
+  if (entry.category === 'resolution_reconciliation' || entry.slug === 'returns-agent') return RESOLUTION_PERMS;
+  if (entry.slug === 'composer-translator' || entry.slug === 'customer-communication-agent') return COMMUNICATION_PERMS;
+  if (entry.runtimeKind === 'llm') return ANALYSIS_PERMS;
+  return READ_ONLY_PERMS;
+}
+
+function safetyFor(entry: AgentCatalogEntry) {
+  if (entry.slug === 'supervisor' || entry.slug === 'resolution-executor' || entry.slug === 'stripe-connector') {
+    return CRITICAL_SAFETY;
+  }
+  if (entry.runtimeKind === 'llm' || entry.category === 'resolution_reconciliation') return STRICT_SAFETY;
+  return STANDARD_SAFETY;
+}
+
+function capabilitiesFor(entry: AgentCatalogEntry) {
+  return {
+    runtimeKind: entry.runtimeKind,
+    implementationMode: entry.implementationMode,
+    modelTier: entry.modelTier,
+    sortOrder: entry.sortOrder,
+    icon: entry.icon,
+    iconColor: entry.iconColor,
+    triggers: entry.triggers,
+    dependencies: entry.dependencies,
+    ioLogic: entry.ioLogic,
+  };
+}
+
+const LEGACY_AGENT_RUN_MAPPINGS = [
+  { fromAgentId: 'agent_copilot', toAgentId: 'agent_composer', toVersionId: 'agent_composer_v1' },
+  { fromAgentId: 'agent_refunds', toAgentId: 'agent_stripe', toVersionId: 'agent_stripe_v1' },
+  { fromAgentId: 'agent_approval_gatekeeper', toAgentId: 'agent_approval_gk', toVersionId: 'agent_approval_gk_v1' },
+  { fromAgentId: 'agent_qa_policy_check', toAgentId: 'agent_qa', toVersionId: 'agent_qa_v1' },
+  { fromAgentId: 'agent_shopify_connector', toAgentId: 'agent_shopify', toVersionId: 'agent_shopify_v1' },
+  { fromAgentId: 'agent_stripe_connector', toAgentId: 'agent_stripe', toVersionId: 'agent_stripe_v1' },
+  { fromAgentId: 'agent_returns_specialist', toAgentId: 'agent_returns', toVersionId: 'agent_returns_v1' },
+  { fromAgentId: 'agent_logistics_tracking', toAgentId: 'agent_logistics', toVersionId: 'agent_logistics_v1' },
 ];
+
+async function repairLegacyAgentRuns() {
+  for (const mapping of LEGACY_AGENT_RUN_MAPPINGS) {
+    const { error } = await supabase
+      .from('agent_runs')
+      .update({
+        agent_id: mapping.toAgentId,
+        agent_version_id: mapping.toVersionId,
+      })
+      .eq('tenant_id', tenantId)
+      .eq('agent_id', mapping.fromAgentId);
+
+    if (error) throw error;
+  }
+}
+
+async function repairLegacyModels() {
+  const { data: versions, error } = await supabase
+    .from('agent_versions')
+    .select('id, reasoning_profile')
+    .eq('tenant_id', tenantId);
+
+  if (error) throw error;
+
+  for (const version of versions ?? []) {
+    const reasoningProfile = version.reasoning_profile;
+    if (!reasoningProfile || typeof reasoningProfile !== 'object') continue;
+    if ((reasoningProfile as any).model !== 'gemini-2.0-flash') continue;
+
+    const { error: updateError } = await supabase
+      .from('agent_versions')
+      .update({
+        reasoning_profile: {
+          ...reasoningProfile,
+          model: 'gemini-2.5-pro',
+        },
+      })
+      .eq('id', version.id);
+
+    if (updateError) throw updateError;
+    console.log(`Updated legacy model for version: ${version.id}`);
+  }
+}
 
 async function seed() {
   const now = new Date().toISOString();
-  console.log('Seeding agents to Supabase...');
+  console.log(`Seeding ${AGENT_CATALOG.length} catalog agents to Supabase tenant ${tenantId}...`);
 
-  for (const agent of AGENTS) {
+  for (const agent of AGENT_CATALOG) {
     const versionId = `${agent.id}_v1`;
 
-    // 1. Insert Agent
     const { error: agentError } = await supabase.from('agents').upsert({
       id: agent.id,
       tenant_id: tenantId,
       name: agent.name,
       slug: agent.slug,
       category: agent.category,
-      is_system: agent.is_system,
-      is_locked: agent.is_locked,
-      is_active: 1,
-      current_version_id: versionId,
+      description: agent.description,
+      is_system: Boolean(agent.isSystem),
+      is_locked: Boolean(agent.isLocked),
+      is_active: true,
+      current_version_id: null,
       created_at: now,
-      updated_at: now
+      updated_at: now,
     });
 
     if (agentError) {
@@ -271,30 +215,74 @@ async function seed() {
       continue;
     }
 
-    // 2. Insert Version
     const { error: versionError } = await supabase.from('agent_versions').upsert({
       id: versionId,
       agent_id: agent.id,
       version_number: 1,
       status: 'published',
       rollout_percentage: 100,
-      permission_profile: agent.permissions,
-      reasoning_profile: agent.reasoning,
-      safety_profile: agent.safety,
-      knowledge_profile: {},
-      capabilities: {},
+      permission_profile: permissionsFor(agent),
+      reasoning_profile: reasoningFor(agent),
+      safety_profile: safetyFor(agent),
+      knowledge_profile: { domains: agent.dependencies, retrieval: agent.runtimeKind === 'llm' },
+      capabilities: capabilitiesFor(agent),
+      published_by: 'catalog-seed',
       published_at: now,
+      changelog: 'Catalog-aligned published profile',
       tenant_id: tenantId,
     });
 
     if (versionError) {
       console.error(`Error seeding version for ${agent.slug}:`, versionError);
     } else {
-      console.log(`✅ Seeded agent: ${agent.slug}`);
+      const { error: activateError } = await supabase
+        .from('agents')
+        .update({ current_version_id: versionId, updated_at: now })
+        .eq('id', agent.id)
+        .eq('tenant_id', tenantId);
+
+      if (activateError) {
+        console.error(`Error activating version for ${agent.slug}:`, activateError);
+        continue;
+      }
+
+      console.log(`Seeded agent: ${agent.slug}`);
     }
   }
 
-  console.log('Seed complete!');
+  const catalogBySlug = new Map(AGENT_CATALOG.map((agent) => [agent.slug, agent]));
+  const { data: existingAgents, error: existingError } = await supabase
+    .from('agents')
+    .select('id, slug, is_active')
+    .eq('tenant_id', tenantId);
+
+  if (existingError) throw existingError;
+
+  const legacyIds = (existingAgents ?? [])
+    .filter((row) => {
+      const catalogAgent = catalogBySlug.get(row.slug);
+      return !catalogAgent || catalogAgent.id !== row.id;
+    })
+    .map((row) => row.id);
+
+  if (legacyIds.length) {
+    const { error: deactivateError } = await supabase
+      .from('agents')
+      .update({ is_active: false, updated_at: now })
+      .eq('tenant_id', tenantId)
+      .in('id', legacyIds);
+
+    if (deactivateError) throw deactivateError;
+    console.log(`Marked ${legacyIds.length} legacy agent rows inactive.`);
+  }
+
+  await repairLegacyAgentRuns();
+  await repairLegacyModels();
+
+  console.log('Seed complete.');
 }
 
-seed();
+seed().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
