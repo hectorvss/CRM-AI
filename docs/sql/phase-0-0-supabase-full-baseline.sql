@@ -467,6 +467,11 @@ CREATE TABLE IF NOT EXISTS payments (
   recommended_action TEXT,
   badges JSONB DEFAULT '[]'::jsonb,
   tab TEXT DEFAULT 'all',
+  authorized_at TIMESTAMPTZ,
+  captured_at TIMESTAMPTZ,
+  refund_status TEXT,
+  refund_details JSONB DEFAULT '[]'::jsonb,
+  reconciliation_details JSONB DEFAULT '{}'::jsonb,
   refund_amount NUMERIC,
   refund_type TEXT,
   dispute_reference TEXT,
@@ -474,6 +479,16 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_update TEXT
+);
+
+CREATE TABLE IF NOT EXISTS payment_events (
+  id TEXT PRIMARY KEY,
+  payment_id TEXT NOT NULL REFERENCES payments(id),
+  type TEXT NOT NULL,
+  content TEXT NOT NULL,
+  system TEXT,
+  time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  tenant_id TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS refunds (

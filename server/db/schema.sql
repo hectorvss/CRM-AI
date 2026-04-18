@@ -355,6 +355,11 @@ CREATE TABLE IF NOT EXISTS payments (
   recommended_action TEXT,
   badges TEXT DEFAULT '[]',
   tab TEXT DEFAULT 'all',
+  authorized_at TEXT,
+  captured_at TEXT,
+  refund_status TEXT,
+  refund_details TEXT DEFAULT '[]',
+  reconciliation_details TEXT DEFAULT '{}',
   refund_amount REAL,
   refund_type TEXT,
   dispute_reference TEXT,
@@ -362,6 +367,16 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   last_update TEXT
+);
+
+CREATE TABLE IF NOT EXISTS payment_events (
+  id TEXT PRIMARY KEY,
+  payment_id TEXT NOT NULL REFERENCES payments(id),
+  type TEXT NOT NULL,
+  content TEXT NOT NULL,
+  system TEXT,
+  time TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  tenant_id TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS refunds (

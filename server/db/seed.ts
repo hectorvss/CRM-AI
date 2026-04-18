@@ -216,6 +216,27 @@ export function seedDatabase(): void {
   ));
 
   // ── Returns ──────────────────────────────────────────────
+  const insertPaymentEvent = db.prepare(
+    'INSERT OR IGNORE INTO payment_events (id,payment_id,type,content,system,time,tenant_id) VALUES (?,?,?,?,?,?,?)'
+  );
+  const paymentEvents = [
+    ['pe_001_1', 'pay_001', 'authorized', 'Payment authorized — $129.00', 'Stripe', '2023-10-16T10:00:20Z'],
+    ['pe_001_2', 'pay_001', 'captured', 'Payment captured successfully', 'Stripe', '2023-10-16T10:01:00Z'],
+    ['pe_001_3', 'pay_001', 'refund_requested', 'Refund requested via OMS', 'OMS', '2023-10-16T12:00:00Z'],
+    ['pe_001_4', 'pay_001', 'refund_initiated', 'Refund initiated in PSP', 'Stripe', '2023-10-16T12:05:00Z'],
+    ['pe_001_5', 'pay_001', 'pending_bank', 'Awaiting bank clearance — T+3 expected', 'Bank', '2023-10-16T12:05:30Z'],
+    ['pe_002_1', 'pay_002', 'authorized', 'Payment authorized — $129.00', 'Stripe', '2023-10-16T10:00:20Z'],
+    ['pe_002_2', 'pay_002', 'captured', 'Payment captured', 'Stripe', '2023-10-16T10:01:00Z'],
+    ['pe_002_3', 'pay_002', 'cancellation_hold', 'Refund on hold pending ops cancellation approval', 'System', '2023-10-16T12:01:00Z'],
+    ['pe_003_1', 'pay_003', 'authorized', 'Payment authorized — $89.00', 'Stripe', '2023-10-15T10:00:20Z'],
+    ['pe_003_2', 'pay_003', 'captured', 'Payment captured', 'Stripe', '2023-10-15T10:01:00Z'],
+    ['pe_003_3', 'pay_003', 'settled', 'Payment settled and reconciled', 'System', '2023-10-15T20:00:00Z'],
+    ['pe_004_1', 'pay_004', 'authorized', 'Payment authorized — $249.00', 'Stripe', '2023-10-14T10:00:20Z'],
+    ['pe_004_2', 'pay_004', 'captured', 'Payment captured', 'Stripe', '2023-10-14T10:01:00Z'],
+    ['pe_004_3', 'pay_004', 'settled', 'Payment settled', 'Stripe', '2023-10-14T22:00:00Z'],
+  ] as const;
+  paymentEvents.forEach(event => insertPaymentEvent.run(...event, TENANT_ID));
+
   const returns: any[] = [
     {
       id: 'ret_001', ext: 'RET-20491', order: 'ord_55210', cust: 'cust_sarah_jenkins',

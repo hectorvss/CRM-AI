@@ -715,7 +715,6 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       db.prepare("UPDATE users SET preferences = COALESCE(preferences, '{}')").run();
     },
   },
-
   // ── 2026-04-18-001: customers full profile + order line items + activity ──────
   {
     version: '2026-04-18-001',
@@ -787,6 +786,144 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
           )
         `);
         db.exec('CREATE INDEX IF NOT EXISTS idx_customer_activity_customer ON customer_activity(customer_id, occurred_at)');
+      },
+    },
+  },
+
+  {
+    version: '2026-04-18-002',
+    up(db) {
+      addColumn(db, 'payments', 'authorized_at', 'TEXT');
+      addColumn(db, 'payments', 'captured_at', 'TEXT');
+      addColumn(db, 'payments', 'refund_status', 'TEXT');
+      addColumn(db, 'payments', 'refund_details', `TEXT DEFAULT '[]'`);
+      addColumn(db, 'payments', 'reconciliation_details', `TEXT DEFAULT '{}'`);
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS payment_events (
+          id TEXT PRIMARY KEY,
+          payment_id TEXT NOT NULL REFERENCES payments(id),
+          type TEXT NOT NULL,
+          content TEXT NOT NULL,
+          system TEXT NOT NULL,
+          time TEXT NOT NULL,
+          tenant_id TEXT NOT NULL
+        )
+      `);
+
+      const paymentUpdates = [
+        {
+          id: 'pay_001',
+          authorized_at: '2023-10-16T10:00:20Z',
+          captured_at: '2023-10-16T10:01:00Z',
+          refund_status: 'pending_bank_clearance',
+          refund_details: JSON.stringify([
+            {
+              attempt: 1,
+              initiated_at: '2023-10-16T12:00:00Z',
+              amount: 129,
+              status: 'processing',
+              psp_ref: 're_001_a',
+            },
+          ]),
+          reconciliation_details: JSON.stringify({
+            status: 'mismatch',
+            oms_state: 'refund_pending',
+            psp_state: 'captured',
+            diff_cents: 0,
+          }),
+        },
+        {
+          id: 'pay_002',
+          authorized_at: '2023-10-16T10:00:20Z',
+          captured_at: '2023-10-16T10:01:00Z',
+          refund_status: 'N/A',
+          refund_details: JSON.stringify([]),
+          reconciliation_details: JSON.stringify({
+            status: 'pending',
+            notes: 'Cancellation approval pending — refund on hold',
+          }),
+        },
+        {
+          id: 'pay_003',
+          authorized_at: '2023-10-15T10:00:20Z',
+          captured_at: '2023-10-15T10:01:00Z',
+          refund_status: 'succeeded',
+          refund_details: JSON.stringify([
+            {
+              attempt: 1,
+              initiated_at: '2023-10-15T14:00:00Z',
+              amount: 89,
+              status: 'succeeded',
+              psp_ref: 're_003_a',
+            },
+          ]),
+          reconciliation_details: JSON.stringify({
+            status: 'matched',
+            notes: 'Refund completed and reconciled',
+          }),
+        },
+        {
+          id: 'pay_004',
+          authorized_at: '2023-10-14T10:00:20Z',
+          captured_at: '2023-10-14T10:01:00Z',
+          refund_status: 'N/A',
+          refund_details: JSON.stringify([]),
+          reconciliation_details: JSON.stringify({
+            status: 'matched',
+            notes: 'Payment captured and settled',
+          }),
+        },
+      ];
+
+      const updatePayment = db.prepare(`
+        UPDATE payments
+        SET authorized_at = ?,
+            captured_at = ?,
+            refund_status = ?,
+            refund_details = ?,
+            reconciliation_details = ?
+        WHERE id = ?
+      `);
+
+      for (const payment of paymentUpdates) {
+        updatePayment.run(
+          payment.authorized_at,
+          payment.captured_at,
+          payment.refund_status,
+          payment.refund_details,
+          payment.reconciliation_details,
+          payment.id,
+        );
+      }
+
+      const paymentEvents = [
+        ['pe_001_1', 'pay_001', 'authorized', 'Payment authorized — $129.00', 'Stripe', '2023-10-16T10:00:20Z'],
+        ['pe_001_2', 'pay_001', 'captured', 'Payment captured successfully', 'Stripe', '2023-10-16T10:01:00Z'],
+        ['pe_001_3', 'pay_001', 'refund_requested', 'Refund requested via OMS', 'OMS', '2023-10-16T12:00:00Z'],
+        ['pe_001_4', 'pay_001', 'refund_initiated', 'Refund initiated in PSP', 'Stripe', '2023-10-16T12:05:00Z'],
+        ['pe_001_5', 'pay_001', 'pending_bank', 'Awaiting bank clearance — T+3 expected', 'Bank', '2023-10-16T12:05:30Z'],
+        ['pe_002_1', 'pay_002', 'authorized', 'Payment authorized — $129.00', 'Stripe', '2023-10-16T10:00:20Z'],
+        ['pe_002_2', 'pay_002', 'captured', 'Payment captured', 'Stripe', '2023-10-16T10:01:00Z'],
+        ['pe_002_3', 'pay_002', 'cancellation_hold', 'Refund on hold pending ops cancellation approval', 'System', '2023-10-16T12:01:00Z'],
+        ['pe_003_1', 'pay_003', 'authorized', 'Payment authorized — $89.00', 'Stripe', '2023-10-15T10:00:20Z'],
+        ['pe_003_2', 'pay_003', 'captured', 'Payment captured', 'Stripe', '2023-10-15T10:01:00Z'],
+        ['pe_003_3', 'pay_003', 'settled', 'Payment settled and reconciled', 'System', '2023-10-15T20:00:00Z'],
+        ['pe_004_1', 'pay_004', 'authorized', 'Payment authorized — $249.00', 'Stripe', '2023-10-14T10:00:20Z'],
+        ['pe_004_2', 'pay_004', 'captured', 'Payment captured', 'Stripe', '2023-10-14T10:01:00Z'],
+        ['pe_004_3', 'pay_004', 'settled', 'Payment settled', 'Stripe', '2023-10-14T22:00:00Z'],
+      ] as const;
+
+      const insertPaymentEvent = db.prepare(`
+        INSERT OR IGNORE INTO payment_events
+          (id, payment_id, type, content, system, time, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const workspace = db.prepare('SELECT org_id FROM workspaces LIMIT 1').get() as { org_id?: string } | undefined;
+      const tenantId = workspace?.org_id || 'org_default';
+      for (const event of paymentEvents) {
+        insertPaymentEvent.run(event[0], event[1], event[2], event[3], event[4], event[5], tenantId);
       }
     },
   },
