@@ -106,7 +106,7 @@ router.post('/webhooks/:id/replay', async (req: MultiTenantRequest, res) => {
     }
 
     const traceId = row.canonical_event_id || row.id;
-    const jobId = await enqueue(
+    const jobId = enqueue(
       JobType.WEBHOOK_PROCESS,
       {
         webhookEventId: row.id,

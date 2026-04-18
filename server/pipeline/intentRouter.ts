@@ -347,20 +347,20 @@ async function handleIntentRoute(
   });
 
   // ── 12. Enqueue downstream jobs ───────────────────────────────────────────
-    await enqueue(
+  enqueue(
     JobType.RECONCILE_CASE,
     { caseId: caseResult.id },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 5 }
   );
 
-  await enqueue(
+  enqueue(
     JobType.DRAFT_REPLY,
     { caseId: caseResult.id },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 8 }
   );
 
   const agentTrigger = caseResult.isNew ? 'case_created' : 'message_received';
-  await triggerAgents(agentTrigger, caseResult.id, {
+  triggerAgents(agentTrigger, caseResult.id, {
     tenantId, workspaceId, traceId: ctx.traceId, priority: 7,
   });
 

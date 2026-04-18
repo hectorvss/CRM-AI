@@ -4,7 +4,6 @@ import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 import { workerStatus } from '../queue/worker.js';
 import { integrationRegistry } from '../integrations/registry.js';
-import { randomUUID } from 'crypto';
 
 export interface OperationsScope {
   tenantId: string;
@@ -21,7 +20,6 @@ export interface OperationsRepository {
   updateWebhookStatus(scope: OperationsScope, id: string, status: string): Promise<void>;
   listCanonicalEvents(scope: OperationsScope, limit?: number): Promise<any[]>;
   listAgentRuns(scope: OperationsScope, limit?: number): Promise<any[]>;
-  logAudit(scope: OperationsScope, entry: any): Promise<void>;
 }
 
 async function getOverviewSupabase(scope: OperationsScope) {
@@ -256,24 +254,6 @@ export function createOperationsRepository(): OperationsRepository {
       updateWebhookStatus: updateWebhookStatusSupabase,
       listCanonicalEvents: listCanonicalEventsSupabase,
       listAgentRuns: listAgentRunsSupabase,
-      logAudit: async (scope, entry) => {
-        const supabase = getSupabaseAdmin();
-        const { error } = await supabase.from('audit_events').insert({
-          id: entry.id || randomUUID(),
-          tenant_id: scope.tenantId,
-          workspace_id: scope.workspaceId,
-          actor_id: entry.actorId || entry.actor_id || 'system',
-          actor_type: entry.actorType || entry.actor_type || 'system',
-          action: entry.action,
-          entity_type: entry.entityType || entry.entity_type || null,
-          entity_id: entry.entityId || entry.entity_id || null,
-          old_value: entry.oldValue || entry.old_value || null,
-          new_value: entry.newValue || entry.new_value || null,
-          metadata: entry.metadata || {},
-          occurred_at: entry.occurredAt || entry.occurred_at || new Date().toISOString(),
-        });
-        if (error) throw error;
-      },
     };
   }
 
@@ -287,27 +267,5 @@ export function createOperationsRepository(): OperationsRepository {
     updateWebhookStatus: async (scope, id, status) => updateWebhookStatusSqlite(scope, id, status),
     listCanonicalEvents: async (scope, limit) => listCanonicalEventsSqlite(scope, limit),
     listAgentRuns: async (scope, limit) => listAgentRunsSqlite(scope, limit),
-    logAudit: async (scope, entry) => {
-      const db = getDb();
-      db.prepare(`
-        INSERT INTO audit_events (
-          id, tenant_id, workspace_id, actor_id, actor_type, action,
-          entity_type, entity_id, old_value, new_value, metadata, occurred_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        entry.id || randomUUID(),
-        scope.tenantId,
-        scope.workspaceId,
-        entry.actorId || entry.actor_id || 'system',
-        entry.actorType || entry.actor_type || 'system',
-        entry.action,
-        entry.entityType || entry.entity_type || null,
-        entry.entityId || entry.entity_id || null,
-        entry.oldValue || entry.old_value ? JSON.stringify(entry.oldValue || entry.old_value) : null,
-        entry.newValue || entry.new_value ? JSON.stringify(entry.newValue || entry.new_value) : null,
-        JSON.stringify(entry.metadata || {}),
-        entry.occurredAt || entry.occurred_at || new Date().toISOString(),
-      );
-    },
   };
 }

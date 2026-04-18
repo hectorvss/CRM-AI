@@ -120,7 +120,7 @@ async function executeStep(step: any, ctx: StepContext): Promise<{ success: bool
       }
 
       case 'internal/send_notification': {
-    await enqueue(
+        enqueue(
           JobType.SEND_MESSAGE,
           {
             caseId:         ctx.caseId,
@@ -328,7 +328,7 @@ async function handleResolutionExecute(
     await caseRepo.update(scope, plan.case_id, { has_reconciliation_conflicts: 0 });
 
     // Fire agent chain: QA check + report generation + audit log on resolution
-  await triggerAgents('case_resolved', plan.case_id, {
+    triggerAgents('case_resolved', plan.case_id, {
       tenantId:     scope.tenantId,
       workspaceId:  scope.workspaceId,
       traceId:      ctx.traceId,
@@ -346,7 +346,7 @@ async function handleResolutionExecute(
     const canRollback    = completedSteps.every(s => s.rollbackable);
 
     if (canRollback && completedSteps.length > 0) {
-      await enqueue(
+      enqueue(
         JobType.RESOLUTION_ROLLBACK,
         { executionPlanId: plan.id, reason: `Step ${steps[failedStepIndex].action} failed` },
         { tenantId: scope.tenantId, workspaceId: scope.workspaceId, traceId: ctx.traceId, priority: 2 },

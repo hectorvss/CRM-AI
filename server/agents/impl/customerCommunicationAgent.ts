@@ -86,7 +86,7 @@ export const customerCommunicationAgentImpl: AgentImplementation = {
 
     if (permissions.canSendMessages && (decision === 'send_update' || decision === 'send_resolution' || decision === 'follow_up')) {
       try {
-  await enqueue(JobType.DRAFT_REPLY, { caseId, tone }, { tenantId, workspaceId, traceId, priority: 6 });
+        enqueue(JobType.DRAFT_REPLY, { caseId, tone }, { tenantId, workspaceId, traceId, priority: 6 });
       } catch (err: any) {
         logger.error('Communication agent failed to enqueue draft', { caseId, error: err?.message });
       }

@@ -277,11 +277,8 @@ function getCustomerStateSqlite(scope: CustomerScope, customerId: string) {
 
 export interface CustomerRepository {
   list(scope: CustomerScope, filters: CustomerFilters): Promise<any[]>;
-  get(scope: CustomerScope, customerId: string): Promise<any | null>;
   getDetail(scope: CustomerScope, customerId: string): Promise<any | null>;
   getState(scope: CustomerScope, customerId: string): Promise<any | null>;
-  getIdentity(scope: CustomerScope, system: string, externalId: string): Promise<any | null>;
-  createStub(scope: CustomerScope, customer: any): Promise<string>;
   upsertCustomer(scope: CustomerScope, customer: any): Promise<string>;
 }
 
@@ -289,67 +286,8 @@ export function createCustomerRepository(): CustomerRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
       list: listCustomersSupabase,
-      get: async (scope, customerId) => {
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase
-          .from('customers')
-          .select('*')
-          .eq('id', customerId)
-          .eq('tenant_id', scope.tenantId)
-          .eq('workspace_id', scope.workspaceId)
-          .maybeSingle();
-        if (error) throw error;
-        return data;
-      },
       getDetail: getCustomerDetailSupabase,
       getState: getCustomerStateSupabase,
-      getIdentity: async (scope, system, externalId) => {
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase
-          .from('linked_identities')
-          .select('*')
-          .eq('system', system)
-          .eq('external_id', externalId)
-          .or(`tenant_id.eq.${scope.tenantId},tenant_id.is.null`)
-          .order('confidence', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (error) throw error;
-        return data;
-      },
-      createStub: async (scope, customer) => {
-        const supabase = getSupabaseAdmin();
-        const now = new Date().toISOString();
-        const id = customer.id || crypto.randomUUID();
-        const { error: customerError } = await supabase.from('customers').insert({
-          id,
-          tenant_id: scope.tenantId,
-          workspace_id: scope.workspaceId,
-          canonical_name: customer.canonicalName || customer.displayName || 'Unknown customer',
-          canonical_email: customer.canonicalEmail || customer.email || null,
-          email: customer.email || customer.canonicalEmail || null,
-          phone: customer.phone || null,
-          segment: customer.segment || 'regular',
-          risk_level: customer.riskLevel || customer.risk_level || 'low',
-          created_at: now,
-          updated_at: now,
-        });
-        if (customerError) throw customerError;
-
-        const { error: identityError } = await supabase.from('linked_identities').insert({
-          id: crypto.randomUUID(),
-          customer_id: id,
-          tenant_id: scope.tenantId,
-          workspace_id: scope.workspaceId,
-          system: customer.identitySystem || customer.source || 'unknown',
-          external_id: customer.identityExternalId || customer.externalId || id,
-          confidence: 1,
-          verified: true,
-          verified_at: now,
-        });
-        if (identityError) throw identityError;
-        return id;
-      },
       upsertCustomer: async (scope, customer) => {
         const supabase = getSupabaseAdmin();
         const { data: linked } = await supabase
@@ -397,59 +335,8 @@ export function createCustomerRepository(): CustomerRepository {
 
   return {
     list: async (scope, filters) => listCustomersSqlite(scope, filters),
-    get: async (scope, customerId) => {
-      const db = getDb();
-      return parseRow(db.prepare('SELECT * FROM customers WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(customerId, scope.tenantId, scope.workspaceId));
-    },
     getDetail: async (scope, customerId) => getCustomerDetailSqlite(scope, customerId),
     getState: async (scope, customerId) => getCustomerStateSqlite(scope, customerId),
-    getIdentity: async (scope, system, externalId) => {
-      const db = getDb();
-      return parseRow(db.prepare(`
-        SELECT * FROM linked_identities
-        WHERE system = ? AND external_id = ? AND (tenant_id = ? OR tenant_id IS NULL)
-        ORDER BY confidence DESC
-        LIMIT 1
-      `).get(system, externalId, scope.tenantId));
-    },
-    createStub: async (scope, customer) => {
-      const db = getDb();
-      const now = new Date().toISOString();
-      const id = customer.id || crypto.randomUUID();
-      db.prepare(`
-        INSERT INTO customers (
-          id, tenant_id, workspace_id, canonical_email, email, phone, canonical_name,
-          segment, risk_level, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        scope.tenantId,
-        scope.workspaceId,
-        customer.canonicalEmail || customer.email || null,
-        customer.email || customer.canonicalEmail || null,
-        customer.phone || null,
-        customer.canonicalName || customer.displayName || 'Unknown customer',
-        customer.segment || 'regular',
-        customer.riskLevel || customer.risk_level || 'low',
-        now,
-        now,
-      );
-      db.prepare(`
-        INSERT OR IGNORE INTO linked_identities (
-          id, customer_id, tenant_id, workspace_id, system, external_id,
-          confidence, verified, verified_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 1.0, 1, ?)
-      `).run(
-        crypto.randomUUID(),
-        id,
-        scope.tenantId,
-        scope.workspaceId,
-        customer.identitySystem || customer.source || 'unknown',
-        customer.identityExternalId || customer.externalId || id,
-        now,
-      );
-      return id;
-    },
     upsertCustomer: async (scope, customer) => {
       const db = getDb();
       const linked = db.prepare('SELECT customer_id FROM linked_identities WHERE system = ? AND external_id = ?').get(customer.source, customer.externalId) as any;

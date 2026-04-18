@@ -18,7 +18,6 @@ import { enqueueDelayed } from './client.js';
 import { JobType }        from './types.js';
 import { logger }         from '../utils/logger.js';
 import { requireScope }    from '../lib/scope.js';
-import { createWorkspaceRepository } from '../data/workspaces.js';
 
 let slaIntervalId:     ReturnType<typeof setInterval> | null = null;
 let reconcileIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -32,40 +31,30 @@ export function startScheduledJobs(): void {
     reconcileIntervalMin: RECONCILE_INTERVAL_MS / 60_000,
   });
 
-  bootstrapScope()
-    .then((scope) => {
-      if (!scope) {
-        logger.info('Skipping scheduled job bootstrap because no workspace scope could be resolved');
-        return;
-      }
+  const scope = bootstrapScope();
+  if (!scope) {
+    logger.info('Skipping scheduled job bootstrap because DEFAULT_TENANT_ID/DEFAULT_WORKSPACE_ID are not set');
+    return;
+  }
 
-      // Fire once shortly after startup (give the worker a few seconds to be fully up)
-      enqueueDelayed(JobType.SLA_CHECK,           {}, 10_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-      enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 30_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+  // Fire once shortly after startup (give the worker a few seconds to be fully up)
+  enqueueDelayed(JobType.SLA_CHECK,           {}, 10_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+  enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 30_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
 
-      slaIntervalId = setInterval(() => {
-        enqueueDelayed(JobType.SLA_CHECK, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-      }, SLA_INTERVAL_MS);
+  slaIntervalId = setInterval(() => {
+    enqueueDelayed(JobType.SLA_CHECK, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+  }, SLA_INTERVAL_MS);
 
-      reconcileIntervalId = setInterval(() => {
-        enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-      }, RECONCILE_INTERVAL_MS);
-    })
-    .catch((error) => {
-      logger.warn('Scheduled job bootstrap failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+  reconcileIntervalId = setInterval(() => {
+    enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+  }, RECONCILE_INTERVAL_MS);
 }
 
-async function bootstrapScope() {
+function bootstrapScope() {
   const tenantId = process.env.DEFAULT_TENANT_ID ?? null;
   const workspaceId = process.env.DEFAULT_WORKSPACE_ID ?? null;
-  if (tenantId && workspaceId) return requireScope({ tenantId, workspaceId }, 'scheduledJobs');
-
-  const workspace = await createWorkspaceRepository().getFirstWorkspace();
-  if (!workspace?.org_id || !workspace?.id) return null;
-  return requireScope({ tenantId: workspace.org_id, workspaceId: workspace.id }, 'scheduledJobs');
+  if (!tenantId || !workspaceId) return null;
+  return requireScope({ tenantId, workspaceId }, 'scheduledJobs');
 }
 
 export function stopScheduledJobs(): void {

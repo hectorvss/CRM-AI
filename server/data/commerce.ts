@@ -587,21 +587,16 @@ async function getOrderSupabase(scope: CommerceScope, orderId: string): Promise<
       .from('order_events')
       .select('*')
       .eq('order_id', orderId)
-      .order('time', { ascending: true }),
+      .order('time', { ascending: true })
+      .catch(error => ({ data: [], error })),
     supabase
       .from('cases')
       .select('id, case_number, status, type')
       .like('order_ids', `%${orderId}%`)
       .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId),
+      .eq('workspace_id', scope.workspaceId)
+      .catch(error => ({ data: [], error })),
   ]);
-
-  if (eventsResult.error) {
-    console.warn('[commerce] order events fallback', { orderId, error: eventsResult.error });
-  }
-  if (casesResult.error) {
-    console.warn('[commerce] order cases fallback', { orderId, error: casesResult.error });
-  }
 
   const enriched = await enrichOrder(flatOrder, scope.tenantId, scope.workspaceId).catch(error => {
     console.warn('[commerce] order detail enrichment fallback', { orderId, error });
@@ -613,10 +608,10 @@ async function getOrderSupabase(scope: CommerceScope, orderId: string): Promise<
       ? context.case_state.timeline.filter((entry: any) =>
           ['orders', 'fulfillment', 'returns', 'payments'].includes(entry.domain),
         )
-      : eventsResult.error ? [] : eventsResult.data ?? [],
+      : eventsResult.data ?? [],
     related_cases: context?.case_state?.related.linked_cases?.length
       ? context.case_state.related.linked_cases
-      : casesResult.error ? [] : casesResult.data ?? [],
+      : casesResult.data ?? [],
     canonical_context: context,
   };
 }

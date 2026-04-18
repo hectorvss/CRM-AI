@@ -667,7 +667,7 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
       }];
 
   const evidenceRefs = Array.isArray(caseRow.ai_evidence_refs) ? caseRow.ai_evidence_refs : [];
-  const knowledgeArticlesById = new Map<string, any>((knowledgeArticles || []).map((article: any) => [article.id, article]));
+  const knowledgeArticlesById = new Map((knowledgeArticles || []).map((article: any) => [article.id, article]));
   const knowledgeLinkNodes: CanonicalNode[] = (caseKnowledgeLinks || []).map((link: any) => {
     const article = knowledgeArticlesById.get(link.article_id);
     const articleStatus = (article?.status || 'draft').toLowerCase();
@@ -819,7 +819,7 @@ function buildBranches(rows: any): Record<string, SystemStatusBranch> {
       label: 'Integrations',
       status: worstStatus([
         ...connectorNodes.map(node => node.status),
-        ...(observedIntegrationSystems.length > 0 ? ['healthy' as CanonicalHealth] : ['warning' as CanonicalHealth]),
+        ...(observedIntegrationSystems.length > 0 ? ['healthy'] : ['warning']),
       ]),
       source_of_truth: 'Connector Registry',
       summary: connectorNodes.length > 0

@@ -63,7 +63,8 @@ async function markFailed(id: string, err: unknown, attempts: number, maxAttempt
 
   if (canRetry) {
     const runAt = new Date(Date.now() + backoffMs(attempts)).toISOString();
-    await getJobRepo().rescheduleJob(id, {
+    await getJobRepo().finishJob(id, {
+      status: 'pending',
       runAt,
       error: message,
     });

@@ -23,7 +23,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { createCanonicalRepository } from '../data/canonical.js';
+import { createIntegrationRepository } from '../data/integrations.js';
 import { createCustomerRepository } from '../data/customers.js';
 import { createCaseRepository } from '../data/cases.js';
 import { enqueue }      from '../queue/client.js';
@@ -72,7 +72,7 @@ async function handleChannelIngest(
     traceId:         ctx.traceId,
   });
 
-  const canonicalRepo = createCanonicalRepository();
+  const integrationRepo = createIntegrationRepository();
   const customerRepo = createCustomerRepository();
   const caseRepo = createCaseRepository();
 
@@ -80,7 +80,7 @@ async function handleChannelIngest(
   const { tenantId, workspaceId } = scope;
 
   // ── 1. Load canonical event ───────────────────────────────────────────────
-  const event = await canonicalRepo.getEvent(scope, payload.canonicalEventId);
+  const event = await integrationRepo.getCanonicalEvent(payload.canonicalEventId);
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -203,7 +203,7 @@ async function handleChannelIngest(
   }
 
   // ── 6. Update canonical event with resolved entity refs ──────────────────
-  await canonicalRepo.updateEventStatus(scope, payload.canonicalEventId, {
+  await integrationRepo.updateCanonicalEvent(payload.canonicalEventId, {
     status: 'canonicalized',
     canonical_entity_type: 'customer',
     canonical_entity_id: customerId,
@@ -222,7 +222,7 @@ async function handleChannelIngest(
   });
 
   // ── 7. Enqueue intent classification ─────────────────────────────────────
-  await enqueue(
+  enqueue(
     JobType.INTENT_ROUTE,
     { canonicalEventId: payload.canonicalEventId },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 5 },

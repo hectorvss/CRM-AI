@@ -135,7 +135,7 @@ shopifyWebhookRouter.post('/', async (req: Request, res: Response) => {
 
     // ── 6. Enqueue for background processing ──────────────────────────────────
     try {
-      await enqueue(JobType.WEBHOOK_PROCESS, {
+      enqueue(JobType.WEBHOOK_PROCESS, {
         webhookEventId: eventId,
         source:         'shopify',
         rawBody,

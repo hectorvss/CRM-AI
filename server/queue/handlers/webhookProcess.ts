@@ -208,7 +208,7 @@ async function handleWebhookProcess(
   await integrationRepo.updateWebhookEventStatus(payload.webhookEventId, 'processed', canonicalEventId);
 
   // ── 7. Enqueue CANONICALIZE job ───────────────────────────────────────────
-  await enqueue(
+  enqueue(
     JobType.CANONICALIZE,
     { canonicalEventId },
     {

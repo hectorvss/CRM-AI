@@ -55,7 +55,6 @@ export interface IAMRepository {
   getRoleById(id: string, tenantId: string, workspaceId: string): Promise<any>;
   getRoleByName(name: string, tenantId: string, workspaceId: string): Promise<any>;
   listRoles(tenantId: string, workspaceId: string): Promise<any[]>;
-  getPermissionKeys(roleId: string): Promise<string[]>;
   createRole(data: {
     id: string;
     workspaceId: string;
@@ -221,12 +220,6 @@ class SQLiteIAMRepository implements IAMRepository {
       const permCount = db.prepare('SELECT COUNT(*) as c FROM role_permissions WHERE role_id = ?').get(r.id) as any;
       return { ...parsed, permission_count: permCount.c };
     });
-  }
-
-  async getPermissionKeys(roleId: string) {
-    const db = getDb();
-    const rows = db.prepare('SELECT permission_key FROM role_permissions WHERE role_id = ? ORDER BY permission_key').all(roleId) as any[];
-    return rows.map((row) => row.permission_key).filter(Boolean);
   }
 
   async createRole(data: any) {
@@ -487,17 +480,6 @@ class SupabaseIAMRepository implements IAMRepository {
       permissions: typeof r.permissions === 'string' ? JSON.parse(r.permissions) : r.permissions,
       permission_count: r.role_permissions?.[0]?.count || 0
     }));
-  }
-
-  async getPermissionKeys(roleId: string) {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('role_permissions')
-      .select('permission_key')
-      .eq('role_id', roleId)
-      .order('permission_key', { ascending: true });
-    if (error) throw error;
-    return (data || []).map((row: any) => row.permission_key).filter(Boolean);
   }
 
   async createRole(data: any) {

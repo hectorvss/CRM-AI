@@ -147,7 +147,7 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
 
     // ── 7. Enqueue for background processing ──────────────────────────────────
     try {
-      await enqueue(JobType.WEBHOOK_PROCESS, {
+      enqueue(JobType.WEBHOOK_PROCESS, {
         webhookEventId: eventId,
         source:         'stripe',
         rawBody,
