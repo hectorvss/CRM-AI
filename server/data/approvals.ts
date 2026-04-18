@@ -43,12 +43,18 @@ async function listApprovalsSupabase(scope: ApprovalScope, filters: { status?: s
 
   const approvals = data ?? [];
   const caseIds = Array.from(new Set(approvals.map((item) => item.case_id).filter(Boolean)));
-  const [casesRes, customersRes, usersRes] = await Promise.all([
-    caseIds.length ? supabase.from('cases').select('id, case_number, type, priority, risk_level, customer_id').in('id', caseIds) : Promise.resolve({ data: [], error: null } as any),
-    caseIds.length ? supabase.from('customers').select('id, canonical_name, segment').in('id', Array.from(new Set((approvals.map((item) => item.customer_id).filter(Boolean))))) : Promise.resolve({ data: [], error: null } as any),
-    approvals.some((item) => item.assigned_to) ? supabase.from('users').select('id, name').in('id', Array.from(new Set(approvals.map((item) => item.assigned_to).filter(Boolean)))) : Promise.resolve({ data: [], error: null } as any),
+  const casesRes = caseIds.length
+    ? await supabase.from('cases').select('id, case_number, type, priority, risk_level, customer_id').in('id', caseIds)
+    : { data: [], error: null } as any;
+  if (casesRes.error) throw casesRes.error;
+
+  const customerIds = Array.from(new Set((casesRes.data ?? []).map((row: any) => row.customer_id).filter(Boolean)));
+  const usersIds = Array.from(new Set(approvals.map((item) => item.assigned_to).filter(Boolean)));
+  const [customersRes, usersRes] = await Promise.all([
+    customerIds.length ? supabase.from('customers').select('id, canonical_name, segment').in('id', customerIds) : Promise.resolve({ data: [], error: null } as any),
+    usersIds.length ? supabase.from('users').select('id, name').in('id', usersIds) : Promise.resolve({ data: [], error: null } as any),
   ]);
-  for (const result of [casesRes, customersRes, usersRes]) {
+  for (const result of [customersRes, usersRes]) {
     if (result?.error) throw result.error;
   }
 
@@ -75,6 +81,21 @@ async function listApprovalsSupabase(scope: ApprovalScope, filters: { status?: s
     const key = [approval.case_id ?? 'no_case', approval.action_type ?? 'manual_review', approval.status ?? 'pending'].join(':');
     return list.findIndex((item) => [item.case_id ?? 'no_case', item.action_type ?? 'manual_review', item.status ?? 'pending'].join(':') === key) === index;
   });
+}
+
+function enrichApprovalFromBundle(approval: any, bundle: any) {
+  return {
+    ...parseJsonApproval(approval),
+    case_number: bundle?.case?.case_number || null,
+    case_type: bundle?.case?.type || null,
+    priority: bundle?.case?.priority || null,
+    case_risk: bundle?.case?.risk_level || null,
+    customer_name: bundle?.customer?.canonical_name || null,
+    customer_segment: bundle?.customer?.segment || null,
+    lifetime_value: bundle?.customer?.lifetime_value || 0,
+    dispute_rate: bundle?.customer?.dispute_rate || 0,
+    refund_rate: bundle?.customer?.refund_rate || 0,
+  };
 }
 
 async function getApprovalSupabase(scope: ApprovalScope, approvalId: string) {
@@ -116,6 +137,30 @@ async function getApprovalContextSupabase(scope: ApprovalScope, approvalId: stri
 
   return {
     approval,
+    case: bundle.case,
+    customer: bundle.customer,
+    case_state: buildCaseState(bundle),
+    conversation: bundle.conversation,
+    messages: bundle.messages ?? [],
+    internal_notes: bundle.internal_notes ?? [],
+    evidence: {
+      approvals: bundle.approvals ?? [],
+      reconciliation_issues: bundle.reconciliation_issues ?? [],
+      linked_cases: bundle.linked_cases ?? [],
+    },
+  };
+}
+
+async function getApprovalContextSqlite(scope: ApprovalScope, approvalId: string) {
+  const approval = getApprovalSqlite(scope, approvalId);
+  if (!approval) return null;
+
+  const caseRepository = createCaseRepository();
+  const bundle = await caseRepository.getBundle({ tenantId: scope.tenantId, workspaceId: scope.workspaceId }, approval.case_id);
+  if (!bundle) return { approval };
+
+  return {
+    approval: enrichApprovalFromBundle(approval, bundle),
     case: bundle.case,
     customer: bundle.customer,
     case_state: buildCaseState(bundle),
@@ -202,6 +247,53 @@ async function decideApprovalSupabase(scope: ApprovalScope, approvalId: string, 
   return { success: true, decision: input.decision, caseId: approval.case_id, executionPlanId: approval.execution_plan_id || null };
 }
 
+async function decideApprovalSqlite(scope: ApprovalScope, approvalId: string, input: { decision: 'approved' | 'rejected'; note?: string; decided_by?: string }) {
+  const db = getDb();
+  const approval = db.prepare(`
+    SELECT *
+    FROM approval_requests
+    WHERE id = ? AND tenant_id = ?
+  `).get(approvalId, scope.tenantId) as any;
+  if (!approval) return null;
+  if (approval.status !== 'pending') {
+    throw new Error('Approval is not pending');
+  }
+
+  const now = new Date().toISOString();
+  const decisionBy = input.decided_by || scope.userId || 'unknown';
+  const caseRepo = createCaseRepository();
+
+  db.prepare(`
+    UPDATE approval_requests
+    SET status = ?, decision_by = ?, decision_at = ?, decision_note = ?, updated_at = ?
+    WHERE id = ? AND tenant_id = ?
+  `).run(input.decision, decisionBy, now, input.note ?? null, now, approvalId, scope.tenantId);
+
+  await caseRepo.addStatusHistory(scope, {
+    caseId: approval.case_id,
+    fromStatus: 'approval_pending',
+    toStatus: input.decision === 'approved' ? 'approval_approved' : 'approval_rejected',
+    changedBy: decisionBy,
+    reason: input.note ?? `Approval ${input.decision}`,
+  });
+
+  if (approval.execution_plan_id) {
+    db.prepare(`
+      UPDATE execution_plans
+      SET status = ?
+      WHERE id = ? AND tenant_id = ?
+    `).run(input.decision === 'approved' ? 'approved' : 'rejected', approval.execution_plan_id, scope.tenantId);
+  }
+
+  await caseRepo.update(scope, approval.case_id, {
+    approval_state: input.decision,
+    execution_state: input.decision === 'approved' ? 'queued' : 'idle',
+    priority: input.decision === 'rejected' ? 'high' : approval.priority,
+  });
+
+  return { success: true, decision: input.decision, caseId: approval.case_id, executionPlanId: approval.execution_plan_id || null };
+}
+
 function listApprovalsSqlite(scope: ApprovalScope, filters: { status?: string; risk_level?: string; assigned_to?: string }) {
   const db = getDb();
   let query = `
@@ -260,7 +352,9 @@ async function createApprovalSupabase(scope: ApprovalScope, input: any) {
     status: input.status ?? 'pending',
     priority: input.priority ?? 'normal',
     assigned_to: input.assignedTo ?? input.assigned_to ?? null,
+    assigned_team_id: input.assignedTeamId ?? input.assigned_team_id ?? null,
     expires_at: input.expiresAt ?? input.expires_at ?? null,
+    execution_plan_id: input.executionPlanId ?? input.execution_plan_id ?? null,
     created_at: now,
     updated_at: now,
   };
@@ -288,7 +382,9 @@ function createApprovalSqlite(scope: ApprovalScope, input: any) {
     status: input.status ?? 'pending',
     priority: input.priority ?? 'normal',
     assigned_to: input.assignedTo ?? input.assigned_to ?? null,
+    assigned_team_id: input.assignedTeamId ?? input.assigned_team_id ?? null,
     expires_at: input.expiresAt ?? input.expires_at ?? null,
+    execution_plan_id: input.executionPlanId ?? input.execution_plan_id ?? null,
     created_at: now,
     updated_at: now,
   };
@@ -296,14 +392,16 @@ function createApprovalSqlite(scope: ApprovalScope, input: any) {
     INSERT INTO approval_requests (
       id, case_id, tenant_id, workspace_id, requested_by, requested_by_type,
       action_type, action_payload, risk_level, policy_rule_id, evidence_package,
-      status, priority, assigned_to, expires_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      status, priority, assigned_to, assigned_team_id, expires_at, execution_plan_id,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     payload.id, payload.case_id, payload.tenant_id, payload.workspace_id,
     payload.requested_by, payload.requested_by_type, payload.action_type,
     JSON.stringify(payload.action_payload), payload.risk_level, payload.policy_rule_id,
     JSON.stringify(payload.evidence_package), payload.status, payload.priority,
-    payload.assigned_to, payload.expires_at, payload.created_at, payload.updated_at,
+    payload.assigned_to, payload.assigned_team_id, payload.expires_at, payload.execution_plan_id,
+    payload.created_at, payload.updated_at,
   );
   return parseJsonApproval(payload);
 }
@@ -330,8 +428,8 @@ export function createApprovalRepository(): ApprovalRepository {
   return {
     list: async (scope, filters) => listApprovalsSqlite(scope, filters),
     get: async (scope, approvalId) => getApprovalSqlite(scope, approvalId),
-    getContext: async () => null,
+    getContext: getApprovalContextSqlite,
     create: async (scope, input) => createApprovalSqlite(scope, input),
-    decide: async () => null,
+    decide: decideApprovalSqlite,
   };
 }
