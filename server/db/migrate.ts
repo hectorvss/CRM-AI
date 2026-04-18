@@ -715,6 +715,81 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       db.prepare("UPDATE users SET preferences = COALESCE(preferences, '{}')").run();
     },
   },
+
+  // ── 2026-04-18-001: customers full profile + order line items + activity ──────
+  {
+    version: '2026-04-18-001',
+    up(db) {
+      // Customer profile fields (sourced from Shopify/Stripe sync)
+      addColumn(db, 'customers', 'role',                  'TEXT');
+      addColumn(db, 'customers', 'company',               'TEXT');
+      addColumn(db, 'customers', 'location',              'TEXT');
+      addColumn(db, 'customers', 'timezone',              'TEXT');
+      addColumn(db, 'customers', 'avatar_url',            'TEXT');
+      addColumn(db, 'customers', 'plan',                  'TEXT');
+      addColumn(db, 'customers', 'next_renewal',          'TEXT');
+      addColumn(db, 'customers', 'fraud_risk',            `TEXT NOT NULL DEFAULT 'low'`);
+      addColumn(db, 'customers', 'notes',                 'TEXT');
+      addColumn(db, 'customers', 'ai_executive_summary',  'TEXT');
+      addColumn(db, 'customers', 'ai_recommendations',    'TEXT');  // JSON array
+      addColumn(db, 'customers', 'ai_impact_resolved',    'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'customers', 'ai_impact_approvals',   'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'customers', 'ai_impact_escalated',   'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'customers', 'top_issue',             'TEXT');
+
+      // Order tracking fields
+      addColumn(db, 'orders', 'total_amount',        'REAL');
+      addColumn(db, 'orders', 'tracking_number',     'TEXT');
+      addColumn(db, 'orders', 'tracking_url',        'TEXT');
+      addColumn(db, 'orders', 'fulfillment_status',  'TEXT');
+      addColumn(db, 'orders', 'shipping_address',    'TEXT');  // JSON
+
+      // order_line_items: items within each order (from Shopify line_items)
+      if (!hasTable(db, 'order_line_items')) {
+        db.exec(`
+          CREATE TABLE order_line_items (
+            id               TEXT PRIMARY KEY,
+            order_id         TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+            tenant_id        TEXT NOT NULL,
+            workspace_id     TEXT NOT NULL DEFAULT 'ws_default',
+            external_item_id TEXT,
+            product_id       TEXT,
+            sku              TEXT,
+            name             TEXT NOT NULL,
+            price            REAL NOT NULL DEFAULT 0,
+            quantity         INTEGER NOT NULL DEFAULT 1,
+            currency         TEXT DEFAULT 'USD',
+            icon             TEXT,
+            image_url        TEXT,
+            created_at       TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+          )
+        `);
+        db.exec('CREATE INDEX IF NOT EXISTS idx_order_line_items_order ON order_line_items(order_id)');
+      }
+
+      // customer_activity: unified timeline (messages, orders, payments, agent notes, AI, system logs)
+      if (!hasTable(db, 'customer_activity')) {
+        db.exec(`
+          CREATE TABLE customer_activity (
+            id           TEXT PRIMARY KEY,
+            customer_id  TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+            tenant_id    TEXT NOT NULL,
+            workspace_id TEXT NOT NULL DEFAULT 'ws_default',
+            type         TEXT NOT NULL,
+            system       TEXT,
+            level        TEXT NOT NULL DEFAULT 'info',
+            title        TEXT,
+            content      TEXT,
+            metadata     TEXT,
+            source       TEXT,
+            occurred_at  TEXT NOT NULL,
+            created_at   TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+          )
+        `);
+        db.exec('CREATE INDEX IF NOT EXISTS idx_customer_activity_customer ON customer_activity(customer_id, occurred_at)');
+      }
+    },
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────────────

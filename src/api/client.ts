@@ -80,8 +80,9 @@ export const customersApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request<any>(`/customers${qs}`).then(unwrapList);
   },
-  get: (id: string) => request<any>(`/customers/${id}`),
-  state: (id: string) => request<any>(`/customers/${id}/state`),
+  get:      (id: string) => request<any>(`/customers/${id}`),
+  state:    (id: string) => request<any>(`/customers/${id}/state`),
+  activity: (id: string) => request<any>(`/customers/${id}/activity`),
   create: (payload: Record<string, any>) =>
     request<any>('/customers', {
       method: 'POST',

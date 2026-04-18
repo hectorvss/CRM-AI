@@ -55,4 +55,18 @@ router.get('/:id/state', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
+// Unified activity timeline (messages, orders, payments, agent notes, AI events, system logs)
+router.get('/:id/activity', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const activity = await customerRepository.getActivity(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId! },
+      req.params.id,
+    );
+    res.json(activity);
+  } catch (error) {
+    console.error('Error fetching customer activity:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
