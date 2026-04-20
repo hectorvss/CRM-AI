@@ -957,17 +957,6 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
                   )}
                 </div>
 
-                {/* Copilot Input Area */}
-                <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
-                  <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
-                    <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
-                    <input className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9" placeholder="Ask a question..." type="text" />
-                    <div className="flex items-center gap-1">
-                      <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
-                      <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">arrow_upward</span></button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </motion.div>

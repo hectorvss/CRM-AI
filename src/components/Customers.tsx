@@ -342,20 +342,6 @@ export default function Customers({ onNavigate }: CustomersProps) {
     return ['all', ...Array.from(names).sort((a, b) => a.localeCompare(b))];
   }, [customers]);
 
-  const filterCounts = useMemo(() => ({
-    vip: customers.filter(customer => customer.segment === 'VIP Enterprise').length,
-    standard: customers.filter(customer => customer.segment === 'Standard').length,
-    openTickets: customers.filter(customer => customer.openTickets > 0).length,
-    risk: customers.filter(customer => customer.risk && customer.risk !== 'Healthy').length,
-    aiHandled: customers.filter(customer => customer.aiImpact.resolved > 0).length,
-  }), [customers]);
-
-  const activeFilterCount = Number(segmentFilter !== 'all')
-    + Number(sourceFilter !== 'all')
-    + Number(openTicketsFilter !== 'all')
-    + Number(riskFilter !== 'all')
-    + Number(aiHandledFilter !== 'all');
-
   const visibleCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return customers.filter(customer => {
@@ -566,174 +552,109 @@ export default function Customers({ onNavigate }: CustomersProps) {
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-6 pb-0 flex-shrink-0 z-20">
-        <div className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-          <div className="px-6 py-4 flex items-start justify-between gap-4 border-b border-gray-100 dark:border-gray-800">
-            <div className="min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Customers</h1>
-                <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-2.5 py-1 text-[11px] font-medium text-gray-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                  {visibleCustomers.length} shown
-                </span>
-                {activeFilterCount > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 px-2.5 py-1 text-[11px] font-medium text-purple-700 dark:text-purple-300">
-                    {activeFilterCount} active filters
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Unified customer records with AI insights & integrations</p>
+        <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card">
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Customers</h1>
+              <p className="text-xs text-gray-500 mt-0.5">Unified customer records with AI insights & integrations</p>
             </div>
             <div className="flex items-center gap-3">
-              <div className="relative w-72 mr-1">
+              <div className="relative w-64 mr-2">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-lg">search</span>
                 <input
                   type="text"
                   placeholder="Search customers..."
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-all"
+                  className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-all"
                 />
               </div>
               <button
                 onClick={() => setIsCreateCustomerOpen(true)}
-                className="px-4 py-2.5 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-card flex items-center gap-2 hover:opacity-90 transition-opacity"
+                className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg text-sm font-bold shadow-card flex items-center gap-2 hover:opacity-90 transition-opacity"
               >
                 <span className="material-symbols-outlined text-lg">add</span>
                 New Customer
               </button>
             </div>
           </div>
-
-          <div className="px-6 py-4 space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.9fr)]">
-              <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40 p-4">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400 font-semibold">Filters</p>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">Scope the customer list</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSegmentFilter('all');
-                      setSourceFilter('all');
-                      setOpenTicketsFilter('all');
-                      setRiskFilter('all');
-                      setAiHandledFilter('all');
-                      setSearchQuery('');
-                    }}
-                    className="text-xs font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                  >
-                    Clear all
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: 'all', label: 'All segments', active: segmentFilter === 'all', count: customers.length, onClick: () => setSegmentFilter('all') },
-                    { key: 'vip', label: 'VIP', active: segmentFilter === 'vip', count: filterCounts.vip, onClick: () => setSegmentFilter('vip') },
-                    { key: 'standard', label: 'Standard', active: segmentFilter === 'standard', count: filterCounts.standard, onClick: () => setSegmentFilter('standard') },
-                  ].map(option => (
-                    <button
-                      key={option.key}
-                      onClick={option.onClick}
-                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all shadow-card ${
-                        option.active
-                          ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
-                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {option.label}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${option.active ? 'bg-white/15 text-white dark:bg-black/10 dark:text-black' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
-                        {option.count}
-                      </span>
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setOpenTicketsFilter(prev => prev === 'all' ? 'open' : 'all')}
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all shadow-card ${
-                      openTicketsFilter === 'open'
-                        ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    Has open tickets
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${openTicketsFilter === 'open' ? 'bg-white/15 text-white dark:bg-black/10 dark:text-black' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
-                      {filterCounts.openTickets}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setRiskFilter(prev => prev === 'all' ? 'risk' : 'all')}
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all shadow-card ${
-                      riskFilter === 'risk'
-                        ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    Risk flags
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${riskFilter === 'risk' ? 'bg-white/15 text-white dark:bg-black/10 dark:text-black' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
-                      {filterCounts.risk}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setAiHandledFilter(prev => prev === 'all' ? 'handled' : 'all')}
-                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all shadow-card ${
-                      aiHandledFilter === 'handled'
-                        ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    AI handled
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${aiHandledFilter === 'handled' ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
-                      {filterCounts.aiHandled}
-                    </span>
-                  </button>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400 font-semibold mb-2">Sources</p>
-                  <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto custom-scrollbar pr-1">
-                    {sourceOptions.map(source => (
-                      <button
-                        key={source}
-                        onClick={() => setSourceFilter(prev => prev === source ? 'all' : source)}
-                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all shadow-card ${
-                          sourceFilter === source
-                            ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
-                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                        }`}
-                      >
-                        {source === 'all' ? 'All sources' : source}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800/50 p-4">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400 font-semibold">Overview</p>
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3">
-                    <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Visible</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1">{visibleCustomers.length}</p>
-                    <p className="text-xs text-gray-500 mt-1">Match current filters</p>
-                  </div>
-                  <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3">
-                    <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Open tickets</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1">{filterCounts.openTickets}</p>
-                    <p className="text-xs text-gray-500 mt-1">Customers with active cases</p>
-                  </div>
-                  <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3">
-                    <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">VIP</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1">{filterCounts.vip}</p>
-                    <p className="text-xs text-gray-500 mt-1">Enterprise segment</p>
-                  </div>
-                  <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3">
-                    <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">AI handled</p>
-                    <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-1">{filterCounts.aiHandled}</p>
-                    <p className="text-xs text-gray-500 mt-1">Records with resolved impact</p>
-                  </div>
-                </div>
-              </div>
+          <div className="px-6 flex items-center space-x-8 border-t border-gray-100 dark:border-gray-800 pt-3">
+            <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar pb-3">
+              <button
+                onClick={() => setSegmentFilter(prev => prev === 'all' ? 'vip' : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  segmentFilter !== 'all'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm mr-1.5 text-gray-500">filter_list</span>
+                Segment
+              </button>
+              <button
+                onClick={() => setSourceFilter(prev => prev === 'all' ? (sourceOptions[1] || 'all') : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  sourceFilter !== 'all'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                Source
+              </button>
+              <button
+                onClick={() => setOpenTicketsFilter(prev => prev === 'all' ? 'open' : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  openTicketsFilter === 'open'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                Has open tickets
+              </button>
+              <button
+                onClick={() => setSegmentFilter(prev => prev === 'vip' ? 'all' : 'vip')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  segmentFilter === 'vip'
+                    ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-100 dark:border-purple-800'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                VIP
+              </button>
+              <button
+                onClick={() => setRiskFilter(prev => prev === 'all' ? 'risk' : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  riskFilter === 'risk'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                Risk flags
+              </button>
+              <button
+                onClick={() => setAiHandledFilter(prev => prev === 'all' ? 'handled' : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  aiHandledFilter === 'handled'
+                    ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                AI handled
+              </button>
+              <div className="border-l border-gray-200 dark:border-gray-700 h-5 mx-2"></div>
+              <button
+                onClick={() => {
+                  setSegmentFilter('all');
+                  setSourceFilter('all');
+                  setOpenTicketsFilter('all');
+                  setRiskFilter('all');
+                  setAiHandledFilter('all');
+                  setSearchQuery('');
+                }}
+                className="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors"
+              >
+                Clear all
+              </button>
             </div>
           </div>
         </div>
