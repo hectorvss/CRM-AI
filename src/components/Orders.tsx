@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Order, OrderTab } from '../types';
 import CaseHeader from './CaseHeader';
 import { casesApi, ordersApi, paymentsApi } from '../api/client';
@@ -433,7 +433,27 @@ export default function Orders({ onNavigate }: OrdersProps) {
     return false;
   });
 
-  const selectedOrder = filteredOrders.find(o => o.id === selectedId) || filteredOrders[0];
+  const selectedOrderBase = filteredOrders.find(o => o.id === selectedId) || filteredOrders[0] || null;
+  const { data: selectedOrderDetailRaw } = useApi(
+    () => selectedOrderBase ? ordersApi.get(selectedOrderBase.id) : Promise.resolve(null),
+    [selectedOrderBase?.id],
+    null,
+  );
+
+  const selectedOrder = useMemo(() => {
+    if (!selectedOrderBase) return null;
+    if (!selectedOrderDetailRaw) return selectedOrderBase;
+
+    const detail = mapApiOrder(selectedOrderDetailRaw);
+    return {
+      ...selectedOrderBase,
+      ...detail,
+      timeline: detail.timeline.length > 0 ? detail.timeline : selectedOrderBase.timeline,
+      relatedCases: detail.relatedCases.length > 0 ? detail.relatedCases : selectedOrderBase.relatedCases,
+      canonicalContext: detail.canonicalContext ?? selectedOrderBase.canonicalContext,
+      canonical_context: detail.canonical_context ?? selectedOrderBase.canonical_context,
+    };
+  }, [selectedOrderBase, selectedOrderDetailRaw]);
 
   useEffect(() => {
     if (filteredOrders.length > 0 && !filteredOrders.find(o => o.id === selectedId)) {

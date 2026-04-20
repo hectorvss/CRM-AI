@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Payment, PaymentTab, OrderTimelineEvent } from '../types';
 import { paymentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
@@ -263,7 +263,25 @@ export default function Payments() {
     return p.tab === activeTab;
   });
 
-  const selectedPayment = filteredPayments.find(p => p.id === selectedId) || filteredPayments[0] || null;
+  const selectedPaymentBase = filteredPayments.find(p => p.id === selectedId) || filteredPayments[0] || null;
+  const { data: selectedPaymentDetailRaw } = useApi(
+    () => selectedPaymentBase ? paymentsApi.get(selectedPaymentBase.id) : Promise.resolve(null),
+    [selectedPaymentBase?.id],
+    null,
+  );
+
+  const selectedPayment = useMemo(() => {
+    if (!selectedPaymentBase) return null;
+    if (!selectedPaymentDetailRaw) return selectedPaymentBase;
+
+    const detail = mapApiPayment(selectedPaymentDetailRaw);
+    return {
+      ...selectedPaymentBase,
+      ...detail,
+      timeline: detail.timeline.length > 0 ? detail.timeline : selectedPaymentBase.timeline,
+      relatedCases: detail.relatedCases.length > 0 ? detail.relatedCases : selectedPaymentBase.relatedCases,
+    };
+  }, [selectedPaymentBase, selectedPaymentDetailRaw]);
 
   useEffect(() => {
     if (filteredPayments.length > 0 && !filteredPayments.find(p => p.id === selectedId)) {

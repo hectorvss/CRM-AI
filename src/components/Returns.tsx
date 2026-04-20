@@ -326,7 +326,25 @@ export default function Returns() {
     return r.tab === activeTab;
   }), [activeTab, returns]);
 
-  const selectedReturn = filteredReturns.find(r => r.id === selectedId) || filteredReturns[0] || null;
+  const selectedReturnBase = filteredReturns.find(r => r.id === selectedId) || filteredReturns[0] || null;
+  const { data: selectedReturnDetailRaw } = useApi(
+    () => selectedReturnBase ? returnsApi.get(selectedReturnBase.id) : Promise.resolve(null),
+    [selectedReturnBase?.id],
+    null,
+  );
+
+  const selectedReturn = useMemo(() => {
+    if (!selectedReturnBase) return null;
+    if (!selectedReturnDetailRaw) return selectedReturnBase;
+
+    const detail = mapApiReturn(selectedReturnDetailRaw);
+    return {
+      ...selectedReturnBase,
+      ...detail,
+      timeline: detail.timeline.length > 0 ? detail.timeline : selectedReturnBase.timeline,
+      relatedCases: detail.relatedCases.length > 0 ? detail.relatedCases : selectedReturnBase.relatedCases,
+    };
+  }, [selectedReturnBase, selectedReturnDetailRaw]);
 
   useEffect(() => {
     if (filteredReturns.length === 0) {

@@ -695,14 +695,30 @@ async function getPaymentSupabase(scope: CommerceScope, paymentId: string): Prom
     customer_email: customer?.canonical_email ?? null,
   };
 
-  const context = await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId);
+  const context = await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId).catch(error => {
+    console.warn('[commerce] payment detail canonical context fallback', { paymentId, error });
+    return null;
+  });
+  const { data: events, error: eventsError } = await supabase
+    .from('payment_events')
+    .select('*')
+    .eq('payment_id', paymentId)
+    .order('time', { ascending: true });
+
+  if (eventsError) {
+    console.warn('[commerce] payment events fallback', { paymentId, error: eventsError });
+  }
   const enriched = await enrichPayment(flatPayment, scope.tenantId, scope.workspaceId).catch(error => {
     console.warn('[commerce] payment detail enrichment fallback', { paymentId, error });
     return flatPayment;
   });
+  const canonicalTimeline = context?.case_state?.timeline?.filter((entry: any) =>
+    ['payments', 'orders', 'fulfillment', 'returns', 'approvals'].includes(entry.domain),
+  ) ?? [];
 
   return {
     ...enriched,
+    events: canonicalTimeline.length > 0 ? canonicalTimeline : (eventsError ? [] : events ?? []),
     canonical_context: context,
   };
 }
@@ -720,7 +736,10 @@ async function updatePaymentSupabase(scope: CommerceScope, paymentId: string, up
 }
 
 async function getPaymentContextSupabase(scope: CommerceScope, paymentId: string): Promise<any | null> {
-  return await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId) ?? null;
+  return await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId).catch(error => {
+    console.warn('[commerce] payment context fallback', { paymentId, error });
+    return null;
+  }) ?? null;
 }
 
 async function listReturnsSupabase(scope: CommerceScope, filters: ReturnFilters): Promise<any[]> {
@@ -780,7 +799,10 @@ async function getReturnSupabase(scope: CommerceScope, returnId: string): Promis
     customer_name: customer?.canonical_name ?? null,
   };
 
-  const context = await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId);
+  const context = await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId).catch(error => {
+    console.warn('[commerce] return detail canonical context fallback', { returnId, error });
+    return null;
+  });
 
   const { data: events, error: eventsError } = await supabase
     .from('return_events')
@@ -788,19 +810,20 @@ async function getReturnSupabase(scope: CommerceScope, returnId: string): Promis
     .eq('return_id', returnId)
     .order('time', { ascending: true });
 
-  if (eventsError) throw eventsError;
+  if (eventsError) {
+    console.warn('[commerce] return events fallback', { returnId, error: eventsError });
+  }
 
   const enriched = await enrichReturn(flatReturn, scope.tenantId, scope.workspaceId).catch(error => {
     console.warn('[commerce] return detail enrichment fallback', { returnId, error });
     return flatReturn;
   });
+  const canonicalTimeline = context?.case_state?.timeline?.filter((entry: any) =>
+    ['returns', 'payments', 'orders', 'fulfillment', 'approvals'].includes(entry.domain),
+  ) ?? [];
   return {
     ...enriched,
-    events: context?.case_state
-      ? context.case_state.timeline.filter((entry: any) =>
-          ['returns', 'payments', 'orders', 'fulfillment', 'approvals'].includes(entry.domain),
-        )
-      : events ?? [],
+    events: canonicalTimeline.length > 0 ? canonicalTimeline : (eventsError ? [] : events ?? []),
     canonical_context: context,
   };
 }
@@ -818,7 +841,10 @@ async function updateReturnSupabase(scope: CommerceScope, returnId: string, upda
 }
 
 async function getReturnContextSupabase(scope: CommerceScope, returnId: string): Promise<any | null> {
-  return await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId) ?? null;
+  return await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId).catch(error => {
+    console.warn('[commerce] return context fallback', { returnId, error });
+    return null;
+  }) ?? null;
 }
 
 // ── Repository interface & factory ───────────────────────────
