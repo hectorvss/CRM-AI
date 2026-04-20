@@ -43,7 +43,7 @@ export default function App() {
           {currentPage === 'home' && <Home />}
           {currentPage === 'ai_studio' && <AIStudio />}
           {currentPage === 'workflows' && <Workflows onNavigate={navigate} />}
-          {currentPage === 'approvals' && <Approvals />}
+          {currentPage === 'approvals' && <Approvals onNavigate={navigate} />}
           {currentPage === 'knowledge' && <Knowledge />}
           {currentPage === 'customers' && <Customers onNavigate={navigate} />}
           {currentPage === 'tools_integrations' && <ToolsIntegrations />}
