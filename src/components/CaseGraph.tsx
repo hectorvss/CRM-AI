@@ -473,40 +473,45 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                   <LoadingState title="Loading timeline" message="Fetching case history from Supabase." compact />
                 ) : (
                   <>
-                    {timeline.length > 0 && (
-                      <div className="absolute left-[55px] top-20 bottom-6 w-0.5 bg-gray-200 dark:bg-gray-700"></div>
-                    )}
-                    <div className="space-y-6">
+                    <div className="relative">
                       {timeline.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                           <span className="material-symbols-outlined text-4xl mb-3">timeline</span>
                           <p className="text-sm font-medium">No timeline events yet</p>
                         </div>
                       )}
-                      {timeline.map((entry: any) => (
-                        <div key={entry.id} className="relative flex items-start group">
-                          <div className="absolute left-0 w-12 h-12 flex items-center justify-center z-10">
-                            <div className={`w-4 h-4 rounded-full border-2 border-white dark:border-gray-900 shadow-sm ${
-                              entry.severity === 'critical' || entry.severity === 'blocked' ? 'bg-red-500' :
-                              entry.severity === 'warning' || entry.severity === 'pending' ? 'bg-orange-400' : 'bg-green-500'
-                            }`}></div>
-                          </div>
-                          <div className="ml-14 flex-1 p-4 rounded-xl border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm">
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-lg text-gray-500 dark:text-gray-400">{entry.icon || 'circle'}</span>
-                                <h3 className="font-bold text-gray-900 dark:text-white">{formatStatus(entry.entry_type || entry.type)}</h3>
+                      {timeline.length > 0 && (
+                        <div className="absolute left-[18px] top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700"></div>
+                      )}
+                      <div className="space-y-6 relative">
+                        {timeline.map((entry: any, index: number) => {
+                          const isCritical = entry.severity === 'critical' || entry.severity === 'blocked';
+                          const isWarning = entry.severity === 'warning' || entry.severity === 'pending';
+                          const dotColor = isCritical ? 'bg-red-500' : isWarning ? 'bg-orange-400' : 'bg-green-500';
+                          return (
+                            <div key={entry.id} className="grid grid-cols-[36px_minmax(0,1fr)] gap-4 group">
+                              <div className="relative flex justify-center">
+                                <div className={`absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-gray-200 dark:bg-gray-700 ${index === 0 ? 'top-6' : ''} ${index === timeline.length - 1 ? 'bottom-6' : ''}`}></div>
+                                <div className={`relative z-10 mt-4 w-4 h-4 rounded-full border-2 border-white dark:border-gray-900 shadow-sm ${dotColor}`}></div>
                               </div>
-                              <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{new Date(entry.occurred_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                              <div className="p-4 rounded-xl border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-sm">
+                                <div className="flex justify-between items-start mb-2 gap-3">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="material-symbols-outlined text-lg text-gray-500 dark:text-gray-400">{entry.icon || 'circle'}</span>
+                                    <h3 className="font-bold text-gray-900 dark:text-white truncate">{formatStatus(entry.entry_type || entry.type)}</h3>
+                                  </div>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 font-mono flex-shrink-0">{new Date(entry.occurred_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+                                <div className="text-sm text-gray-600 dark:text-gray-300">{entry.content}</div>
+                                <div className="mt-3 flex items-center justify-between gap-3">
+                                  <span className="text-[10px] font-bold uppercase px-2 py-1 rounded border bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600">{formatStatus(entry.domain)}</span>
+                                  <span className="text-xs text-gray-500">{entry.source || entry.actor || 'System'}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300">{entry.content}</div>
-                            <div className="mt-3 flex items-center justify-between">
-                              <span className="text-[10px] font-bold uppercase px-2 py-1 rounded border bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600">{formatStatus(entry.domain)}</span>
-                              <span className="text-xs text-gray-500">{entry.source || entry.actor || 'System'}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                          );
+                        })}
+                      </div>
                     </div>
                   </>
                 )}
