@@ -747,9 +747,6 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
                     Copilot
                   </button>
                   <div className="flex items-center gap-1 ml-auto">
-                    <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                      <span className="material-symbols-outlined text-[20px]">settings</span>
-                    </button>
                     <button 
                       onClick={() => setIsRightSidebarOpen(false)}
                       className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"

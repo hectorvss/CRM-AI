@@ -52,7 +52,6 @@ export default function CaseCopilotPanel({
   const [isCopilotSending, setIsCopilotSending] = useState(false);
   const [showCaseBrief, setShowCaseBrief] = useState(false);
   const copilotBottomRef = useRef<HTMLDivElement>(null);
-  const copilotInputRef = useRef<HTMLInputElement>(null);
   const welcomeSentForRef = useRef<string | null>(null);
 
   const effectiveSuggestions = useMemo(() => {
@@ -140,14 +139,14 @@ export default function CaseCopilotPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="px-3 pt-3 pb-2.5 flex items-center gap-2 flex-wrap border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
+      <div className="px-3 pt-3 pb-3 flex items-center gap-2 flex-wrap border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
         <button
           onClick={() => setShowCaseBrief(prev => !prev)}
           title="Toggle case brief"
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border shadow-sm ${
             showCaseBrief
-              ? 'bg-purple-100 dark:bg-purple-900/30 text-secondary border-purple-200 dark:border-purple-700'
-              : 'bg-gray-100 dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary'
+              ? 'bg-purple-50 dark:bg-purple-900/20 text-secondary border-purple-200 dark:border-purple-700'
+              : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary'
           }`}
         >
           <span className="material-symbols-outlined text-[14px]">description</span>
@@ -158,7 +157,7 @@ export default function CaseCopilotPanel({
           <button
             onClick={onOpenModule}
             title={moduleButtonLabel}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary transition-all shadow-sm"
           >
             <span className="material-symbols-outlined text-[14px]">open_in_new</span>
             {moduleButtonLabel}
@@ -178,17 +177,17 @@ export default function CaseCopilotPanel({
       </div>
 
       {showCaseBrief && (
-        <div className="mx-3 mt-2.5 bg-white dark:bg-card-dark rounded-xl border border-gray-100 dark:border-gray-700 p-3 text-xs space-y-2 flex-shrink-0 shadow-card">
+        <div className="mx-3 mt-2.5 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark p-4 text-sm space-y-3 flex-shrink-0 shadow-card">
           <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{summary}</p>
           {conflict && (
-            <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-              <span className="material-symbols-outlined text-red-500 text-[13px] flex-shrink-0 mt-0.5">warning</span>
+            <div className="flex items-start gap-2 rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 text-gray-600 dark:text-gray-400">
+              <span className="material-symbols-outlined text-red-500 text-[14px] flex-shrink-0 mt-0.5">warning</span>
               <span>{conflict}</span>
             </div>
           )}
           {recommendation && (
-            <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700">
-              <span className="material-symbols-outlined text-secondary text-[13px] flex-shrink-0 mt-0.5">bolt</span>
+            <div className="flex items-start gap-2 rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3">
+              <span className="material-symbols-outlined text-secondary text-[14px] flex-shrink-0 mt-0.5">bolt</span>
               <span className="italic text-gray-600 dark:text-gray-400">{recommendation}</span>
             </div>
           )}
@@ -197,52 +196,61 @@ export default function CaseCopilotPanel({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
         {copilotMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-10">
-            <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3 border border-purple-100 dark:border-purple-800/30 shadow-sm">
-              <span className={`material-symbols-outlined text-secondary text-2xl ${isLoading ? 'animate-pulse' : ''}`}>auto_awesome</span>
-            </div>
+          <div className="flex flex-col gap-3">
             {isLoading ? (
-              <p className="text-sm text-gray-400">{`Reading ${entityLabel.toLowerCase()} data...`}</p>
+              <div className="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark p-4 shadow-card">
+                <div className="space-y-2">
+                  <div className="h-3.5 w-2/3 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-3.5 w-full rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-3.5 w-5/6 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  <div className="h-3.5 w-3/5 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                </div>
+                <p className="mt-4 text-xs text-gray-400">{`Reading ${entityLabel.toLowerCase()} data...`}</p>
+              </div>
             ) : (
-              <>
-                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{emptyTitle}</p>
-                <p className="text-[11px] text-gray-400 max-w-[220px] leading-relaxed">{emptySubtitle}</p>
-              </>
+              <div className="flex items-end gap-2">
+                <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
+                  <span className="material-symbols-outlined text-white text-[14px]">auto_awesome</span>
+                </div>
+                <div className="max-w-[88%] rounded-2xl rounded-bl-sm border border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark p-4 shadow-card">
+                  <p className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                    {`I've loaded the full state for ${subjectLabel}.\n\n${summary}${conflict ? `\n\nActive blocker: ${conflict}` : ''}${recommendation ? `\n\nRecommendation: ${recommendation}` : ''}\n\nWhat would you like to dig into?`}
+                  </p>
+                  <span className="mt-2 block text-[10px] text-gray-400">{nowTime()}</span>
+                </div>
+              </div>
+            )}
+            {!isLoading && (
+              <div className="flex flex-wrap gap-2 pl-9">
+                {effectiveSuggestions.map(q => (
+                  <button
+                    key={q}
+                    onClick={() => handleCopilotSubmit(q)}
+                    className="text-[11px] px-3 py-1.5 rounded-full border border-secondary/30 text-secondary hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-secondary transition-all font-medium"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         ) : (
-          copilotMessages.map((message, idx) => (
-            <React.Fragment key={message.id}>
-              <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start items-end gap-2'}`}>
-                {message.role === 'assistant' && (
-                  <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
-                    <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
-                  </div>
-                )}
-                <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
-                  message.role === 'user'
-                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600 rounded-br-sm'
-                    : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
-                }`}>
-                  <p className="whitespace-pre-wrap">{message.content}</p>
-                  <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-gray-500' : 'text-gray-400'}`}>{message.time}</span>
-                </div>
-              </div>
-
-              {message.role === 'assistant' && idx === 0 && copilotMessages.length === 1 && !isCopilotSending && (
-                <div className="flex flex-wrap gap-1.5 pl-8 pt-0.5">
-                  {effectiveSuggestions.map(q => (
-                    <button
-                      key={q}
-                      onClick={() => handleCopilotSubmit(q)}
-                      className="text-[11px] px-2.5 py-1.5 rounded-full border border-secondary/30 text-secondary hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-secondary transition-all font-medium"
-                    >
-                      {q}
-                    </button>
-                  ))}
+          copilotMessages.map((message) => (
+            <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start items-end gap-2'}`}>
+              {message.role === 'assistant' && (
+                <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
+                  <span className="material-symbols-outlined text-white text-[14px]">auto_awesome</span>
                 </div>
               )}
-            </React.Fragment>
+              <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed border ${
+                message.role === 'user'
+                  ? 'bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 rounded-br-sm'
+                  : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
+              }`}>
+                <p className="whitespace-pre-wrap">{message.content}</p>
+                <span className={`block mt-2 text-[10px] ${message.role === 'user' ? 'text-gray-500' : 'text-gray-400'}`}>{message.time}</span>
+              </div>
+            </div>
           ))
         )}
 
@@ -260,11 +268,10 @@ export default function CaseCopilotPanel({
 
       <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark flex-shrink-0">
         <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
-          <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg">
+          <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg" title="Copilot">
             <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
           </button>
           <input
-            ref={copilotInputRef}
             value={copilotInput}
             onChange={e => setCopilotInput(e.target.value)}
             onKeyDown={e => {
@@ -286,7 +293,7 @@ export default function CaseCopilotPanel({
                 className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg disabled:opacity-40"
                 title={applyButtonLabel}
               >
-                <span className="material-symbols-outlined text-[20px]">drive_file_move</span>
+                <span className="material-symbols-outlined text-[20px]">open_in_new</span>
               </button>
             )}
             <button
