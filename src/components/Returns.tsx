@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Return, ReturnTab, OrderTimelineEvent } from '../types';
+import { Return, ReturnTab, OrderTimelineEvent, Page } from '../types';
 import CaseHeader from './CaseHeader';
+import CaseCopilotPanel from './CaseCopilotPanel';
 import { returnsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
+type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
+
+interface ReturnsProps {
+  onNavigate?: NavigateFn;
+}
 
 const formatDate = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
@@ -255,7 +261,7 @@ const RETURNS: Return[] = [
   }
 ];
 
-export default function Returns() {
+export default function Returns({ onNavigate }: ReturnsProps) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<ReturnTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
@@ -327,7 +333,7 @@ export default function Returns() {
   }), [activeTab, returns]);
 
   const selectedReturnBase = filteredReturns.find(r => r.id === selectedId) || filteredReturns[0] || null;
-  const { data: selectedReturnDetailRaw } = useApi(
+  const { data: selectedReturnDetailRaw, loading: selectedReturnDetailLoading } = useApi(
     () => selectedReturnBase ? returnsApi.get(selectedReturnBase.id) : Promise.resolve(null),
     [selectedReturnBase?.id],
     null,
@@ -469,7 +475,14 @@ export default function Returns() {
                 </button>
               </div>
             )}
-            {selectedReturn ? (
+            {selectedReturnDetailLoading ? (
+              <div className="flex-1 flex items-center justify-center px-8 py-12">
+                <div className="max-w-sm text-center">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Loading return details</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Fetching the return timeline and context together.</p>
+                </div>
+              </div>
+            ) : selectedReturn ? (
               <div className="p-8 w-full space-y-8">
                 <CaseHeader
                   caseId={selectedReturn.relatedCases[0]?.id || selectedReturn.returnId}
@@ -631,40 +644,23 @@ export default function Returns() {
                   Copilot is disabled until a return is selected.
                 </div>
               ) : rightTab === 'copilot' ? (
-                <div className="p-4 flex flex-col gap-4">
-                  {/* Copilot Case Summary */}
-                  <div className="flex gap-2">
-                    <div className="w-6 h-6 rounded-md bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5">
-                      <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                    </div>
-                    <div className="flex flex-col gap-2 max-w-[85%] w-full">
-                      <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-2.5 px-3.5 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Return Summary</h4>
-                        <p className="leading-relaxed mb-3">Return {selectedReturn.returnId} for {selectedReturn.customerName} is currently {selectedReturn.returnStatus}. The refund amount is {selectedReturn.total}.</p>
-                        
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Conflict Detection</h4>
-                        <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-800/30 text-xs text-red-700 dark:text-red-400 mb-3">
-                          {selectedReturn.returnStatus === 'Delayed' ? 'Return received but refund not triggered in OMS.' : 'No major conflicts detected.'}
-                        </div>
-
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
-                        <p className="text-xs bg-white/50 dark:bg-blue-600/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic">
-                          {selectedReturn.recommendedNextAction || "Monitor return transit status."}
-                        </p>
-                      </div>
-                      
-                      <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500 mb-2">Suggested Reply</h4>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed italic mb-3">
-                          "Hi {selectedReturn.customerName.split(' ')[0]}, I'm monitoring your return {selectedReturn.returnId}. It's currently {selectedReturn.returnStatus} and I'll update you as soon as the refund is processed."
-                        </p>
-                        <button className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
-                          Apply to Composer
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <CaseCopilotPanel
+                  caseId={selectedReturn.relatedCases[0]?.id || selectedReturn.returnId}
+                  entityLabel="return"
+                  subjectLabel={`Return ${selectedReturn.returnId}`}
+                  summary={`Return ${selectedReturn.returnId} for ${selectedReturn.customerName} is currently ${selectedReturn.returnStatus}. The refund amount is ${selectedReturn.total}.`}
+                  conflict={selectedReturn.conflictDetected || (selectedReturn.returnStatus === 'Delayed' ? 'Return received but refund not triggered in OMS.' : 'No major conflicts detected.')}
+                  recommendation={selectedReturn.recommendedNextAction || 'Monitor return transit status.'}
+                  riskLabel={selectedReturn.riskLevel}
+                  isLoading={selectedReturnDetailLoading}
+                  suggestedQuestions={['What\'s the current status?', 'What should I do next?', 'Why is this return high risk?', 'Walk me through this return']}
+                  onOpenModule={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('case_graph', selectedReturn.relatedCases[0].id)}
+                  moduleButtonLabel="View case"
+                  onApply={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('inbox', selectedReturn.relatedCases[0].id)}
+                  applyButtonLabel="Open case"
+                  emptyTitle="Ask me anything about this return"
+                  emptySubtitle="I have full context: order, WMS, carrier and history."
+                />
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {/* Case Attributes */}
@@ -813,3 +809,4 @@ export default function Returns() {
     </div>
   );
 }
+

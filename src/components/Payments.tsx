@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Payment, PaymentTab, OrderTimelineEvent } from '../types';
+import { Payment, PaymentTab, OrderTimelineEvent, Page } from '../types';
+import CaseCopilotPanel from './CaseCopilotPanel';
 import { paymentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
+type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
+
+interface PaymentsProps {
+  onNavigate?: NavigateFn;
+}
 
 const formatDate = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
@@ -195,7 +201,7 @@ const PAYMENTS: Payment[] = [
   }
 ];
 
-export default function Payments() {
+export default function Payments({ onNavigate }: PaymentsProps) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<PaymentTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
@@ -264,7 +270,7 @@ export default function Payments() {
   });
 
   const selectedPaymentBase = filteredPayments.find(p => p.id === selectedId) || filteredPayments[0] || null;
-  const { data: selectedPaymentDetailRaw } = useApi(
+  const { data: selectedPaymentDetailRaw, loading: selectedPaymentDetailLoading } = useApi(
     () => selectedPaymentBase ? paymentsApi.get(selectedPaymentBase.id) : Promise.resolve(null),
     [selectedPaymentBase?.id],
     null,
@@ -415,6 +421,11 @@ export default function Payments() {
           <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-card-dark overflow-y-auto custom-scrollbar">
             {selectedPayment && (
               <div className="p-8 w-full space-y-8">
+                {selectedPaymentDetailLoading && (
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                    Loading payment details...
+                  </div>
+                )}
                 {/* Header Info */}
                 <div className="flex justify-between items-start">
                   <div>
@@ -622,40 +633,23 @@ export default function Payments() {
                   Copilot is disabled until a payment is selected.
                 </div>
               ) : rightTab === 'copilot' ? (
-                <div className="p-4 flex flex-col gap-4">
-                  {/* Copilot Case Summary */}
-                  <div className="flex gap-2">
-                    <div className="w-6 h-6 rounded-md bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5">
-                      <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                    </div>
-                    <div className="flex flex-col gap-2 max-w-[85%] w-full">
-                      <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-2.5 px-3.5 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Payment Summary</h4>
-                        <p className="leading-relaxed mb-3">Payment {selectedPayment.paymentId} for {selectedPayment.customerName} is currently {selectedPayment.paymentStatus}. The amount is {selectedPayment.amount}.</p>
-                        
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Conflict Detection</h4>
-                        <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-800/30 text-xs text-red-700 dark:text-red-400 mb-3">
-                          {selectedPayment.paymentStatus === 'Failed' ? 'Payment failed in PSP but OMS still shows pending.' : 'No major conflicts detected.'}
-                        </div>
-
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
-                        <p className="text-xs bg-white/50 dark:bg-blue-600/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic">
-                          {selectedPayment.recommendedNextAction || "Monitor payment reconciliation."}
-                        </p>
-                      </div>
-                      
-                      <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500 mb-2">Suggested Reply</h4>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed italic mb-3">
-                          "Hi {selectedPayment.customerName.split(' ')[0]}, I'm looking into the payment for order {selectedPayment.paymentId}. It's currently {selectedPayment.paymentStatus} and I'll update you shortly."
-                        </p>
-                        <button className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
-                          Apply to Composer
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <CaseCopilotPanel
+                  caseId={selectedPayment.relatedCases[0]?.id || selectedPayment.id}
+                  entityLabel="payment"
+                  subjectLabel={`Payment ${selectedPayment.paymentId}`}
+                  summary={`Payment ${selectedPayment.paymentId} for ${selectedPayment.customerName} is currently ${selectedPayment.paymentStatus}. The amount is ${selectedPayment.amount}.`}
+                  conflict={selectedPayment.conflictDetected || (selectedPayment.paymentStatus === 'Failed' ? 'Payment failed in PSP but OMS still shows pending.' : 'No major conflicts detected.')}
+                  recommendation={selectedPayment.recommendedNextAction || 'Monitor payment reconciliation.'}
+                  riskLabel={selectedPayment.riskLevel}
+                  isLoading={selectedPaymentDetailLoading}
+                  suggestedQuestions={['What\'s the current status?', 'What should I do next?', 'Why is this payment high risk?', 'Walk me through this payment']}
+                  onOpenModule={() => selectedPayment.relatedCases[0]?.id && onNavigate?.('case_graph', selectedPayment.relatedCases[0].id)}
+                  moduleButtonLabel="View case"
+                  onApply={() => selectedPayment.relatedCases[0]?.id && onNavigate?.('inbox', selectedPayment.relatedCases[0].id)}
+                  applyButtonLabel="Open case"
+                  emptyTitle="Ask me anything about this payment"
+                  emptySubtitle="I have full context: order, PSP, reconciliation and history."
+                />
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {/* Case Attributes */}
@@ -785,6 +779,14 @@ export default function Payments() {
                   </div>
                 </div>
               )}
+            {!selectedPayment && (
+              <div className="flex-1 flex items-center justify-center px-8 py-12">
+                <div className="max-w-sm text-center">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No payments found for this filter.</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Load demo payments or switch to another tab to continue.</p>
+                </div>
+              </div>
+            )}
             </div>
 
             {/* Copilot Input Area */}
@@ -804,3 +806,4 @@ export default function Payments() {
     </div>
   );
 }
+
