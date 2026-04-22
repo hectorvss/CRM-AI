@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { approvalsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
-import type { Page } from '../types';
+import type { NavigateFn } from '../types';
 
 type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 type Decision = 'approved' | 'rejected';
@@ -14,10 +14,9 @@ type FocusItem = {
   kind: string;
 };
 
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
-
 interface ApprovalsProps {
   onNavigate?: NavigateFn;
+  focusApprovalId?: string | null;
 }
 
 type ApprovalRecord = {
@@ -154,7 +153,7 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export default function Approvals({ onNavigate }: ApprovalsProps) {
+export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ApprovalStatus>('pending');
   const [query, setQuery] = useState('');
@@ -181,6 +180,13 @@ export default function Approvals({ onNavigate }: ApprovalsProps) {
       setSelectedId(null);
     }
   }, [approvals, selectedId]);
+
+  useEffect(() => {
+    if (!focusApprovalId) return;
+    if (selectedId !== focusApprovalId) {
+      setSelectedId(focusApprovalId);
+    }
+  }, [focusApprovalId, selectedId]);
 
   const selectedApproval = useMemo(
     () => approvals.find((item) => item.id === selectedId) || null,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Return, ReturnTab, OrderTimelineEvent, Page } from '../types';
+import { Return, ReturnTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseHeader from './CaseHeader';
 import CaseCopilotPanel from './CaseCopilotPanel';
 import { returnsApi } from '../api/client';
@@ -7,10 +7,11 @@ import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
 
 interface ReturnsProps {
   onNavigate?: NavigateFn;
+  focusEntityId?: string | null;
+  focusSection?: string | null;
 }
 
 const formatDate = (value?: string | null) =>
@@ -261,7 +262,7 @@ const RETURNS: Return[] = [
   }
 ];
 
-export default function Returns({ onNavigate }: ReturnsProps) {
+export default function Returns({ onNavigate, focusEntityId, focusSection }: ReturnsProps) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<ReturnTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
@@ -361,6 +362,22 @@ export default function Returns({ onNavigate }: ReturnsProps) {
       setSelectedId(filteredReturns[0].id);
     }
   }, [activeTab, filteredReturns, selectedId]);
+
+  useEffect(() => {
+    if (focusSection && ['all', 'pending_review', 'in_transit', 'received', 'refund_pending', 'blocked'].includes(focusSection) && activeTab !== focusSection) {
+      setActiveTab(focusSection as ReturnTab);
+    }
+  }, [activeTab, focusSection]);
+
+  useEffect(() => {
+    if (!focusEntityId) return;
+    if (activeTab !== 'all') {
+      setActiveTab('all');
+    }
+    if (selectedId !== focusEntityId) {
+      setSelectedId(focusEntityId);
+    }
+  }, [activeTab, focusEntityId, selectedId]);
 
   if (isInitialReturnsLoading) {
     return (

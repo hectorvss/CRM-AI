@@ -14,6 +14,7 @@ import {
   createWorkspaceRepository,
 } from '../data/index.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { broadcastSSE } from './sse.js';
 
 const router = Router();
 
@@ -33,6 +34,46 @@ type CommandScope = {
   tenantId: string;
   workspaceId: string;
   userId?: string;
+};
+
+type NavigationTarget = {
+  page: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  section?: string | null;
+  sourceContext?: string | null;
+  runId?: string | null;
+};
+
+type CommandContext = {
+  recentTargets?: NavigationTarget[];
+  activeTarget?: NavigationTarget | null;
+  lastStructuredIntent?: Record<string, any> | null;
+};
+
+type StructuredCommand = {
+  kind:
+    | 'approval_queue'
+    | 'payment_queue'
+    | 'case'
+    | 'order'
+    | 'payment'
+    | 'return'
+    | 'customer'
+    | 'workflow'
+    | 'agents'
+    | 'conflicts'
+    | 'search';
+  intent: 'investigate' | 'open' | 'search' | 'explain_blocker' | 'compare' | 'operate';
+  id?: string;
+  query?: string;
+  targetEntityType?: string | null;
+  targetEntityRef?: string | null;
+  requestedAction?: string | null;
+  filters: string[];
+  riskLevel: 'low' | 'medium' | 'high';
+  needsConfirmation: boolean;
+  navigationTarget?: NavigationTarget | null;
 };
 
 type SuperAgentActionPayload = {
@@ -56,6 +97,7 @@ type UiAction = {
   description: string;
   targetPage?: string;
   focusId?: string | null;
+  navigationTarget?: NavigationTarget | null;
   permission?: string;
   allowed?: boolean;
   sensitive?: boolean;
@@ -75,7 +117,7 @@ type ContextPanel = {
   facts: Array<{ label: string; value: string }>;
   evidence: Array<{ label: string; value: string; tone?: 'neutral' | 'warning' | 'success' }>;
   timeline: Array<{ label: string; value: string; time?: string | null }>;
-  related: Array<{ label: string; value: string; targetPage?: string; focusId?: string | null }>;
+  related: Array<{ label: string; value: string; targetPage?: string; focusId?: string | null; navigationTarget?: NavigationTarget | null }>;
 };
 
 type AgentActivity = {
@@ -85,6 +127,13 @@ type AgentActivity = {
   mode?: string | null;
   status: 'available' | 'consulted' | 'proposed' | 'executed' | 'blocked';
   summary: string;
+};
+
+type StreamStep = {
+  id: string;
+  label: string;
+  status: 'running' | 'completed' | 'failed';
+  detail?: string | null;
 };
 
 function getScope(req: MultiTenantRequest): CommandScope {
@@ -153,6 +202,158 @@ function flattenPermissions(req: MultiTenantRequest) {
   const permissions = req.permissions || [];
   if (permissions.includes('*')) return ['Full workspace access'];
   return permissions.slice(0, 8);
+}
+
+function entityTypeFromPage(page?: string | null) {
+  switch (page) {
+    case 'inbox':
+    case 'case_graph':
+      return 'case';
+    case 'orders':
+      return 'order';
+    case 'payments':
+      return 'payment';
+    case 'returns':
+      return 'return';
+    case 'approvals':
+      return 'approval';
+    case 'customers':
+      return 'customer';
+    case 'workflows':
+      return 'workflow';
+    case 'knowledge':
+      return 'knowledge';
+    case 'reports':
+      return 'report';
+    case 'settings':
+      return 'setting';
+    default:
+      return 'workspace';
+  }
+}
+
+function pageFromEntityType(entityType?: string | null) {
+  switch (entityType) {
+    case 'case':
+      return 'case_graph';
+    case 'order':
+      return 'orders';
+    case 'payment':
+      return 'payments';
+    case 'return':
+      return 'returns';
+    case 'approval':
+      return 'approvals';
+    case 'customer':
+      return 'customers';
+    case 'workflow':
+      return 'workflows';
+    default:
+      return 'super_agent';
+  }
+}
+
+function buildNavigationTarget(input: {
+  page: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  section?: string | null;
+  sourceContext?: string | null;
+  runId?: string | null;
+}): NavigationTarget {
+  return {
+    page: input.page,
+    entityType: input.entityType ?? entityTypeFromPage(input.page),
+    entityId: input.entityId ?? null,
+    section: input.section ?? null,
+    sourceContext: input.sourceContext ?? null,
+    runId: input.runId ?? null,
+  };
+}
+
+function emitSuperAgentEvent(scope: CommandScope, event: string, data: Record<string, unknown>) {
+  broadcastSSE(scope.tenantId, `super-agent:${event}`, data);
+}
+
+function splitIntoChunks(value: string, size = 120) {
+  const text = String(value || '').trim();
+  if (!text) return [];
+  const chunks: string[] = [];
+  for (let index = 0; index < text.length; index += size) {
+    chunks.push(text.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function inferPrimaryNavigationTarget(response: any) {
+  if (response?.navigationTarget) return response.navigationTarget;
+  const actionTarget = Array.isArray(response?.actions)
+    ? response.actions.find((action: UiAction) => action.navigationTarget || action.targetPage)
+    : null;
+  if (actionTarget?.navigationTarget) return actionTarget.navigationTarget;
+  if (actionTarget?.targetPage) {
+    return buildNavigationTarget({
+      page: actionTarget.targetPage,
+      entityType: actionTarget.payload?.entityType || entityTypeFromPage(actionTarget.targetPage),
+      entityId: actionTarget.focusId ?? actionTarget.payload?.entityId ?? null,
+    });
+  }
+  if (response?.contextPanel?.entityType && response?.contextPanel?.entityId) {
+    return buildNavigationTarget({
+      page: pageFromEntityType(response.contextPanel.entityType),
+      entityType: response.contextPanel.entityType,
+      entityId: response.contextPanel.entityId,
+    });
+  }
+  return null;
+}
+
+function deriveFacts(response: any) {
+  if (Array.isArray(response?.facts) && response.facts.length) return response.facts;
+  if (Array.isArray(response?.contextPanel?.facts)) {
+    return response.contextPanel.facts.map((fact: any) => `${fact.label}: ${fact.value}`);
+  }
+  return [];
+}
+
+function deriveConflicts(response: any) {
+  if (Array.isArray(response?.conflicts) && response.conflicts.length) return response.conflicts;
+  const evidence = Array.isArray(response?.contextPanel?.evidence) ? response.contextPanel.evidence : [];
+  return evidence
+    .filter((item: any) => item.tone === 'warning')
+    .map((item: any) => `${item.label}: ${item.value}`);
+}
+
+function deriveEvidence(response: any) {
+  if (Array.isArray(response?.evidence) && response.evidence.length) return response.evidence;
+  return Array.isArray(response?.contextPanel?.evidence)
+    ? response.contextPanel.evidence.map((item: any) => `${item.label}: ${item.value}`)
+    : [];
+}
+
+function resolveRelativeTarget(text: string, context?: CommandContext | null) {
+  const recentTargets = Array.isArray(context?.recentTargets) ? context!.recentTargets! : [];
+  if (!recentTargets.length) return null;
+
+  const wantsOrder = /(pedido|order)/.test(text);
+  const wantsPayment = /(pago|payment|refund)/.test(text);
+  const wantsReturn = /(devolucion|return)/.test(text);
+  const wantsApproval = /(aprob|approval)/.test(text);
+  const wantsCustomer = /(cliente|customer)/.test(text);
+  const wantsWorkflow = /(workflow)/.test(text);
+  const wantsCase = /(caso|case|hilo|thread)/.test(text);
+
+  const desiredType =
+    wantsOrder ? 'order'
+    : wantsPayment ? 'payment'
+    : wantsReturn ? 'return'
+    : wantsApproval ? 'approval'
+    : wantsCustomer ? 'customer'
+    : wantsWorkflow ? 'workflow'
+    : wantsCase ? 'case'
+    : null;
+
+  return recentTargets.find((target) => !desiredType || target.entityType === desiredType) || recentTargets[0];
 }
 
 function getAccessLevel(req: MultiTenantRequest) {
@@ -273,6 +474,7 @@ function buildAction({
   description,
   targetPage,
   focusId,
+  navigationTarget,
   permission,
   req,
   payload,
@@ -283,6 +485,7 @@ function buildAction({
   description: string;
   targetPage?: string;
   focusId?: string | null;
+  navigationTarget?: NavigationTarget | null;
   permission?: string;
   req: MultiTenantRequest;
   payload?: SuperAgentActionPayload;
@@ -297,6 +500,14 @@ function buildAction({
     description,
     targetPage,
     focusId: focusId ?? null,
+    navigationTarget: navigationTarget || (targetPage
+      ? buildNavigationTarget({
+          page: targetPage,
+          entityType: payload?.entityType || entityTypeFromPage(targetPage),
+          entityId: focusId ?? payload?.entityId ?? null,
+          sourceContext: 'super_agent_action',
+        })
+      : null),
     permission,
     allowed,
     sensitive,
@@ -834,6 +1045,14 @@ function createResponse(input: {
   agents?: AgentActivity[];
   suggestedReplies?: string[];
   consultedModules?: string[];
+  facts?: string[];
+  conflicts?: string[];
+  sources?: string[];
+  evidence?: string[];
+  steps?: StreamStep[];
+  runId?: string | null;
+  structuredIntent?: StructuredCommand | null;
+  navigationTarget?: NavigationTarget | null;
 }) {
   return {
     id: crypto.randomUUID(),
@@ -846,6 +1065,14 @@ function createResponse(input: {
     agents: input.agents || [],
     suggestedReplies: input.suggestedReplies || [],
     consultedModules: input.consultedModules || [],
+    facts: input.facts || [],
+    conflicts: input.conflicts || [],
+    sources: input.sources || input.consultedModules || [],
+    evidence: input.evidence || [],
+    steps: input.steps || [],
+    runId: input.runId || null,
+    structuredIntent: input.structuredIntent || null,
+    navigationTarget: input.navigationTarget || null,
   };
 }
 
@@ -854,32 +1081,195 @@ function parseEntityId(input: string, pattern: RegExp) {
   return match ? match[0] : null;
 }
 
-function parseCommandIntent(input: string) {
+function parseCommandIntent(input: string, context?: CommandContext | null): StructuredCommand {
   const text = input.trim().toLowerCase();
   const caseId = parseEntityId(input, /\bcas[-_a-z0-9]+\b/i);
   const orderId = parseEntityId(input, /\bord[-_a-z0-9]+\b/i);
   const paymentId = parseEntityId(input, /\bpay[-_a-z0-9]+\b/i);
   const returnId = parseEntityId(input, /\bret[-_a-z0-9]+\b/i);
-  const orderQuery = input.replace(/pedido|order/gi, '').trim();
-  const paymentQuery = input.replace(/pago|payment/gi, '').trim();
-  const caseQuery = input.replace(/caso|case/gi, '').trim();
-  const returnQuery = input.replace(/devolucion|return/gi, '').trim();
+  const workflowId = parseEntityId(input, /\bwf[-_a-z0-9]+\b/i);
+  const recentTarget = resolveRelativeTarget(text, context);
+  const orderQuery = input.replace(/pedido|order|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const paymentQuery = input.replace(/pago|payment|refund|reembolso|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const caseQuery = input.replace(/caso|case|hilo|thread|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const returnQuery = input.replace(/devolucion|return|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const customerQuery = input.replace(/cliente|customer|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const workflowQuery = input.replace(/workflow|flujo|abrir|open|publica|publish|revisa|review|investiga|investigate/gi, '').trim();
+  const filters = [
+    text.includes('pend') ? 'pending' : null,
+    text.includes('bloque') ? 'blocked' : null,
+    text.includes('alto riesgo') || text.includes('high risk') ? 'high_risk' : null,
+  ].filter(Boolean) as string[];
+  const intent =
+    /(abrir|open|go to|ll[eé]vame|navega)/.test(text) ? 'open'
+    : /(por que|por qué|why|bloquead|blocked)/.test(text) ? 'explain_blocker'
+    : /(compara|compare)/.test(text) ? 'compare'
+    : /(cancel|refund|reembolso|aprueba|approve|rechaza|reject|publica|publish|actualiza|update|cambia|change|cierra|close)/.test(text) ? 'operate'
+    : /(busca|search)/.test(text) ? 'search'
+    : 'investigate';
+  const requestedAction =
+    /(cancel|cancela)/.test(text) ? 'cancel'
+    : /(refund|reembolso)/.test(text) ? 'refund'
+    : /(approve|aprueba)/.test(text) ? 'approve'
+    : /(reject|rechaza)/.test(text) ? 'reject'
+    : /(publish|publica)/.test(text) ? 'publish'
+    : /(open|abrir)/.test(text) ? 'open'
+    : /(update|actualiza|change|cambia|close|cierra)/.test(text) ? 'update'
+    : null;
 
-  if ((text.includes('aprob') || text.includes('approval')) && text.includes('pend')) return { kind: 'approval_queue' as const };
-  if ((text.includes('pago') || text.includes('payment')) && (text.includes('pend') || text.includes('bloque') || text.includes('refund'))) return { kind: 'payment_queue' as const };
-  if ((text.includes('caso') || text.includes('case')) && caseQuery) return { kind: 'case' as const, id: caseQuery };
-  if ((text.includes('pedido') || text.includes('order')) && orderQuery) return { kind: 'order' as const, id: orderQuery };
-  if ((text.includes('pago') || text.includes('payment')) && paymentQuery) return { kind: 'payment' as const, id: paymentQuery };
-  if ((text.includes('devolucion') || text.includes('return')) && returnQuery) return { kind: 'return' as const, id: returnQuery };
-  if (text.includes('workflow')) return { kind: 'workflow' as const };
-  if (text.includes('agente') || text.includes('agent')) return { kind: 'agents' as const };
-  if (text.includes('inconsist') || text.includes('conflict') || text.includes('bloquead')) return { kind: 'conflicts' as const };
-  if (caseId) return { kind: 'case' as const, id: caseId };
-  if (orderId) return { kind: 'order' as const, id: orderId };
-  if (paymentId) return { kind: 'payment' as const, id: paymentId };
-  if (returnId) return { kind: 'return' as const, id: returnId };
-  if (text.includes('cliente') || text.includes('customer')) return { kind: 'customer' as const, query: input.replace(/cliente|customer/gi, '').trim() };
-  return { kind: 'search' as const, query: input.trim() };
+  let command: StructuredCommand | null = null;
+
+  if ((text.includes('aprob') || text.includes('approval')) && text.includes('pend')) {
+    command = {
+      kind: 'approval_queue',
+      intent,
+      targetEntityType: 'approval',
+      targetEntityRef: null,
+      requestedAction,
+      filters: filters.length ? filters : ['pending'],
+      riskLevel: 'medium',
+      needsConfirmation: false,
+      navigationTarget: buildNavigationTarget({ page: 'approvals', entityType: 'approval' }),
+    };
+  } else if ((text.includes('pago') || text.includes('payment')) && (text.includes('pend') || text.includes('bloque') || text.includes('refund'))) {
+    command = {
+      kind: 'payment_queue',
+      intent,
+      targetEntityType: 'payment',
+      targetEntityRef: null,
+      requestedAction,
+      filters,
+      riskLevel: filters.includes('high_risk') ? 'high' : 'medium',
+      needsConfirmation: false,
+      navigationTarget: buildNavigationTarget({ page: 'payments', entityType: 'payment' }),
+    };
+  } else if (caseId || ((text.includes('caso') || text.includes('case')) && caseQuery) || recentTarget?.entityType === 'case') {
+    const resolved = caseId || caseQuery || recentTarget?.entityId || input.trim();
+    command = {
+      kind: 'case',
+      intent,
+      id: resolved,
+      targetEntityType: 'case',
+      targetEntityRef: resolved,
+      requestedAction,
+      filters,
+      riskLevel: filters.includes('high_risk') ? 'high' : 'medium',
+      needsConfirmation: requestedAction !== null,
+      navigationTarget: buildNavigationTarget({ page: 'case_graph', entityType: 'case', entityId: resolved }),
+    };
+  } else if (orderId || ((text.includes('pedido') || text.includes('order')) && orderQuery) || recentTarget?.entityType === 'order') {
+    const resolved = orderId || orderQuery || recentTarget?.entityId || input.trim();
+    command = {
+      kind: 'order',
+      intent,
+      id: resolved,
+      targetEntityType: 'order',
+      targetEntityRef: resolved,
+      requestedAction,
+      filters,
+      riskLevel: requestedAction === 'cancel' ? 'high' : 'medium',
+      needsConfirmation: requestedAction === 'cancel',
+      navigationTarget: buildNavigationTarget({ page: 'orders', entityType: 'order', entityId: resolved }),
+    };
+  } else if (paymentId || ((text.includes('pago') || text.includes('payment')) && paymentQuery) || recentTarget?.entityType === 'payment') {
+    const resolved = paymentId || paymentQuery || recentTarget?.entityId || input.trim();
+    command = {
+      kind: 'payment',
+      intent,
+      id: resolved,
+      targetEntityType: 'payment',
+      targetEntityRef: resolved,
+      requestedAction,
+      filters,
+      riskLevel: requestedAction === 'refund' ? 'high' : 'medium',
+      needsConfirmation: requestedAction === 'refund',
+      navigationTarget: buildNavigationTarget({ page: 'payments', entityType: 'payment', entityId: resolved }),
+    };
+  } else if (returnId || ((text.includes('devolucion') || text.includes('return')) && returnQuery) || recentTarget?.entityType === 'return') {
+    const resolved = returnId || returnQuery || recentTarget?.entityId || input.trim();
+    command = {
+      kind: 'return',
+      intent,
+      id: resolved,
+      targetEntityType: 'return',
+      targetEntityRef: resolved,
+      requestedAction,
+      filters,
+      riskLevel: filters.includes('high_risk') ? 'high' : 'medium',
+      needsConfirmation: false,
+      navigationTarget: buildNavigationTarget({ page: 'returns', entityType: 'return', entityId: resolved }),
+    };
+  } else if (text.includes('workflow') || text.includes('flujo') || workflowId || recentTarget?.entityType === 'workflow') {
+    const resolved = workflowId || workflowQuery || recentTarget?.entityId || null;
+    command = {
+      kind: 'workflow',
+      intent,
+      id: resolved || undefined,
+      query: workflowQuery || undefined,
+      targetEntityType: 'workflow',
+      targetEntityRef: resolved,
+      requestedAction,
+      filters,
+      riskLevel: requestedAction === 'publish' ? 'high' : 'medium',
+      needsConfirmation: requestedAction === 'publish',
+      navigationTarget: buildNavigationTarget({ page: 'workflows', entityType: 'workflow', entityId: resolved }),
+    };
+  } else if (text.includes('agente') || text.includes('agent')) {
+    command = {
+      kind: 'agents',
+      intent,
+      targetEntityType: 'agent',
+      targetEntityRef: null,
+      requestedAction,
+      filters,
+      riskLevel: 'low',
+      needsConfirmation: false,
+      navigationTarget: buildNavigationTarget({ page: 'super_agent', entityType: 'agent' }),
+    };
+  } else if (text.includes('inconsist') || text.includes('conflict') || text.includes('bloquead')) {
+    command = {
+      kind: 'conflicts',
+      intent: intent === 'search' ? 'explain_blocker' : intent,
+      targetEntityType: recentTarget?.entityType || null,
+      targetEntityRef: recentTarget?.entityId || null,
+      requestedAction,
+      filters,
+      riskLevel: 'high',
+      needsConfirmation: false,
+      navigationTarget: recentTarget || buildNavigationTarget({ page: 'super_agent' }),
+    };
+  } else if (text.includes('cliente') || text.includes('customer') || recentTarget?.entityType === 'customer') {
+    const resolved = customerQuery || recentTarget?.entityId || input.trim();
+    command = {
+      kind: 'customer',
+      intent,
+      query: resolved,
+      targetEntityType: 'customer',
+      targetEntityRef: resolved,
+      requestedAction,
+      filters,
+      riskLevel: filters.includes('high_risk') ? 'high' : 'low',
+      needsConfirmation: false,
+      navigationTarget: buildNavigationTarget({ page: 'customers', entityType: 'customer', entityId: recentTarget?.entityType === 'customer' ? recentTarget.entityId : null }),
+    };
+  }
+
+  if (command) {
+    return command;
+  }
+
+  return {
+    kind: 'search',
+    intent,
+    query: input.trim(),
+    targetEntityType: recentTarget?.entityType || null,
+    targetEntityRef: recentTarget?.entityId || null,
+    requestedAction,
+    filters,
+    riskLevel: filters.includes('high_risk') ? 'high' : 'low',
+    needsConfirmation: false,
+    navigationTarget: recentTarget || context?.activeTarget || buildNavigationTarget({ page: 'super_agent' }),
+  };
 }
 
 async function handleCaseIntent(req: MultiTenantRequest, scope: CommandScope, input: string, caseId: string, agents: any[]) {
@@ -1750,6 +2140,8 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
   try {
     const scope = getScope(req);
     const input = String(req.body?.input || '').trim();
+    const runId = String(req.body?.runId || crypto.randomUUID());
+    const commandContext = (req.body?.context || {}) as CommandContext;
     const agents = hasPermission(req, 'agents.read') ? await agentRepository.listAgents(scope) : [];
 
     if (!input) {
@@ -1757,27 +2149,167 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       return;
     }
 
-    const command = parseCommandIntent(input);
+    emitSuperAgentEvent(scope, 'run_started', { runId, input });
+    emitSuperAgentEvent(scope, 'step_started', {
+      runId,
+      step: { id: 'parse', label: 'Normalizing command intent', status: 'running' },
+    });
+
+    const command = parseCommandIntent(input, commandContext);
+
+    emitSuperAgentEvent(scope, 'step_completed', {
+      runId,
+      step: { id: 'parse', label: 'Normalizing command intent', status: 'completed', detail: command.kind },
+    });
+    emitSuperAgentEvent(scope, 'step_started', {
+      runId,
+      step: {
+        id: 'modules',
+        label: `Consulting ${command.kind === 'search' ? 'connected modules' : `${command.kind} context`}`,
+        status: 'running',
+      },
+    });
+
     const response =
-      command.kind === 'case' ? await handleCaseIntent(req, scope, input, command.id, agents)
-      : command.kind === 'order' ? await handleOrderIntent(req, scope, input, command.id, agents)
-      : command.kind === 'payment' ? await handlePaymentIntent(req, scope, input, command.id, agents)
-      : command.kind === 'return' ? await handleReturnIntent(req, scope, input, command.id, agents)
-      : command.kind === 'customer' ? await handleCustomerIntent(req, scope, input, command.query, agents)
+      command.kind === 'case' ? await handleCaseIntent(req, scope, input, command.id || command.targetEntityRef || input, agents)
+      : command.kind === 'order' ? await handleOrderIntent(req, scope, input, command.id || command.targetEntityRef || input, agents)
+      : command.kind === 'payment' ? await handlePaymentIntent(req, scope, input, command.id || command.targetEntityRef || input, agents)
+      : command.kind === 'return' ? await handleReturnIntent(req, scope, input, command.id || command.targetEntityRef || input, agents)
+      : command.kind === 'customer' ? await handleCustomerIntent(req, scope, input, command.query || command.targetEntityRef || input, agents)
       : command.kind === 'approval_queue' ? await handleApprovalQueueIntent(req, scope, input, agents)
       : command.kind === 'payment_queue' ? await handlePaymentQueueIntent(req, scope, input, agents)
       : command.kind === 'conflicts' ? await handleConflictIntent(req, scope, input, agents)
       : command.kind === 'workflow' ? await handleWorkflowIntent(req, scope, input, agents)
       : command.kind === 'agents' ? await handleAgentIntent(input, agents)
-      : await handleSearchIntent(req, scope, input, command.query, agents);
+      : await handleSearchIntent(req, scope, input, command.query || input, agents);
+
+    emitSuperAgentEvent(scope, 'step_completed', {
+      runId,
+      step: {
+        id: 'modules',
+        label: `Consulting ${command.kind === 'search' ? 'connected modules' : `${command.kind} context`}`,
+        status: 'completed',
+        detail: Array.isArray(response?.consultedModules) ? response.consultedModules.join(', ') : null,
+      },
+    });
+
+    if (Array.isArray(response?.agents)) {
+      response.agents.forEach((agent: AgentActivity) => {
+        emitSuperAgentEvent(scope, 'agent_called', {
+          runId,
+          agent: {
+            slug: agent.slug,
+            name: agent.name,
+            runtime: agent.runtime || null,
+            mode: agent.mode || null,
+            status: agent.status,
+          },
+        });
+        emitSuperAgentEvent(scope, 'agent_result', {
+          runId,
+          agent: {
+            slug: agent.slug,
+            name: agent.name,
+            status: agent.status,
+            summary: agent.summary,
+          },
+        });
+      });
+    }
+
+    if (Array.isArray(response?.actions) && response.actions.length > 0) {
+      emitSuperAgentEvent(scope, 'action_proposed', {
+        runId,
+        actions: response.actions.map((action: UiAction) => ({
+          id: action.id,
+          label: action.label,
+          type: action.type,
+          sensitive: action.sensitive === true,
+          requiresConfirmation: action.requiresConfirmation === true,
+        })),
+      });
+    }
+
+    const finalResponse = {
+      ...response,
+      runId,
+      structuredIntent: response?.structuredIntent || command,
+      navigationTarget: response?.navigationTarget || command.navigationTarget || inferPrimaryNavigationTarget(response),
+      facts: deriveFacts(response),
+      conflicts: deriveConflicts(response),
+      sources: Array.isArray(response?.sources) && response.sources.length ? response.sources : (response?.consultedModules || []),
+      evidence: deriveEvidence(response),
+      steps: Array.isArray(response?.steps) && response.steps.length ? response.steps : [
+        { id: 'parse', label: 'Normalizing command intent', status: 'completed' },
+        {
+          id: 'modules',
+          label: `Consulted ${Array.isArray(response?.consultedModules) && response.consultedModules.length ? response.consultedModules.join(', ') : 'workspace data'}`,
+          status: 'completed',
+        },
+      ],
+    };
+
+    const chunks = splitIntoChunks([
+      finalResponse.summary,
+      ...(Array.isArray(finalResponse.facts) ? finalResponse.facts.slice(0, 3) : []),
+      ...(Array.isArray(finalResponse.conflicts) ? finalResponse.conflicts.slice(0, 2) : []),
+    ].filter(Boolean).join(' '));
+
+    chunks.forEach((chunk, index) => {
+      emitSuperAgentEvent(scope, 'message_chunk', {
+        runId,
+        chunk,
+        index,
+      });
+    });
+
+    emitSuperAgentEvent(scope, 'run_finished', {
+      runId,
+      summary: finalResponse.summary,
+      statusLine: finalResponse.statusLine,
+      navigationTarget: finalResponse.navigationTarget,
+    });
+
+    await auditRepository.log({
+      tenantId: scope.tenantId,
+      workspaceId: scope.workspaceId,
+      actorId: req.userId || 'system',
+      action: 'SUPER_AGENT_COMMAND',
+      entityType: finalResponse.navigationTarget?.entityType || 'workspace',
+      entityId: finalResponse.navigationTarget?.entityId || scope.workspaceId,
+      metadata: {
+        source: 'super-agent',
+        input,
+        runId,
+        command,
+        consultedModules: finalResponse.consultedModules || [],
+        agents: Array.isArray(finalResponse.agents) ? finalResponse.agents.map((agent: AgentActivity) => agent.slug) : [],
+        navigationTarget: finalResponse.navigationTarget || null,
+        actions: Array.isArray(finalResponse.actions)
+          ? finalResponse.actions.map((action: UiAction) => ({
+              type: action.type,
+              label: action.label,
+              allowed: action.allowed !== false,
+            }))
+          : [],
+      },
+    });
 
     res.json({
       ok: true,
       permissionMatrix: buildPermissionMatrix(req),
-      response,
+      response: finalResponse,
     });
   } catch (error) {
     console.error('Super Agent command error:', error);
+    try {
+      emitSuperAgentEvent(getScope(req), 'run_failed', {
+        runId: String(req.body?.runId || ''),
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    } catch {
+      // noop
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1787,6 +2319,7 @@ router.post('/execute', async (req: MultiTenantRequest, res) => {
     const scope = getScope(req);
     const payload = req.body?.payload as SuperAgentActionPayload | undefined;
     const confirmed = req.body?.confirmed === true;
+    const runId = String(req.body?.runId || crypto.randomUUID());
 
     if (!payload || !payload.kind || !payload.entityId) {
       res.status(400).json({ error: 'payload.kind and payload.entityId are required' });
@@ -1798,15 +2331,53 @@ router.post('/execute', async (req: MultiTenantRequest, res) => {
       return;
     }
 
+    emitSuperAgentEvent(scope, 'action_executing', {
+      runId,
+      action: {
+        kind: payload.kind,
+        entityType: payload.entityType,
+        entityId: payload.entityId,
+      },
+    });
+
     const result = await executeAction(req, scope, payload);
     if (!result.ok) {
+      emitSuperAgentEvent(scope, result.approvalRequired ? 'action_completed' : 'run_failed', {
+        runId,
+        action: {
+          kind: payload.kind,
+          entityType: payload.entityType,
+          entityId: payload.entityId,
+        },
+        approvalRequired: result.approvalRequired === true,
+        approvalId: result.approval?.id || null,
+        error: result.error || null,
+      });
       res.status(result.approvalRequired ? 202 : 403).json(result);
       return;
     }
 
+    emitSuperAgentEvent(scope, 'action_completed', {
+      runId,
+      action: {
+        kind: payload.kind,
+        entityType: payload.entityType,
+        entityId: payload.entityId,
+      },
+      result: result.result || null,
+    });
+
     res.json(result);
   } catch (error) {
     console.error('Super Agent execute error:', error);
+    try {
+      emitSuperAgentEvent(getScope(req), 'run_failed', {
+        runId: String(req.body?.runId || ''),
+        error: error instanceof Error ? error.message : 'Internal server error',
+      });
+    } catch {
+      // noop
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

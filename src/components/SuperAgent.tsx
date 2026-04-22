@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { superAgentApi } from '../api/client';
-import type { Page } from '../types';
-
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
+import type { NavigateFn, NavigationTarget, Page } from '../types';
 
 type MessageSection = {
   title: string;
@@ -25,6 +23,7 @@ type SuperAgentAction = {
   description: string;
   targetPage?: string;
   focusId?: string | null;
+  navigationTarget?: NavigationTarget | null;
   permission?: string;
   allowed?: boolean;
   sensitive?: boolean;
@@ -44,7 +43,14 @@ type ContextPanel = {
   facts: Array<{ label: string; value: string }>;
   evidence: Array<{ label: string; value: string; tone?: 'neutral' | 'warning' | 'success' }>;
   timeline: Array<{ label: string; value: string; time?: string | null }>;
-  related: Array<{ label: string; value: string; targetPage?: string; focusId?: string | null }>;
+  related: Array<{ label: string; value: string; targetPage?: string; focusId?: string | null; navigationTarget?: NavigationTarget | null }>;
+};
+
+type StreamStep = {
+  id: string;
+  label: string;
+  status: 'running' | 'completed' | 'failed';
+  detail?: string | null;
 };
 
 type AssistantPayload = {
@@ -58,6 +64,14 @@ type AssistantPayload = {
   agents: AgentCard[];
   suggestedReplies: string[];
   consultedModules: string[];
+  facts?: string[];
+  conflicts?: string[];
+  sources?: string[];
+  evidence?: string[];
+  steps?: StreamStep[];
+  runId?: string | null;
+  structuredIntent?: Record<string, any> | null;
+  navigationTarget?: NavigationTarget | null;
 };
 
 type PermissionMatrix = {
@@ -82,8 +96,18 @@ type ConversationMessage =
   | { id: string; role: 'user'; text: string }
   | { id: string; role: 'assistant'; payload: AssistantPayload; muted?: boolean };
 
+type StreamActivity = {
+  runId: string;
+  statusLine: string;
+  text: string;
+  steps: StreamStep[];
+  agents: AgentCard[];
+  error?: string | null;
+};
+
 interface SuperAgentProps {
   onNavigate?: NavigateFn;
+  activeTarget?: NavigationTarget;
 }
 
 function roleTone(status?: string | null) {
@@ -142,7 +166,62 @@ function assistantFromExecution(summary: string, sectionTitle: string, items: st
   };
 }
 
-export default function SuperAgent({ onNavigate }: SuperAgentProps) {
+function fallbackNavigationTarget(page?: string, entityId?: string | null): NavigationTarget | null {
+  if (!page) return null;
+  const normalizedPage = page as Page;
+  const entityType =
+    normalizedPage === 'orders' ? 'order'
+    : normalizedPage === 'payments' ? 'payment'
+    : normalizedPage === 'returns' ? 'return'
+    : normalizedPage === 'approvals' ? 'approval'
+    : normalizedPage === 'customers' ? 'customer'
+    : normalizedPage === 'workflows' ? 'workflow'
+    : normalizedPage === 'case_graph' || normalizedPage === 'inbox' ? 'case'
+    : 'workspace';
+
+  return {
+    page: normalizedPage,
+    entityType,
+    entityId: entityId ?? null,
+    section: null,
+    sourceContext: 'super_agent',
+    runId: null,
+  };
+}
+
+function dedupeTargets(targets: Array<NavigationTarget | null | undefined>) {
+  const seen = new Set<string>();
+  return targets.filter((target): target is NavigationTarget => {
+    if (!target?.page) return false;
+    const key = [target.page, target.entityType || '', target.entityId || '', target.section || ''].join('::');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function pageFromContextPanel(entityType?: string | null): Page {
+  switch (entityType) {
+    case 'case':
+      return 'case_graph';
+    case 'order':
+      return 'orders';
+    case 'payment':
+      return 'payments';
+    case 'return':
+      return 'returns';
+    case 'approval':
+      return 'approvals';
+    case 'customer':
+      return 'customers';
+    case 'workflow':
+      return 'workflows';
+    default:
+      return 'super_agent';
+  }
+}
+
+export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps) {
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<PermissionMatrix | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -155,7 +234,10 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
+  const [streamActivity, setStreamActivity] = useState<StreamActivity | null>(null);
+  const [isStreamConnected, setIsStreamConnected] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const streamRunIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +269,143 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, pendingAction, flashMessage, isSending]);
+  }, [messages, pendingAction, flashMessage, isSending, streamActivity]);
+
+  useEffect(() => {
+    const source = new EventSource('/api/sse/agent-runs');
+
+    const handleConnected = () => setIsStreamConnected(true);
+    const handleFailure = () => setIsStreamConnected(false);
+    const parseData = (event: MessageEvent) => {
+      try {
+        return JSON.parse(event.data || '{}');
+      } catch {
+        return {};
+      }
+    };
+    const updateIfCurrent = (event: MessageEvent, updater: (data: any, current: StreamActivity) => StreamActivity) => {
+      const data = parseData(event);
+      setStreamActivity((current) => {
+        if (!current || data.runId !== current.runId) return current;
+        return updater(data, current);
+      });
+    };
+
+    source.addEventListener('connected', handleConnected as EventListener);
+    source.addEventListener('super-agent:run_started', ((event: MessageEvent) => {
+      const data = parseData(event);
+      setStreamActivity((current) => {
+        if (!current || data.runId !== current.runId) return current;
+        return { ...current, statusLine: 'Connecting modules and specialists...' };
+      });
+    }) as EventListener);
+    source.addEventListener('super-agent:message_chunk', ((event: MessageEvent) => {
+      updateIfCurrent(event, (data, current) => ({
+        ...current,
+        text: `${current.text}${data.chunk || ''}`,
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:step_started', ((event: MessageEvent) => {
+      updateIfCurrent(event, (data, current) => ({
+        ...current,
+        statusLine: data.step?.label || current.statusLine,
+        steps: [...current.steps.filter((step) => step.id !== data.step?.id), data.step].filter(Boolean),
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:step_completed', ((event: MessageEvent) => {
+      updateIfCurrent(event, (data, current) => ({
+        ...current,
+        statusLine: data.step?.label || 'Step completed',
+        steps: [...current.steps.filter((step) => step.id !== data.step?.id), data.step].filter(Boolean),
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:agent_called', ((event: MessageEvent) => {
+      updateIfCurrent(event, (data, current) => ({
+        ...current,
+        agents: [...current.agents.filter((agent) => agent.slug !== data.agent?.slug), {
+          slug: data.agent?.slug || 'agent',
+          name: data.agent?.name || data.agent?.slug || 'Agent',
+          runtime: data.agent?.runtime || null,
+          mode: data.agent?.mode || null,
+          status: data.agent?.status || 'consulted',
+          summary: 'Consulted during orchestration.',
+        }],
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:agent_result', ((event: MessageEvent) => {
+      updateIfCurrent(event, (data, current) => ({
+        ...current,
+        agents: [...current.agents.filter((agent) => agent.slug !== data.agent?.slug), {
+          slug: data.agent?.slug || 'agent',
+          name: data.agent?.name || data.agent?.slug || 'Agent',
+          runtime: null,
+          mode: null,
+          status: data.agent?.status || 'consulted',
+          summary: data.agent?.summary || 'Completed.',
+        }],
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:action_proposed', ((event: MessageEvent) => {
+      updateIfCurrent(event, (_data, current) => ({
+        ...current,
+        statusLine: 'Action proposal ready for review',
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:action_executing', ((event: MessageEvent) => {
+      updateIfCurrent(event, (_data, current) => ({
+        ...current,
+        statusLine: 'Executing guarded action...',
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:action_completed', ((event: MessageEvent) => {
+      updateIfCurrent(event, (_data, current) => ({
+        ...current,
+        statusLine: 'Action execution completed',
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:run_finished', ((event: MessageEvent) => {
+      updateIfCurrent(event, (data, current) => ({
+        ...current,
+        statusLine: data.statusLine || 'Run completed',
+      }));
+    }) as EventListener);
+    source.addEventListener('super-agent:run_failed', ((event: MessageEvent) => {
+      updateIfCurrent(event, (data, current) => ({
+        ...current,
+        error: data.error || 'The run failed unexpectedly.',
+        statusLine: 'Run failed',
+      }));
+    }) as EventListener);
+    source.onerror = handleFailure;
+
+    return () => {
+      source.close();
+    };
+  }, []);
+
+  function buildCommandContext() {
+    const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant') as Extract<ConversationMessage, { role: 'assistant' }> | undefined;
+    const recentTargets = dedupeTargets([
+      activeTarget,
+      contextPanel?.entityType && contextPanel?.entityId ? {
+        page: fallbackNavigationTarget(pageFromContextPanel(contextPanel.entityType), contextPanel.entityId)?.page || 'super_agent',
+        entityType: contextPanel.entityType,
+        entityId: contextPanel.entityId,
+        section: null,
+        sourceContext: 'context_panel',
+        runId: latestAssistant?.payload.runId || null,
+      } : null,
+      latestAssistant?.payload.navigationTarget || null,
+      ...(latestAssistant?.payload.actions || []).map((action) => action.navigationTarget || fallbackNavigationTarget(action.targetPage, action.focusId ?? null)),
+      ...(contextPanel?.related || []).map((link) => link.navigationTarget || fallbackNavigationTarget(link.targetPage, link.focusId ?? null)),
+    ]);
+
+    return {
+      activeTarget: activeTarget || null,
+      recentTargets,
+      lastStructuredIntent: latestAssistant?.payload.structuredIntent || null,
+    };
+  }
 
   async function sendPrompt(promptOverride?: string) {
     const prompt = (promptOverride ?? composerText).trim();
@@ -208,20 +426,39 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
     setPendingAction(null);
     setFlashMessage(null);
     setIsSending(true);
+    const runId = typeof window !== 'undefined' && 'crypto' in window && 'randomUUID' in window.crypto
+      ? window.crypto.randomUUID()
+      : `run-${Date.now()}`;
+    streamRunIdRef.current = runId;
+    setStreamActivity({
+      runId,
+      statusLine: isStreamConnected ? 'Connecting modules and specialists...' : 'Waiting for response...',
+      text: '',
+      steps: [],
+      agents: [],
+      error: null,
+    });
 
     try {
-      const result = await superAgentApi.command(finalPrompt);
+      const result = await superAgentApi.command(finalPrompt, {
+        runId,
+        mode,
+        context: buildCommandContext(),
+      });
       const payload = result.response as AssistantPayload;
       setMessages((current) => [...current, { id: payload.id, role: 'assistant', payload }]);
       setPermissionMatrix(result.permissionMatrix || null);
       if (payload.contextPanel) {
         setContextPanel(payload.contextPanel);
       }
+      setStreamActivity(null);
     } catch (error) {
       const fallback = assistantFromError(finalPrompt, error instanceof Error ? error.message : 'Unable to process command.');
       setMessages((current) => [...current, { id: fallback.id, role: 'assistant', payload: fallback }]);
+      setStreamActivity((current) => current ? { ...current, error: fallback.summary, statusLine: 'Command failed' } : null);
     } finally {
       setIsSending(false);
+      streamRunIdRef.current = null;
     }
   }
 
@@ -230,9 +467,24 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
 
     setIsExecuting(true);
     setFlashMessage(null);
+    const runId = typeof window !== 'undefined' && 'crypto' in window && 'randomUUID' in window.crypto
+      ? window.crypto.randomUUID()
+      : `run-${Date.now()}`;
+    streamRunIdRef.current = runId;
+    setStreamActivity({
+      runId,
+      statusLine: 'Executing guarded action...',
+      text: '',
+      steps: [],
+      agents: [],
+      error: null,
+    });
 
     try {
-      const result = await superAgentApi.execute(pendingAction.payload, true);
+      const result = await superAgentApi.execute(pendingAction.payload, true, {
+        runId,
+        sourceContext: 'super_agent_confirmation',
+      });
 
       if (result.ok) {
         const update = assistantFromExecution(
@@ -245,6 +497,7 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
         );
 
         setMessages((current) => [...current, { id: update.id, role: 'assistant', payload: update }]);
+        setStreamActivity(null);
 
         const refreshPrompt =
           pendingAction.payload.kind === 'approval.decide'
@@ -276,12 +529,21 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
               description: 'Review the newly created approval request.',
               targetPage: 'approvals',
               focusId: approvalId,
+              navigationTarget: {
+                page: 'approvals',
+                entityType: 'approval',
+                entityId: approvalId,
+                section: null,
+                sourceContext: 'super_agent_approval',
+                runId,
+              },
             },
           ],
         );
 
         setMessages((current) => [...current, { id: approvalMessage.id, role: 'assistant', payload: approvalMessage }]);
         setFlashMessage('Approval created instead of executing directly.');
+        setStreamActivity(null);
       } else {
         const failure = assistantFromExecution(
           'Action blocked.',
@@ -289,6 +551,7 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
           [result.error || pendingAction.blockedReason || 'The requested action could not be executed.'],
         );
         setMessages((current) => [...current, { id: failure.id, role: 'assistant', payload: failure }]);
+        setStreamActivity((current) => current ? { ...current, error: failure.summary, statusLine: 'Action blocked' } : null);
       }
     } catch (error) {
       const failure = assistantFromExecution(
@@ -297,17 +560,23 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
         [error instanceof Error ? error.message : 'The requested action failed unexpectedly.'],
       );
       setMessages((current) => [...current, { id: failure.id, role: 'assistant', payload: failure }]);
+      setStreamActivity((current) => current ? { ...current, error: failure.summary, statusLine: 'Action failed' } : null);
     } finally {
       setPendingAction(null);
       setIsExecuting(false);
+      streamRunIdRef.current = null;
     }
+  }
+
+  function navigateToTarget(target?: NavigationTarget | null, fallbackPage?: string, fallbackId?: string | null) {
+    const resolvedTarget = target || fallbackNavigationTarget(fallbackPage, fallbackId);
+    if (!resolvedTarget) return;
+    onNavigate?.(resolvedTarget);
   }
 
   function handleAction(action: SuperAgentAction) {
     if (action.type === 'navigate') {
-      if (action.targetPage) {
-        onNavigate?.(action.targetPage as Page, action.focusId ?? null);
-      }
+      navigateToTarget(action.navigationTarget, action.targetPage, action.focusId ?? null);
       return;
     }
 
@@ -321,6 +590,14 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
   }
 
   function renderAssistantMessage(payload: AssistantPayload, muted = false) {
+    const structuredBlocks = [
+      payload.facts?.length ? { title: 'What I found', items: payload.facts } : null,
+      payload.conflicts?.length ? { title: 'Conflict detected', items: payload.conflicts } : null,
+      payload.sources?.length ? { title: 'Modules consulted', items: payload.sources } : null,
+      payload.evidence?.length ? { title: 'Evidence', items: payload.evidence } : null,
+    ].filter(Boolean) as MessageSection[];
+    const sections = [...payload.sections, ...structuredBlocks];
+
     return (
       <div
         key={payload.id}
@@ -348,7 +625,7 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
         </div>
 
         <div className="mt-5 grid gap-3">
-          {payload.sections.map((section) => (
+          {sections.map((section) => (
             <section
               key={`${payload.id}-${section.title}`}
               className="rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-4 dark:border-gray-700 dark:bg-gray-800/60"
@@ -403,6 +680,28 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
           </div>
         ) : null}
 
+        {payload.steps?.length ? (
+          <div className="mt-4 rounded-2xl border border-gray-100 bg-white/80 px-4 py-4 dark:border-gray-700 dark:bg-gray-900/40">
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Execution trace</h4>
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">{payload.steps.length} steps</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {payload.steps.map((step) => (
+                <div key={`${payload.id}-${step.id}`} className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 dark:border-gray-700 dark:bg-gray-800/60">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{step.label}</p>
+                    {step.detail ? <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{step.detail}</p> : null}
+                  </div>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(step.status)}`}>
+                    {step.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {payload.actions.length > 0 ? (
           <div className="mt-5 flex flex-wrap gap-2">
             {payload.actions.map((action) => (
@@ -435,6 +734,67 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
                 {reply}
               </button>
             ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderStreamingMessage(activity: StreamActivity) {
+    return (
+      <div className="rounded-[28px] border border-white/80 bg-white/85 px-6 py-5 shadow-card backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/85">
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black text-white shadow-sm dark:bg-white dark:text-black">
+            <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Super Agent live run</p>
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                {activity.statusLine}
+              </span>
+            </div>
+            <h3 className="mt-2 text-lg font-semibold leading-7 text-gray-900 dark:text-white">
+              {activity.text || 'Reading modules and assembling the operational answer...'}
+            </h3>
+          </div>
+        </div>
+
+        {activity.steps.length > 0 ? (
+          <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-4 dark:border-gray-700 dark:bg-gray-800/60">
+            <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Live execution</h4>
+            <div className="mt-3 space-y-2">
+              {activity.steps.map((step) => (
+                <div key={`${activity.runId}-${step.id}`} className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{step.label}</p>
+                    {step.detail ? <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{step.detail}</p> : null}
+                  </div>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(step.status)}`}>
+                    {step.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {activity.agents.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {activity.agents.map((agent) => (
+              <span
+                key={`${activity.runId}-${agent.slug}`}
+                className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300"
+              >
+                {agent.name} · {agent.status}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {activity.error ? (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-300">
+            {activity.error}
           </div>
         ) : null}
       </div>
@@ -586,7 +946,9 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
                   ),
                 )}
 
-                {isSending ? (
+                {isSending && streamActivity ? renderStreamingMessage(streamActivity) : null}
+
+                {isSending && !streamActivity ? (
                   <div className="rounded-[24px] border border-white/80 bg-white/80 px-5 py-4 shadow-card dark:border-gray-700 dark:bg-card-dark/80">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-black text-white dark:bg-white dark:text-black">
@@ -826,9 +1188,7 @@ export default function SuperAgent({ onNavigate }: SuperAgentProps) {
                             key={`${contextPanel.title}-${link.label}-${link.value}`}
                             type="button"
                             onClick={() => {
-                              if (link.targetPage) {
-                                onNavigate?.(link.targetPage as Page, link.focusId ?? null);
-                              }
+                              navigateToTarget(link.navigationTarget, link.targetPage, link.focusId ?? null);
                             }}
                             className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-3 text-left transition-colors hover:border-secondary/30 hover:text-secondary dark:border-gray-700 dark:bg-gray-800/60"
                           >

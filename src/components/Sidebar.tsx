@@ -9,20 +9,38 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentPage, onPageChange, isOpen, onToggle }: SidebarProps) {
-  const navItems = [
-    { id: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
-    { id: 'super_agent', label: 'Super Agent', icon: 'auto_awesome' },
-    { id: 'case_graph', label: 'Case Graph', icon: 'hub' },
-    { id: 'customers', label: 'Customers', icon: 'people' },
-    { id: 'orders', label: 'Orders', icon: 'shopping_bag' },
-    { id: 'payments', label: 'Payments', icon: 'payments' },
-    { id: 'returns', label: 'Returns', icon: 'assignment_return' },
-    { id: 'approvals', label: 'Approvals', icon: 'check_circle' },
-    { id: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
-    { id: 'workflows', label: 'Workflows', icon: 'account_tree' },
-    { id: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
-    { id: 'reports', label: 'Reports', icon: 'bar_chart' },
-    { id: 'tools_integrations', label: 'Integrations', icon: 'extension' },
+  const navGroups: Array<{
+    title: string;
+    items: Array<{ id: Page; label: string; icon: string; badge?: number }>;
+  }> = [
+    {
+      title: 'Superagent',
+      items: [
+        { id: 'super_agent', label: 'Command Center', icon: 'auto_awesome' },
+      ],
+    },
+    {
+      title: 'Operations',
+      items: [
+        { id: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
+        { id: 'case_graph', label: 'Case Graph', icon: 'hub' },
+        { id: 'customers', label: 'Customers', icon: 'people' },
+        { id: 'orders', label: 'Orders', icon: 'shopping_bag' },
+        { id: 'payments', label: 'Payments', icon: 'payments' },
+        { id: 'returns', label: 'Returns', icon: 'assignment_return' },
+        { id: 'approvals', label: 'Approvals', icon: 'check_circle' },
+      ],
+    },
+    {
+      title: 'Automation',
+      items: [
+        { id: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
+        { id: 'workflows', label: 'Workflows', icon: 'account_tree' },
+        { id: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
+        { id: 'reports', label: 'Reports', icon: 'bar_chart' },
+        { id: 'tools_integrations', label: 'Integrations', icon: 'extension' },
+      ],
+    },
   ];
 
   return (
@@ -50,28 +68,37 @@ export default function Sidebar({ currentPage, onPageChange, isOpen, onToggle }:
           )}
         </div>
 
-        <nav className="space-y-0.5 px-2 flex flex-col">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onPageChange(item.id as Page)}
-              className={`relative flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${
-                currentPage === item.id
-                  ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
-              }`}
-              title={!isOpen ? item.label : undefined}
-            >
-              <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${
-                currentPage === item.id ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
-              }`}>{item.icon}</span>
-              {isOpen && <span className="truncate">{item.label}</span>}
-              {item.badge && (
-                <span className={`${isOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-200 py-0.5 px-2 rounded-full text-[10px] font-semibold`}>
-                  {item.badge}
-                </span>
-              )}
-            </button>
+        <nav className="space-y-3 px-2 flex flex-col">
+          {navGroups.map((group) => (
+            <div key={group.title} className="space-y-1">
+              {isOpen ? (
+                <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                  {group.title}
+                </p>
+              ) : null}
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => onPageChange(item.id)}
+                  className={`relative flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${
+                    currentPage === item.id
+                      ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
+                  }`}
+                  title={!isOpen ? item.label : undefined}
+                >
+                  <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${
+                    currentPage === item.id ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
+                  }`}>{item.icon}</span>
+                  {isOpen && <span className="truncate">{item.label}</span>}
+                  {item.badge && (
+                    <span className={`${isOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-200 py-0.5 px-2 rounded-full text-[10px] font-semibold`}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
       </div>

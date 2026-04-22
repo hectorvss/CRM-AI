@@ -3,13 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { customersApi, paymentsApi, policyApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
-import type { Page } from '../types';
+import type { NavigateFn, Page } from '../types';
 
 type CustomerTab = 'all_activity' | 'conversations' | 'orders' | 'system_logs';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
 
 interface CustomersProps {
   onNavigate?: NavigateFn;
+  focusCustomerId?: string | null;
 }
 
 interface Order {
@@ -251,7 +251,7 @@ function buildInitialsAvatar(name: string) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-export default function Customers({ onNavigate }: CustomersProps) {
+export default function Customers({ onNavigate, focusCustomerId }: CustomersProps) {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<CustomerTab>('all_activity');
   const [searchQuery, setSearchQuery] = useState('');
@@ -282,6 +282,13 @@ export default function Customers({ onNavigate }: CustomersProps) {
     () => selectedCustomerId ? customersApi.activity(selectedCustomerId) : Promise.resolve([]),
     [selectedCustomerId]
   );
+
+  React.useEffect(() => {
+    if (!focusCustomerId) return;
+    if (selectedCustomerId !== focusCustomerId) {
+      setSelectedCustomerId(focusCustomerId);
+    }
+  }, [focusCustomerId, selectedCustomerId]);
 
   const mapApiCustomer = (c: any) => {
     const name    = c.canonical_name || c.name || 'Unknown';

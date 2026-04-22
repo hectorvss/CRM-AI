@@ -5,13 +5,14 @@ import CaseCopilotPanel from './CaseCopilotPanel';
 import { casesApi, ordersApi, paymentsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
-import type { Page } from '../types';
+import type { NavigateFn } from '../types';
 
 type RightTab = 'details' | 'copilot';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
 
 interface OrdersProps {
   onNavigate?: NavigateFn;
+  focusEntityId?: string | null;
+  focusSection?: string | null;
 }
 
 const formatDate = (value?: string | null) =>
@@ -324,7 +325,7 @@ const ORDERS: Order[] = [
   }
 ];
 
-export default function Orders({ onNavigate }: OrdersProps) {
+export default function Orders({ onNavigate, focusEntityId, focusSection }: OrdersProps) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<OrderTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
@@ -461,6 +462,22 @@ export default function Orders({ onNavigate }: OrdersProps) {
       setSelectedId(filteredOrders[0].id);
     }
   }, [activeTab, filteredOrders, selectedId]);
+
+  useEffect(() => {
+    if (focusSection && ['all', 'attention', 'refunds', 'conflicts'].includes(focusSection) && activeTab !== focusSection) {
+      setActiveTab(focusSection as OrderTab);
+    }
+  }, [activeTab, focusSection]);
+
+  useEffect(() => {
+    if (!focusEntityId) return;
+    if (activeTab !== 'all') {
+      setActiveTab('all');
+    }
+    if (selectedId !== focusEntityId) {
+      setSelectedId(focusEntityId);
+    }
+  }, [activeTab, focusEntityId, selectedId]);
 
   const selectedOrderCaseId = selectedOrder?.relatedCases?.[0]?.id || null;
   const selectedOrderPaymentId =
