@@ -30,18 +30,16 @@ function isTargetActive(currentPage: Page, currentSection: string | null | undef
 }
 
 export default function Sidebar({ currentPage, currentSection, onPageChange, isOpen, onToggle }: SidebarProps) {
+  const superAgentItem: SidebarItem = {
+    target: { page: 'super_agent', entityType: 'workspace', section: 'command-center', sourceContext: 'sidebar' },
+    label: 'Super Agent',
+    icon: 'auto_awesome',
+  };
+
   const navGroups: Array<{
     title: string;
     items: SidebarItem[];
   }> = [
-    {
-      title: 'Super Agent',
-      items: [
-        { target: { page: 'super_agent', entityType: 'workspace', section: 'command-center', sourceContext: 'sidebar' }, label: 'Command Center', icon: 'auto_awesome' },
-        { target: { page: 'super_agent', entityType: 'workspace', section: 'live-runs', sourceContext: 'sidebar' }, label: 'Live Runs', icon: 'monitoring' },
-        { target: { page: 'super_agent', entityType: 'workspace', section: 'guardrails', sourceContext: 'sidebar' }, label: 'Guardrails', icon: 'shield' },
-      ],
-    },
     {
       title: 'Operations',
       items: [
@@ -92,6 +90,24 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
         </div>
 
         <nav className="space-y-3 px-2 flex flex-col">
+          {/* Super Agent — single item at the top */}
+          <div className="space-y-1">
+            <button
+              onClick={() => onPageChange(superAgentItem.target)}
+              className={`relative flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${
+                currentPage === 'super_agent'
+                  ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
+              }`}
+              title={!isOpen ? superAgentItem.label : undefined}
+            >
+              <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${
+                currentPage === 'super_agent' ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
+              }`}>{superAgentItem.icon}</span>
+              {isOpen && <span className="block truncate">{superAgentItem.label}</span>}
+            </button>
+          </div>
+
           {navGroups.map((group) => (
             <div key={group.title} className="space-y-1">
               {isOpen ? (
