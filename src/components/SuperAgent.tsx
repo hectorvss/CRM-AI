@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { superAgentApi } from '../api/client';
 import type { NavigateFn, NavigationTarget, Page } from '../types';
 
@@ -140,13 +141,16 @@ function assistantFromError(input: string, message: string): AssistantPayload {
     sections: [
       {
         title: 'What happened',
-        items: ['The Super Agent backend did not return a valid response.', 'You can retry the command or continue from a structured module.'],
+        items: [
+          'The Super Agent backend did not return a valid response.',
+          'You can retry the command or navigate to a structured module.',
+        ],
       },
     ],
     actions: [],
     contextPanel: null,
     agents: [],
-    suggestedReplies: ['Reintenta el comando', 'Abre aprobaciones pendientes', 'Busca un pedido'],
+    suggestedReplies: ['Retry command', 'Open pending approvals', 'Search for an order'],
     consultedModules: [],
   };
 }
@@ -202,22 +206,14 @@ function dedupeTargets(targets: Array<NavigationTarget | null | undefined>) {
 
 function pageFromContextPanel(entityType?: string | null): Page {
   switch (entityType) {
-    case 'case':
-      return 'case_graph';
-    case 'order':
-      return 'orders';
-    case 'payment':
-      return 'payments';
-    case 'return':
-      return 'returns';
-    case 'approval':
-      return 'approvals';
-    case 'customer':
-      return 'customers';
-    case 'workflow':
-      return 'workflows';
-    default:
-      return 'super_agent';
+    case 'case': return 'case_graph';
+    case 'order': return 'orders';
+    case 'payment': return 'payments';
+    case 'return': return 'returns';
+    case 'approval': return 'approvals';
+    case 'customer': return 'customers';
+    case 'workflow': return 'workflows';
+    default: return 'super_agent';
   }
 }
 
@@ -255,17 +251,12 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
         const fallback = assistantFromError('', error instanceof Error ? error.message : 'Unable to load Super Agent.');
         setMessages([{ id: fallback.id, role: 'assistant', payload: fallback, muted: true }]);
       } finally {
-        if (!cancelled) {
-          setIsBootstrapping(false);
-        }
+        if (!cancelled) setIsBootstrapping(false);
       }
     }
 
     void load();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -278,11 +269,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     const handleConnected = () => setIsStreamConnected(true);
     const handleFailure = () => setIsStreamConnected(false);
     const parseData = (event: MessageEvent) => {
-      try {
-        return JSON.parse(event.data || '{}');
-      } catch {
-        return {};
-      }
+      try { return JSON.parse(event.data || '{}'); } catch { return {}; }
     };
     const updateIfCurrent = (event: MessageEvent, updater: (data: any, current: StreamActivity) => StreamActivity) => {
       const data = parseData(event);
@@ -301,10 +288,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       });
     }) as EventListener);
     source.addEventListener('super-agent:message_chunk', ((event: MessageEvent) => {
-      updateIfCurrent(event, (data, current) => ({
-        ...current,
-        text: `${current.text}${data.chunk || ''}`,
-      }));
+      updateIfCurrent(event, (data, current) => ({ ...current, text: `${current.text}${data.chunk || ''}` }));
     }) as EventListener);
     source.addEventListener('super-agent:step_started', ((event: MessageEvent) => {
       updateIfCurrent(event, (data, current) => ({
@@ -347,28 +331,16 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       }));
     }) as EventListener);
     source.addEventListener('super-agent:action_proposed', ((event: MessageEvent) => {
-      updateIfCurrent(event, (_data, current) => ({
-        ...current,
-        statusLine: 'Action proposal ready for review',
-      }));
+      updateIfCurrent(event, (_data, current) => ({ ...current, statusLine: 'Action proposal ready for review' }));
     }) as EventListener);
     source.addEventListener('super-agent:action_executing', ((event: MessageEvent) => {
-      updateIfCurrent(event, (_data, current) => ({
-        ...current,
-        statusLine: 'Executing guarded action...',
-      }));
+      updateIfCurrent(event, (_data, current) => ({ ...current, statusLine: 'Executing guarded action...' }));
     }) as EventListener);
     source.addEventListener('super-agent:action_completed', ((event: MessageEvent) => {
-      updateIfCurrent(event, (_data, current) => ({
-        ...current,
-        statusLine: 'Action execution completed',
-      }));
+      updateIfCurrent(event, (_data, current) => ({ ...current, statusLine: 'Action execution completed' }));
     }) as EventListener);
     source.addEventListener('super-agent:run_finished', ((event: MessageEvent) => {
-      updateIfCurrent(event, (data, current) => ({
-        ...current,
-        statusLine: data.statusLine || 'Run completed',
-      }));
+      updateIfCurrent(event, (data, current) => ({ ...current, statusLine: data.statusLine || 'Run completed' }));
     }) as EventListener);
     source.addEventListener('super-agent:run_failed', ((event: MessageEvent) => {
       updateIfCurrent(event, (data, current) => ({
@@ -379,9 +351,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     }) as EventListener);
     source.onerror = handleFailure;
 
-    return () => {
-      source.close();
-    };
+    return () => { source.close(); };
   }, []);
 
   function buildCommandContext() {
@@ -412,15 +382,9 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     const prompt = (promptOverride ?? composerText).trim();
     if (!prompt || isSending || isExecuting) return;
 
-    const finalPrompt = mode === 'operate' && !promptOverride
-      ? `Operate: ${prompt}`
-      : prompt;
+    const finalPrompt = mode === 'operate' && !promptOverride ? `Operate: ${prompt}` : prompt;
 
-    const userMessage: ConversationMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      text: finalPrompt,
-    };
+    const userMessage: ConversationMessage = { id: `user-${Date.now()}`, role: 'user', text: finalPrompt };
 
     setMessages((current) => [...current, userMessage]);
     setComposerText('');
@@ -441,17 +405,11 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     });
 
     try {
-      const result = await superAgentApi.command(finalPrompt, {
-        runId,
-        mode,
-        context: buildCommandContext(),
-      });
+      const result = await superAgentApi.command(finalPrompt, { runId, mode, context: buildCommandContext() });
       const payload = result.response as AssistantPayload;
       setMessages((current) => [...current, { id: payload.id, role: 'assistant', payload }]);
       setPermissionMatrix(result.permissionMatrix || null);
-      if (payload.contextPanel) {
-        setContextPanel(payload.contextPanel);
-      }
+      if (payload.contextPanel) setContextPanel(payload.contextPanel);
       setStreamActivity(null);
     } catch (error) {
       const fallback = assistantFromError(finalPrompt, error instanceof Error ? error.message : 'Unable to process command.');
@@ -472,14 +430,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       ? window.crypto.randomUUID()
       : `run-${Date.now()}`;
     streamRunIdRef.current = runId;
-    setStreamActivity({
-      runId,
-      statusLine: 'Executing guarded action...',
-      text: '',
-      steps: [],
-      agents: [],
-      error: null,
-    });
+    setStreamActivity({ runId, statusLine: 'Executing guarded action...', text: '', steps: [], agents: [], error: null });
 
     try {
       const result = await superAgentApi.execute(pendingAction.payload, true, {
@@ -491,28 +442,20 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
         const update = assistantFromExecution(
           `${pendingAction.label} completed.`,
           'Execution result',
-          [
-            pendingAction.description,
-            'The change was written through the Super Agent guardrail layer and recorded in the audit trail.',
-          ],
+          [pendingAction.description, 'The change was written through the Super Agent guardrail layer and recorded in the audit trail.'],
         );
-
         setMessages((current) => [...current, { id: update.id, role: 'assistant', payload: update }]);
         setStreamActivity(null);
 
         const refreshPrompt =
-          pendingAction.payload.kind === 'approval.decide'
-            ? 'Aprobaciones pendientes'
-            : pendingAction.payload.kind === 'workflow.publish'
-            ? `workflow ${pendingAction.payload.entityId}`
-            : `${pendingAction.payload.entityType} ${pendingAction.payload.entityId}`;
+          pendingAction.payload.kind === 'approval.decide' ? 'Pending approvals'
+          : pendingAction.payload.kind === 'workflow.publish' ? `workflow ${pendingAction.payload.entityId}`
+          : `${pendingAction.payload.entityType} ${pendingAction.payload.entityId}`;
         const refreshed = await superAgentApi.command(refreshPrompt);
         const refreshedPayload = refreshed.response as AssistantPayload;
         setMessages((current) => [...current, { id: refreshedPayload.id, role: 'assistant', payload: refreshedPayload, muted: true }]);
         setPermissionMatrix(refreshed.permissionMatrix || null);
-        if (refreshedPayload.contextPanel) {
-          setContextPanel(refreshedPayload.contextPanel);
-        }
+        if (refreshedPayload.contextPanel) setContextPanel(refreshedPayload.contextPanel);
       } else if (result.approvalRequired) {
         const approvalId = result.approval?.id || 'pending approval';
         const approvalMessage = assistantFromExecution(
@@ -522,44 +465,33 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             'The requested action crossed a sensitive threshold and was not executed directly.',
             `Approval request created: ${approvalId}.`,
           ],
-          [
-            {
-              id: `nav-approval-${approvalId}`,
-              type: 'navigate',
-              label: 'Open approvals',
-              description: 'Review the newly created approval request.',
-              targetPage: 'approvals',
-              focusId: approvalId,
-              navigationTarget: {
-                page: 'approvals',
-                entityType: 'approval',
-                entityId: approvalId,
-                section: null,
-                sourceContext: 'super_agent_approval',
-                runId,
-              },
+          [{
+            id: `nav-approval-${approvalId}`,
+            type: 'navigate',
+            label: 'Open approvals',
+            description: 'Review the newly created approval request.',
+            targetPage: 'approvals',
+            focusId: approvalId,
+            navigationTarget: {
+              page: 'approvals',
+              entityType: 'approval',
+              entityId: approvalId,
+              section: null,
+              sourceContext: 'super_agent_approval',
+              runId,
             },
-          ],
+          }],
         );
-
         setMessages((current) => [...current, { id: approvalMessage.id, role: 'assistant', payload: approvalMessage }]);
         setFlashMessage('Approval created instead of executing directly.');
         setStreamActivity(null);
       } else {
-        const failure = assistantFromExecution(
-          'Action blocked.',
-          'Execution blocked',
-          [result.error || pendingAction.blockedReason || 'The requested action could not be executed.'],
-        );
+        const failure = assistantFromExecution('Action blocked.', 'Execution blocked', [result.error || pendingAction.blockedReason || 'The requested action could not be executed.']);
         setMessages((current) => [...current, { id: failure.id, role: 'assistant', payload: failure }]);
         setStreamActivity((current) => current ? { ...current, error: failure.summary, statusLine: 'Action blocked' } : null);
       }
     } catch (error) {
-      const failure = assistantFromExecution(
-        'Action failed.',
-        'Execution error',
-        [error instanceof Error ? error.message : 'The requested action failed unexpectedly.'],
-      );
+      const failure = assistantFromExecution('Action failed.', 'Execution error', [error instanceof Error ? error.message : 'The requested action failed unexpectedly.']);
       setMessages((current) => [...current, { id: failure.id, role: 'assistant', payload: failure }]);
       setStreamActivity((current) => current ? { ...current, error: failure.summary, statusLine: 'Action failed' } : null);
     } finally {
@@ -580,15 +512,44 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       navigateToTarget(action.navigationTarget, action.targetPage, action.focusId ?? null);
       return;
     }
-
     if (!action.allowed) {
       setFlashMessage(action.blockedReason || 'You do not have permission to execute this action.');
       return;
     }
-
     setPendingAction(action);
     setFlashMessage(null);
   }
+
+  function navigateToSection(section: string) {
+    onNavigate?.({ page: 'super_agent', section, entityType: 'workspace', entityId: null, sourceContext: 'super_agent_tabs', runId: null });
+  }
+
+  const sectionMeta = activeSection === 'live-runs'
+    ? {
+        label: 'Live Runs',
+        title: 'Real-time operational tracking',
+        description: 'Monitor agent runs, investigation steps, and long-running executions from the command center.',
+        quickReplies: ['Review pending payments', 'Open pending approvals', 'Investigate a conflicted order'],
+      }
+    : activeSection === 'guardrails'
+    ? {
+        label: 'Guardrails',
+        title: 'Control, approvals & traceability',
+        description: 'Review effective permissions, sensitive actions, and the security layer protecting writes and automations.',
+        quickReplies: ['Explain why an action is blocked', 'Open pending approvals', 'Prepare next operational step'],
+      }
+    : {
+        label: 'Command Center',
+        title: bootstrap?.welcomeTitle || 'Super Agent',
+        description: bootstrap?.welcomeSubtitle || 'Investigate entities, cross-reference modules, understand blockers, coordinate specialists, and execute changes with full traceability.',
+        quickReplies: bootstrap?.quickActions || [],
+      };
+
+  const tabs = [
+    { id: 'command-center', label: 'Command Center', icon: 'auto_awesome' },
+    { id: 'live-runs', label: 'Live Runs', icon: 'monitoring' },
+    { id: 'guardrails', label: 'Guardrails', icon: 'shield' },
+  ];
 
   function renderAssistantMessage(payload: AssistantPayload, muted = false) {
     const structuredBlocks = [
@@ -600,457 +561,507 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     const sections = [...payload.sections, ...structuredBlocks];
 
     return (
-      <div
+      <motion.div
         key={payload.id}
-        className={`rounded-[28px] border px-6 py-5 shadow-card backdrop-blur-sm ${
-          muted
-            ? 'bg-white/70 border-white/70 dark:bg-card-dark/70 dark:border-gray-700/70'
-            : 'bg-white/90 border-white dark:bg-card-dark/90 dark:border-gray-700'
-        }`}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className={`${muted ? 'opacity-60' : ''}`}
       >
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black text-white shadow-sm dark:bg-white dark:text-black">
-            <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
+        {/* Agent header */}
+        <div className="flex items-start gap-3 mb-3">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black">
+            <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Super Agent</p>
-              {payload.statusLine ? (
-                <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                  {payload.statusLine}
-                </span>
-              ) : null}
-            </div>
-            <h3 className="mt-2 text-lg font-semibold leading-7 text-gray-900 dark:text-white">{payload.summary}</h3>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-xs font-semibold text-gray-900 dark:text-white">Super Agent</span>
+            {payload.statusLine ? (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                {payload.statusLine}
+              </span>
+            ) : null}
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3">
-          {sections.map((section) => (
-            <section
-              key={`${payload.id}-${section.title}`}
-              className="rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-4 dark:border-gray-700 dark:bg-gray-800/60"
-            >
-              <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">{section.title}</h4>
-              <div className="mt-3 space-y-2">
-                {section.items.map((item) => (
-                  <p key={item} className="text-sm leading-6 text-gray-700 dark:text-gray-200">
-                    {item}
-                  </p>
+        {/* Summary */}
+        <div className="ml-11">
+          <p className="text-[15px] leading-7 font-medium text-gray-900 dark:text-white">{payload.summary}</p>
+
+          {/* Sections */}
+          {sections.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              {sections.map((section) => (
+                <div
+                  key={`${payload.id}-${section.title}`}
+                  className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/60 dark:bg-gray-800/40"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">{section.title}</p>
+                  <div className="mt-2 space-y-1.5">
+                    {section.items.map((item) => (
+                      <p key={item} className="text-sm leading-6 text-gray-700 dark:text-gray-300">{item}</p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Consulted modules */}
+          {payload.consultedModules.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {payload.consultedModules.map((mod) => (
+                <span
+                  key={`${payload.id}-${mod}`}
+                  className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400"
+                >
+                  {mod}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Agents */}
+          {payload.agents.length > 0 ? (
+            <div className="mt-4 rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900/40">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Agent orchestration</p>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500">{payload.agents.length} specialists</span>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {payload.agents.map((agent) => (
+                  <div key={`${payload.id}-${agent.slug}`} className="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-gray-700/60 dark:bg-gray-800/40">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</p>
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(agent.status)}`}>
+                        {agent.status}
+                      </span>
+                    </div>
+                    {(agent.runtime || agent.mode) ? (
+                      <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
+                        {[agent.runtime, agent.mode].filter(Boolean).join(' · ')}
+                      </p>
+                    ) : null}
+                    <p className="mt-1.5 text-xs leading-5 text-gray-600 dark:text-gray-300">{agent.summary}</p>
+                  </div>
                 ))}
               </div>
-            </section>
-          ))}
-        </div>
-
-        {payload.consultedModules.length > 0 ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {payload.consultedModules.map((moduleName) => (
-              <span
-                key={`${payload.id}-${moduleName}`}
-                className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300"
-              >
-                {moduleName}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        {payload.agents.length > 0 ? (
-          <div className="mt-4 rounded-2xl border border-gray-100 bg-white/80 px-4 py-4 dark:border-gray-700 dark:bg-gray-900/40">
-            <div className="flex items-center justify-between gap-3">
-              <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Agent orchestration</h4>
-              <span className="text-[10px] text-gray-400 dark:text-gray-500">{payload.agents.length} specialists</span>
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {payload.agents.map((agent) => (
-                <div key={`${payload.id}-${agent.slug}`} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 dark:border-gray-700 dark:bg-gray-800/60">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</p>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(agent.status)}`}>
-                      {agent.status}
+          ) : null}
+
+          {/* Steps */}
+          {payload.steps?.length ? (
+            <div className="mt-4 rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900/40">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Execution trace</p>
+                <span className="text-[10px] text-gray-400 dark:text-gray-500">{payload.steps.length} steps</span>
+              </div>
+              <div className="space-y-1.5">
+                {payload.steps.map((step) => (
+                  <div key={`${payload.id}-${step.id}`} className="flex items-start justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-gray-700/60 dark:bg-gray-800/40">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{step.label}</p>
+                      {step.detail ? <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{step.detail}</p> : null}
+                    </div>
+                    <span className={`flex-shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(step.status)}`}>
+                      {step.status}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                    {[agent.runtime, agent.mode].filter(Boolean).join(' · ')}
-                  </p>
-                  <p className="mt-2 text-xs leading-5 text-gray-600 dark:text-gray-300">{agent.summary}</p>
-                </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Actions */}
+          {payload.actions.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {payload.actions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={() => handleAction(action)}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                    action.type === 'navigate'
+                      ? 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'
+                      : 'border-transparent bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                  } ${!action.allowed ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  disabled={action.allowed === false}
+                >
+                  {action.label}
+                </button>
               ))}
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {payload.steps?.length ? (
-          <div className="mt-4 rounded-2xl border border-gray-100 bg-white/80 px-4 py-4 dark:border-gray-700 dark:bg-gray-900/40">
-            <div className="flex items-center justify-between gap-3">
-              <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Execution trace</h4>
-              <span className="text-[10px] text-gray-400 dark:text-gray-500">{payload.steps.length} steps</span>
-            </div>
-            <div className="mt-3 space-y-2">
-              {payload.steps.map((step) => (
-                <div key={`${payload.id}-${step.id}`} className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 dark:border-gray-700 dark:bg-gray-800/60">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{step.label}</p>
-                    {step.detail ? <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{step.detail}</p> : null}
-                  </div>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(step.status)}`}>
-                    {step.status}
-                  </span>
-                </div>
+          {/* Suggested replies */}
+          {payload.suggestedReplies.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {payload.suggestedReplies.map((reply) => (
+                <button
+                  key={`${payload.id}-${reply}`}
+                  type="button"
+                  onClick={() => void sendPrompt(reply)}
+                  className="rounded-full border border-secondary/20 bg-secondary/5 px-3 py-1.5 text-xs font-medium text-secondary transition-all hover:border-secondary/40 hover:bg-secondary/10"
+                >
+                  {reply}
+                </button>
               ))}
             </div>
-          </div>
-        ) : null}
-
-        {payload.actions.length > 0 ? (
-          <div className="mt-5 flex flex-wrap gap-2">
-            {payload.actions.map((action) => (
-              <button
-                key={action.id}
-                type="button"
-                onClick={() => handleAction(action)}
-                className={`rounded-2xl border px-4 py-2.5 text-sm font-semibold transition-all ${
-                  action.type === 'navigate'
-                    ? 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200'
-                    : 'border-transparent bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                } ${!action.allowed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                disabled={action.allowed === false}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {payload.suggestedReplies.length > 0 ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {payload.suggestedReplies.map((reply) => (
-              <button
-                key={`${payload.id}-${reply}`}
-                type="button"
-                onClick={() => void sendPrompt(reply)}
-                className="rounded-full border border-secondary/20 bg-secondary/5 px-3 py-1.5 text-xs font-medium text-secondary transition-all hover:border-secondary/40 hover:bg-secondary/10"
-              >
-                {reply}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      </motion.div>
     );
   }
 
-  const sectionMeta = activeSection === 'live-runs'
-    ? {
-        pill: 'Live Runs',
-        title: 'Seguimiento operativo en tiempo real',
-        description: 'Sigue el avance de agentes, pasos de investigación y ejecuciones largas desde el centro de mando.',
-        quickReplies: ['Revisa pagos pendientes', 'Abre aprobaciones pendientes', 'Investiga un pedido con conflicto'],
-      }
-    : activeSection === 'guardrails'
-    ? {
-        pill: 'Guardrails',
-        title: 'Control, aprobaciones y trazabilidad',
-        description: 'Revisa permisos efectivos, acciones sensibles y la capa de seguridad que protege escrituras y automatizaciones.',
-        quickReplies: ['Explica por que una accion esta bloqueada', 'Abre aprobaciones pendientes', 'Prepara el siguiente paso operativo'],
-      }
-    : {
-        pill: 'Command Center',
-        title: 'Opera el SaaS desde un unico punto de control',
-        description: 'Investiga entidades, cruza modulos, entiende bloqueos reales, coordina especialistas y ejecuta cambios con trazabilidad.',
-        quickReplies: bootstrap?.quickActions || [],
-      };
-
   function renderStreamingMessage(activity: StreamActivity) {
     return (
-      <div className="rounded-[28px] border border-white/80 bg-white/85 px-6 py-5 shadow-card backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/85">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black text-white shadow-sm dark:bg-white dark:text-black">
-            <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+      >
+        <div className="flex items-start gap-3 mb-3">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black">
+            <span className="material-symbols-outlined text-[14px] animate-pulse">auto_awesome</span>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Super Agent live run</p>
-              <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                {activity.statusLine}
-              </span>
-            </div>
-            <h3 className="mt-2 text-lg font-semibold leading-7 text-gray-900 dark:text-white">
-              {activity.text || 'Reading modules and assembling the operational answer...'}
-            </h3>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-xs font-semibold text-gray-900 dark:text-white">Super Agent</span>
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              {activity.statusLine}
+            </span>
           </div>
         </div>
+        <div className="ml-11">
+          <p className="text-[15px] leading-7 font-medium text-gray-900 dark:text-white">
+            {activity.text || 'Reading modules and assembling the operational answer...'}
+          </p>
 
-        {activity.steps.length > 0 ? (
-          <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-4 dark:border-gray-700 dark:bg-gray-800/60">
-            <h4 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Live execution</h4>
-            <div className="mt-3 space-y-2">
-              {activity.steps.map((step) => (
-                <div key={`${activity.runId}-${step.id}`} className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{step.label}</p>
-                    {step.detail ? <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{step.detail}</p> : null}
+          {activity.steps.length > 0 ? (
+            <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-800/40">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 mb-3">Live execution</p>
+              <div className="space-y-1.5">
+                {activity.steps.map((step) => (
+                  <div key={`${activity.runId}-${step.id}`} className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{step.label}</p>
+                      {step.detail ? <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{step.detail}</p> : null}
+                    </div>
+                    <span className={`flex-shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(step.status)}`}>
+                      {step.status}
+                    </span>
                   </div>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusTone(step.status)}`}>
-                    {step.status}
-                  </span>
-                </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {activity.agents.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {activity.agents.map((agent) => (
+                <span
+                  key={`${activity.runId}-${agent.slug}`}
+                  className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400"
+                >
+                  {agent.name} · {agent.status}
+                </span>
               ))}
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {activity.agents.length > 0 ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {activity.agents.map((agent) => (
-              <span
-                key={`${activity.runId}-${agent.slug}`}
-                className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300"
-              >
-                {agent.name} · {agent.status}
-              </span>
-            ))}
-          </div>
-        ) : null}
+          {activity.error ? (
+            <div className="mt-3 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/30 dark:bg-rose-900/10 dark:text-rose-300">
+              {activity.error}
+            </div>
+          ) : null}
 
-        {activity.error ? (
-          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-300">
-            {activity.error}
-          </div>
-        ) : null}
-      </div>
+          {!activity.text && !activity.error ? (
+            <div className="mt-3 flex gap-1">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.2s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.1s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300" />
+            </div>
+          ) : null}
+        </div>
+      </motion.div>
     );
   }
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
-      <div className="relative mx-2 my-2 flex-1 overflow-hidden rounded-[28px] border border-gray-200/80 bg-[#f7f5ef] shadow-soft dark:border-gray-800 dark:bg-[#151515]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(110,98,229,0.16),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(31,31,31,0.1),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.74),rgba(255,255,255,0))] dark:bg-[radial-gradient(circle_at_top,rgba(110,98,229,0.22),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.06),transparent_20%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0))]" />
+      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
 
-        <div className="relative flex h-full min-h-0">
-          <section className="flex min-w-0 flex-1 flex-col">
-            <header className="border-b border-white/70 px-6 py-5 backdrop-blur-sm dark:border-gray-800/80">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-black/10 bg-black/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
-                      {sectionMeta.pill}
-                    </span>
-                    {permissionMatrix ? (
-                      <span className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${roleTone(permissionMatrix.accessLevel)}`}>
-                        {permissionMatrix.accessLevel}
-                      </span>
-                    ) : null}
-                  </div>
-                  <h1 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-gray-900 dark:text-white">
-                    {bootstrap?.welcomeTitle || 'Super Agent'}
-                  </h1>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
-                    {sectionMeta.description || bootstrap?.welcomeSubtitle || 'Unified command center for reading state, coordinating agents, and executing controlled actions.'}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {bootstrap?.localAgents?.length ? (
-                    <span className="rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-xs font-medium text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
-                      {bootstrap.localAgents.length} local agents online
+        {/* Header */}
+        <div className="flex-shrink-0 z-20">
+          <div className="bg-white dark:bg-card-dark border-b border-gray-100 dark:border-gray-800">
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Super Agent</h1>
+                  {permissionMatrix ? (
+                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${roleTone(permissionMatrix.accessLevel)}`}>
+                      {permissionMatrix.accessLevel}
                     </span>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setIsPanelOpen((current) => !current)}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white/80 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-white dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-200 dark:hover:bg-gray-900"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">right_panel_open</span>
-                    {isPanelOpen ? 'Hide context' : 'Show context'}
-                  </button>
+                  {isStreamConnected ? (
+                    <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Live
+                    </span>
+                  ) : null}
                 </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {sectionMeta.description}
+                </p>
               </div>
-            </header>
+              <div className="flex items-center gap-2">
+                {bootstrap?.localAgents?.length ? (
+                  <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+                    {bootstrap.localAgents.length} agents online
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setIsPanelOpen((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    isPanelOpen
+                      ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-black'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">right_panel_open</span>
+                  Context
+                </button>
+              </div>
+            </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-56 pt-8">
-              <div className="mx-auto flex max-w-4xl flex-col gap-5">
+            {/* Section tabs */}
+            <div className="px-6 flex items-center gap-6 pt-1">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => navigateToSection(tab.id)}
+                  className={`pb-3 flex items-center gap-1.5 text-sm transition-colors border-b-2 ${
+                    activeSection === tab.id
+                      ? 'font-bold text-gray-900 dark:text-white border-black dark:border-white'
+                      : 'font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">{tab.icon}</span>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex flex-1 min-h-0">
+
+          {/* Chat area */}
+          <div className="flex flex-1 flex-col min-w-0 relative">
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-60 pt-8">
+              <div className="mx-auto flex max-w-3xl flex-col gap-8">
+
+                {/* Bootstrapping */}
                 {isBootstrapping ? (
-                  <div className="rounded-[28px] border border-white/80 bg-white/70 px-8 py-12 text-center shadow-card backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/80">
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-black text-white dark:bg-white dark:text-black">
-                      <span className="material-symbols-outlined text-[24px]">auto_awesome</span>
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                      <span className="material-symbols-outlined text-[22px] text-gray-400 dark:text-gray-500 animate-pulse">auto_awesome</span>
                     </div>
-                    <h2 className="mt-4 text-xl font-semibold text-gray-900 dark:text-white">Preparing the command center</h2>
-                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                      Loading workspace context, permissions, and the local specialist roster.
-                    </p>
+                    <p className="mt-4 text-sm font-medium text-gray-700 dark:text-gray-300">Preparing the command center</p>
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Loading workspace context, permissions, and agent roster...</p>
                   </div>
                 ) : null}
 
+                {/* Empty state */}
                 {!isBootstrapping && messages.length === 0 && bootstrap ? (
-                  <>
-                    <div className="rounded-[32px] border border-white/90 bg-white/80 px-8 py-10 shadow-soft backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/85">
-                      <div className="mx-auto max-w-2xl text-center">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500 dark:text-gray-400">
-                          {sectionMeta.pill}
-                        </p>
-                        <h2 className="mt-4 text-4xl font-semibold tracking-[-0.04em] text-gray-900 dark:text-white">
-                          {sectionMeta.title}
-                        </h2>
-                        <p className="mt-4 text-base leading-7 text-gray-600 dark:text-gray-300">
-                          {sectionMeta.description}
-                        </p>
+                  <AnimatePresence>
+                    <motion.div
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="flex flex-col items-center text-center pt-12 pb-8"
+                    >
+                      {/* Icon */}
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-black text-white dark:bg-white dark:text-black shadow-sm">
+                        <span className="material-symbols-outlined text-[24px]">auto_awesome</span>
                       </div>
 
-                      <div className="mt-8 grid gap-3 md:grid-cols-4">
-                        {bootstrap.overview.map((card) => (
-                          <div key={card.label} className="rounded-2xl border border-gray-100 bg-gray-50/90 px-4 py-4 dark:border-gray-700 dark:bg-gray-800/60">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">{card.label}</p>
-                            <p className="mt-3 text-2xl font-semibold text-gray-900 dark:text-white">{card.value}</p>
-                            <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{card.detail}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                      <h2 className="mt-5 text-3xl font-semibold tracking-[-0.03em] text-gray-900 dark:text-white">
+                        {sectionMeta.title}
+                      </h2>
+                      <p className="mt-3 max-w-lg text-sm leading-6 text-gray-500 dark:text-gray-400">
+                        {sectionMeta.description}
+                      </p>
 
-                    <div className="rounded-[28px] border border-white/80 bg-white/70 px-6 py-6 shadow-card backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/80">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Quick actions</p>
-                          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Start from a realistic operational task adapted to the current workspace.</p>
-                        </div>
-                        {permissionMatrix ? (
-                          <div className="rounded-2xl border border-gray-200 bg-white/80 px-4 py-3 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
-                            <span className="font-semibold text-gray-900 dark:text-white">{permissionMatrix.roleId}</span>
-                            <div className="mt-1">{permissionMatrix.preview.join(' • ')}</div>
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        {sectionMeta.quickReplies.map((action) => (
-                          <button
-                            key={action}
-                            type="button"
-                            onClick={() => void sendPrompt(action)}
-                            className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:border-secondary/40 hover:text-secondary dark:border-gray-700 dark:bg-gray-900/70 dark:text-gray-200"
-                          >
-                            {action}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {bootstrap.localAgents?.length ? (
-                      <div className="grid gap-3 md:grid-cols-3">
-                        {bootstrap.localAgents.slice(0, 6).map((agent) => (
-                          <div key={agent.slug} className="rounded-2xl border border-white/70 bg-white/65 px-4 py-4 shadow-card backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/75">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</p>
-                              <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                                {agent.runtime}
-                              </span>
+                      {/* Overview cards */}
+                      {bootstrap.overview.length > 0 ? (
+                        <div className="mt-10 w-full grid gap-3 md:grid-cols-4">
+                          {bootstrap.overview.map((card) => (
+                            <div key={card.label} className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 text-left dark:border-gray-700/60 dark:bg-gray-800/40">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">{card.label}</p>
+                              <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{card.value}</p>
+                              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{card.detail}</p>
                             </div>
-                            <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">
-                              {agent.mode || 'available'} specialist ready for orchestration from the central command layer.
-                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {/* Quick actions */}
+                      {sectionMeta.quickReplies.length > 0 ? (
+                        <div className="mt-8 w-full">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 mb-4">Quick actions</p>
+                          <div className="flex flex-wrap justify-center gap-2">
+                            {sectionMeta.quickReplies.map((action) => (
+                              <button
+                                key={action}
+                                type="button"
+                                onClick={() => void sendPrompt(action)}
+                                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:border-gray-300 hover:shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-600"
+                              >
+                                {action}
+                              </button>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </>
+                        </div>
+                      ) : null}
+
+                      {/* Local agents */}
+                      {bootstrap.localAgents?.length ? (
+                        <div className="mt-10 w-full">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 mb-4">Available specialists</p>
+                          <div className="grid gap-2 md:grid-cols-3">
+                            {bootstrap.localAgents.slice(0, 6).map((agent) => (
+                              <div key={agent.slug} className="rounded-xl border border-gray-100 bg-white px-4 py-3 text-left dark:border-gray-700/60 dark:bg-gray-900/40">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{agent.name}</p>
+                                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                    {agent.runtime}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                  {agent.mode || 'available'} · ready for orchestration
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </motion.div>
+                  </AnimatePresence>
                 ) : null}
 
+                {/* Messages */}
                 {messages.map((message) =>
                   message.role === 'user' ? (
-                    <div key={message.id} className="flex justify-end">
-                      <div className="max-w-2xl rounded-[26px] rounded-br-md border border-gray-200 bg-[#f1ede4] px-5 py-4 text-sm leading-6 text-gray-800 shadow-card dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                    <motion.div
+                      key={message.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="flex justify-end"
+                    >
+                      <div className="max-w-xl rounded-2xl bg-gray-100 px-5 py-3.5 text-[15px] leading-7 text-gray-900 dark:bg-gray-800 dark:text-white">
                         {message.text}
                       </div>
-                    </div>
+                    </motion.div>
                   ) : (
                     renderAssistantMessage(message.payload, message.muted === true)
-                  ),
+                  )
                 )}
 
+                {/* Streaming */}
                 {isSending && streamActivity ? renderStreamingMessage(streamActivity) : null}
 
                 {isSending && !streamActivity ? (
-                  <div className="rounded-[24px] border border-white/80 bg-white/80 px-5 py-4 shadow-card dark:border-gray-700 dark:bg-card-dark/80">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-black text-white dark:bg-white dark:text-black">
-                        <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black">
+                        <span className="material-symbols-outlined text-[14px] animate-pulse">auto_awesome</span>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800 dark:text-gray-100">Reading modules and assembling the operational answer...</p>
-                        <div className="mt-2 flex gap-1">
-                          <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.2s]" />
-                          <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.1s]" />
-                          <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" />
-                        </div>
+                      <div className="pt-1.5 flex gap-1">
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.2s]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.1s]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300" />
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 ) : null}
 
                 <div ref={bottomRef} />
               </div>
             </div>
 
-            <div className="absolute inset-x-0 bottom-0 z-20 border-t border-white/70 bg-[linear-gradient(180deg,rgba(247,245,239,0),rgba(247,245,239,0.95)_25%,rgba(247,245,239,1)_100%)] px-6 pb-6 pt-10 backdrop-blur-md dark:border-gray-800/80 dark:bg-[linear-gradient(180deg,rgba(21,21,21,0),rgba(21,21,21,0.92)_25%,rgba(21,21,21,1)_100%)]">
-              <div className="mx-auto max-w-4xl">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  {sectionMeta.quickReplies.slice(0, 5).map((action) => (
-                    <button
-                      key={`input-${action}`}
-                      type="button"
-                      onClick={() => void sendPrompt(action)}
-                      className="rounded-full border border-gray-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-gray-600 transition-all hover:border-secondary/40 hover:text-secondary dark:border-gray-700 dark:bg-gray-900/70 dark:text-gray-300"
+            {/* Input area — floats at bottom */}
+            <div className="absolute inset-x-0 bottom-0 z-10 px-6 pb-6 pt-16 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-card-dark dark:via-card-dark/95">
+              <div className="mx-auto max-w-3xl">
+
+                {/* Flash message */}
+                <AnimatePresence>
+                  {flashMessage ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 4 }}
+                      className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-sm text-amber-700 dark:border-amber-900/30 dark:bg-amber-900/10 dark:text-amber-300"
                     >
-                      {action}
-                    </button>
-                  ))}
-                </div>
+                      {flashMessage}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
 
-                {flashMessage ? (
-                  <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
-                    {flashMessage}
-                  </div>
-                ) : null}
-
-                {pendingAction ? (
-                  <div className="mb-3 rounded-[24px] border border-gray-200 bg-white/90 px-5 py-4 shadow-card dark:border-gray-700 dark:bg-card-dark/90">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Confirmation required</p>
-                        <p className="mt-2 text-base font-semibold text-gray-900 dark:text-white">{pendingAction.label}</p>
-                        <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">{pendingAction.description}</p>
+                {/* Pending action confirmation */}
+                <AnimatePresence>
+                  {pendingAction ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 4 }}
+                      className="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Confirmation required</p>
+                          <p className="mt-1.5 text-sm font-semibold text-gray-900 dark:text-white">{pendingAction.label}</p>
+                          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{pendingAction.description}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPendingAction(null)}
+                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void confirmPendingAction()}
+                            disabled={isExecuting}
+                            className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-black"
+                          >
+                            {isExecuting ? 'Executing...' : 'Confirm'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setPendingAction(null)}
-                          className="rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-200"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void confirmPendingAction()}
-                          disabled={isExecuting}
-                          className="rounded-2xl bg-black px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
-                        >
-                          {isExecuting ? 'Executing...' : 'Confirm action'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
 
-                <div className="rounded-[30px] border border-white/90 bg-white/92 p-3 shadow-soft backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/92">
-                  <div className="mb-3 flex flex-wrap items-center gap-2 px-2">
+                {/* Composer */}
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                  {/* Mode toggle row */}
+                  <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 border-b border-gray-100 dark:border-gray-800">
                     <button
                       type="button"
                       onClick={() => setMode('investigate')}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
                         mode === 'investigate'
-                          ? 'bg-black text-white dark:bg-white dark:text-black'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                          ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                          : 'bg-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                       }`}
                     >
                       Investigate
@@ -1058,188 +1069,218 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setMode('operate')}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
                         mode === 'operate'
                           ? 'bg-secondary text-white'
-                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                          : 'bg-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                       }`}
                     >
                       Operate
                     </button>
-                    <div className="ml-auto text-[11px] text-gray-400 dark:text-gray-500">
-                      {mode === 'investigate'
-                        ? 'Read state, explain blockers, connect modules.'
-                        : 'Prepare guarded actions and execute with confirmation.'}
-                    </div>
+                    <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500">
+                      {mode === 'investigate' ? 'Read state, explain blockers, connect modules' : 'Prepare guarded actions and execute with confirmation'}
+                    </span>
                   </div>
 
-                  <div className="flex items-end gap-3">
-                    <div className="flex-1 rounded-[24px] border border-gray-200 bg-[#f7f5ef] px-4 py-3 dark:border-gray-700 dark:bg-gray-900/60">
-                      <textarea
-                        value={composerText}
-                        onChange={(event) => setComposerText(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' && !event.shiftKey) {
-                            event.preventDefault();
-                            void sendPrompt();
-                          }
-                        }}
-                        placeholder={
-                          mode === 'investigate'
-                            ? 'Ask about an order, payment, customer, case, approval, policy, or inconsistency...'
-                            : 'Ask to update status, refund a payment, cancel an order, publish a workflow, or request approval...'
+                  {/* Textarea + send button */}
+                  <div className="flex items-end gap-3 px-4 py-3">
+                    <textarea
+                      value={composerText}
+                      onChange={(e) => setComposerText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          void sendPrompt();
                         }
-                        className="min-h-[92px] w-full resize-none bg-transparent text-[15px] leading-7 text-gray-800 outline-none placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-gray-500"
-                      />
-                    </div>
-
+                      }}
+                      placeholder={
+                        mode === 'investigate'
+                          ? 'Ask about an order, payment, customer, case, approval, or inconsistency...'
+                          : 'Ask to update a status, process a refund, cancel an order, or publish a workflow...'
+                      }
+                      className="flex-1 min-h-[72px] resize-none bg-transparent text-sm leading-6 text-gray-800 outline-none placeholder:text-gray-400 dark:text-gray-100 dark:placeholder:text-gray-500"
+                    />
                     <button
                       type="button"
                       onClick={() => void sendPrompt()}
                       disabled={!composerText.trim() || isSending || isExecuting}
-                      className="flex h-14 w-14 items-center justify-center rounded-2xl bg-black text-white transition-all hover:scale-[1.02] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-black"
+                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-black text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30 dark:bg-white dark:text-black"
                     >
-                      <span className="material-symbols-outlined text-[20px]">arrow_upward</span>
+                      <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
                     </button>
                   </div>
-                </div>
-              </div>
-            </div>
-          </section>
 
-          <aside
-            className={`relative border-l border-white/70 bg-white/78 backdrop-blur-xl transition-all duration-300 dark:border-gray-800/80 dark:bg-card-dark/78 ${
-              isPanelOpen ? 'w-[360px] max-w-[42vw]' : 'w-0'
-            } overflow-hidden`}
-          >
-            <div className="flex h-full min-h-0 flex-col">
-              <div className="border-b border-gray-100 px-5 py-5 dark:border-gray-800">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Context panel</p>
-                    <h2 className="mt-2 text-lg font-semibold text-gray-900 dark:text-white">
-                      {contextPanel?.title || 'No entity selected'}
-                    </h2>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      {contextPanel?.subtitle || 'Structured operational context will appear here.'}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsPanelOpen(false)}
-                    className="rounded-xl border border-gray-200 bg-white p-2 text-gray-500 transition-colors hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:text-white"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">close</span>
-                  </button>
-                </div>
-
-                {contextPanel ? (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {contextPanel.status ? (
-                      <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${statusTone(contextPanel.status)}`}>
-                        {contextPanel.status}
-                      </span>
-                    ) : null}
-                    {contextPanel.risk ? (
-                      <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${statusTone(contextPanel.risk)}`}>
-                        {contextPanel.risk}
-                      </span>
-                    ) : null}
-                    <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
-                      {contextPanel.entityType}
-                    </span>
-                  </div>
-                ) : null}
-
-                {contextPanel?.description ? (
-                  <p className="mt-4 text-sm leading-6 text-gray-600 dark:text-gray-300">{contextPanel.description}</p>
-                ) : null}
-              </div>
-
-              <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-5">
-                {contextPanel ? (
-                  <div className="space-y-5">
-                    <section className="rounded-2xl border border-gray-100 bg-gray-50/90 p-4 dark:border-gray-700 dark:bg-gray-800/60">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Facts</h3>
-                      <div className="mt-3 space-y-3">
-                        {contextPanel.facts.map((fact) => (
-                          <div key={`${contextPanel.title}-${fact.label}`} className="flex items-start justify-between gap-3">
-                            <span className="text-xs uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">{fact.label}</span>
-                            <span className="text-sm text-right font-medium text-gray-900 dark:text-white">{fact.value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section className="rounded-2xl border border-gray-100 bg-white/90 p-4 dark:border-gray-700 dark:bg-gray-900/40">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Evidence</h3>
-                      <div className="mt-3 space-y-3">
-                        {contextPanel.evidence.map((evidence) => (
-                          <div key={`${contextPanel.title}-${evidence.label}`} className={`rounded-xl border px-3 py-3 ${statusTone(evidence.tone)}`}>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em]">{evidence.label}</p>
-                            <p className="mt-2 text-sm leading-6">{evidence.value}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section className="rounded-2xl border border-gray-100 bg-white/90 p-4 dark:border-gray-700 dark:bg-gray-900/40">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Timeline</h3>
-                      <div className="mt-3 space-y-3">
-                        {contextPanel.timeline.length > 0 ? contextPanel.timeline.map((entry) => (
-                          <div key={`${contextPanel.title}-${entry.label}-${entry.time || entry.value}`} className="rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-3 dark:border-gray-700 dark:bg-gray-800/60">
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="text-sm font-semibold text-gray-900 dark:text-white">{entry.label}</p>
-                              {entry.time ? (
-                                <span className="text-[10px] text-gray-400 dark:text-gray-500">{entry.time}</span>
-                              ) : null}
-                            </div>
-                            <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{entry.value}</p>
-                          </div>
-                        )) : (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">No timeline entries available for this context yet.</p>
-                        )}
-                      </div>
-                    </section>
-
-                    <section className="rounded-2xl border border-gray-100 bg-white/90 p-4 dark:border-gray-700 dark:bg-gray-900/40">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Related</h3>
-                      <div className="mt-3 space-y-2">
-                        {contextPanel.related.length > 0 ? contextPanel.related.map((link) => (
-                          <button
-                            key={`${contextPanel.title}-${link.label}-${link.value}`}
-                            type="button"
-                            onClick={() => {
-                              navigateToTarget(link.navigationTarget, link.targetPage, link.focusId ?? null);
-                            }}
-                            className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-3 text-left transition-colors hover:border-secondary/30 hover:text-secondary dark:border-gray-700 dark:bg-gray-800/60"
-                          >
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">{link.label}</p>
-                              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white">{link.value}</p>
-                            </div>
-                            <span className="material-symbols-outlined text-[18px] text-gray-300 dark:text-gray-500">open_in_new</span>
-                          </button>
-                        )) : (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">No related entities linked to this context.</p>
-                        )}
-                      </div>
-                    </section>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-gray-200 bg-white/70 px-5 py-8 text-center dark:border-gray-700 dark:bg-gray-900/40">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-300">
-                      <span className="material-symbols-outlined text-[22px]">hub</span>
+                  {/* Quick prompts row */}
+                  {sectionMeta.quickReplies.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 px-4 pb-3">
+                      {sectionMeta.quickReplies.slice(0, 4).map((action) => (
+                        <button
+                          key={`input-${action}`}
+                          type="button"
+                          onClick={() => void sendPrompt(action)}
+                          className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                          {action}
+                        </button>
+                      ))}
                     </div>
-                    <p className="mt-4 text-sm font-medium text-gray-700 dark:text-gray-200">The structured context will appear here.</p>
-                    <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
-                      Ask the Super Agent about a case, order, payment, return, customer, approval, workflow, or inconsistency.
-                    </p>
-                  </div>
-                )}
+                  ) : null}
+                </div>
               </div>
             </div>
-          </aside>
+          </div>
+
+          {/* Context panel */}
+          <AnimatePresence>
+            {isPanelOpen ? (
+              <motion.aside
+                key="context-panel"
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 340, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="flex-shrink-0 border-l border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20 overflow-hidden"
+                style={{ minWidth: 0 }}
+              >
+                <div className="flex h-full flex-col w-[340px]">
+                  {/* Panel header */}
+                  <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-800 px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Context panel</p>
+                        <h2 className="mt-1.5 text-sm font-semibold text-gray-900 dark:text-white truncate">
+                          {contextPanel?.title || 'No entity selected'}
+                        </h2>
+                        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                          {contextPanel?.subtitle || 'Structured operational context appears here.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsPanelOpen(false)}
+                        className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">close</span>
+                      </button>
+                    </div>
+
+                    {contextPanel ? (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <span className="rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-[10px] font-medium text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                          {contextPanel.entityType}
+                        </span>
+                        {contextPanel.status ? (
+                          <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${statusTone(contextPanel.status)}`}>
+                            {contextPanel.status}
+                          </span>
+                        ) : null}
+                        {contextPanel.risk ? (
+                          <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${statusTone(contextPanel.risk)}`}>
+                            {contextPanel.risk}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {contextPanel?.description ? (
+                      <p className="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">{contextPanel.description}</p>
+                    ) : null}
+                  </div>
+
+                  {/* Panel content */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-5 space-y-4">
+                    {contextPanel ? (
+                      <>
+                        {/* Facts */}
+                        <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900/40">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 mb-3">Facts</p>
+                          <div className="space-y-2.5">
+                            {contextPanel.facts.map((fact) => (
+                              <div key={`${contextPanel.title}-${fact.label}`} className="flex items-start justify-between gap-3">
+                                <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 flex-shrink-0">{fact.label}</span>
+                                <span className="text-xs font-medium text-right text-gray-900 dark:text-white">{fact.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Evidence */}
+                        {contextPanel.evidence.length > 0 ? (
+                          <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900/40">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 mb-3">Evidence</p>
+                            <div className="space-y-2">
+                              {contextPanel.evidence.map((ev) => (
+                                <div key={`${contextPanel.title}-${ev.label}`} className={`rounded-lg border px-3 py-2.5 ${statusTone(ev.tone)}`}>
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide">{ev.label}</p>
+                                  <p className="mt-1 text-xs leading-5">{ev.value}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Timeline */}
+                        <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900/40">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 mb-3">Timeline</p>
+                          {contextPanel.timeline.length > 0 ? (
+                            <div className="space-y-2">
+                              {contextPanel.timeline.map((entry) => (
+                                <div
+                                  key={`${contextPanel.title}-${entry.label}-${entry.time || entry.value}`}
+                                  className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-gray-700/60 dark:bg-gray-800/40"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className="text-xs font-semibold text-gray-900 dark:text-white">{entry.label}</p>
+                                    {entry.time ? <span className="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0">{entry.time}</span> : null}
+                                  </div>
+                                  <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{entry.value}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-400 dark:text-gray-500">No timeline entries available.</p>
+                          )}
+                        </div>
+
+                        {/* Related */}
+                        {contextPanel.related.length > 0 ? (
+                          <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-700/60 dark:bg-gray-900/40">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500 mb-3">Related</p>
+                            <div className="space-y-1.5">
+                              {contextPanel.related.map((link) => (
+                                <button
+                                  key={`${contextPanel.title}-${link.label}-${link.value}`}
+                                  type="button"
+                                  onClick={() => navigateToTarget(link.navigationTarget, link.targetPage, link.focusId ?? null)}
+                                  className="flex w-full items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-left transition-colors hover:border-secondary/30 hover:bg-secondary/5 dark:border-gray-700/60 dark:bg-gray-800/40"
+                                >
+                                  <div>
+                                    <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">{link.label}</p>
+                                    <p className="mt-0.5 text-xs font-semibold text-gray-900 dark:text-white">{link.value}</p>
+                                  </div>
+                                  <span className="material-symbols-outlined text-[14px] text-gray-300 dark:text-gray-600">open_in_new</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
+                          <span className="material-symbols-outlined text-[18px] text-gray-400 dark:text-gray-500">hub</span>
+                        </div>
+                        <p className="mt-3 text-sm font-medium text-gray-600 dark:text-gray-300">No context selected</p>
+                        <p className="mt-1 text-xs leading-5 text-gray-400 dark:text-gray-500 max-w-[200px]">
+                          Ask the Super Agent about a case, order, payment, customer, or workflow.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.aside>
+            ) : null}
+          </AnimatePresence>
         </div>
       </div>
     </div>
