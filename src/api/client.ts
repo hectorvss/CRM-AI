@@ -398,6 +398,20 @@ export const auditApi = {
   entity: (entityType: string, entityId: string) => request<any>(`/audit/${entityType}/${entityId}`).then(unwrapList),
 };
 
+export const superAgentApi = {
+  bootstrap: () => request<any>('/super-agent/bootstrap'),
+  command: (input: string, options?: { runId?: string; mode?: string; context?: Record<string, any> }) =>
+    request<any>('/super-agent/command', {
+      method: 'POST',
+      body: JSON.stringify({ input, ...options }),
+    }),
+  execute: (payload: Record<string, any>, confirmed = true, options?: { runId?: string; sourceContext?: string }) =>
+    request<any>('/super-agent/execute', {
+      method: 'POST',
+      body: JSON.stringify({ payload, confirmed, ...options }),
+    }),
+};
+
 // ── Health ────────────────────────────────────────────────
 export const healthApi = {
   check: () => request<any>('/health'),

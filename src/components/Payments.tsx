@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Payment, PaymentTab, OrderTimelineEvent, Page } from '../types';
+import { Payment, PaymentTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseCopilotPanel from './CaseCopilotPanel';
 import { paymentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
 
 interface PaymentsProps {
   onNavigate?: NavigateFn;
+  focusEntityId?: string | null;
+  focusSection?: string | null;
 }
 
 const formatDate = (value?: string | null) =>
@@ -201,7 +202,7 @@ const PAYMENTS: Payment[] = [
   }
 ];
 
-export default function Payments({ onNavigate }: PaymentsProps) {
+export default function Payments({ onNavigate, focusEntityId, focusSection }: PaymentsProps) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<PaymentTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
@@ -294,6 +295,22 @@ export default function Payments({ onNavigate }: PaymentsProps) {
       setSelectedId(filteredPayments[0].id);
     }
   }, [activeTab, filteredPayments, selectedId]);
+
+  useEffect(() => {
+    if (focusSection && ['all', 'refunds', 'disputes', 'reconciliation', 'blocked'].includes(focusSection) && activeTab !== focusSection) {
+      setActiveTab(focusSection as PaymentTab);
+    }
+  }, [activeTab, focusSection]);
+
+  useEffect(() => {
+    if (!focusEntityId) return;
+    if (activeTab !== 'all') {
+      setActiveTab('all');
+    }
+    if (selectedId !== focusEntityId) {
+      setSelectedId(focusEntityId);
+    }
+  }, [activeTab, focusEntityId, selectedId]);
 
   const handleRefund = async (payment: Payment) => {
     setActionMessage(null);

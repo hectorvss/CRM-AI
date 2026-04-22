@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { workflowsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
-import type { Page } from '../types';
+import type { NavigateFn } from '../types';
 import LoadingState from './LoadingState';
 
 type WorkflowView = 'list' | 'builder' | 'new';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
 
 interface WorkflowsProps {
   onNavigate?: NavigateFn;
+  focusWorkflowId?: string | null;
 }
 
 interface Workflow {
@@ -177,7 +177,7 @@ const TEMPLATE_LIBRARY = [
   },
 ] as const;
 
-export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
+export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: WorkflowsProps) {
   void _onNavigate;
   const [view, setView] = useState<WorkflowView>('list');
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
@@ -215,6 +215,16 @@ export default function Workflows({ onNavigate: _onNavigate }: WorkflowsProps) {
   });
 
   const workflows = Array.isArray(apiWorkflows) ? apiWorkflows.map(mapApiWorkflow) : [];
+
+  useEffect(() => {
+    if (!focusWorkflowId || workflows.length === 0) return;
+    const target = workflows.find((workflow) => workflow.id === focusWorkflowId);
+    if (!target) return;
+    if (selectedWorkflow?.id !== target.id || view !== 'builder') {
+      setSelectedWorkflow(target);
+      setView('builder');
+    }
+  }, [focusWorkflowId, selectedWorkflow?.id, view, workflows]);
 
   if (workflowsLoading && workflows.length === 0) {
     return <LoadingState title="Loading workflows" message="Fetching live workflow definitions from Supabase." />;
