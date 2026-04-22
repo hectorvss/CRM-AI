@@ -69,6 +69,7 @@ function pickLatestMatch<T extends Record<string, any>>(items: T[], predicate: (
 }
 
 function buildTimeline(bundle: any) {
+  const connectorsById = new Map<string, any>((bundle.connectors ?? []).map((connector: any) => [String(connector.id), connector]));
   const timeline = [
     ...(bundle.messages ?? []).map((message: any) => ({
       id: message.id,
@@ -219,12 +220,22 @@ function buildTimeline(bundle: any) {
       entry_type: 'webhook_event',
       type: event.event_type || 'webhook_event',
       domain: 'integrations',
-      actor: event.source_system || 'webhook',
-      content: `Webhook ${event.event_type || 'received'} (${event.status || 'received'})`,
+      actor: (() => {
+        const connector = event.connector_id ? connectorsById.get(String(event.connector_id)) : null;
+        return connector?.name || event.source_system || 'webhook';
+      })(),
+      content: (() => {
+        const connector = event.connector_id ? connectorsById.get(String(event.connector_id)) : null;
+        const connectorLabel = connector?.system || connector?.name || event.connector_id;
+        return `Webhook ${event.event_type || 'received'} (${event.status || 'received'})${connectorLabel ? ` via ${connectorLabel}` : ''}`;
+      })(),
       occurred_at: event.received_at || event.processed_at,
       icon: 'webhook',
       severity: branchHealthFromStatus(event.status || 'warning'),
-      source: event.source_system || 'webhook',
+      source: (() => {
+        const connector = event.connector_id ? connectorsById.get(String(event.connector_id)) : null;
+        return connector?.system || event.source_system || 'webhook';
+      })(),
     })),
     ...(bundle.policy_evaluations ?? []).map((evaluation: any) => ({
       id: evaluation.id,
@@ -354,6 +365,12 @@ function buildCaseState(bundle: any) {
       orderEventsByOrderId.set(event.order_id, [...(orderEventsByOrderId.get(event.order_id) || []), event]);
     }
   }
+  const orderLineItemsByOrderId = new Map<string, any[]>();
+  for (const item of bundle.order_line_items ?? []) {
+    if (item.order_id) {
+      orderLineItemsByOrderId.set(item.order_id, [...(orderLineItemsByOrderId.get(item.order_id) || []), item]);
+    }
+  }
   const returnEventsByReturnId = new Map<string, any[]>();
   for (const event of bundle.return_events ?? []) {
     if (event.return_id) {
@@ -382,6 +399,7 @@ function buildCaseState(bundle: any) {
     const relatedRefunds = refundsByOrderId.get(order.id) || [];
     const relatedIssues = reconciliationIssues.filter((issue: any) => issue.entity_type === 'order' && issue.entity_id === order.id);
     const relatedEvents = orderEventsByOrderId.get(order.id) || [];
+    const relatedLineItems = orderLineItemsByOrderId.get(order.id) || [];
     return [
       buildDerivedNode(
         `order:${order.id}`,
@@ -449,6 +467,15 @@ function buildCaseState(bundle: any) {
         relatedEvents.at(-1)?.time || relatedEvents.at(-1)?.created_at || order.updated_at,
         relatedEvents.at(-1)?.content || 'Order event history',
       ),
+      ...relatedLineItems.map((item: any, index: number) => buildDerivedNode(
+        `order:${order.id}:line-item:${item.id || index}`,
+        item.name || item.sku || `Line item ${index + 1}`,
+        item.quantity > 0 ? 'healthy' : 'warning',
+        'orders',
+        `${item.quantity || 1} × ${item.sku || item.external_item_id || 'item'}`,
+        item.created_at || order.updated_at,
+        item.price ? `${item.currency || order.currency || 'USD'} ${item.price}` : item.external_item_id || item.product_id || 'Line item',
+      )),
     ];
   });
   const paymentNodes = latestBy(bundle.payments ?? [], 'updated_at').flatMap((payment: any) => {
@@ -1137,6 +1164,7 @@ function buildCaseState(bundle: any) {
     },
     related: {
       orders: bundle.orders ?? [],
+      order_line_items: bundle.order_line_items ?? [],
       payments: bundle.payments ?? [],
       returns: bundle.returns ?? [],
       refunds,
@@ -1146,6 +1174,7 @@ function buildCaseState(bundle: any) {
       case_knowledge_links: caseKnowledgeLinks,
       knowledge_articles: knowledgeArticles,
       connectors,
+      webhook_events: bundle.webhook_events ?? [],
       agents,
       agent_versions: agentVersions,
       workflow_runs: workflowRuns,
@@ -1308,6 +1337,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     teamResult,
     caseStatusHistoryResult,
     orderEventsResult,
+    orderLineItemsResult,
     returnEventsResult,
     caseKnowledgeLinksResult,
     connectorsResult,
@@ -1337,6 +1367,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     caseRow.assigned_team_id ? supabase.from('teams').select('name').eq('id', caseRow.assigned_team_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
     supabase.from('case_status_history').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
     asArray<string>(caseRow.order_ids).length ? supabase.from('order_events').select('*').in('order_id', asArray<string>(caseRow.order_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.order_ids).length ? supabase.from('order_line_items').select('*').in('order_id', asArray<string>(caseRow.order_ids)).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: true }) : Promise.resolve({ data: [], error: null } as any),
     asArray<string>(caseRow.return_ids).length ? supabase.from('return_events').select('*').in('return_id', asArray<string>(caseRow.return_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
     supabase.from('case_knowledge_links').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId),
     supabase.from('connectors').select('*').eq('tenant_id', scope.tenantId),
@@ -1351,7 +1382,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     supabase.from('canonical_events').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('occurred_at', { ascending: false }),
   ]);
 
-  for (const result of [customerResult, conversationResult, ordersResult, paymentsResult, returnsResult, refundsResult, approvalsResult, issuesResult, linksResult, draftsResult, notesResult, messagesResult, userResult, teamResult, caseStatusHistoryResult, orderEventsResult, returnEventsResult, caseKnowledgeLinksResult, connectorsResult, agentsResult, executionPlansResult, toolActionAttemptsResult, policyRulesResult, policyEvaluationsResult, webhookEventsResult, workflowRunsResult, agentRunsResult, canonicalEventsResult]) {
+  for (const result of [customerResult, conversationResult, ordersResult, paymentsResult, returnsResult, refundsResult, approvalsResult, issuesResult, linksResult, draftsResult, notesResult, messagesResult, userResult, teamResult, caseStatusHistoryResult, orderEventsResult, orderLineItemsResult, returnEventsResult, caseKnowledgeLinksResult, connectorsResult, agentsResult, executionPlansResult, toolActionAttemptsResult, policyRulesResult, policyEvaluationsResult, webhookEventsResult, workflowRunsResult, agentRunsResult, canonicalEventsResult]) {
     if (result?.error) throw result.error;
   }
 
@@ -1414,6 +1445,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     internal_notes: notesResult.data ?? [],
     messages: messagesResult.data ?? [],
     order_events: orderEventsResult.data ?? [],
+    order_line_items: orderLineItemsResult.data ?? [],
     return_events: returnEventsResult.data ?? [],
     workflow_run_steps: workflowRunStepsResult.data ?? [],
     case_knowledge_links: caseKnowledgeLinksResult.data ?? [],
@@ -1487,6 +1519,9 @@ function fetchCaseBundleSqlite(scope: CaseScope, caseId: string) {
   const orderEvents = parsedCase.order_ids?.length
     ? db.prepare(`SELECT * FROM order_events WHERE tenant_id = ? AND order_id IN (${parsedCase.order_ids.map(() => '?').join(',')}) ORDER BY time ASC`).all(scope.tenantId, ...parsedCase.order_ids)
     : [];
+  const orderLineItems = parsedCase.order_ids?.length
+    ? db.prepare(`SELECT * FROM order_line_items WHERE tenant_id = ? AND workspace_id = ? AND order_id IN (${parsedCase.order_ids.map(() => '?').join(',')}) ORDER BY created_at ASC`).all(scope.tenantId, scope.workspaceId, ...parsedCase.order_ids)
+    : [];
   const returnEvents = parsedCase.return_ids?.length
     ? db.prepare(`SELECT * FROM return_events WHERE tenant_id = ? AND return_id IN (${parsedCase.return_ids.map(() => '?').join(',')}) ORDER BY time ASC`).all(scope.tenantId, ...parsedCase.return_ids)
     : [];
@@ -1526,6 +1561,7 @@ function fetchCaseBundleSqlite(scope: CaseScope, caseId: string) {
     messages: messages.map(parseRow),
     case_status_history: caseStatusHistory.map(parseRow),
     order_events: orderEvents.map(parseRow),
+    order_line_items: orderLineItems.map(parseRow),
     return_events: returnEvents.map(parseRow),
     workflow_run_steps: workflowRunSteps.map(parseRow),
     case_knowledge_links: caseKnowledgeLinks.map(parseRow),

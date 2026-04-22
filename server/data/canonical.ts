@@ -50,7 +50,7 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     orders, payments, returns,
     approvals, workflowRuns, reconciliationIssues, linkedCases,
     messages, internalNotes, statusHistory, canonicalEvents,
-    orderEvents, returnEvents, agentRuns
+    orderEvents, orderLineItems, returnEvents, webhookEvents, agentRuns
   ] = await Promise.all([
     orderIds.length ? supabase.from('orders').select('*').in('id', orderIds) : Promise.resolve({ data: [] }),
     paymentIds.length ? supabase.from('payments').select('*').in('id', paymentIds) : Promise.resolve({ data: [] }),
@@ -64,7 +64,9 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     supabase.from('case_status_history').select('*').eq('case_id', caseId).order('created_at', { ascending: true }),
     supabase.from('canonical_events').select('*').eq('case_id', caseId).order('occurred_at', { ascending: true }),
     orderIds.length ? supabase.from('order_events').select('*').in('order_id', orderIds).order('time', { ascending: true }) : Promise.resolve({ data: [] }),
+    orderIds.length ? supabase.from('order_line_items').select('*').in('order_id', orderIds).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
     returnIds.length ? supabase.from('return_events').select('*').in('return_id', returnIds).order('time', { ascending: true }) : Promise.resolve({ data: [] }),
+    supabase.from('webhook_events').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('received_at', { ascending: true }),
     supabase.from('agent_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('started_at', { ascending: true }),
   ]);
 
@@ -139,7 +141,9 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     statusHistory: statusHistory.data || [],
     canonicalEvents: canonicalEvents.data || [],
     orderEvents: orderEvents.data || [],
+    orderLineItems: orderLineItems.data || [],
     returnEvents: returnEvents.data || [],
+    webhookEvents: webhookEvents.data || [],
     agentRuns: agentRuns.data || [],
     workflowRunSteps: workflowRunStepsRes.data || [],
     refunds: Array.from(new Map([
@@ -266,9 +270,13 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
   const orderEvents = orderIds.length > 0
     ? db.prepare(`SELECT * FROM order_events WHERE tenant_id = ? AND order_id IN (${orderIds.map(() => '?').join(',')}) ORDER BY time ASC`).all(scope.tenantId, ...orderIds).map(parseRow)
     : [];
+  const orderLineItems = orderIds.length > 0
+    ? db.prepare(`SELECT * FROM order_line_items WHERE tenant_id = ? AND workspace_id = ? AND order_id IN (${orderIds.map(() => '?').join(',')}) ORDER BY created_at ASC`).all(scope.tenantId, scope.workspaceId, ...orderIds).map(parseRow)
+    : [];
   const returnEvents = returnIds.length > 0
     ? db.prepare(`SELECT * FROM return_events WHERE tenant_id = ? AND return_id IN (${returnIds.map(() => '?').join(',')}) ORDER BY time ASC`).all(scope.tenantId, ...returnIds).map(parseRow)
     : [];
+  const webhookEvents = db.prepare(`SELECT * FROM webhook_events WHERE tenant_id = ? AND workspace_id = ? AND case_id = ? ORDER BY received_at ASC`).all(scope.tenantId, scope.workspaceId, caseId).map(parseRow);
 
   const refundsByPayment = paymentIds.length > 0
     ? db.prepare(`SELECT * FROM refunds WHERE tenant_id = ? AND payment_id IN (${paymentIds.map(() => '?').join(',')}) ORDER BY created_at ASC`).all(scope.tenantId, ...paymentIds).map(parseRow)
@@ -332,7 +340,9 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
     statusHistory,
     canonicalEvents,
     orderEvents,
+    orderLineItems,
     returnEvents,
+    webhookEvents,
     workflowRunSteps,
     agentRuns,
     refunds: Array.from(new Map([...refundsByPayment, ...refundsByOrder, ...refundsByCustomer].map((refund: any) => [refund.id, refund])).values()),

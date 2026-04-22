@@ -339,6 +339,9 @@ async function getOrderSqlite(scope: CommerceScope, orderId: string): Promise<an
   const events = db
     .prepare('SELECT * FROM order_events WHERE order_id = ? ORDER BY time ASC')
     .all(orderId);
+  const lineItems = db
+    .prepare('SELECT * FROM order_line_items WHERE order_id = ? AND tenant_id = ? AND workspace_id = ? ORDER BY created_at ASC')
+    .all(orderId, scope.tenantId, scope.workspaceId);
 
   const relatedCases = db
     .prepare(
@@ -356,6 +359,7 @@ async function getOrderSqlite(scope: CommerceScope, orderId: string): Promise<an
           ['orders', 'fulfillment', 'returns', 'payments'].includes(entry.domain),
         )
       : events.map(parseRow),
+    line_items: lineItems.map(parseRow),
     related_cases: context?.case_state?.related.linked_cases?.length
       ? context.case_state.related.linked_cases
       : relatedCases.map(parseRow),
@@ -582,12 +586,19 @@ async function getOrderSupabase(scope: CommerceScope, orderId: string): Promise<
     return null;
   });
 
-  const [eventsResult, casesResult] = await Promise.all([
+  const [eventsResult, lineItemsResult, casesResult] = await Promise.all([
     supabase
       .from('order_events')
       .select('*')
       .eq('order_id', orderId)
       .order('time', { ascending: true }),
+    supabase
+      .from('order_line_items')
+      .select('*')
+      .eq('order_id', orderId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .order('created_at', { ascending: true }),
     supabase
       .from('cases')
       .select('id, case_number, status, type')
@@ -598,6 +609,9 @@ async function getOrderSupabase(scope: CommerceScope, orderId: string): Promise<
 
   if (eventsResult.error) {
     console.warn('[commerce] order events fallback', { orderId, error: eventsResult.error });
+  }
+  if (lineItemsResult.error) {
+    console.warn('[commerce] order line items fallback', { orderId, error: lineItemsResult.error });
   }
   if (casesResult.error) {
     console.warn('[commerce] order cases fallback', { orderId, error: casesResult.error });
@@ -614,6 +628,7 @@ async function getOrderSupabase(scope: CommerceScope, orderId: string): Promise<
           ['orders', 'fulfillment', 'returns', 'payments'].includes(entry.domain),
         )
       : eventsResult.error ? [] : eventsResult.data ?? [],
+    line_items: lineItemsResult.error ? [] : lineItemsResult.data ?? [],
     related_cases: context?.case_state?.related.linked_cases?.length
       ? context.case_state.related.linked_cases
       : casesResult.error ? [] : casesResult.data ?? [],
