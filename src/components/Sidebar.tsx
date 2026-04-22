@@ -1,47 +1,85 @@
 import React from 'react';
-import { Page } from '../types';
+import { NavigateInput, NavigationTarget, Page } from '../types';
 
 interface SidebarProps {
   currentPage: Page;
-  onPageChange: (page: Page) => void;
+  currentSection?: string | null;
+  onPageChange: (target: NavigateInput) => void;
   isOpen: boolean;
   onToggle: () => void;
 }
 
-export default function Sidebar({ currentPage, onPageChange, isOpen, onToggle }: SidebarProps) {
+type SidebarItem = {
+  target: NavigateInput;
+  label: string;
+  icon: string;
+  badge?: number;
+  description?: string;
+};
+
+function targetPageOf(target: NavigateInput) {
+  return typeof target === 'string' ? target : target.page;
+}
+
+function targetSectionOf(target: NavigateInput) {
+  return typeof target === 'string' ? null : target.section ?? null;
+}
+
+function isTargetActive(currentPage: Page, currentSection: string | null | undefined, target: NavigateInput) {
+  return currentPage === targetPageOf(target) && (targetSectionOf(target) ? currentSection === targetSectionOf(target) : true);
+}
+
+export default function Sidebar({ currentPage, currentSection, onPageChange, isOpen, onToggle }: SidebarProps) {
+  const superAgentItems: SidebarItem[] = [
+    {
+      target: { page: 'super_agent', entityType: 'workspace', section: 'command-center', sourceContext: 'sidebar' },
+      label: 'Command Center',
+      icon: 'auto_awesome',
+      description: 'Investiga, navega y ejecuta acciones.',
+    },
+    {
+      target: { page: 'super_agent', entityType: 'workspace', section: 'live-runs', sourceContext: 'sidebar' },
+      label: 'Live Runs',
+      icon: 'monitoring',
+      description: 'Sigue agentes, pasos y ejecuciones.',
+    },
+    {
+      target: { page: 'super_agent', entityType: 'workspace', section: 'guardrails', sourceContext: 'sidebar' },
+      label: 'Guardrails',
+      icon: 'shield',
+      description: 'Permisos, approvals y trazabilidad.',
+    },
+  ];
+
   const navGroups: Array<{
     title: string;
-    items: Array<{ id: Page; label: string; icon: string; badge?: number }>;
+    items: SidebarItem[];
   }> = [
-    {
-      title: 'Superagent',
-      items: [
-        { id: 'super_agent', label: 'Command Center', icon: 'auto_awesome' },
-      ],
-    },
     {
       title: 'Operations',
       items: [
-        { id: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
-        { id: 'case_graph', label: 'Case Graph', icon: 'hub' },
-        { id: 'customers', label: 'Customers', icon: 'people' },
-        { id: 'orders', label: 'Orders', icon: 'shopping_bag' },
-        { id: 'payments', label: 'Payments', icon: 'payments' },
-        { id: 'returns', label: 'Returns', icon: 'assignment_return' },
-        { id: 'approvals', label: 'Approvals', icon: 'check_circle' },
+        { target: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
+        { target: 'case_graph', label: 'Case Graph', icon: 'hub' },
+        { target: 'customers', label: 'Customers', icon: 'people' },
+        { target: 'orders', label: 'Orders', icon: 'shopping_bag' },
+        { target: 'payments', label: 'Payments', icon: 'payments' },
+        { target: 'returns', label: 'Returns', icon: 'assignment_return' },
+        { target: 'approvals', label: 'Approvals', icon: 'check_circle' },
       ],
     },
     {
       title: 'Automation',
       items: [
-        { id: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
-        { id: 'workflows', label: 'Workflows', icon: 'account_tree' },
-        { id: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
-        { id: 'reports', label: 'Reports', icon: 'bar_chart' },
-        { id: 'tools_integrations', label: 'Integrations', icon: 'extension' },
+        { target: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
+        { target: 'workflows', label: 'Workflows', icon: 'account_tree' },
+        { target: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
+        { target: 'reports', label: 'Reports', icon: 'bar_chart' },
+        { target: 'tools_integrations', label: 'Integrations', icon: 'extension' },
       ],
     },
   ];
+
+  const superAgentActive = currentPage === 'super_agent';
 
   return (
     <aside className={`${isOpen ? 'w-64' : 'w-20'} bg-sidebar-light dark:bg-sidebar-dark flex-shrink-0 flex flex-col justify-between border-r border-transparent dark:border-gray-800 transition-all duration-300 py-4 overflow-hidden relative`}>
@@ -69,6 +107,84 @@ export default function Sidebar({ currentPage, onPageChange, isOpen, onToggle }:
         </div>
 
         <nav className="space-y-3 px-2 flex flex-col">
+          <div className="space-y-2">
+            {isOpen ? (
+              <p className="px-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                Superagent
+              </p>
+            ) : null}
+
+            <button
+              onClick={() => onPageChange({ page: 'super_agent', entityType: 'workspace', section: 'command-center', sourceContext: 'sidebar' })}
+              className={`relative flex items-start ${isOpen ? 'px-3 py-3 w-full justify-start' : 'justify-center w-12 h-12 mx-auto'} rounded-2xl border transition-all ${
+                superAgentActive
+                  ? 'border-secondary/30 bg-[linear-gradient(135deg,rgba(109,40,217,0.12),rgba(59,130,246,0.08))] text-gray-900 dark:text-white'
+                  : 'border-gray-200 bg-white/70 text-gray-700 hover:border-secondary/30 hover:bg-white dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-200'
+              }`}
+              title={!isOpen ? 'Superagent' : undefined}
+            >
+              <span className={`material-symbols-outlined text-[22px] flex-shrink-0 ${isOpen ? 'mr-3 mt-0.5' : ''} ${
+                superAgentActive ? 'text-secondary' : 'text-gray-500 dark:text-gray-400'
+              }`}>
+                auto_awesome
+              </span>
+              {isOpen ? (
+                <div className="min-w-0 text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold truncate">Superagent</span>
+                    <span className="rounded-full border border-secondary/20 bg-secondary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-secondary">
+                      AI
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                    Capa operativa central del SaaS.
+                  </p>
+                </div>
+              ) : null}
+            </button>
+
+            {isOpen ? (
+              <div className="ml-4 space-y-1 border-l border-gray-200 pl-3 dark:border-gray-800">
+                {superAgentItems.map((item) => {
+                  const active = isTargetActive(currentPage, currentSection, item.target);
+                  return (
+                    <button
+                      key={`${targetPageOf(item.target)}-${targetSectionOf(item.target) || 'root'}`}
+                      onClick={() => onPageChange(item.target)}
+                      className={`w-full rounded-xl px-3 py-2 text-left transition-all ${
+                        active
+                          ? 'bg-secondary/10 text-secondary'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[18px]">{item.icon}</span>
+                        <span className="text-sm font-medium">{item.label}</span>
+                      </div>
+                      {item.description ? (
+                        <p className={`mt-1 pl-7 text-[11px] leading-5 ${active ? 'text-secondary/80' : 'text-gray-400 dark:text-gray-500'}`}>
+                          {item.description}
+                        </p>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <button
+                onClick={() => onPageChange({ page: 'super_agent', entityType: 'workspace', section: 'command-center', sourceContext: 'sidebar' })}
+                className={`relative justify-center w-10 h-10 mx-auto flex items-center rounded-xl transition-all ${
+                  superAgentActive
+                    ? 'bg-secondary/10 text-secondary'
+                    : 'text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-800'
+                }`}
+                title="Superagent"
+              >
+                <span className="material-symbols-outlined text-xl">auto_awesome</span>
+              </button>
+            )}
+          </div>
+
           {navGroups.map((group) => (
             <div key={group.title} className="space-y-1">
               {isOpen ? (
@@ -78,17 +194,17 @@ export default function Sidebar({ currentPage, onPageChange, isOpen, onToggle }:
               ) : null}
               {group.items.map((item) => (
                 <button
-                  key={item.id}
-                  onClick={() => onPageChange(item.id)}
+                  key={typeof item.target === 'string' ? item.target : `${item.target.page}-${item.target.section || 'root'}`}
+                  onClick={() => onPageChange(item.target)}
                   className={`relative flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${
-                    currentPage === item.id
+                    isTargetActive(currentPage, currentSection, item.target)
                       ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
                   }`}
                   title={!isOpen ? item.label : undefined}
                 >
                   <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${
-                    currentPage === item.id ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
+                    isTargetActive(currentPage, currentSection, item.target) ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
                   }`}>{item.icon}</span>
                   {isOpen && <span className="truncate">{item.label}</span>}
                   {item.badge && (

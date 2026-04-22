@@ -222,6 +222,7 @@ function pageFromContextPanel(entityType?: string | null): Page {
 }
 
 export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps) {
+  const activeSection = activeTarget?.section || 'command-center';
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<PermissionMatrix | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -740,6 +741,27 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     );
   }
 
+  const sectionMeta = activeSection === 'live-runs'
+    ? {
+        pill: 'Live Runs',
+        title: 'Seguimiento operativo en tiempo real',
+        description: 'Sigue el avance de agentes, pasos de investigación y ejecuciones largas desde el centro de mando.',
+        quickReplies: ['Revisa pagos pendientes', 'Abre aprobaciones pendientes', 'Investiga un pedido con conflicto'],
+      }
+    : activeSection === 'guardrails'
+    ? {
+        pill: 'Guardrails',
+        title: 'Control, aprobaciones y trazabilidad',
+        description: 'Revisa permisos efectivos, acciones sensibles y la capa de seguridad que protege escrituras y automatizaciones.',
+        quickReplies: ['Explica por que una accion esta bloqueada', 'Abre aprobaciones pendientes', 'Prepara el siguiente paso operativo'],
+      }
+    : {
+        pill: 'Command Center',
+        title: 'Opera el SaaS desde un unico punto de control',
+        description: 'Investiga entidades, cruza modulos, entiende bloqueos reales, coordina especialistas y ejecuta cambios con trazabilidad.',
+        quickReplies: bootstrap?.quickActions || [],
+      };
+
   function renderStreamingMessage(activity: StreamActivity) {
     return (
       <div className="rounded-[28px] border border-white/80 bg-white/85 px-6 py-5 shadow-card backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/85">
@@ -813,7 +835,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-black/10 bg-black/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
-                      AI Operating Layer
+                      {sectionMeta.pill}
                     </span>
                     {permissionMatrix ? (
                       <span className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${roleTone(permissionMatrix.accessLevel)}`}>
@@ -825,7 +847,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     {bootstrap?.welcomeTitle || 'Super Agent'}
                   </h1>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
-                    {bootstrap?.welcomeSubtitle || 'Unified command center for reading state, coordinating agents, and executing controlled actions.'}
+                    {sectionMeta.description || bootstrap?.welcomeSubtitle || 'Unified command center for reading state, coordinating agents, and executing controlled actions.'}
                   </p>
                 </div>
 
@@ -866,13 +888,13 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <div className="rounded-[32px] border border-white/90 bg-white/80 px-8 py-10 shadow-soft backdrop-blur-sm dark:border-gray-700 dark:bg-card-dark/85">
                       <div className="mx-auto max-w-2xl text-center">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500 dark:text-gray-400">
-                          Control conversation
+                          {sectionMeta.pill}
                         </p>
                         <h2 className="mt-4 text-4xl font-semibold tracking-[-0.04em] text-gray-900 dark:text-white">
-                          Opera el SaaS desde un unico punto de control
+                          {sectionMeta.title}
                         </h2>
                         <p className="mt-4 text-base leading-7 text-gray-600 dark:text-gray-300">
-                          Investiga entidades, cruza modulos, entiende bloqueos reales, coordina especialistas y ejecuta cambios con trazabilidad.
+                          {sectionMeta.description}
                         </p>
                       </div>
 
@@ -901,7 +923,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         ) : null}
                       </div>
                       <div className="mt-5 flex flex-wrap gap-2">
-                        {bootstrap.quickActions.map((action) => (
+                        {sectionMeta.quickReplies.map((action) => (
                           <button
                             key={action}
                             type="button"
@@ -973,7 +995,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             <div className="absolute inset-x-0 bottom-0 z-20 border-t border-white/70 bg-[linear-gradient(180deg,rgba(247,245,239,0),rgba(247,245,239,0.95)_25%,rgba(247,245,239,1)_100%)] px-6 pb-6 pt-10 backdrop-blur-md dark:border-gray-800/80 dark:bg-[linear-gradient(180deg,rgba(21,21,21,0),rgba(21,21,21,0.92)_25%,rgba(21,21,21,1)_100%)]">
               <div className="mx-auto max-w-4xl">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  {(bootstrap?.quickActions || []).slice(0, 5).map((action) => (
+                  {sectionMeta.quickReplies.slice(0, 5).map((action) => (
                     <button
                       key={`input-${action}`}
                       type="button"

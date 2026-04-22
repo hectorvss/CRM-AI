@@ -181,7 +181,8 @@ export default function App() {
     <div className="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200 font-sans h-screen flex overflow-hidden selection:bg-purple-200 dark:selection:bg-purple-900">
       <Sidebar 
         currentPage={currentPage} 
-        onPageChange={(page) => navigate(page)}
+        currentSection={navigationTarget.section}
+        onPageChange={navigate}
         isOpen={isLeftSidebarOpen}
         onToggle={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
       />
