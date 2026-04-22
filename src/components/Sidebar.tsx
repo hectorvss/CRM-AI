@@ -36,32 +36,19 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
     icon: 'auto_awesome',
   };
 
-  const navGroups: Array<{
-    title: string;
-    items: SidebarItem[];
-  }> = [
-    {
-      title: 'Operations',
-      items: [
-        { target: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
-        { target: 'case_graph', label: 'Case Graph', icon: 'hub' },
-        { target: 'customers', label: 'Customers', icon: 'people' },
-        { target: 'orders', label: 'Orders', icon: 'shopping_bag' },
-        { target: 'payments', label: 'Payments', icon: 'payments' },
-        { target: 'returns', label: 'Returns', icon: 'assignment_return' },
-        { target: 'approvals', label: 'Approvals', icon: 'check_circle' },
-      ],
-    },
-    {
-      title: 'Automation',
-      items: [
-        { target: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
-        { target: 'workflows', label: 'Workflows', icon: 'account_tree' },
-        { target: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
-        { target: 'reports', label: 'Reports', icon: 'bar_chart' },
-        { target: 'tools_integrations', label: 'Integrations', icon: 'extension' },
-      ],
-    },
+  const navItems: SidebarItem[] = [
+    { target: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
+    { target: 'case_graph', label: 'Case Graph', icon: 'hub' },
+    { target: 'customers', label: 'Customers', icon: 'people' },
+    { target: 'orders', label: 'Orders', icon: 'shopping_bag' },
+    { target: 'payments', label: 'Payments', icon: 'payments' },
+    { target: 'returns', label: 'Returns', icon: 'assignment_return' },
+    { target: 'approvals', label: 'Approvals', icon: 'check_circle' },
+    { target: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
+    { target: 'workflows', label: 'Workflows', icon: 'account_tree' },
+    { target: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
+    { target: 'reports', label: 'Reports', icon: 'bar_chart' },
+    { target: 'tools_integrations', label: 'Integrations', icon: 'extension' },
   ];
 
   return (
@@ -108,46 +95,30 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
             </button>
           </div>
 
-          {navGroups.map((group) => (
-            <div key={group.title} className="space-y-1">
-              {isOpen ? (
-                <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                  {group.title}
-                </p>
-              ) : null}
-              {group.items.map((item) => (
-                <button
-                  key={typeof item.target === 'string' ? item.target : `${item.target.page}-${item.target.section || 'root'}`}
-                  onClick={() => onPageChange(item.target)}
-                  className={`relative flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${
-                    isTargetActive(currentPage, currentSection, item.target)
-                      ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
-                  }`}
-                  title={!isOpen ? item.label : undefined}
-                >
-                  <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${
-                    isTargetActive(currentPage, currentSection, item.target) ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
-                  }`}>{item.icon}</span>
-                  {isOpen && (
-                    <div className="min-w-0 flex-1 text-left">
-                      <span className="block truncate">{item.label}</span>
-                      {item.description ? (
-                        <span className="mt-0.5 block truncate text-[11px] font-normal text-gray-400 dark:text-gray-500">
-                          {item.description}
-                        </span>
-                      ) : null}
-                    </div>
-                  )}
-                  {item.badge && (
-                    <span className={`${isOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-200 py-0.5 px-2 rounded-full text-[10px] font-semibold`}>
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
+          <div className="space-y-1">
+            {navItems.map((item) => (
+              <button
+                key={typeof item.target === 'string' ? item.target : `${item.target.page}-${item.target.section || 'root'}`}
+                onClick={() => onPageChange(item.target)}
+                className={`relative flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${
+                  isTargetActive(currentPage, currentSection, item.target)
+                    ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
+                }`}
+                title={!isOpen ? item.label : undefined}
+              >
+                <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${
+                  isTargetActive(currentPage, currentSection, item.target) ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
+                }`}>{item.icon}</span>
+                {isOpen && <span className="block truncate flex-1 text-left">{item.label}</span>}
+                {item.badge ? (
+                  <span className={`${isOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-200 py-0.5 px-2 rounded-full text-[10px] font-semibold`}>
+                    {item.badge}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
         </nav>
       </div>
       
