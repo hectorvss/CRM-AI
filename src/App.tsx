@@ -17,6 +17,7 @@ import Returns from './components/Returns';
 import Payments from './components/Payments';
 import CaseGraph from './components/CaseGraph';
 import PageErrorBoundary from './components/PageErrorBoundary';
+import SuperAgent from './components/SuperAgent';
 import { Page } from './types';
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
       <main className="flex-1 flex flex-col h-full min-w-0 relative">
         <PageErrorBoundary page={currentPage}>
           {currentPage === 'inbox' && <Inbox focusCaseId={focusCaseId} />}
+          {currentPage === 'super_agent' && <SuperAgent onNavigate={navigate} />}
           {currentPage === 'home' && <Home />}
           {currentPage === 'ai_studio' && <AIStudio />}
           {currentPage === 'workflows' && <Workflows onNavigate={navigate} />}

@@ -11,6 +11,7 @@ interface SidebarProps {
 export default function Sidebar({ currentPage, onPageChange, isOpen, onToggle }: SidebarProps) {
   const navItems = [
     { id: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
+    { id: 'super_agent', label: 'Super Agent', icon: 'auto_awesome' },
     { id: 'case_graph', label: 'Case Graph', icon: 'hub' },
     { id: 'customers', label: 'Customers', icon: 'people' },
     { id: 'orders', label: 'Orders', icon: 'shopping_bag' },

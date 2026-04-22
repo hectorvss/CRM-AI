@@ -1,4 +1,4 @@
-export type Page = 'inbox' | 'home' | 'ai_studio' | 'workflows' | 'approvals' | 'knowledge' | 'customers' | 'tools_integrations' | 'reports' | 'settings' | 'orders' | 'returns' | 'payments' | 'case_graph' | 'upgrade' | 'profile';
+export type Page = 'inbox' | 'super_agent' | 'home' | 'ai_studio' | 'workflows' | 'approvals' | 'knowledge' | 'customers' | 'tools_integrations' | 'reports' | 'settings' | 'orders' | 'returns' | 'payments' | 'case_graph' | 'upgrade' | 'profile';
 
 export type Channel = 'web_chat' | 'email' | 'whatsapp';
 
