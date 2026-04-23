@@ -398,6 +398,32 @@ export const auditApi = {
   entity: (entityType: string, entityId: string) => request<any>(`/audit/${entityType}/${entityId}`).then(unwrapList),
 };
 
+// ── Policy Rules (AI Studio live rules CRUD) ──────────────
+export const policyRulesApi = {
+  list: (params?: { entity_type?: string; is_active?: boolean }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params)
+              .filter(([, v]) => v !== undefined)
+              .map(([k, v]) => [k, String(v)])
+          )
+        ).toString()
+      : '';
+    return request<any>(`/policy/rules${qs}`).then(unwrapList);
+  },
+  create: (payload: Record<string, any>) =>
+    request<any>('/policy/rules', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/policy/rules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+};
+
 export const superAgentApi = {
   bootstrap: () => request<any>('/super-agent/bootstrap'),
   command: (input: string, options?: { runId?: string; mode?: string; context?: Record<string, any> }) =>
@@ -409,6 +435,15 @@ export const superAgentApi = {
     request<any>('/super-agent/execute', {
       method: 'POST',
       body: JSON.stringify({ payload, confirmed, ...options }),
+    }),
+  /**
+   * Plan Engine endpoint (LLM-driven). Sends the user message and gets back
+   * { response: LLMResponse, trace?: ExecutionTrace, sessionId: string }.
+   */
+  plan: (userMessage: string, options?: { sessionId?: string; dryRun?: boolean }) =>
+    request<any>('/super-agent/plan', {
+      method: 'POST',
+      body: JSON.stringify({ userMessage, ...options }),
     }),
 };
 

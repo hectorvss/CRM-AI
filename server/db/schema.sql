@@ -1054,6 +1054,57 @@ CREATE INDEX IF NOT EXISTS idx_jobs_trace
   WHERE trace_id IS NOT NULL;
 
 -- ============================================================
+-- SUPER AGENT PLAN ENGINE — SESSIONS
+-- ============================================================
+-- Stores conversational session state for the Plan Engine.
+-- L1 (recent turns) + L2 (rolling summary) + slots (live entities).
+-- TTL enforced at the application layer via ttl_at.
+
+CREATE TABLE IF NOT EXISTS super_agent_sessions (
+  id            TEXT PRIMARY KEY,                    -- UUIDv4
+  user_id       TEXT NOT NULL,
+  tenant_id     TEXT NOT NULL,
+  workspace_id  TEXT,
+  turns_json    TEXT NOT NULL DEFAULT '[]',          -- Turn[] — last N turns (L1)
+  summary       TEXT NOT NULL DEFAULT '',            -- Rolling summary (L2)
+  slots_json    TEXT NOT NULL DEFAULT '{}',          -- Slot map keyed by slot type
+  pending_approval_ids_json TEXT NOT NULL DEFAULT '[]',
+  active_plan_id TEXT,
+  created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  updated_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  ttl_at        TEXT NOT NULL                        -- ISO timestamp; session expires after this
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_sessions_user   ON super_agent_sessions(user_id, tenant_id);
+CREATE INDEX IF NOT EXISTS idx_sa_sessions_ttl    ON super_agent_sessions(ttl_at);
+
+-- ============================================================
+-- SUPER AGENT PLAN ENGINE — EXECUTION TRACES
+-- ============================================================
+-- Immutable audit of every plan execution. One row per plan;
+-- spans stored as JSON for flexibility. Never updated once written.
+
+CREATE TABLE IF NOT EXISTS super_agent_traces (
+  plan_id       TEXT PRIMARY KEY,
+  session_id    TEXT NOT NULL,
+  tenant_id     TEXT NOT NULL,
+  workspace_id  TEXT,
+  user_id       TEXT,
+  started_at    TEXT NOT NULL,
+  ended_at      TEXT NOT NULL,
+  status        TEXT NOT NULL,                       -- ExecutionStatus enum
+  spans_json    TEXT NOT NULL DEFAULT '[]',          -- ExecutionSpan[]
+  summary       TEXT NOT NULL DEFAULT '',
+  approval_ids_json TEXT NOT NULL DEFAULT '[]',
+  policy_decisions_json TEXT NOT NULL DEFAULT '[]',
+  created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_traces_session  ON super_agent_traces(session_id);
+CREATE INDEX IF NOT EXISTS idx_sa_traces_tenant   ON super_agent_traces(tenant_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sa_traces_user     ON super_agent_traces(user_id, started_at DESC);
+
+-- ============================================================
 -- SCHEMA MIGRATIONS TRACKING
 -- ============================================================
 -- Tracks which incremental ALTER TABLE migrations have been applied.

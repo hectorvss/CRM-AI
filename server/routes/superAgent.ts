@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { Router } from 'express';
+import { logger } from '../utils/logger.js';
 import {
   buildCaseState,
   buildResolveView,
@@ -2295,6 +2296,38 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       },
     });
 
+    // ── Shadow mode: fire LLM path async (non-blocking) ─────────────────────
+    // When SUPER_AGENT_LLM_ROUTING=true the /plan endpoint is the primary
+    // path. Here we silently mirror traffic to measure LLM accuracy vs. regex.
+    const llmEnabled = process.env.SUPER_AGENT_LLM_ROUTING === 'true';
+    if (!llmEnabled && input) {
+      const shadowSessionId = `shadow-${req.userId || 'anon'}-${scope.workspaceId}`;
+      void planEngine
+        .generate({
+          userMessage: input,
+          sessionId: shadowSessionId,
+          userId: req.userId || 'system',
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId || null,
+          hasPermission: (perm: string) => hasPermission(req, perm),
+        })
+        .then((llmResp) => {
+          const diverged = llmResp.kind !== 'plan'
+            || llmResp.plan.steps.length === 0
+            || finalResponse.consultedModules?.length === 0;
+          logger.debug('Shadow mode LLM response', {
+            runId,
+            kind: llmResp.kind,
+            regexKind: command.kind,
+            diverged,
+            steps: llmResp.kind === 'plan' ? llmResp.plan.steps.map((s) => s.tool) : [],
+          });
+        })
+        .catch((err) => {
+          logger.debug('Shadow mode LLM error', { runId, error: String(err) });
+        });
+    }
+
     res.json({
       ok: true,
       permissionMatrix: buildPermissionMatrix(req),
@@ -2379,6 +2412,67 @@ router.post('/execute', async (req: MultiTenantRequest, res) => {
       // noop
     }
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Plan Engine endpoints ────────────────────────────────────────────────────
+//
+// These are the NEW LLM-driven routes. They run in parallel to the existing
+// regex-based routes. Feature flag SUPER_AGENT_LLM_ROUTING=true enables them.
+//
+// POST /api/super-agent/plan
+//   Body: { userMessage, sessionId?, dryRun? }
+//   Returns: { response: LLMResponse, trace?: ExecutionTrace }
+//
+// GET /api/super-agent/catalog
+//   Returns the tool catalog visible to the caller.
+
+import { planEngine } from '../agents/planEngine/index.js';
+
+router.post('/plan', async (req: MultiTenantRequest, res) => {
+  try {
+    const scope = getScope(req);
+    const { userMessage, sessionId, dryRun } = req.body as {
+      userMessage?: string;
+      sessionId?: string;
+      dryRun?: boolean;
+    };
+
+    if (!userMessage || typeof userMessage !== 'string' || !userMessage.trim()) {
+      return res.status(400).json({ error: 'userMessage is required' });
+    }
+
+    const effectiveSessionId = sessionId || `${req.userId || 'anon'}-${Date.now()}`;
+
+    const { response, trace } = await planEngine.planAndExecute(
+      {
+        userMessage: userMessage.trim(),
+        sessionId: effectiveSessionId,
+        userId: req.userId || 'system',
+        tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId || null,
+        hasPermission: (perm: string) => hasPermission(req, perm),
+      },
+      { dryRun: dryRun === true },
+    );
+
+    return res.json({ response, trace: trace ?? null, sessionId: effectiveSessionId });
+  } catch (error) {
+    console.error('Plan Engine error:', error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+router.get('/catalog', (req: MultiTenantRequest, res) => {
+  try {
+    const catalog = planEngine.catalog.listForCaller(
+      (perm) => hasPermission(req, perm),
+    );
+    return res.json({ tools: catalog, count: catalog.length });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to list tool catalog' });
   }
 });
 

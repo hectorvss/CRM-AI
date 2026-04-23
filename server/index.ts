@@ -57,6 +57,10 @@ import './pipeline/slaMonitor.js';
 // to the worker without needing a separate registration call.
 import './agents/orchestrator.js';
 
+// ── Plan Engine — initialise tool registry at startup ───────────────────────
+import { planEngine } from './agents/planEngine/index.js';
+planEngine.init();
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
 
