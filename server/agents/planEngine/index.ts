@@ -20,7 +20,12 @@ import { registerAllTools } from './tools/index.js';
 import { toolRegistry } from './registry.js';
 import { executePlan, type ExecutorDeps, type ExecuteOptions } from './executor.js';
 import { getPlanEngineLLMProvider } from './llm.js';
-import { createAuditRepository, createApprovalRepository } from '../../data/index.js';
+import {
+  createAuditRepository,
+  createApprovalRepository,
+  createAgentRepository,
+  createKnowledgeRepository,
+} from '../../data/index.js';
 import { logger } from '../../utils/logger.js';
 import * as sessionRepo from './sessionRepository.js';
 import * as traceRepo from './traceRepository.js';
@@ -32,7 +37,7 @@ import type {
   ToolExecutionContext,
   AuditEntry,
 } from './types.js';
-import type { PlanRequest, LLMResponse } from './llm.js';
+import type { PlanRequest, LLMResponse, AgentRuntimeConfig } from './llm.js';
 
 export type { Plan, ExecutionTrace, SessionState, ToolExecutionContext };
 export type { LLMResponse };
@@ -52,6 +57,8 @@ function ensureInitialised() {
 
 const auditRepoInst = createAuditRepository();
 const approvalRepoInst = createApprovalRepository();
+const agentRepoInst = createAgentRepository();
+const knowledgeRepoInst = createKnowledgeRepository();
 
 // ── Executor dependencies ────────────────────────────────────────────────────
 
@@ -104,6 +111,78 @@ function buildAuditSink(tenantId: string, workspaceId: string | null, userId: st
   };
 }
 
+// ── Agent config loader ───────────────────────────────────────────────────────
+//
+// Reads the agent's active agent_versions row (from AI Studio edits) and
+// builds an AgentRuntimeConfig to pass to the LLM provider. This is how
+// AI Studio's Reasoning / Safety / Knowledge tabs affect Plan Engine behaviour.
+
+async function loadAgentRuntimeConfig(
+  tenantId: string,
+  workspaceId: string | null,
+  agentId: string,
+): Promise<AgentRuntimeConfig> {
+  try {
+    const scope = {
+      tenantId,
+      workspaceId: workspaceId ?? 'ws_default',
+      userId: undefined,
+    };
+    const agent = await agentRepoInst.getEffectiveAgent(scope, agentId);
+    if (!agent) return {};
+
+    const reasoning = agent.reasoning_profile && typeof agent.reasoning_profile === 'object'
+      ? agent.reasoning_profile as Record<string, any>
+      : {};
+    const safety = agent.safety_profile && typeof agent.safety_profile === 'object'
+      ? agent.safety_profile as Record<string, any>
+      : {};
+    const knowledge = agent.knowledge_profile && typeof agent.knowledge_profile === 'object'
+      ? agent.knowledge_profile as Record<string, any>
+      : {};
+    const permissions = agent.permission_profile && typeof agent.permission_profile === 'object'
+      ? agent.permission_profile as Record<string, any>
+      : {};
+
+    // Fetch knowledge snippets when the profile specifies domains
+    let knowledgeSnippets: AgentRuntimeConfig['knowledgeSnippets'] = [];
+    const domainIds: string[] = Array.isArray(knowledge.domains) ? knowledge.domains : [];
+    const maxArticles = typeof knowledge.maxArticles === 'number' ? knowledge.maxArticles : 8;
+    if (domainIds.length > 0) {
+      try {
+        const articles = await knowledgeRepoInst.listArticles(
+          { tenantId, workspaceId: workspaceId ?? 'ws_default' },
+          { domain_id: domainIds[0], status: 'published' }, // search first domain; extend later
+        );
+        knowledgeSnippets = articles.slice(0, maxArticles).map((a: any) => ({
+          title: a.title ?? 'Knowledge article',
+          excerpt: typeof a.content === 'string'
+            ? a.content.slice(0, 400) + (a.content.length > 400 ? '…' : '')
+            : '',
+        }));
+      } catch (err) {
+        logger.warn('PlanEngine: failed to load knowledge snippets', { error: String(err) });
+      }
+    }
+
+    return {
+      model: reasoning.model || undefined,
+      temperature: typeof reasoning.temperature === 'number' ? reasoning.temperature : undefined,
+      maxOutputTokens: typeof reasoning.maxOutputTokens === 'number' ? reasoning.maxOutputTokens : undefined,
+      personaOverride: typeof reasoning.persona === 'string' ? reasoning.persona : undefined,
+      safetyInstructions: typeof safety.additionalInstructions === 'string'
+        ? safety.additionalInstructions
+        : undefined,
+      blockedTools: Array.isArray(safety.blockedTools) ? safety.blockedTools : undefined,
+      allowedTools: Array.isArray(permissions.allowedTools) ? permissions.allowedTools : undefined,
+      knowledgeSnippets: knowledgeSnippets.length > 0 ? knowledgeSnippets : undefined,
+    };
+  } catch (err) {
+    logger.warn('PlanEngine: failed to load agent runtime config', { agentId, error: String(err) });
+    return {};
+  }
+}
+
 // ── LLM summarizer (used by L2 compressor) ───────────────────────────────────
 
 async function llmSummarize(prompt: string): Promise<string> {
@@ -125,6 +204,12 @@ export interface PlanEngineGenerateInput {
   workspaceId: string | null;
   hasPermission: (perm: string) => boolean;
   domainContext?: unknown;
+  /**
+   * Agent ID or slug whose AI Studio configuration should drive this run.
+   * Defaults to "supervisor" — the primary Plan Engine agent.
+   * AI Studio sets this by navigating to Agents → [agent] → Reasoning/Safety/Knowledge.
+   */
+  agentId?: string;
 }
 
 export interface PlanEngineExecuteInput {
@@ -158,6 +243,10 @@ export const planEngine = {
     const planId = randomUUID();
     const availableTools = toolRegistry.listForCaller(input.hasPermission);
 
+    // Load AI Studio configuration for this agent (non-blocking — falls back to defaults)
+    const agentId = input.agentId ?? 'supervisor';
+    const agentConfig = await loadAgentRuntimeConfig(input.tenantId, input.workspaceId, agentId);
+
     const req: PlanRequest = {
       userMessage: input.userMessage,
       session: {
@@ -170,6 +259,7 @@ export const planEngine = {
       availableTools,
       domainContext: input.domainContext,
       planId,
+      agentConfig,
     };
 
     const response = await getPlanEngineLLMProvider().generatePlan(req);

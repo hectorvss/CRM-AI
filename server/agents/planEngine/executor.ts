@@ -151,8 +151,8 @@ export async function executePlan(
     summary: '',
   };
 
-  // 1. Evaluate policy for the entire plan upfront.
-  const decisions = evaluatePlan(plan, toolRegistry, {
+  // 1. Evaluate policy for the entire plan upfront (async — may read DB rules).
+  const decisions = await evaluatePlan(plan, toolRegistry, {
     tenantId: context.tenantId,
     workspaceId: context.workspaceId,
     userId: context.userId,

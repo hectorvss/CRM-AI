@@ -21,6 +21,13 @@ import { approvalGetTool, approvalListTool, approvalDecideTool } from './approva
 import { customerGetTool, customerListTool } from './customers.js';
 // ── Knowledge
 import { knowledgeSearchTool } from './knowledge.js';
+// ── Agent Delegates (bridge to catalog agent implementations)
+import {
+  agentDraftReplyTool,
+  agentTriageTool,
+  agentFraudCheckTool,
+  agentEscalateTool,
+} from './agentDelegates.js';
 
 export function registerAllTools(): void {
   // Orders
@@ -54,4 +61,10 @@ export function registerAllTools(): void {
 
   // Knowledge
   toolRegistry.register(knowledgeSearchTool);
+
+  // Agent Delegates
+  toolRegistry.register(agentDraftReplyTool);
+  toolRegistry.register(agentTriageTool);
+  toolRegistry.register(agentFraudCheckTool);
+  toolRegistry.register(agentEscalateTool);
 }

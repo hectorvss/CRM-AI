@@ -21,6 +21,8 @@ import type {
   ToolSpec,
 } from './types.js';
 import type { toolRegistry as ToolRegistry } from './registry.js';
+import { createPolicyRepository } from '../../data/index.js';
+import { logger } from '../../utils/logger.js';
 
 // ── Rule contract ────────────────────────────────────────────────────────────
 
@@ -176,6 +178,107 @@ const baselineRules: PolicyRule[] = [
   },
 ];
 
+// ── DB rule bridge ───────────────────────────────────────────────────────────
+//
+// Converts a policy_rules DB row (entity-level, condition-based) into a
+// PolicyRule compatible with the Plan Engine's per-step evaluator.
+//
+// Mapping conventions:
+//   DB entity_type "payment"  → tool names beginning with "payment."
+//   DB action_mapping.action_types ["refund"] → tool action suffix "refund"
+//   DB conditions              → evaluated against {...step.args, toolRisk, userId}
+//   DB action_mapping.decision → "block" → deny | "approval_required" → require_approval
+
+function getFieldValue(obj: Record<string, any>, path: string): any {
+  return path.split('.').reduce((acc: any, k: string) => (acc && typeof acc === 'object' ? acc[k] : undefined), obj);
+}
+
+function evalCondition(operator: string, actual: any, expected: any): boolean {
+  switch (operator) {
+    case 'eq': return actual === expected;
+    case 'neq': return actual !== expected;
+    case 'gt': return Number(actual) > Number(expected);
+    case 'gte': return Number(actual) >= Number(expected);
+    case 'lt': return Number(actual) < Number(expected);
+    case 'lte': return Number(actual) <= Number(expected);
+    case 'in': return Array.isArray(expected) ? expected.includes(actual) : false;
+    case 'contains':
+      if (typeof actual === 'string' && typeof expected === 'string')
+        return actual.toLowerCase().includes(expected.toLowerCase());
+      return Array.isArray(actual) ? actual.includes(expected) : false;
+    case 'exists': return actual !== undefined && actual !== null;
+    default: return false;
+  }
+}
+
+function asArr(v: unknown): any[] {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
+  return [];
+}
+
+function asObj(v: unknown): Record<string, any> {
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, any>;
+  if (typeof v === 'string') { try { const p = JSON.parse(v); return p && typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch { return {}; } }
+  return {};
+}
+
+function dbRuleToPolicyRule(dbRule: any): PolicyRule {
+  const actionMapping = asObj(dbRule.action_mapping);
+  const conditions = asArr(dbRule.conditions);
+  const allowedActions = asArr(actionMapping.action_types);
+  const entityType = String(dbRule.entity_type ?? '').toLowerCase();
+
+  // Derive numeric priority: DB rules sit between permission checks (900) and
+  // the low-priority defaults (50-100), so use 600 as a band.
+  // If the DB rule specifies a priority field use it, otherwise 600.
+  const priority = typeof dbRule.priority === 'number' ? dbRule.priority : 600;
+
+  return {
+    id: `db:${dbRule.id}`,
+    description: dbRule.name ?? 'DB policy rule',
+    priority,
+    evaluate({ tool, args, context }) {
+      // 1. Entity type gating: only consider rules that match this tool's entity
+      if (entityType) {
+        const toolEntity = tool.name.split('.')[0].toLowerCase();
+        if (toolEntity !== entityType) return null;
+      }
+
+      // 2. Action type gating
+      if (allowedActions.length > 0) {
+        const toolAction = tool.name.split('.').slice(1).join('.').toLowerCase();
+        if (!allowedActions.some((a: string) => String(a).toLowerCase() === toolAction)) return null;
+      }
+
+      // 3. Condition evaluation — check against {args..., toolRisk, userId}
+      const ctx: Record<string, any> = {
+        ...(args && typeof args === 'object' ? (args as Record<string, any>) : {}),
+        toolRisk: tool.risk,
+        userId: context.userId,
+      };
+      const allMatch = conditions.every((c: any) => {
+        if (!c?.field) return true;
+        const actual = getFieldValue(ctx, String(c.field));
+        return evalCondition(String(c.operator ?? 'eq'), actual, c.value);
+      });
+      if (!allMatch) return null;
+
+      // 4. Map DB decision → PolicyAction
+      const rawDecision = String(actionMapping.decision ?? 'allow').toLowerCase();
+      const action: PolicyAction =
+        rawDecision === 'block' ? 'deny'
+        : rawDecision === 'approval_required' ? 'require_approval'
+        : 'allow';
+
+      return {
+        action,
+        reason: actionMapping.reason ?? `DB policy rule matched: ${dbRule.name}`,
+      };
+    },
+  };
+}
+
 // ── Engine ───────────────────────────────────────────────────────────────────
 
 const customRules: PolicyRule[] = [];
@@ -186,14 +289,29 @@ export function registerPolicyRule(rule: PolicyRule): void {
 
 /**
  * Evaluate a full plan against all rules. Returns one PolicyDecision per step.
+ * Merges hardcoded baseline rules with active DB policy_rules for this tenant.
  * Does NOT mutate the plan.
  */
-export function evaluatePlan(
+export async function evaluatePlan(
   plan: Plan,
   registry: typeof ToolRegistry,
   context: Pick<ToolExecutionContext, 'tenantId' | 'workspaceId' | 'userId' | 'hasPermission'>,
-): PolicyDecision[] {
-  const rules = [...baselineRules, ...customRules].sort((a, b) => b.priority - a.priority);
+): Promise<PolicyDecision[]> {
+  // Load tenant DB rules (non-fatal — fall back to baseline only if DB is unavailable)
+  let dbRules: PolicyRule[] = [];
+  try {
+    const policyRepo = createPolicyRepository();
+    const rows = await policyRepo.listRules(
+      { tenantId: context.tenantId, workspaceId: context.workspaceId ?? '' },
+      undefined,
+      true, // isActive = true only
+    );
+    dbRules = rows.map(dbRuleToPolicyRule);
+  } catch (err) {
+    logger.warn('PlanEngine policy: failed to load DB rules, using baseline only', { error: String(err) });
+  }
+
+  const rules = [...baselineRules, ...dbRules, ...customRules].sort((a, b) => b.priority - a.priority);
   const decisions: PolicyDecision[] = [];
 
   for (const step of plan.steps) {

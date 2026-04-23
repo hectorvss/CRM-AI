@@ -19,6 +19,43 @@ import type { CatalogEntry } from './registry.js';
 
 // ── Contract ─────────────────────────────────────────────────────────────────
 
+/**
+ * Runtime configuration injected from the agent's active agent_versions row.
+ * AI Studio edits these profiles; the Plan Engine reads them here at call time.
+ */
+export interface AgentRuntimeConfig {
+  /** Override model name (e.g. "gemini-2.5-pro"). Falls back to config.ai.geminiModel. */
+  model?: string;
+  /** Override generation temperature. Falls back to 0.2. */
+  temperature?: number;
+  /** Max output tokens. Falls back to 2048. */
+  maxOutputTokens?: number;
+  /**
+   * Additional safety/persona instructions appended to the system prompt.
+   * Sourced from safety_profile.additionalInstructions.
+   */
+  safetyInstructions?: string;
+  /**
+   * Persona override — overrides the default Super Agent persona description.
+   * Sourced from reasoning_profile.persona.
+   */
+  personaOverride?: string;
+  /**
+   * Short knowledge snippets injected into context.
+   * Sourced from knowledge articles relevant to this workspace/domains.
+   */
+  knowledgeSnippets?: Array<{ title: string; excerpt: string }>;
+  /**
+   * List of tool names this agent is explicitly allowed to use.
+   * Empty = no restriction beyond permission check.
+   */
+  allowedTools?: string[];
+  /**
+   * List of tool names this agent is explicitly forbidden from using.
+   */
+  blockedTools?: string[];
+}
+
 export interface PlanRequest {
   /** Raw user message for this turn. */
   userMessage: string;
@@ -30,6 +67,11 @@ export interface PlanRequest {
   domainContext?: unknown;
   /** Model-visible hint: planId to embed in the generated plan. */
   planId: string;
+  /**
+   * Live agent configuration from agent_versions.
+   * Sourced from AI Studio's Reasoning / Safety / Knowledge tabs.
+   */
+  agentConfig?: AgentRuntimeConfig;
 }
 
 export type LLMResponse =
@@ -46,8 +88,17 @@ export interface LLMProvider {
 
 // ── Gemini system prompt ─────────────────────────────────────────────────────
 
-function buildSystemPrompt(tools: CatalogEntry[]): string {
-  const toolDocs = tools
+function buildSystemPrompt(tools: CatalogEntry[], agentConfig?: AgentRuntimeConfig): string {
+  // Filter tools based on agentConfig allow/block lists
+  let effectiveTools = tools;
+  if (agentConfig?.allowedTools?.length) {
+    effectiveTools = tools.filter((t) => agentConfig.allowedTools!.includes(t.name));
+  }
+  if (agentConfig?.blockedTools?.length) {
+    effectiveTools = effectiveTools.filter((t) => !agentConfig.blockedTools!.includes(t.name));
+  }
+
+  const toolDocs = effectiveTools
     .map((t) => {
       const argFields =
         t.args.type === 'object'
@@ -63,13 +114,27 @@ ${argFields}`;
     })
     .join('\n\n');
 
-  return `You are the Super Agent for a B2B customer support CRM. You help support agents manage cases, orders, payments, refunds, returns, approvals, and workflows.
+  // Persona — overridable via AI Studio Reasoning tab
+  const persona = agentConfig?.personaOverride
+    ?? 'You are the Super Agent for a B2B customer support CRM. You help support agents manage cases, orders, payments, refunds, returns, approvals, and workflows.';
+
+  // Knowledge snippets injected by AI Studio Knowledge tab
+  const knowledgeSection = agentConfig?.knowledgeSnippets?.length
+    ? `\n\n## Reference knowledge\n${agentConfig.knowledgeSnippets.map((s) => `### ${s.title}\n${s.excerpt}`).join('\n\n')}`
+    : '';
+
+  // Safety instructions from AI Studio Safety tab
+  const safetySection = agentConfig?.safetyInstructions
+    ? `\n\n## Safety & constraints\n${agentConfig.safetyInstructions}`
+    : '';
+
+  return `${persona}
 
 ## Your job
 Given the conversation history and the user's latest message, produce a JSON plan or ask a clarifying question.
 
 ## Available tools
-${toolDocs}
+${toolDocs}${knowledgeSection}${safetySection}
 
 ## Output format — you MUST respond with valid JSON, one of:
 
@@ -217,17 +282,23 @@ class GeminiProvider implements LLMProvider {
   }
 
   async generatePlan(req: PlanRequest): Promise<LLMResponse> {
-    const systemPrompt = buildSystemPrompt(req.availableTools);
+    const { agentConfig } = req;
+    const systemPrompt = buildSystemPrompt(req.availableTools, agentConfig);
     const contextMessages = buildContextMessages(req);
+
+    // Resolve model/generation overrides from AI Studio Reasoning tab
+    const modelName = agentConfig?.model ?? this.modelName;
+    const temperature = typeof agentConfig?.temperature === 'number' ? agentConfig.temperature : 0.2;
+    const maxOutputTokens = typeof agentConfig?.maxOutputTokens === 'number' ? agentConfig.maxOutputTokens : 2048;
 
     return withGeminiRetry(
       async () => {
         const model = this.genAI.getGenerativeModel({
-          model: this.modelName,
+          model: modelName,
           systemInstruction: systemPrompt,
           generationConfig: {
-            temperature: 0.2,       // low for deterministic tool selection
-            maxOutputTokens: 2048,
+            temperature,
+            maxOutputTokens,
             responseMimeType: 'application/json',
           },
         });

@@ -15,7 +15,14 @@ import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { buildCaseState, buildResolveView } from '../data/cases.js';
 import { buildContextWindow } from '../pipeline/contextWindow.js';
-import { createAIRepository, createAgentRepository, createCaseRepository } from '../data/index.js';
+import {
+  createAIRepository,
+  createAgentRepository,
+  createCaseRepository,
+  createPolicyRepository,
+  createKnowledgeRepository,
+} from '../data/index.js';
+import { planEngine } from '../agents/planEngine/index.js';
 
 const router = Router();
 router.use(extractMultiTenant);
@@ -23,6 +30,8 @@ router.use(extractMultiTenant);
 const aiRepository = createAIRepository();
 const agentRepository = createAgentRepository();
 const caseRepository = createCaseRepository();
+const policyRepository = createPolicyRepository();
+const knowledgeRepository = createKnowledgeRepository();
 
 function normalizeCopilotHistory(history: Array<{ role: string; content: string }> = []) {
   return history
@@ -81,6 +90,105 @@ function buildFallbackCopilotAnswer(state: ReturnType<typeof buildCaseState>) {
     branchSummaries.length ? `Active blockers: ${branchSummaries.join(' | ')}` : null,
   ].filter(Boolean).join('\n');
 }
+
+// ── GET /api/ai/studio ────────────────────────────────────────────────────────
+// Master control plane overview for AI Studio. All tabs read from here.
+
+router.get('/studio', requirePermission('agents.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+
+    // Fan out to all data sources in parallel
+    const [agents, policyMetrics, knowledgeDomains, knowledgeArticles] = await Promise.allSettled([
+      agentRepository.listAgents(scope),
+      policyRepository.getMetrics(scope),
+      knowledgeRepository.listDomains(scope),
+      knowledgeRepository.listArticles(scope, { status: 'published' }),
+    ]);
+
+    const agentList: any[] = agents.status === 'fulfilled' ? agents.value : [];
+    const metrics = policyMetrics.status === 'fulfilled' ? policyMetrics.value : null;
+    const domains: any[] = knowledgeDomains.status === 'fulfilled' ? knowledgeDomains.value : [];
+    const articles: any[] = knowledgeArticles.status === 'fulfilled' ? knowledgeArticles.value : [];
+
+    // Agent summary
+    const activeAgents = agentList.filter((a) => a.is_active);
+    const byCategory = agentList.reduce((acc: Record<string, number>, a) => {
+      const cat = a.category ?? 'unknown';
+      acc[cat] = (acc[cat] ?? 0) + 1;
+      return acc;
+    }, {});
+    const byMode = agentList.reduce((acc: Record<string, number>, a) => {
+      const mode = a.implementation_mode ?? 'unknown';
+      acc[mode] = (acc[mode] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    // Plan engine traces (in-memory store — returns 0 when fresh)
+    let recentTraceCount = 0;
+    try {
+      // listTraces needs a sessionId; we count via a no-op — fix when traces become DB-backed
+      recentTraceCount = 0;
+    } catch { /* ignore */ }
+
+    // Feature flags (env-driven)
+    const llmRoutingEnabled = process.env.SUPER_AGENT_LLM_ROUTING === 'true';
+
+    res.json({
+      agents: {
+        total: agentList.length,
+        active: activeAgents.length,
+        inactive: agentList.length - activeAgents.length,
+        byCategory,
+        byImplementationMode: byMode,
+        list: agentList.map((a) => ({
+          id: a.id,
+          slug: a.slug,
+          name: a.name,
+          category: a.category,
+          is_active: a.is_active,
+          implementation_mode: a.implementation_mode,
+          version_number: a.version_number ?? null,
+          version_status: a.version_status ?? null,
+          metrics: a.metrics ?? null,
+        })),
+      },
+      planEngine: {
+        enabled: true,
+        llmRoutingActive: llmRoutingEnabled,
+        shadowModeActive: !llmRoutingEnabled,
+        toolCount: planEngine.catalog.list().length,
+        recentTraceCount,
+        tools: planEngine.catalog.list().map((t) => ({
+          name: t.name,
+          version: t.version,
+          sideEffect: t.sideEffect,
+          risk: t.risk,
+        })),
+      },
+      policy: {
+        metrics,
+        ruleCount: 0, // populated via effective-policy per agent
+      },
+      knowledge: {
+        domainCount: domains.length,
+        articleCount: articles.length,
+        publishedArticles: articles.filter((a) => a.status === 'published').length,
+        domains: domains.map((d) => ({ id: d.id, name: d.name })),
+      },
+      modelConfig: {
+        model: config.ai.geminiModel,
+        apiKeyConfigured: Boolean(config.ai.geminiApiKey),
+      },
+      featureFlags: {
+        llmRouting: llmRoutingEnabled,
+      },
+    });
+  } catch (error) {
+    console.error('AI Studio overview error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // ── GET /api/ai/stats ─────────────────────────────────────────────────────────
 
