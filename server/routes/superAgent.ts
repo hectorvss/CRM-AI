@@ -2295,6 +2295,136 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       step: { id: 'parse', label: 'Normalizing command intent', status: 'running' },
     });
 
+    const useLlmFirst = process.env.SUPER_AGENT_LEGACY_ROUTING !== 'true';
+    if (useLlmFirst) {
+      try {
+        const { response: llmResponse, trace } = await planEngine.planAndExecute(
+          {
+            userMessage: input,
+            sessionId,
+            userId: req.userId || 'system',
+            tenantId: scope.tenantId,
+            workspaceId: scope.workspaceId || null,
+            hasPermission: (perm: string) => hasPermission(req, perm),
+          },
+          { dryRun: mode !== 'operate' },
+        );
+
+        const finalResponse = buildResponseFromPlanOutcome(input, runId, llmResponse, trace);
+
+        if (finalResponse.navigationTarget) {
+          planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
+        }
+
+        emitSuperAgentEvent(scope, 'step_completed', {
+          runId,
+          step: {
+            id: 'parse',
+            label: 'Normalizing command intent',
+            status: 'completed',
+            detail: llmResponse.kind,
+          },
+        });
+
+        emitSuperAgentEvent(scope, 'step_started', {
+          runId,
+          step: {
+            id: 'modules',
+            label: `Consulting ${Array.isArray(finalResponse.consultedModules) && finalResponse.consultedModules.length ? finalResponse.consultedModules.join(', ') : 'workspace data'}`,
+            status: 'running',
+          },
+        });
+
+        if (Array.isArray(finalResponse.agents)) {
+          finalResponse.agents.forEach((agent: AgentActivity) => {
+            emitSuperAgentEvent(scope, 'agent_called', {
+              runId,
+              agent: {
+                slug: agent.slug,
+                name: agent.name,
+                runtime: agent.runtime || null,
+                mode: agent.mode || null,
+                status: agent.status,
+              },
+            });
+            emitSuperAgentEvent(scope, 'agent_result', {
+              runId,
+              agent: {
+                slug: agent.slug,
+                name: agent.name,
+                status: agent.status,
+                summary: agent.summary,
+              },
+            });
+          });
+        }
+
+        if (Array.isArray(finalResponse.actions) && finalResponse.actions.length > 0) {
+          emitSuperAgentEvent(scope, 'action_proposed', {
+            runId,
+            actions: finalResponse.actions.map((action: UiAction) => ({
+              id: action.id,
+              label: action.label,
+              type: action.type,
+              sensitive: action.sensitive === true,
+              requiresConfirmation: action.requiresConfirmation === true,
+            })),
+          });
+        }
+
+        const chunks = splitIntoChunks([
+          finalResponse.summary,
+          ...(Array.isArray(finalResponse.facts) ? finalResponse.facts.slice(0, 3) : []),
+          ...(Array.isArray(finalResponse.conflicts) ? finalResponse.conflicts.slice(0, 2) : []),
+        ].filter(Boolean).join(' '));
+
+        chunks.forEach((chunk, index) => {
+          emitSuperAgentEvent(scope, 'message_chunk', {
+            runId,
+            chunk,
+            index,
+          });
+        });
+
+        emitSuperAgentEvent(scope, 'run_finished', {
+          runId,
+          summary: finalResponse.summary,
+          statusLine: finalResponse.statusLine,
+          navigationTarget: finalResponse.navigationTarget,
+        });
+
+        await auditRepository.log({
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId,
+          actorId: req.userId || 'system',
+          action: 'SUPER_AGENT_COMMAND',
+          entityType: finalResponse.navigationTarget?.entityType || 'workspace',
+          entityId: finalResponse.navigationTarget?.entityId || scope.workspaceId,
+          metadata: {
+            source: 'super-agent',
+            input,
+            runId,
+            sessionId,
+            llmRouting: true,
+            consultedModules: finalResponse.consultedModules || [],
+            navigationTarget: finalResponse.navigationTarget || null,
+          },
+        });
+
+        return res.json({
+          ok: true,
+          sessionId,
+          permissionMatrix: buildPermissionMatrix(req),
+          response: finalResponse,
+        });
+      } catch (llmError) {
+        logger.warn('LLM-first command path failed, falling back to legacy routing', {
+          runId,
+          error: llmError instanceof Error ? llmError.message : String(llmError),
+        });
+      }
+    }
+
     const command = parseCommandIntent(input, enrichedCommandContext);
 
     emitSuperAgentEvent(scope, 'step_completed', {

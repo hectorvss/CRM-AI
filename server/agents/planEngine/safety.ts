@@ -110,6 +110,14 @@ export function classifyRiskFromPlanSignal(toolName: string, args: unknown): Ris
     return 'high';
   }
 
+  if (toolName === 'agent.run') {
+    const slug = String((args as any)?.agentSlug ?? '').toLowerCase();
+    if (/(refund|payment|finance|fraud|escalat|approval|policy|workflow|settings|integration|connector)/.test(slug)) {
+      return 'high';
+    }
+    return 'medium';
+  }
+
   if (toolName.startsWith('settings.') && toolName.includes('.')) {
     return 'high';
   }

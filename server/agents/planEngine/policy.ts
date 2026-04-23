@@ -266,6 +266,25 @@ const baselineRules: PolicyRule[] = [
     },
   },
 
+  // 10d. Sensitive delegated agents should not bypass human gates
+  {
+    id: 'sensitive_agent_run_requires_approval',
+    description: 'Delegated agents that touch finance, approvals, policy, or critical operations require approval',
+    priority: 405,
+    evaluate({ tool, args }) {
+      if (tool.name !== 'agent.run') return null;
+      const agentSlug = String((args as any)?.agentSlug ?? '').toLowerCase();
+      if (/(refund|payment|finance|fraud|escalat|approval|policy|workflow|settings|integration|connector)/.test(agentSlug)) {
+        return {
+          action: 'require_approval',
+          reason: `Sensitive delegated agent ${agentSlug || 'unknown'} requires approval`,
+          riskElevation: 'high',
+        };
+      }
+      return null;
+    },
+  },
+
   // 10. Default allow for reads
   {
     id: 'allow_reads',

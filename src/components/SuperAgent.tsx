@@ -2,10 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { superAgentApi } from '../api/client';
 import type { NavigateFn, NavigationTarget, Page } from '../types';
 
-// ── Feature flag: set VITE_LLM_ROUTING=true to route through Plan Engine ─────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const LLM_ROUTING = (import.meta as any).env?.VITE_LLM_ROUTING === 'true';
-
 type MessageSection = {
   title: string;
   items: string[];
@@ -114,6 +110,73 @@ interface SuperAgentProps {
   activeTarget?: NavigationTarget;
 }
 
+function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<string, any>, fallbackInput: string, fallbackRunId?: string | null): AssistantPayload {
+  const consultedModules = Array.isArray(payload.consultedModules)
+    ? [...new Set(payload.consultedModules.map((item) => String(item)).filter(Boolean))]
+    : [];
+  const agents = Array.isArray(payload.agents)
+    ? payload.agents.map((agent: any) => ({
+        slug: String(agent.slug || 'agent'),
+        name: String(agent.name || 'Agent'),
+        runtime: agent.runtime || null,
+        mode: agent.mode || null,
+        status: (agent.status || 'consulted') as AgentCard['status'],
+        summary: String(agent.summary || 'Completed.'),
+      })) as AgentCard[]
+    : [];
+  const steps = Array.isArray(payload.steps)
+    ? payload.steps.map((step: any, index: number) => ({
+        id: String(step.id || `step-${index}`),
+        label: String(step.label || 'Step'),
+        status: step.status === 'failed' ? 'failed' : step.status === 'running' ? 'running' : 'completed',
+        detail: step.detail ? String(step.detail) : null,
+      })) as StreamStep[]
+    : [];
+  const actions = Array.isArray(payload.actions)
+    ? payload.actions.map((action: any, index: number) => ({
+        id: String(action.id || `action-${index}`),
+        type: (action.type === 'execute' ? 'execute' : 'navigate') as SuperAgentAction['type'],
+        label: String(action.label || 'Open'),
+        description: String(action.description || ''),
+        targetPage: action.targetPage || undefined,
+        focusId: action.focusId ?? null,
+        navigationTarget: action.navigationTarget || null,
+        permission: action.permission,
+        allowed: action.allowed !== false,
+        sensitive: action.sensitive === true,
+        requiresConfirmation: action.requiresConfirmation === true,
+        blockedReason: action.blockedReason ?? null,
+        payload: action.payload || undefined,
+      })) as SuperAgentAction[]
+    : [];
+
+  return {
+    id: String(payload.id || `assistant-${Date.now()}`),
+    input: String(payload.input || fallbackInput || ''),
+    summary: String(payload.summary || payload.question || payload.error || 'Super Agent is ready.'),
+    statusLine: String(payload.statusLine || ''),
+    sections: Array.isArray(payload.sections)
+      ? payload.sections.map((section: any, index: number) => ({
+          title: String(section.title || `Section ${index + 1}`),
+          items: Array.isArray(section.items) ? section.items.map((item: any) => String(item)) : [],
+        }))
+      : [],
+    actions,
+    contextPanel: payload.contextPanel || null,
+    agents,
+    suggestedReplies: Array.isArray(payload.suggestedReplies) ? payload.suggestedReplies.map((item: any) => String(item)) : [],
+    consultedModules,
+    facts: Array.isArray(payload.facts) ? payload.facts.map((item: any) => String(item)) : undefined,
+    conflicts: Array.isArray(payload.conflicts) ? payload.conflicts.map((item: any) => String(item)) : undefined,
+    sources: Array.isArray(payload.sources) ? payload.sources.map((item: any) => String(item)) : undefined,
+    evidence: Array.isArray(payload.evidence) ? payload.evidence.map((item: any) => String(item)) : undefined,
+    steps,
+    runId: payload.runId ?? fallbackRunId ?? null,
+    structuredIntent: payload.structuredIntent || null,
+    navigationTarget: payload.navigationTarget || null,
+  };
+}
+
 function fallbackNavigationTarget(page?: string, entityId?: string | null): NavigationTarget | null {
   if (!page) return null;
   const normalizedPage = page as Page;
@@ -164,11 +227,19 @@ function assistantFromExecution(summary: string, sectionTitle: string, items: st
 // ── Plan Engine response → AssistantPayload mapper ───────────────────────────
 
 function planResponseToPayload(planResp: any, trace: any): AssistantPayload {
+  const commandResponse = trace?.commandResponse || planResp?.plan?.commandResponse || null;
+  if (commandResponse) {
+    return normalizeAssistantPayload(
+      commandResponse,
+      commandResponse.input || planResp?.plan?.responseTemplate || '',
+      commandResponse.runId || trace?.runId || planResp?.plan?.planId || null,
+    );
+  }
+
   const id = `assistant-plan-${Date.now()}`;
   const status = trace?.status ?? 'success';
   const summary = trace?.summary ?? planResp?.plan?.rationale ?? '';
 
-  // Build step cards from execution spans
   const steps: StreamStep[] = (trace?.spans ?? []).map((span: any) => ({
     id: span.stepId,
     label: span.tool,
@@ -178,7 +249,6 @@ function planResponseToPayload(planResp: any, trace: any): AssistantPayload {
       : span.result?.error,
   }));
 
-  // Approval actions
   const actions: SuperAgentAction[] = (trace?.approvalIds ?? []).map((apId: string) => ({
     id: `nav-approval-${apId}`,
     type: 'navigate' as const,
@@ -196,7 +266,7 @@ function planResponseToPayload(planResp: any, trace: any): AssistantPayload {
     : status === 'failed' ? 'Execution failed'
     : '';
 
-  return {
+  return normalizeAssistantPayload({
     id,
     input: '',
     summary,
@@ -208,7 +278,8 @@ function planResponseToPayload(planResp: any, trace: any): AssistantPayload {
     suggestedReplies: [],
     consultedModules: [...new Set((trace?.spans ?? []).map((s: any) => String(s.tool?.split('.')[0] ?? '')))].filter(Boolean) as string[],
     steps,
-  };
+    runId: trace?.runId || planResp?.plan?.planId || null,
+  }, '', trace?.runId || planResp?.plan?.planId || null);
 }
 
 function clarificationToPayload(question: string): AssistantPayload {
@@ -247,6 +318,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [traceMetrics, setTraceMetrics] = useState<{ total: number; success: number; partial: number; failed: number; pendingApproval: number; rejectedByPolicy: number; averageLatencyMs: number; averageSpanCount: number } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const streamRunIdRef = useRef<string | null>(null);
+  const streamMessageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -351,6 +423,23 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     return () => { source.close(); };
   }, []);
 
+  useEffect(() => {
+    const messageId = streamMessageIdRef.current;
+    if (!streamActivity || !messageId) return;
+    setMessages((current) => current.map((message) => {
+      if (message.role !== 'assistant' || message.payload.id !== messageId) return message;
+      const payload = normalizeAssistantPayload({
+        ...message.payload,
+        summary: streamActivity.text || 'Thinking through your request...',
+        statusLine: streamActivity.statusLine || 'Thinking',
+        steps: streamActivity.steps,
+        agents: streamActivity.agents,
+        runId: streamActivity.runId,
+      }, message.payload.input, streamActivity.runId);
+      return { ...message, payload };
+    }));
+  }, [streamActivity]);
+
   function buildCommandContext() {
     const latest = [...messages].reverse().find((m) => m.role === 'assistant') as Extract<ConversationMessage, { role: 'assistant' }> | undefined;
     const recentTargets = dedupeTargets([
@@ -366,57 +455,60 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     const prompt = (promptOverride ?? composerText).trim();
     if (!prompt || isSending || isExecuting) return;
     const finalPrompt = mode === 'operate' && !promptOverride ? `Operate: ${prompt}` : prompt;
-    setMessages((c) => [...c, { id: `user-${Date.now()}`, role: 'user', text: finalPrompt }]);
     setComposerText('');
     setPendingAction(null);
     setFlashMessage(null);
     setIsSending(true);
     const runId = window.crypto?.randomUUID?.() || `run-${Date.now()}`;
+    const livePayload = normalizeAssistantPayload({
+      id: `assistant-live-${runId}`,
+      input: finalPrompt,
+      summary: 'Thinking through your request...',
+      statusLine: isStreamConnected ? 'Thinking' : 'Connecting',
+      sections: [],
+      actions: [],
+      contextPanel: null,
+      agents: [],
+      suggestedReplies: [],
+      consultedModules: [],
+      steps: [],
+      runId,
+    }, finalPrompt, runId);
     streamRunIdRef.current = runId;
+    streamMessageIdRef.current = livePayload.id;
+    setMessages((c) => [
+      ...c,
+      { id: `user-${Date.now()}`, role: 'user', text: finalPrompt },
+      { id: livePayload.id, role: 'assistant', payload: livePayload },
+    ]);
     setStreamActivity({ runId, statusLine: isStreamConnected ? 'Connecting...' : 'Waiting...', text: '', steps: [], agents: [], error: null });
 
     try {
-      if (LLM_ROUTING) {
-        // ── Plan Engine path ────────────────────────────────────────────────
-        const result = await superAgentApi.plan(finalPrompt, {
-          sessionId: planSessionId ?? undefined,
-          dryRun: mode === 'investigate',
-        });
-
-        // Persist session id for multi-turn continuity
-        if (result.sessionId) setPlanSessionId(result.sessionId);
-
-        const resp = result.response;
-        let payload: AssistantPayload;
-
-        if (resp?.kind === 'plan') {
-          payload = planResponseToPayload(resp, result.trace);
-        } else if (resp?.kind === 'clarification') {
-          payload = clarificationToPayload(resp.question);
-        } else {
-          payload = assistantFromError(finalPrompt, resp?.error ?? 'Unexpected response from Plan Engine.');
-        }
-
-        setMessages((c) => [...c, { id: payload.id, role: 'assistant', payload }]);
-        if (payload.contextPanel) setContextPanel(payload.contextPanel);
-        setStreamActivity(null);
-      } else {
-        // ── Legacy regex path (default) ─────────────────────────────────────
-        const result = await superAgentApi.command(finalPrompt, { runId, mode, context: buildCommandContext() });
-        if (result.sessionId) setPlanSessionId(result.sessionId);
-        const payload = result.response as AssistantPayload;
-        setMessages((c) => [...c, { id: payload.id, role: 'assistant', payload }]);
-        setPermissionMatrix(result.permissionMatrix || null);
-        if (payload.contextPanel) setContextPanel(payload.contextPanel);
-        setStreamActivity(null);
-      }
+      const result = await superAgentApi.command(finalPrompt, { runId, mode, context: buildCommandContext() });
+      if (result.sessionId) setPlanSessionId(result.sessionId);
+      const payload = normalizeAssistantPayload(result.response as Partial<AssistantPayload>, finalPrompt, result.response?.runId || runId);
+      const liveMessageId = streamMessageIdRef.current;
+      setMessages((c) => c.map((message) => (
+        message.role === 'assistant' && message.payload.id === liveMessageId
+          ? { id: payload.id, role: 'assistant', payload }
+          : message
+      )));
+      setPermissionMatrix(result.permissionMatrix || null);
+      if (payload.contextPanel) setContextPanel(payload.contextPanel);
+      setStreamActivity(null);
     } catch (error) {
       const fallback = assistantFromError(finalPrompt, error instanceof Error ? error.message : 'Unable to process command.');
-      setMessages((c) => [...c, { id: fallback.id, role: 'assistant', payload: fallback }]);
-      setStreamActivity((c) => c ? { ...c, error: fallback.summary, statusLine: 'Failed' } : null);
+      const liveMessageId = streamMessageIdRef.current;
+      setMessages((c) => c.map((message) => (
+        message.role === 'assistant' && message.payload.id === liveMessageId
+          ? { id: fallback.id, role: 'assistant', payload: fallback }
+          : message
+      )));
+      setStreamActivity(null);
     } finally {
       setIsSending(false);
       streamRunIdRef.current = null;
+      streamMessageIdRef.current = null;
     }
   }
 
@@ -434,8 +526,8 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
         setMessages((c) => [...c, { id: update.id, role: 'assistant', payload: update }]);
         setStreamActivity(null);
         const refreshPrompt = pendingAction.payload.kind === 'approval.decide' ? 'Pending approvals' : `${pendingAction.payload.entityType} ${pendingAction.payload.entityId}`;
-        const refreshed = await superAgentApi.command(refreshPrompt);
-        const rp = refreshed.response as AssistantPayload;
+        const refreshed = await superAgentApi.command(refreshPrompt, { runId: window.crypto?.randomUUID?.() || `run-${Date.now()}`, mode: 'investigate', context: buildCommandContext() });
+        const rp = normalizeAssistantPayload(refreshed.response as Partial<AssistantPayload>, refreshPrompt, refreshed.response?.runId || null);
         setMessages((c) => [...c, { id: rp.id, role: 'assistant', payload: rp, muted: true }]);
         setPermissionMatrix(refreshed.permissionMatrix || null);
         if (rp.contextPanel) setContextPanel(rp.contextPanel);
@@ -592,69 +684,171 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                 </div>
               ) : (
                 <div key={msg.id} className={msg.muted ? 'opacity-50' : ''}>
-                  <p className="text-sm leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
+                  <div className="flex gap-3">
+                    <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gray-900 text-white dark:bg-white dark:text-black">
+                      <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Super Agent</p>
+                        {msg.payload.statusLine ? (
+                          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                            {msg.payload.statusLine}
+                          </span>
+                        ) : null}
+                        {msg.payload.consultedModules.length > 0 ? (
+                          <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+                            Thinking across {msg.payload.consultedModules.join(', ')}
+                          </span>
+                        ) : null}
+                      </div>
 
-                  {[
-                    ...msg.payload.sections,
-                    ...(msg.payload.facts?.length ? [{ title: 'Found', items: msg.payload.facts }] : []),
-                    ...(msg.payload.conflicts?.length ? [{ title: 'Conflicts', items: msg.payload.conflicts }] : []),
-                  ].map((s) => (
-                    <div key={`${msg.id}-${s.title}`} className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-800/30">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">{s.title}</p>
-                      <div className="mt-2 space-y-1">
-                        {s.items.map((item) => (
-                          <p key={item} className="text-sm leading-6 text-gray-700 dark:text-gray-300">{item}</p>
+                      <div className="mt-3 rounded-3xl border border-gray-200 bg-white px-4 py-4 shadow-sm dark:border-gray-700 dark:bg-gray-950/70">
+                        <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
+                        {msg.payload.structuredIntent ? (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {msg.payload.structuredIntent.intent ? (
+                              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
+                                {String(msg.payload.structuredIntent.intent)}
+                              </span>
+                            ) : null}
+                            {msg.payload.structuredIntent.targetEntityType ? (
+                              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
+                                {String(msg.payload.structuredIntent.targetEntityType)}
+                              </span>
+                            ) : null}
+                            {msg.payload.runId ? (
+                              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-500">
+                                Run {msg.payload.runId.slice(0, 8)}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {[
+                          ...msg.payload.sections,
+                          ...(msg.payload.facts?.length ? [{ title: 'What I found', items: msg.payload.facts }] : []),
+                          ...(msg.payload.conflicts?.length ? [{ title: 'Conflicts', items: msg.payload.conflicts }] : []),
+                        ].map((s) => (
+                          <div key={`${msg.id}-${s.title}`} className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">{s.title}</p>
+                            <div className="mt-2 space-y-1.5">
+                              {s.items.map((item) => (
+                                <p key={item} className="text-sm leading-6 text-gray-700 dark:text-gray-300">{item}</p>
+                              ))}
+                            </div>
+                          </div>
                         ))}
+
+                        {msg.payload.steps?.length ? (
+                          <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Thinking and running</p>
+                            <div className="mt-2 space-y-2">
+                              {msg.payload.steps.map((step) => (
+                                <div key={step.id} className="flex items-start gap-3">
+                                  <span className={`mt-1 h-2.5 w-2.5 rounded-full ${
+                                    step.status === 'completed'
+                                      ? 'bg-emerald-500'
+                                      : step.status === 'failed'
+                                        ? 'bg-red-500'
+                                        : 'animate-pulse bg-blue-500'
+                                  }`} />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white">{step.label}</p>
+                                    {step.detail ? <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{step.detail}</p> : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {msg.payload.sources?.length ? (
+                          <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Sources consulted</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {msg.payload.sources.map((source) => (
+                                <span key={`${msg.id}-${source}`} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-950/70 dark:text-gray-300">
+                                  {source}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {msg.payload.evidence?.length ? (
+                          <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Evidence</p>
+                            <div className="mt-2 space-y-1.5">
+                              {msg.payload.evidence.map((item) => (
+                                <p key={`${msg.id}-${item}`} className="text-sm leading-6 text-gray-700 dark:text-gray-300">{item}</p>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {msg.payload.agents.length > 0 ? (
+                          <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Agents involved</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {msg.payload.agents.map((agent) => (
+                                <span key={agent.slug} className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-950/70 dark:text-gray-300">
+                                  <span className={`h-1.5 w-1.5 rounded-full ${
+                                    agent.status === 'executed'
+                                      ? 'bg-emerald-500'
+                                      : agent.status === 'blocked'
+                                        ? 'bg-red-500'
+                                        : agent.status === 'proposed'
+                                          ? 'bg-amber-500'
+                                          : 'bg-blue-500'
+                                  }`} />
+                                  {agent.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {msg.payload.actions.length > 0 ? (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {msg.payload.actions.map((action) => (
+                              <button
+                                key={action.id}
+                                type="button"
+                                onClick={() => handleAction(action)}
+                                disabled={action.allowed === false}
+                                className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${
+                                  action.type === 'navigate'
+                                    ? 'border-gray-200 text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:text-gray-300'
+                                    : 'border-transparent bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                                }`}
+                              >
+                                {action.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {msg.payload.suggestedReplies.length > 0 ? (
+                          <div className="mt-4 flex flex-wrap gap-1.5">
+                            {msg.payload.suggestedReplies.map((reply) => (
+                              <button
+                                key={`${msg.id}-${reply}`}
+                                type="button"
+                                onClick={() => void sendPrompt(reply)}
+                                className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                              >
+                                {reply}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                  ))}
-
-                  {msg.payload.actions.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {msg.payload.actions.map((action) => (
-                        <button
-                          key={action.id}
-                          type="button"
-                          onClick={() => handleAction(action)}
-                          disabled={action.allowed === false}
-                          className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${
-                            action.type === 'navigate'
-                              ? 'border-gray-200 text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:text-gray-300'
-                              : 'border-transparent bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                          }`}
-                        >
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {msg.payload.suggestedReplies.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {msg.payload.suggestedReplies.map((reply) => (
-                        <button
-                          key={`${msg.id}-${reply}`}
-                          type="button"
-                          onClick={() => void sendPrompt(reply)}
-                          className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                        >
-                          {reply}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                  </div>
                 </div>
               )
             )}
-
-            {/* Streaming indicator */}
-            {isSending ? (
-              <div className="flex gap-1.5">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.2s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.1s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300" />
-              </div>
-            ) : null}
 
             <div ref={bottomRef} />
           </div>
