@@ -130,9 +130,22 @@ export async function maybeCompressTurns(
     .map((t) => `${t.role.toUpperCase()}: ${t.content}`)
     .join('\n');
 
+  const slotText = Object.entries(session.slots || {})
+    .map(([key, slot]) => `${key}: ${JSON.stringify(slot.value)}`)
+    .join('\n');
+
+  const recentTargetsText = (session.recentTargets || [])
+    .slice(0, 5)
+    .map((target, index) => `${index + 1}. ${target.entityType || target.page}${target.entityId ? `:${target.entityId}` : ''}${target.section ? `#${target.section}` : ''}`)
+    .join('\n');
+
+  const pendingApprovalsText = (session.pendingApprovalIds || []).length
+    ? session.pendingApprovalIds.join(', ')
+    : 'none';
+
   const prompt = session.summary
-    ? `Previous summary:\n${session.summary}\n\nNew conversation to add:\n${conversationText}\n\nWrite a concise updated summary (max 200 words) of what the user is working on and key facts discovered. Plain text, no lists.`
-    : `Summarise this support agent conversation (max 200 words). Focus on: what the user investigated, entities found (IDs, statuses), and actions taken. Plain text, no lists.\n\n${conversationText}`;
+    ? `Previous summary:\n${session.summary}\n\nLive session context:\nRecent navigation targets:\n${recentTargetsText || 'none'}\n\nActive slots:\n${slotText || 'none'}\n\nPending approvals:\n${pendingApprovalsText}\n\nNew conversation to add:\n${conversationText}\n\nWrite a concise updated summary (max 200 words) of what the user is working on, which entities are active, what action or approval is pending, and the most important facts discovered. Plain text, no lists.`
+    : `Summarise this support agent conversation (max 200 words). Focus on: what the user investigated, entities found (IDs, statuses), active navigation targets, pending approvals, and actions taken. Plain text, no lists.\n\nRecent navigation targets:\n${recentTargetsText || 'none'}\n\nActive slots:\n${slotText || 'none'}\n\nPending approvals:\n${pendingApprovalsText}\n\n${conversationText}`;
 
   try {
     const summary = await llmSummarize(prompt);

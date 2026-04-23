@@ -1929,6 +1929,7 @@ function shouldRequireApprovalForAction(payload: SuperAgentActionPayload, entity
   if (payload.kind === 'case.update_status') return false;
   if (payload.kind === 'approval.decide') return false;
   if (payload.kind === 'case.add_internal_note') return false;
+  if (payload.kind === 'workflow.publish') return true;
   return false;
 }
 
@@ -2159,6 +2160,11 @@ async function executeAction(req: MultiTenantRequest, scope: CommandScope, paylo
 
       const workflow = await workflowRepository.getDefinition(payload.entityId, scope.tenantId, scope.workspaceId);
       if (!workflow) return { ok: false, error: 'Workflow not found' };
+
+      if (shouldRequireApprovalForAction(payload, workflow)) {
+        const approval = await createApprovalForSensitiveAction(scope, req, payload, workflow);
+        return { ok: false, approvalRequired: true, approval };
+      }
 
       const versions = await workflowRepository.listVersions(payload.entityId);
       const draftVersion = versions.find((version: any) => String(version.status) === 'draft');

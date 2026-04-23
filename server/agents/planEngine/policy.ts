@@ -162,7 +162,60 @@ const baselineRules: PolicyRule[] = [
     },
   },
 
-  // 7. Default allow for reads
+  // 7. Workflow publication is a structural change and should be reviewed
+  {
+    id: 'workflow_publish_requires_approval',
+    description: 'Publishing workflows requires approval to avoid structural regressions',
+    priority: 450,
+    evaluate({ tool }) {
+      if (tool.name === 'workflow.publish') {
+        return {
+          action: 'require_approval',
+          reason: 'Publishing workflows requires explicit approval',
+          riskElevation: 'high',
+        };
+      }
+      return null;
+    },
+  },
+
+  // 8. Settings mutations are always sensitive
+  {
+    id: 'settings_write_requires_approval',
+    description: 'Settings writes require approval',
+    priority: 440,
+    evaluate({ tool }) {
+      if (tool.name.startsWith('settings.') && tool.sideEffect === 'write') {
+        return {
+          action: 'require_approval',
+          reason: 'Settings changes require approval',
+          riskElevation: 'high',
+        };
+      }
+      return null;
+    },
+  },
+
+  // 9. Bulk operations should not execute blindly
+  {
+    id: 'bulk_operation_requires_approval',
+    description: 'Large bulk operations route to approval',
+    priority: 430,
+    evaluate({ args, tool }) {
+      const raw = JSON.stringify(args ?? {});
+      if (tool.sideEffect !== 'write') return null;
+      if (/"bulk"\s*:\s*true/.test(raw) || /"items"\s*:\s*\[\s*.*,.+/.test(raw) || /"ids"\s*:\s*\[\s*.*,.+/.test(raw)) {
+        return {
+          action: 'require_approval',
+          reason: 'Bulk operations require approval',
+          riskElevation: 'high',
+        };
+      }
+      return null;
+    },
+  },
+
+  // 10. Default allow for reads
   {
     id: 'allow_reads',
     description: 'Read-only tools are auto-allowed',
@@ -175,7 +228,7 @@ const baselineRules: PolicyRule[] = [
     },
   },
 
-  // 8. Default allow for low/medium-risk writes (conservative fallback)
+  // 11. Default allow for low/medium-risk writes (conservative fallback)
   {
     id: 'allow_low_medium_writes',
     description: 'Allow write operations with low/medium risk when no higher rule applies',
