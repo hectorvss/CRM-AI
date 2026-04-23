@@ -1082,6 +1082,84 @@ function createResponse(input: {
   };
 }
 
+function buildResponseFromPlanOutcome(
+  input: string,
+  runId: string,
+  response: any,
+  trace: any,
+): ReturnType<typeof createResponse> {
+  const consultedModules: string[] = Array.from(
+    new Set(
+      (trace?.spans ?? [])
+        .map((span: any) => String(span.tool || '').split('.')[0])
+        .filter(Boolean),
+    ),
+  ) as string[];
+  const summary =
+    trace?.summary
+    || response?.plan?.rationale
+    || response?.question
+    || response?.error
+    || 'Super Agent completed the requested operation.';
+  const statusLine =
+    response?.kind === 'clarification' ? 'Clarification required'
+    : trace?.status === 'pending_approval' ? 'Waiting for approval'
+    : trace?.status === 'rejected_by_policy' ? 'Blocked by policy'
+    : trace?.status === 'failed' ? 'Execution failed'
+    : 'Completed';
+
+  const steps = Array.isArray(trace?.spans)
+    ? trace.spans.map((span: any) => ({
+        label: span.tool,
+        value: span.result?.ok
+          ? toText(span.result?.value)
+          : span.result?.error || 'Failed',
+      }))
+    : [];
+
+  return createResponse({
+    input,
+    summary,
+    statusLine,
+    sections: response?.kind === 'plan'
+      ? [
+          { title: 'Plan', items: (response.plan?.steps ?? []).map((step: any) => `${step.tool} · ${step.rationale || 'No rationale'}`) },
+          { title: 'Execution', items: [trace?.summary || 'Execution completed.'] },
+        ]
+      : response?.kind === 'clarification'
+        ? [{ title: 'Clarification', items: [response.question] }]
+        : [{ title: 'Execution', items: [response?.error || 'Unknown LLM error'] }],
+    actions: Array.isArray(trace?.approvalIds) && trace.approvalIds.length
+      ? trace.approvalIds.map((approvalId: string) => buildAction({
+          req: { permissions: [] } as MultiTenantRequest,
+          label: 'Review approval',
+          description: 'Open the required approval request.',
+          targetPage: 'approvals',
+          focusId: approvalId,
+        }))
+      : [],
+    contextPanel: null,
+    agents: [],
+    suggestedReplies: [],
+    consultedModules,
+    facts: steps.map((step: any) => `${step.label}: ${step.value}`),
+    conflicts: [],
+    sources: consultedModules,
+    evidence: trace?.approvalIds?.length ? [`Approval required: ${trace.approvalIds.join(', ')}`] : [],
+    steps: Array.isArray(trace?.spans)
+      ? trace.spans.map((span: any) => ({
+          id: span.stepId,
+          label: span.tool,
+          status: span.result?.ok ? 'completed' : 'failed',
+          detail: span.result?.error || null,
+        }))
+      : [],
+    runId,
+    structuredIntent: response?.kind === 'plan' ? response.plan : null,
+    navigationTarget: null,
+  });
+}
+
 function parseEntityId(input: string, pattern: RegExp) {
   const match = input.match(pattern);
   return match ? match[0] : null;
@@ -2147,6 +2225,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
     const scope = getScope(req);
     const input = String(req.body?.input || '').trim();
     const runId = String(req.body?.runId || crypto.randomUUID());
+    const mode = String(req.body?.mode || 'investigate') === 'operate' ? 'operate' : 'investigate';
     const commandContext = (req.body?.context || {}) as CommandContext;
     const sessionId = commandContext.sessionId || runId;
     const agents = hasPermission(req, 'agents.read') ? await agentRepository.listAgents(scope) : [];
@@ -2306,6 +2385,47 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
     // When SUPER_AGENT_LLM_ROUTING=true the /plan endpoint is the primary
     // path. Here we silently mirror traffic to measure LLM accuracy vs. regex.
     const llmEnabled = process.env.SUPER_AGENT_LLM_ROUTING === 'true';
+    if (llmEnabled && input) {
+      const { response: llmResponse, trace } = await planEngine.planAndExecute(
+        {
+          userMessage: input,
+          sessionId,
+          userId: req.userId || 'system',
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId || null,
+          hasPermission: (perm: string) => hasPermission(req, perm),
+        },
+        { dryRun: mode === 'investigate' },
+      );
+
+      const finalResponse = buildResponseFromPlanOutcome(input, runId, llmResponse, trace);
+
+      await auditRepository.log({
+        tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId,
+        actorId: req.userId || 'system',
+        action: 'SUPER_AGENT_COMMAND',
+        entityType: finalResponse.navigationTarget?.entityType || 'workspace',
+        entityId: finalResponse.navigationTarget?.entityId || scope.workspaceId,
+        metadata: {
+          source: 'super-agent',
+          input,
+          runId,
+          sessionId,
+          llmRouting: true,
+          consultedModules: finalResponse.consultedModules || [],
+          navigationTarget: finalResponse.navigationTarget || null,
+        },
+      });
+
+      return res.json({
+        ok: true,
+        sessionId,
+        permissionMatrix: buildPermissionMatrix(req),
+        response: finalResponse,
+      });
+    }
+
     if (!llmEnabled && input) {
       const shadowSessionId = commandContext.sessionId || `shadow-${req.userId || 'anon'}-${scope.workspaceId}`;
       void planEngine
