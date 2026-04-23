@@ -1068,6 +1068,7 @@ CREATE TABLE IF NOT EXISTS super_agent_sessions (
   turns_json    TEXT NOT NULL DEFAULT '[]',          -- Turn[] — last N turns (L1)
   summary       TEXT NOT NULL DEFAULT '',            -- Rolling summary (L2)
   slots_json    TEXT NOT NULL DEFAULT '{}',          -- Slot map keyed by slot type
+  recent_targets_json TEXT NOT NULL DEFAULT '[]',     -- Recent navigation targets for coreference
   pending_approval_ids_json TEXT NOT NULL DEFAULT '[]',
   active_plan_id TEXT,
   created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),

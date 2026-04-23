@@ -940,6 +940,7 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
           turns_json    TEXT NOT NULL DEFAULT '[]',
           summary       TEXT NOT NULL DEFAULT '',
           slots_json    TEXT NOT NULL DEFAULT '{}',
+          recent_targets_json TEXT NOT NULL DEFAULT '[]',
           pending_approval_ids_json TEXT NOT NULL DEFAULT '[]',
           active_plan_id TEXT,
           created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
@@ -968,6 +969,20 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
         CREATE INDEX IF NOT EXISTS idx_sa_traces_tenant  ON super_agent_traces(tenant_id, started_at DESC);
         CREATE INDEX IF NOT EXISTS idx_sa_traces_user    ON super_agent_traces(user_id, started_at DESC);
       `);
+    },
+  },
+  // ── 2026-04-23-002: add recent_targets_json to super_agent_sessions ───────
+  {
+    version: '2026-04-23-002',
+    up(db) {
+      const columns = db.prepare("PRAGMA table_info(super_agent_sessions)").all() as Array<{ name: string }>;
+      const hasRecentTargets = columns.some((column) => column.name === 'recent_targets_json');
+      if (!hasRecentTargets) {
+        db.exec(`
+          ALTER TABLE super_agent_sessions
+          ADD COLUMN recent_targets_json TEXT NOT NULL DEFAULT '[]';
+        `);
+      }
     },
   },
 ];

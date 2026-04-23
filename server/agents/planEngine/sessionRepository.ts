@@ -10,7 +10,7 @@
 
 import { getDb } from '../../db/client.js';
 import { logger } from '../../utils/logger.js';
-import type { SessionState, Turn, Slot } from './types.js';
+import type { SessionState, Turn, Slot, ConversationTarget } from './types.js';
 
 const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour default
 
@@ -25,6 +25,7 @@ function rowToSession(row: any): SessionState {
     turns: JSON.parse(row.turns_json || '[]') as Turn[],
     summary: row.summary ?? '',
     slots: JSON.parse(row.slots_json || '{}') as Record<string, Slot>,
+    recentTargets: JSON.parse(row.recent_targets_json || '[]') as ConversationTarget[],
     pendingApprovalIds: JSON.parse(row.pending_approval_ids_json || '[]') as string[],
     activePlanId: row.active_plan_id ?? undefined,
     createdAt: row.created_at,
@@ -72,6 +73,7 @@ export function createSession(
     turns: [],
     summary: '',
     slots: {},
+    recentTargets: [],
     pendingApprovalIds: [],
     createdAt: now,
     updatedAt: now,
@@ -82,12 +84,12 @@ export function createSession(
     db.prepare(`
       INSERT OR REPLACE INTO super_agent_sessions
         (id, user_id, tenant_id, workspace_id, turns_json, summary,
-         slots_json, pending_approval_ids_json, active_plan_id,
+         slots_json, recent_targets_json, pending_approval_ids_json, active_plan_id,
          created_at, updated_at, ttl_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, userId, tenantId, workspaceId,
-      '[]', '', '{}', '[]', null,
+      '[]', '', '{}', '[]', '[]', null,
       now, now, ttlAt,
     );
   } catch (err) {
@@ -112,9 +114,9 @@ export function saveSession(session: SessionState): void {
     db.prepare(`
       INSERT OR REPLACE INTO super_agent_sessions
         (id, user_id, tenant_id, workspace_id, turns_json, summary,
-         slots_json, pending_approval_ids_json, active_plan_id,
+         slots_json, recent_targets_json, pending_approval_ids_json, active_plan_id,
          created_at, updated_at, ttl_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       session.id,
       session.userId,
@@ -123,6 +125,7 @@ export function saveSession(session: SessionState): void {
       JSON.stringify(session.turns),
       session.summary,
       JSON.stringify(session.slots),
+      JSON.stringify(session.recentTargets ?? []),
       JSON.stringify(session.pendingApprovalIds),
       session.activePlanId ?? null,
       session.createdAt,

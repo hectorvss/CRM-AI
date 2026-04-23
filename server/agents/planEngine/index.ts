@@ -37,6 +37,7 @@ import type {
   SessionState,
   ToolExecutionContext,
   AuditEntry,
+  ConversationTarget,
 } from './types.js';
 import type { PlanRequest, LLMResponse, AgentRuntimeConfig } from './llm.js';
 
@@ -195,6 +196,43 @@ async function llmSummarize(prompt: string): Promise<string> {
   });
 }
 
+function rememberTarget(sessionId: string, target: ConversationTarget | null | undefined): SessionState | null {
+  if (!target) return null;
+  const session = sessionRepo.getSession(sessionId);
+  if (!session) return null;
+
+  const nextTargets = [
+    target,
+    ...(session.recentTargets ?? []).filter((existing) => {
+      const sameEntity = existing.entityType === target.entityType && existing.entityId === target.entityId;
+      const sameSection = existing.section === target.section;
+      return !(sameEntity && sameSection);
+    }),
+  ].slice(0, 5);
+
+  session.recentTargets = nextTargets;
+  sessionRepo.saveSession(session);
+  return session;
+}
+
+function getCommandContext(sessionId: string): { recentTargets: ConversationTarget[]; activeTarget: ConversationTarget | null } {
+  const session = sessionRepo.getSession(sessionId);
+  const recentTargets = session?.recentTargets ?? [];
+  return {
+    recentTargets,
+    activeTarget: recentTargets[0] ?? null,
+  };
+}
+
+function ensureSession(
+  sessionId: string,
+  userId: string,
+  tenantId: string,
+  workspaceId: string | null,
+): SessionState {
+  return sessionRepo.getOrCreateSession(sessionId, userId, tenantId, workspaceId);
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export interface PlanEngineGenerateInput {
@@ -255,6 +293,7 @@ export const planEngine = {
         turns: session.turns,
         summary: session.summary,
         slots: session.slots,
+        recentTargets: session.recentTargets,
         pendingApprovalIds: session.pendingApprovalIds,
       },
       availableTools,
@@ -382,6 +421,16 @@ export const planEngine = {
   /** Aggregate trace metrics for observability dashboards. */
   getMetrics(sessionId?: string) {
     return traceRepo.getTraceMetrics(sessionId);
+  },
+
+  ensureSession,
+
+  rememberTarget(sessionId: string, target: ConversationTarget | null | undefined) {
+    return rememberTarget(sessionId, target);
+  },
+
+  getCommandContext(sessionId: string) {
+    return getCommandContext(sessionId);
   },
 
   /** Tool catalog (for observability and admin). */

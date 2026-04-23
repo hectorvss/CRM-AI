@@ -236,6 +236,15 @@ export interface Slot {
   ttlTurns: number;
 }
 
+export interface ConversationTarget {
+  page: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  section?: string | null;
+  sourceContext?: string | null;
+  runId?: string | null;
+}
+
 export interface SessionState {
   id: string;
   userId: string;
@@ -246,6 +255,8 @@ export interface SessionState {
   summary: string;
   /** Live entities referenceable by pronouns / ellipsis. */
   slots: Record<string, Slot>;
+  /** Last navigation targets to resolve pronouns / ellipsis. */
+  recentTargets: ConversationTarget[];
   /** Approvals awaiting human decision inside this session. */
   pendingApprovalIds: string[];
   /** Currently executing plan, if any. */

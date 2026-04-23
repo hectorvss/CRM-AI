@@ -61,7 +61,7 @@ export interface PlanRequest {
   /** Raw user message for this turn. */
   userMessage: string;
   /** Session state — L1 turns, slots, pending approvals, summary. */
-  session: Pick<SessionState, 'id' | 'turns' | 'summary' | 'slots' | 'pendingApprovalIds'>;
+  session: Pick<SessionState, 'id' | 'turns' | 'summary' | 'slots' | 'recentTargets' | 'pendingApprovalIds'>;
   /** Tools the caller is permitted to use (already filtered by permission). */
   availableTools: CatalogEntry[];
   /** Optional domain snapshot — recent entity the user was discussing. */
@@ -205,6 +205,21 @@ function buildContextMessages(req: PlanRequest): Array<{ role: 'user' | 'model';
     messages.push({
       role: 'model',
       parts: [{ text: '{"kind":"clarification","question":"(context loaded)"}' }],
+    });
+  }
+
+  const recentTargets = Array.isArray(req.session.recentTargets) ? req.session.recentTargets.slice(0, 5) : [];
+  if (recentTargets.length > 0) {
+    const targetText = recentTargets
+      .map((target, index) => `${index + 1}. ${target.entityType || target.page}${target.entityId ? `:${target.entityId}` : ''}${target.section ? `#${target.section}` : ''}`)
+      .join('\n');
+    messages.push({
+      role: 'user',
+      parts: [{ text: `[Recent navigation targets]\n${targetText}` }],
+    });
+    messages.push({
+      role: 'model',
+      parts: [{ text: '{"kind":"clarification","question":"(navigation context loaded)"}' }],
     });
   }
 

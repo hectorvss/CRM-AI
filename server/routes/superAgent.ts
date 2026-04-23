@@ -338,6 +338,28 @@ function deriveEvidence(response: any) {
 }
 
 function resolveRelativeTarget(text: string, context?: CommandContext | null) {
+  if (context?.activeTarget) {
+    const activeTarget = context.activeTarget;
+    const wantsOrder = /(pedido|order)/.test(text);
+    const wantsPayment = /(pago|payment|refund)/.test(text);
+    const wantsReturn = /(devolucion|return)/.test(text);
+    const wantsApproval = /(aprob|approval)/.test(text);
+    const wantsCustomer = /(cliente|customer)/.test(text);
+    const wantsWorkflow = /(workflow)/.test(text);
+    const wantsCase = /(caso|case|hilo|thread)/.test(text);
+
+    const matchesActive =
+      (wantsOrder && activeTarget.entityType === 'order') ||
+      (wantsPayment && activeTarget.entityType === 'payment') ||
+      (wantsReturn && activeTarget.entityType === 'return') ||
+      (wantsApproval && activeTarget.entityType === 'approval') ||
+      (wantsCustomer && activeTarget.entityType === 'customer') ||
+      (wantsWorkflow && activeTarget.entityType === 'workflow') ||
+      (wantsCase && activeTarget.entityType === 'case');
+
+    if (matchesActive) return activeTarget;
+  }
+
   const recentTargets = Array.isArray(context?.recentTargets) ? context!.recentTargets! : [];
   if (!recentTargets.length) return null;
 
@@ -2229,6 +2251,16 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
     const commandContext = (req.body?.context || {}) as CommandContext;
     const sessionId = commandContext.sessionId || runId;
     const agents = hasPermission(req, 'agents.read') ? await agentRepository.listAgents(scope) : [];
+    planEngine.ensureSession(sessionId, req.userId || 'system', scope.tenantId, scope.workspaceId || null);
+    const sessionMemory = planEngine.getCommandContext(sessionId);
+    const enrichedCommandContext: CommandContext = {
+      ...commandContext,
+      recentTargets: [
+        ...(commandContext.recentTargets || []),
+        ...(sessionMemory.recentTargets || []),
+      ].slice(0, 5),
+      activeTarget: commandContext.activeTarget || sessionMemory.activeTarget || null,
+    };
 
     if (!input) {
       res.status(400).json({ error: 'input is required' });
@@ -2241,7 +2273,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       step: { id: 'parse', label: 'Normalizing command intent', status: 'running' },
     });
 
-    const command = parseCommandIntent(input, commandContext);
+    const command = parseCommandIntent(input, enrichedCommandContext);
 
     emitSuperAgentEvent(scope, 'step_completed', {
       runId,
@@ -2335,6 +2367,10 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       ],
     };
 
+    if (finalResponse.navigationTarget) {
+      planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
+    }
+
     const chunks = splitIntoChunks([
       finalResponse.summary,
       ...(Array.isArray(finalResponse.facts) ? finalResponse.facts.slice(0, 3) : []),
@@ -2399,6 +2435,10 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       );
 
       const finalResponse = buildResponseFromPlanOutcome(input, runId, llmResponse, trace);
+
+      if (finalResponse.navigationTarget) {
+        planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
+      }
 
       await auditRepository.log({
         tenantId: scope.tenantId,
@@ -2582,6 +2622,11 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
       },
       { dryRun: dryRun === true },
     );
+
+    const plannedResponse = buildResponseFromPlanOutcome(userMessage.trim(), effectiveSessionId, response, trace);
+    if (plannedResponse.navigationTarget) {
+      planEngine.rememberTarget(effectiveSessionId, plannedResponse.navigationTarget);
+    }
 
     return res.json({ response, trace: trace ?? null, sessionId: effectiveSessionId });
   } catch (error) {
