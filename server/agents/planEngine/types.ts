@@ -133,6 +133,11 @@ export interface PlanStep {
   args: unknown;
   /** Step ids this step depends on. Empty = may run first / in parallel with other roots. */
   dependsOn: string[];
+  /**
+   * When true, the executor records a failed span but continues with later steps.
+   * Useful for orchestration chains where partial execution is preferable to an abort.
+   */
+  continueOnFailure?: boolean;
   /** Optional human-readable rationale for this specific step. */
   rationale?: string;
 }

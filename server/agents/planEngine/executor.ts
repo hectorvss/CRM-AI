@@ -326,6 +326,9 @@ export async function executePlan(
         tool: step.tool,
         error: result.error,
       });
+      if (step.continueOnFailure) {
+        continue;
+      }
       break;
     }
   }

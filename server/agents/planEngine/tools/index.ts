@@ -28,6 +28,7 @@ import {
   agentFraudCheckTool,
   agentEscalateTool,
 } from './agentDelegates.js';
+import { agentRunTool } from './agentRun.js';
 
 export function registerAllTools(): void {
   // Orders
@@ -67,4 +68,5 @@ export function registerAllTools(): void {
   toolRegistry.register(agentTriageTool);
   toolRegistry.register(agentFraudCheckTool);
   toolRegistry.register(agentEscalateTool);
+  toolRegistry.register(agentRunTool);
 }

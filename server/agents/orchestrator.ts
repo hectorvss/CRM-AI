@@ -6,104 +6,136 @@
  * The orchestrator answers: "given this lifecycle event on this case,
  * which agents should run, and in what order?"
  *
- * Routing is 100% deterministic (no AI). Each trigger maps to an ordered
- * list of agent slugs. The agents run sequentially so each one can read
- * the results of the previous one from the context window.
- *
- * Gemini is only used inside the individual agent implementations.
+ * Routing is deterministic, but execution now flows through the same
+ * Plan Engine runtime used by Super Agent. That gives us a single policy,
+ * trace, approval and SSE path for both user-driven plans and backend
+ * orchestration chains.
  */
+
+import { randomUUID } from 'crypto';
 
 import { createCaseRepository } from '../data/cases.js';
 import { logger } from '../utils/logger.js';
-import { runAgent } from './runner.js';
 import { broadcastSSE } from '../routes/sse.js';
 import { requireScope } from '../lib/scope.js';
+import { enqueue } from '../queue/client.js';
+import { JobType } from '../queue/types.js';
+import { planEngine } from './planEngine/index.js';
 import type { JobHandler } from '../queue/types.js';
 import type { AgentTriggerPayload } from '../queue/types.js';
-
-// ── Routing table ─────────────────────────────────────────────────────────────
-//
-// Order matters: agents earlier in the list can write DB state that later
-// agents read via the context window.
+import type { Plan } from './planEngine/types.js';
 
 type TriggerEvent = AgentTriggerPayload['triggerEvent'];
 
 const ROUTING_TABLE: Record<TriggerEvent, string[]> = {
   case_created: [
-    'triage-agent',                 // classify urgency + severity + SLA
-    'identity-resolver',            // link cross-system identities
-    'identity-mapping-agent',       // deep cross-system identity mapping
-    'customer-identity-agent',      // canonical customer truth + metrics
-    'customer-profiler',            // build risk score + segment
-    'knowledge-retriever',          // attach relevant policy articles
-    'helpdesk-agent',               // sync helpdesk tags + notes
-    'shopify-connector',            // read order state from Shopify
-    'stripe-connector',             // read payment state from Stripe
-    'logistics-tracking-agent',     // check shipping/tracking status
-    'fraud-detector',               // scan for fraud signals
-    'sla-monitor',                  // set initial SLA tracking
-    'customer-communication-agent', // decide if ack message needed
-    'audit-logger',                 // record case creation audit event
+    'triage-agent',
+    'identity-resolver',
+    'identity-mapping-agent',
+    'customer-identity-agent',
+    'customer-profiler',
+    'knowledge-retriever',
+    'helpdesk-agent',
+    'shopify-connector',
+    'stripe-connector',
+    'logistics-tracking-agent',
+    'fraud-detector',
+    'sla-monitor',
+    'customer-communication-agent',
+    'audit-logger',
   ],
-
   message_received: [
-    'triage-agent',                 // re-evaluate urgency on new message
-    'helpdesk-agent',               // sync helpdesk tags from message
-    'knowledge-retriever',          // refresh relevant policies
-    'sla-monitor',                  // check first-response SLA
-    'customer-communication-agent', // decide communication strategy
-    'draft-reply-agent',            // generate AI draft reply
-    'audit-logger',                 // record message receipt audit event
+    'triage-agent',
+    'helpdesk-agent',
+    'knowledge-retriever',
+    'sla-monitor',
+    'customer-communication-agent',
+    'draft-reply-agent',
+    'audit-logger',
   ],
-
   conflicts_detected: [
-    'shopify-connector',            // read latest Shopify state
-    'stripe-connector',             // read latest Shopify state
-    'oms-erp-agent',                // verify back-office consistency
-    'returns-agent',                // check return lifecycle state
-    'subscription-agent',           // check subscription state if relevant
-    'qa-policy-check',              // validate resolution against policies
-    'approval-gatekeeper',          // determine if approval is required
-    'fraud-detector',               // scan conflicts for fraud patterns
-    'escalation-manager',           // check if escalation needed
-    'report-generator',             // generate AI diagnosis for conflicts
-    'workflow-runtime-agent',       // pause workflows if needed
-    'audit-logger',                 // record conflict detection audit event
+    'shopify-connector',
+    'stripe-connector',
+    'oms-erp-agent',
+    'returns-agent',
+    'subscription-agent',
+    'qa-policy-check',
+    'approval-gatekeeper',
+    'fraud-detector',
+    'escalation-manager',
+    'report-generator',
+    'workflow-runtime-agent',
+    'audit-logger',
   ],
-
   approval_approved: [
-    'approval-gatekeeper',           // release the approval gate
-    'workflow-runtime-agent',        // advance workflow past human review
-    'resolution-executor',           // execute or stage approved resolution
-    'returns-agent',                 // unblock return lifecycle
-    'stripe-connector',              // prepare approved credit/refund writeback
-    'shopify-connector',             // prepare approved replacement/order writeback
-    'oms-erp-agent',                 // align back-office state
-    'customer-communication-agent',  // decide customer update objective
-    'composer-translator',           // draft approved outcome message
-    'audit-logger',                 // record approval release audit event
+    'approval-gatekeeper',
+    'workflow-runtime-agent',
+    'resolution-executor',
+    'returns-agent',
+    'stripe-connector',
+    'shopify-connector',
+    'oms-erp-agent',
+    'customer-communication-agent',
+    'composer-translator',
+    'audit-logger',
   ],
-
   approval_rejected: [
-    'approval-gatekeeper',           // stop the blocked action
-    'workflow-runtime-agent',        // close workflow branch
-    'customer-communication-agent',  // decide rejection update objective
-    'composer-translator',           // draft policy-grounded rejection message
-    'audit-logger',                 // record rejection audit event
+    'approval-gatekeeper',
+    'workflow-runtime-agent',
+    'customer-communication-agent',
+    'composer-translator',
+    'audit-logger',
   ],
-
   case_resolved: [
-    'qa-policy-check',              // final compliance check
-    'report-generator',             // generate resolution summary report
-    'workflow-runtime-agent',       // complete active workflows
-    'sla-escalation-agent',         // final SLA status update
-    'customer-communication-agent', // send resolution confirmation
-    'composer-translator',          // draft localized resolution message
-    'audit-logger',                 // record case resolution audit event
+    'qa-policy-check',
+    'report-generator',
+    'workflow-runtime-agent',
+    'sla-escalation-agent',
+    'customer-communication-agent',
+    'composer-translator',
+    'audit-logger',
   ],
 };
 
-// ── AGENT_TRIGGER job handler ─────────────────────────────────────────────────
+function buildChainPlan(input: {
+  triggerEvent: TriggerEvent;
+  caseId: string;
+  slugs: string[];
+  traceId: string;
+  extraContext: Record<string, unknown>;
+}): Plan {
+  const { triggerEvent, caseId, slugs, traceId, extraContext } = input;
+
+  const steps = slugs.map((agentSlug, index) => ({
+    id: `step_${index}`,
+    tool: 'agent.run',
+    args: {
+      agentSlug,
+      caseId,
+      triggerEvent,
+      extraContext: {
+        ...extraContext,
+        orchestration: 'deterministic',
+        chainIndex: index,
+        chainLength: slugs.length,
+      },
+    },
+    dependsOn: index === 0 ? [] : [`step_${index - 1}`],
+    continueOnFailure: true,
+    rationale: `Run orchestrator agent ${agentSlug} for ${triggerEvent}`,
+  }));
+
+  return {
+    planId: traceId,
+    sessionId: `agent-chain:${traceId}`,
+    createdAt: new Date().toISOString(),
+    steps,
+    confidence: 1,
+    rationale: `Deterministic orchestration chain for ${triggerEvent}`,
+    needsApproval: false,
+    responseTemplate: `Orchestrated ${slugs.length} agent(s) for ${triggerEvent}`,
+  };
+}
 
 export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, ctx) => {
   const { triggerEvent, caseId, agentSlug, context: extraContext = {} } = payload;
@@ -111,11 +143,8 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
 
   const { tenantId: resolvedTenantId, workspaceId: resolvedWorkspaceId } = requireScope({ tenantId, workspaceId }, 'agentTriggerHandler');
 
-  // ── Determine which agents to run ────────────────────────────────────────
   let slugsToRun: string[];
-
   if (agentSlug) {
-    // Direct invocation of a single agent (bypass routing table)
     slugsToRun = [agentSlug];
   } else {
     slugsToRun = ROUTING_TABLE[triggerEvent] ?? [];
@@ -126,16 +155,6 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
     return;
   }
 
-  logger.info('Orchestrator dispatching agents', {
-    triggerEvent, caseId, slugs: slugsToRun, jobId: ctx.jobId,
-  });
-
-  // Broadcast chain start to SSE clients
-  broadcastSSE(resolvedTenantId, 'chain:start', {
-    caseId, triggerEvent, slugs: slugsToRun,
-  });
-
-  // ── Check case still exists and is actionable ─────────────────────────────
   const caseRepo = createCaseRepository();
   const caseRow = await caseRepo.get({ tenantId: resolvedTenantId, workspaceId: resolvedWorkspaceId }, caseId);
 
@@ -144,77 +163,83 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
     return;
   }
 
-  // Don't run agents on cases that are already closed (except audit-logger)
   const isClosed = caseRow.status === 'closed' || caseRow.status === 'resolved';
   if (isClosed && triggerEvent !== 'case_resolved') {
     logger.debug('Case already closed — skipping non-resolution trigger', { caseId, triggerEvent });
     return;
   }
 
-  // ── Run agents sequentially ───────────────────────────────────────────────
-  let consecutiveFailures = 0;
+  const plan = buildChainPlan({
+    triggerEvent,
+    caseId,
+    slugs: slugsToRun,
+    traceId: traceId ?? randomUUID(),
+    extraContext,
+  });
 
-  for (const slug of slugsToRun) {
-    // Skip audit-logger if previous agents all failed (avoid spammy partial audits)
-    if (slug === 'audit-logger' && consecutiveFailures === slugsToRun.length - 1) {
-      logger.debug('Skipping audit-logger — all prior agents failed', { caseId });
-      continue;
-    }
+  logger.info('Orchestrator dispatching agents via Plan Engine', {
+    triggerEvent,
+    caseId,
+    slugs: slugsToRun,
+    jobId: ctx.jobId,
+    planId: plan.planId,
+  });
 
-    try {
-      broadcastSSE(resolvedTenantId, 'agent:start', {
-        agentSlug: slug, caseId, triggerEvent,
-      });
+  broadcastSSE(resolvedTenantId, 'chain:start', {
+    caseId,
+    triggerEvent,
+    slugs: slugsToRun,
+    planId: plan.planId,
+  });
 
-      const result = await runAgent({
-        agentSlug: slug,
-        caseId,
-        tenantId: resolvedTenantId,
-        workspaceId: resolvedWorkspaceId,
-        triggerEvent,
-        traceId,
-        extraContext,
-      });
+  try {
+    const trace = await planEngine.execute({
+      plan,
+      userId: 'system',
+      tenantId: resolvedTenantId,
+      workspaceId: resolvedWorkspaceId,
+      hasPermission: () => true,
+    });
 
-      const status = result.success ? 'completed' : 'failed';
-      broadcastSSE(resolvedTenantId, 'agent:finish', {
-        agentSlug: slug, caseId, status,
-        summary: result.summary ?? null,
-        confidence: result.confidence ?? null,
-        error: result.error ?? null,
-      });
+    const failures = trace.spans.filter((span) => !span.result.ok).length;
 
-      if (!result.success) {
-        consecutiveFailures++;
-        logger.warn('Agent returned failure', { slug, caseId, error: result.error });
-      } else {
-        consecutiveFailures = 0;
-      }
-    } catch (err: any) {
-      consecutiveFailures++;
-      broadcastSSE(resolvedTenantId, 'agent:finish', {
-        agentSlug: slug, caseId, status: 'error',
-        error: err?.message ?? 'Unknown error',
-      });
-      logger.error('Agent threw unhandled error', { slug, caseId, error: err?.message });
-    }
+    broadcastSSE(resolvedTenantId, 'chain:finish', {
+      caseId,
+      triggerEvent,
+      failures,
+      totalAgents: slugsToRun.length,
+      planId: plan.planId,
+      status: trace.status,
+    });
+
+    logger.info('Orchestrator finished agent chain', {
+      triggerEvent,
+      caseId,
+      slugs: slugsToRun,
+      failures,
+      planId: plan.planId,
+      traceStatus: trace.status,
+    });
+  } catch (err: any) {
+    broadcastSSE(resolvedTenantId, 'chain:finish', {
+      caseId,
+      triggerEvent,
+      failures: slugsToRun.length,
+      totalAgents: slugsToRun.length,
+      planId: plan.planId,
+      status: 'error',
+      error: err?.message ?? 'Unknown error',
+    });
+
+    logger.error('Orchestrator chain execution failed', {
+      triggerEvent,
+      caseId,
+      slugs: slugsToRun,
+      planId: plan.planId,
+      error: err?.message ?? String(err),
+    });
   }
-
-  broadcastSSE(resolvedTenantId, 'chain:finish', {
-    caseId, triggerEvent, failures: consecutiveFailures,
-    totalAgents: slugsToRun.length,
-  });
-
-  logger.info('Orchestrator finished agent chain', {
-    triggerEvent, caseId, slugs: slugsToRun,
-    failures: consecutiveFailures,
-  });
 };
-
-// ── Helper: fire-and-forget trigger (called from pipeline handlers) ───────────
-
-import { enqueue } from '../queue/client.js';
-import { JobType } from '../queue/types.js';
 
 export function triggerAgents(
   event: TriggerEvent,
