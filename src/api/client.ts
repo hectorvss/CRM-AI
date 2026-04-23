@@ -445,6 +445,14 @@ export const superAgentApi = {
       method: 'POST',
       body: JSON.stringify({ userMessage, ...options }),
     }),
+  session: (sessionId: string) => request<any>(`/super-agent/sessions/${encodeURIComponent(sessionId)}`),
+  sessionTraces: (sessionId: string, limit = 20) =>
+    request<any>(`/super-agent/sessions/${encodeURIComponent(sessionId)}/traces?limit=${limit}`),
+  trace: (planId: string) => request<any>(`/super-agent/traces/${encodeURIComponent(planId)}`),
+  replay: (sessionId: string, limit = 20) =>
+    request<any>(`/super-agent/replay/${encodeURIComponent(sessionId)}?limit=${limit}`),
+  metrics: (sessionId?: string) =>
+    request<any>(`/super-agent/metrics${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`),
 };
 
 // ── Health ────────────────────────────────────────────────

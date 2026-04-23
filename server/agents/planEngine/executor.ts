@@ -24,10 +24,12 @@ import type {
   ToolExecutionContext,
   ToolResult,
   PolicyDecision,
+  RiskLevel,
 } from './types.js';
 import { toolRegistry } from './registry.js';
 import { evaluatePlan, aggregateDecision } from './policy.js';
 import { logger } from '../../utils/logger.js';
+import { classifyRiskFromArgs, isToolBlocked } from './safety.js';
 
 export interface ExecutorDeps {
   /** Create an approval request when policy says `require_approval`. Returns approval id. */
@@ -127,6 +129,13 @@ async function runStepWithTimeout(
   ]);
 }
 
+function elevateRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
+  const order: RiskLevel[] = ['none', 'low', 'medium', 'high', 'critical'];
+  const left = order.indexOf(a);
+  const right = order.indexOf(b);
+  return right > left ? b : a;
+}
+
 export async function executePlan(
   plan: Plan,
   context: ToolExecutionContext,
@@ -209,6 +218,16 @@ export async function executePlan(
       break;
     }
 
+    if (isToolBlocked(tool.name)) {
+      anyFailed = true;
+      spans.push(makeSyntheticSpan(step, decision.riskLevel, {
+        ok: false,
+        error: `Tool ${tool.name} is disabled by Super Agent kill-switch`,
+        errorCode: 'TOOL_BLOCKED',
+      }));
+      break;
+    }
+
     // Step-level approval gate
     if (decision.action === 'require_approval') {
       if (options.skipApprovals) {
@@ -261,6 +280,8 @@ export async function executePlan(
       break;
     }
 
+    const runtimeRisk = elevateRisk(decision.riskLevel, classifyRiskFromArgs(tool.name, interpolated));
+
     // Execute
     const stepStart = Date.now();
     const stepStartIso = new Date(stepStart).toISOString();
@@ -291,7 +312,7 @@ export async function executePlan(
       latencyMs: stepEnd - stepStart,
       args: parsed.value,
       result,
-      riskLevel: decision.riskLevel,
+      riskLevel: runtimeRisk,
       dryRun: options.dryRun === true,
     };
     spans.push(span);

@@ -30,6 +30,7 @@ import { logger } from '../../utils/logger.js';
 import * as sessionRepo from './sessionRepository.js';
 import * as traceRepo from './traceRepository.js';
 import { extractSlotsFromTrace, maybeCompressTurns } from './slots.js';
+import { redactSensitiveText } from './safety.js';
 import type {
   Plan,
   ExecutionTrace,
@@ -189,7 +190,7 @@ async function llmSummarize(prompt: string): Promise<string> {
   const provider = getPlanEngineLLMProvider();
   // Re-use the summarizeResult method with a single pseudo-step
   return provider.summarizeResult({
-    userMessage: prompt,
+    userMessage: redactSensitiveText(prompt),
     steps: [],
   });
 }
@@ -376,6 +377,11 @@ export const planEngine = {
   /** List traces for a session. */
   listTraces(sessionId: string, limit?: number) {
     return traceRepo.listTracesForSession(sessionId, limit);
+  },
+
+  /** Aggregate trace metrics for observability dashboards. */
+  getMetrics(sessionId?: string) {
+    return traceRepo.getTraceMetrics(sessionId);
   },
 
   /** Tool catalog (for observability and admin). */

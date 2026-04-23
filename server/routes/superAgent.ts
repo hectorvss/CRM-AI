@@ -47,6 +47,7 @@ type NavigationTarget = {
 };
 
 type CommandContext = {
+  sessionId?: string | null;
   recentTargets?: NavigationTarget[];
   activeTarget?: NavigationTarget | null;
   lastStructuredIntent?: Record<string, any> | null;
@@ -152,6 +153,10 @@ function hasPermission(req: MultiTenantRequest, permission: string) {
 
 function hasAnyPermission(req: MultiTenantRequest, permissions: string[]) {
   return permissions.some((permission) => hasPermission(req, permission));
+}
+
+function canInspectSuperAgent(req: MultiTenantRequest) {
+  return hasAnyPermission(req, ['audit.read', 'cases.read', 'approvals.read', 'reports.read', 'settings.read', 'agents.read']);
 }
 
 function titleCase(value?: string | null) {
@@ -2143,6 +2148,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
     const input = String(req.body?.input || '').trim();
     const runId = String(req.body?.runId || crypto.randomUUID());
     const commandContext = (req.body?.context || {}) as CommandContext;
+    const sessionId = commandContext.sessionId || runId;
     const agents = hasPermission(req, 'agents.read') ? await agentRepository.listAgents(scope) : [];
 
     if (!input) {
@@ -2301,7 +2307,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
     // path. Here we silently mirror traffic to measure LLM accuracy vs. regex.
     const llmEnabled = process.env.SUPER_AGENT_LLM_ROUTING === 'true';
     if (!llmEnabled && input) {
-      const shadowSessionId = `shadow-${req.userId || 'anon'}-${scope.workspaceId}`;
+      const shadowSessionId = commandContext.sessionId || `shadow-${req.userId || 'anon'}-${scope.workspaceId}`;
       void planEngine
         .generate({
           userMessage: input,
@@ -2330,6 +2336,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
 
     res.json({
       ok: true,
+      sessionId,
       permissionMatrix: buildPermissionMatrix(req),
       response: finalResponse,
     });
@@ -2473,6 +2480,88 @@ router.get('/catalog', (req: MultiTenantRequest, res) => {
     return res.json({ tools: catalog, count: catalog.length });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to list tool catalog' });
+  }
+});
+
+router.get('/sessions/:sessionId', (req: MultiTenantRequest, res) => {
+  try {
+    if (!canInspectSuperAgent(req)) {
+      return res.status(403).json({ error: 'Missing permission to inspect Super Agent sessions' });
+    }
+    const session = planEngine.getSession(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    return res.json({ session });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to load Super Agent session' });
+  }
+});
+
+router.get('/sessions/:sessionId/traces', (req: MultiTenantRequest, res) => {
+  try {
+    if (!canInspectSuperAgent(req)) {
+      return res.status(403).json({ error: 'Missing permission to inspect Super Agent traces' });
+    }
+    const traces = planEngine.listTraces(req.params.sessionId, Number(req.query.limit ?? 20) || 20);
+    return res.json({ sessionId: req.params.sessionId, traces, count: traces.length });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to load Super Agent traces' });
+  }
+});
+
+router.get('/traces/:planId', (req: MultiTenantRequest, res) => {
+  try {
+    if (!canInspectSuperAgent(req)) {
+      return res.status(403).json({ error: 'Missing permission to inspect Super Agent traces' });
+    }
+    const trace = planEngine.getTrace(req.params.planId);
+    if (!trace) {
+      return res.status(404).json({ error: 'Trace not found' });
+    }
+    return res.json({ trace });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to load Super Agent trace' });
+  }
+});
+
+router.get('/replay/:sessionId', (req: MultiTenantRequest, res) => {
+  try {
+    if (!canInspectSuperAgent(req)) {
+      return res.status(403).json({ error: 'Missing permission to inspect Super Agent replay' });
+    }
+    const session = planEngine.getSession(req.params.sessionId);
+    const traces = planEngine.listTraces(req.params.sessionId, Number(req.query.limit ?? 20) || 20);
+    if (!session && traces.length === 0) {
+      return res.status(404).json({ error: 'Replay not found' });
+    }
+    return res.json({
+      session,
+      traces,
+      timeline: traces.map((trace) => ({
+        planId: trace.planId,
+        status: trace.status,
+        summary: trace.summary,
+        startedAt: trace.startedAt,
+        endedAt: trace.endedAt,
+        approvalIds: trace.approvalIds || [],
+        consultedModules: Array.from(new Set((trace.spans || []).map((span) => String(span.tool || '').split('.')[0]))).filter(Boolean),
+      })),
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to load Super Agent replay' });
+  }
+});
+
+router.get('/metrics', (req: MultiTenantRequest, res) => {
+  try {
+    if (!canInspectSuperAgent(req)) {
+      return res.status(403).json({ error: 'Missing permission to inspect Super Agent metrics' });
+    }
+    const sessionId = req.query.sessionId ? String(req.query.sessionId) : undefined;
+    return res.json({ metrics: planEngine.getMetrics(sessionId), sessionId: sessionId || null });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to load Super Agent metrics' });
   }
 });
 

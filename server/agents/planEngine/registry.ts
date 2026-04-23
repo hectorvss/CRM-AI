@@ -12,6 +12,7 @@
 
 import type { ToolSpec, SchemaDescriptor } from './types.js';
 import { logger } from '../../utils/logger.js';
+import { isToolBlocked } from './safety.js';
 
 class ToolRegistry {
   private tools = new Map<string, ToolSpec<any, any>>();
@@ -41,7 +42,7 @@ class ToolRegistry {
   /** Count of registered (non-deprecated) tools. */
   size(): number {
     let n = 0;
-    for (const t of this.tools.values()) if (!t.deprecated) n++;
+    for (const t of this.tools.values()) if (!t.deprecated && !isToolBlocked(t.name)) n++;
     return n;
   }
 
@@ -57,6 +58,7 @@ class ToolRegistry {
     const out: CatalogEntry[] = [];
     for (const spec of this.tools.values()) {
       if (spec.deprecated) continue;
+      if (isToolBlocked(spec.name)) continue;
       if (spec.requiredPermission && !hasPermission(spec.requiredPermission)) continue;
       out.push({
         name: spec.name,
@@ -87,6 +89,7 @@ class ToolRegistry {
       args: spec.args.describe(),
       returns: spec.returns.describe(),
       deprecated: spec.deprecated === true,
+      blocked: isToolBlocked(spec.name),
       requiredPermission: spec.requiredPermission,
     }));
   }
@@ -106,6 +109,7 @@ export interface CatalogEntry {
   risk: ToolSpec['risk'];
   args: SchemaDescriptor;
   returns: SchemaDescriptor;
+  blocked?: boolean;
 }
 
 /**

@@ -243,6 +243,8 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [streamActivity, setStreamActivity] = useState<StreamActivity | null>(null);
   const [isStreamConnected, setIsStreamConnected] = useState(false);
   const [planSessionId, setPlanSessionId] = useState<string | null>(null);
+  const [recentTraces, setRecentTraces] = useState<Array<{ planId: string; status: string; summary: string; startedAt: string; endedAt: string }>>([]);
+  const [traceMetrics, setTraceMetrics] = useState<{ total: number; success: number; partial: number; failed: number; pendingApproval: number; rejectedByPolicy: number; averageLatencyMs: number; averageSpanCount: number } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const streamRunIdRef = useRef<string | null>(null);
 
@@ -266,6 +268,47 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     void load();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadReplay() {
+      if (!planSessionId || (activeSection !== 'live-runs' && activeSection !== 'guardrails')) {
+        setRecentTraces([]);
+        return;
+      }
+      try {
+        const data = await superAgentApi.sessionTraces(planSessionId, 5);
+        if (cancelled) return;
+        setRecentTraces(Array.isArray(data?.traces) ? data.traces : []);
+      } catch {
+        if (!cancelled) setRecentTraces([]);
+      }
+    }
+    void loadReplay();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection, planSessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMetrics() {
+      if (activeSection !== 'live-runs' && activeSection !== 'guardrails') {
+        setTraceMetrics(null);
+        return;
+      }
+      try {
+        const data = await superAgentApi.metrics(planSessionId ?? undefined);
+        if (!cancelled) setTraceMetrics(data?.metrics || null);
+      } catch {
+        if (!cancelled) setTraceMetrics(null);
+      }
+    }
+    void loadMetrics();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection, planSessionId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -316,7 +359,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       latest?.payload.navigationTarget || null,
       ...(latest?.payload.actions || []).map((a) => a.navigationTarget || fallbackNavigationTarget(a.targetPage, a.focusId ?? null)),
     ]);
-    return { activeTarget: activeTarget || null, recentTargets, lastStructuredIntent: latest?.payload.structuredIntent || null };
+    return { sessionId: planSessionId, activeTarget: activeTarget || null, recentTargets, lastStructuredIntent: latest?.payload.structuredIntent || null };
   }
 
   async function sendPrompt(promptOverride?: string) {
@@ -360,6 +403,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       } else {
         // ── Legacy regex path (default) ─────────────────────────────────────
         const result = await superAgentApi.command(finalPrompt, { runId, mode, context: buildCommandContext() });
+        if (result.sessionId) setPlanSessionId(result.sessionId);
         const payload = result.response as AssistantPayload;
         setMessages((c) => [...c, { id: payload.id, role: 'assistant', payload }]);
         setPermissionMatrix(result.permissionMatrix || null);
@@ -450,6 +494,8 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     : activeSection === 'guardrails' ? 'Review permissions, approvals, and sensitive action guardrails.'
     : 'Investigate, cross-reference, and act across the entire workspace.';
 
+  const showObservabilityPanel = activeSection === 'live-runs' || activeSection === 'guardrails';
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="relative flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
@@ -491,6 +537,48 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     ))}
                   </div>
                 ) : null}
+              </div>
+            ) : null}
+
+            {!isBootstrapping && showObservabilityPanel && recentTraces.length > 0 ? (
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 text-left dark:border-gray-700 dark:bg-gray-900/50">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gray-400">Recent traces</p>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Latest plan executions for this session.</p>
+                  </div>
+                  {planSessionId ? <span className="text-[11px] text-gray-400 break-all">{planSessionId}</span> : null}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {recentTraces.map((trace) => (
+                    <div key={trace.planId} className="rounded-xl bg-white px-3 py-2 shadow-sm dark:bg-gray-950/60">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{trace.summary || trace.planId}</p>
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-300">{trace.status}</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-gray-400">
+                        {trace.startedAt ? new Date(trace.startedAt).toLocaleString() : 'N/A'}
+                        {trace.endedAt ? ` · ${new Date(trace.endedAt).toLocaleTimeString()}` : ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {!isBootstrapping && showObservabilityPanel && traceMetrics ? (
+              <div className="grid grid-cols-2 gap-3 rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm dark:border-gray-700 dark:bg-gray-950/60 md:grid-cols-4">
+                {[
+                  ['Total', traceMetrics.total],
+                  ['Success', traceMetrics.success],
+                  ['Pending', traceMetrics.pendingApproval],
+                  ['Failed', traceMetrics.failed],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="rounded-xl bg-gray-50 px-3 py-2 dark:bg-gray-900/60">
+                    <p className="text-[11px] uppercase tracking-[0.24em] text-gray-400">{label}</p>
+                    <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{String(value)}</p>
+                  </div>
+                ))}
               </div>
             ) : null}
 

@@ -14,6 +14,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
+import { redactSensitiveText, redactStructuredValue } from './safety.js';
 import type { Plan, PlanStep, SessionState } from './types.js';
 import type { CatalogEntry } from './registry.js';
 
@@ -177,12 +178,13 @@ ${toolDocs}${knowledgeSection}${safetySection}
 
 function buildContextMessages(req: PlanRequest): Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> {
   const messages: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+  const safeDomainContext = req.domainContext ? redactSensitiveText(JSON.stringify(redactStructuredValue(req.domainContext), null, 2)) : '';
 
   // Rolling session summary (L2)
   if (req.session.summary) {
     messages.push({
       role: 'user',
-      parts: [{ text: `[Session summary so far]\n${req.session.summary}` }],
+      parts: [{ text: `[Session summary so far]\n${redactSensitiveText(req.session.summary)}` }],
     });
     messages.push({
       role: 'model',
@@ -193,7 +195,9 @@ function buildContextMessages(req: PlanRequest): Array<{ role: 'user' | 'model';
   // Live slots
   const slots = Object.entries(req.session.slots ?? {});
   if (slots.length > 0) {
-    const slotText = slots.map(([k, v]) => `${k}: ${JSON.stringify(v.value)}`).join('\n');
+    const slotText = slots
+      .map(([k, v]) => `${k}: ${redactSensitiveText(String(JSON.stringify(redactStructuredValue(v.value)) ?? ''))}`)
+      .join('\n');
     messages.push({
       role: 'user',
       parts: [{ text: `[Active context]\n${slotText}` }],
@@ -204,19 +208,30 @@ function buildContextMessages(req: PlanRequest): Array<{ role: 'user' | 'model';
     });
   }
 
+  if (safeDomainContext) {
+    messages.push({
+      role: 'user',
+      parts: [{ text: `[Domain context]\n${safeDomainContext}` }],
+    });
+    messages.push({
+      role: 'model',
+      parts: [{ text: '{"kind":"clarification","question":"(domain context loaded)"}' }],
+    });
+  }
+
   // Recent turns (L1 — last 10)
   const recentTurns = (req.session.turns ?? []).slice(-10);
   for (const turn of recentTurns) {
     if (turn.role === 'user') {
-      messages.push({ role: 'user', parts: [{ text: turn.content }] });
+      messages.push({ role: 'user', parts: [{ text: redactSensitiveText(turn.content) }] });
     } else if (turn.role === 'assistant') {
       // Reuse prior plan JSON if present, else wrap plaintext
-      messages.push({ role: 'model', parts: [{ text: turn.content }] });
+      messages.push({ role: 'model', parts: [{ text: redactSensitiveText(turn.content) }] });
     }
   }
 
   // Current user message
-  messages.push({ role: 'user', parts: [{ text: req.userMessage }] });
+  messages.push({ role: 'user', parts: [{ text: redactSensitiveText(req.userMessage) }] });
 
   return messages;
 }
@@ -330,10 +345,10 @@ class GeminiProvider implements LLMProvider {
     });
 
     const stepsText = input.steps
-      .map((s, i) => `Step ${i + 1} (${s.tool}): ${JSON.stringify(s.result)}`)
+      .map((s, i) => `Step ${i + 1} (${s.tool}): ${redactSensitiveText(String(JSON.stringify(redactStructuredValue(s.result)) ?? ''))}`)
       .join('\n');
 
-    const prompt = `User asked: "${input.userMessage}"
+    const prompt = `User asked: "${redactSensitiveText(input.userMessage)}"
 The following actions were executed:
 ${stepsText}
 

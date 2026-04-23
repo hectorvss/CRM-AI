@@ -23,6 +23,7 @@ import type {
 import type { toolRegistry as ToolRegistry } from './registry.js';
 import { createPolicyRepository } from '../../data/index.js';
 import { logger } from '../../utils/logger.js';
+import { isToolBlocked } from './safety.js';
 
 // ── Rule contract ────────────────────────────────────────────────────────────
 
@@ -47,6 +48,22 @@ export interface PolicyRule {
 // `registerPolicyRule()` at startup.
 
 const baselineRules: PolicyRule[] = [
+  // 0. Kill-switch / tool blocklist
+  {
+    id: 'tool_kill_switch',
+    description: 'Block tools disabled by environment kill-switch',
+    priority: 1100,
+    evaluate({ tool }) {
+      if (tool && isToolBlocked(tool.name)) {
+        return {
+          action: 'deny',
+          reason: `Tool ${tool.name} is disabled by Super Agent kill-switch`,
+        };
+      }
+      return null;
+    },
+  },
+
   // 1. Deny unknown tools (defence in depth — registry should have caught this)
   {
     id: 'unknown_tool',
