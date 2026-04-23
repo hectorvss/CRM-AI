@@ -16,6 +16,12 @@ import {
 } from '../data/index.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { broadcastSSE } from './sse.js';
+import type {
+  CommandContext,
+  NavigationTarget,
+  StructuredCommand,
+} from '../agents/superAgent/intent.js';
+import { parseCommandIntent as parseSuperAgentCommandIntent } from '../agents/superAgent/intent.js';
 
 const router = Router();
 
@@ -35,47 +41,6 @@ type CommandScope = {
   tenantId: string;
   workspaceId: string;
   userId?: string;
-};
-
-type NavigationTarget = {
-  page: string;
-  entityType?: string | null;
-  entityId?: string | null;
-  section?: string | null;
-  sourceContext?: string | null;
-  runId?: string | null;
-};
-
-type CommandContext = {
-  sessionId?: string | null;
-  recentTargets?: NavigationTarget[];
-  activeTarget?: NavigationTarget | null;
-  lastStructuredIntent?: Record<string, any> | null;
-};
-
-type StructuredCommand = {
-  kind:
-    | 'approval_queue'
-    | 'payment_queue'
-    | 'case'
-    | 'order'
-    | 'payment'
-    | 'return'
-    | 'customer'
-    | 'workflow'
-    | 'agents'
-    | 'conflicts'
-    | 'search';
-  intent: 'investigate' | 'open' | 'search' | 'explain_blocker' | 'compare' | 'operate';
-  id?: string;
-  query?: string;
-  targetEntityType?: string | null;
-  targetEntityRef?: string | null;
-  requestedAction?: string | null;
-  filters: string[];
-  riskLevel: 'low' | 'medium' | 'high';
-  needsConfirmation: boolean;
-  navigationTarget?: NavigationTarget | null;
 };
 
 type SuperAgentActionPayload = {
@@ -1188,6 +1153,7 @@ function parseEntityId(input: string, pattern: RegExp) {
 }
 
 function parseCommandIntent(input: string, context?: CommandContext | null): StructuredCommand {
+  return parseSuperAgentCommandIntent(input, context);
   const text = input.trim().toLowerCase();
   const caseId = parseEntityId(input, /\bcas[-_a-z0-9]+\b/i);
   const orderId = parseEntityId(input, /\bord[-_a-z0-9]+\b/i);
