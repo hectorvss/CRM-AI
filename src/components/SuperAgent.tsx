@@ -692,33 +692,33 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">Super Agent</p>
                         {msg.payload.statusLine ? (
-                          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-300">
+                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
                             {msg.payload.statusLine}
                           </span>
                         ) : null}
                         {msg.payload.consultedModules.length > 0 ? (
-                          <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
                             Thinking across {msg.payload.consultedModules.join(', ')}
                           </span>
                         ) : null}
                       </div>
 
-                      <div className="mt-3 rounded-3xl border border-gray-200 bg-white px-4 py-4 shadow-sm dark:border-gray-700 dark:bg-gray-950/70">
+                      <div className="mt-3">
                         <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
                         {msg.payload.structuredIntent ? (
                           <div className="mt-4 flex flex-wrap gap-2">
                             {msg.payload.structuredIntent.intent ? (
-                              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
+                              <span className="text-[11px] font-medium uppercase text-gray-400 dark:text-gray-500">
                                 {String(msg.payload.structuredIntent.intent)}
                               </span>
                             ) : null}
                             {msg.payload.structuredIntent.targetEntityType ? (
-                              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-300">
+                              <span className="text-[11px] font-medium uppercase text-gray-400 dark:text-gray-500">
                                 {String(msg.payload.structuredIntent.targetEntityType)}
                               </span>
                             ) : null}
                             {msg.payload.runId ? (
-                              <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-400 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-500">
+                              <span className="text-[11px] font-medium text-gray-300 dark:text-gray-600">
                                 Run {msg.payload.runId.slice(0, 8)}
                               </span>
                             ) : null}
@@ -730,9 +730,9 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                           ...(msg.payload.facts?.length ? [{ title: 'What I found', items: msg.payload.facts }] : []),
                           ...(msg.payload.conflicts?.length ? [{ title: 'Conflicts', items: msg.payload.conflicts }] : []),
                         ].map((s) => (
-                          <div key={`${msg.id}-${s.title}`} className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">{s.title}</p>
-                            <div className="mt-2 space-y-1.5">
+                          <div key={`${msg.id}-${s.title}`} className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
+                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">{s.title}</p>
+                            <div className="mt-2 space-y-2">
                               {s.items.map((item) => (
                                 <p key={item} className="text-sm leading-6 text-gray-700 dark:text-gray-300">{item}</p>
                               ))}
@@ -741,12 +741,12 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         ))}
 
                         {msg.payload.steps?.length ? (
-                          <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Thinking and running</p>
+                          <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
+                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">Thinking and running</p>
                             <div className="mt-2 space-y-2">
                               {msg.payload.steps.map((step) => (
                                 <div key={step.id} className="flex items-start gap-3">
-                                  <span className={`mt-1 h-2.5 w-2.5 rounded-full ${
+                                  <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${
                                     step.status === 'completed'
                                       ? 'bg-emerald-500'
                                       : step.status === 'failed'
@@ -764,11 +764,11 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         ) : null}
 
                         {msg.payload.sources?.length ? (
-                          <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Sources consulted</p>
-                            <div className="mt-2 flex flex-wrap gap-2">
+                          <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
+                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">Sources consulted</p>
+                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
                               {msg.payload.sources.map((source) => (
-                                <span key={`${msg.id}-${source}`} className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-950/70 dark:text-gray-300">
+                                <span key={`${msg.id}-${source}`} className="text-xs text-gray-500 dark:text-gray-400">
                                   {source}
                                 </span>
                               ))}
@@ -777,9 +777,9 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         ) : null}
 
                         {msg.payload.evidence?.length ? (
-                          <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Evidence</p>
-                            <div className="mt-2 space-y-1.5">
+                          <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
+                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">Evidence</p>
+                            <div className="mt-2 space-y-2">
                               {msg.payload.evidence.map((item) => (
                                 <p key={`${msg.id}-${item}`} className="text-sm leading-6 text-gray-700 dark:text-gray-300">{item}</p>
                               ))}
@@ -788,11 +788,11 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         ) : null}
 
                         {msg.payload.agents.length > 0 ? (
-                          <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700/50 dark:bg-gray-900/40">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Agents involved</p>
-                            <div className="mt-3 flex flex-wrap gap-2">
+                          <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
+                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">Agents involved</p>
+                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
                               {msg.payload.agents.map((agent) => (
-                                <span key={agent.slug} className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-950/70 dark:text-gray-300">
+                                <span key={agent.slug} className="inline-flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
                                   <span className={`h-1.5 w-1.5 rounded-full ${
                                     agent.status === 'executed'
                                       ? 'bg-emerald-500'
@@ -810,7 +810,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         ) : null}
 
                         {msg.payload.actions.length > 0 ? (
-                          <div className="mt-4 flex flex-wrap gap-2">
+                          <div className="mt-5 flex flex-wrap gap-2">
                             {msg.payload.actions.map((action) => (
                               <button
                                 key={action.id}
