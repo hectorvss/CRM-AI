@@ -927,6 +927,49 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       }
     },
   },
+  // ── 2026-04-23-001: super_agent_sessions + super_agent_traces ────────────
+  {
+    version: '2026-04-23-001',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS super_agent_sessions (
+          id            TEXT PRIMARY KEY,
+          user_id       TEXT NOT NULL,
+          tenant_id     TEXT NOT NULL,
+          workspace_id  TEXT,
+          turns_json    TEXT NOT NULL DEFAULT '[]',
+          summary       TEXT NOT NULL DEFAULT '',
+          slots_json    TEXT NOT NULL DEFAULT '{}',
+          pending_approval_ids_json TEXT NOT NULL DEFAULT '[]',
+          active_plan_id TEXT,
+          created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+          updated_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+          ttl_at        TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sa_sessions_user  ON super_agent_sessions(user_id, tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_sa_sessions_ttl   ON super_agent_sessions(ttl_at);
+
+        CREATE TABLE IF NOT EXISTS super_agent_traces (
+          plan_id       TEXT PRIMARY KEY,
+          session_id    TEXT NOT NULL,
+          tenant_id     TEXT NOT NULL,
+          workspace_id  TEXT,
+          user_id       TEXT,
+          started_at    TEXT NOT NULL,
+          ended_at      TEXT NOT NULL,
+          status        TEXT NOT NULL,
+          spans_json    TEXT NOT NULL DEFAULT '[]',
+          summary       TEXT NOT NULL DEFAULT '',
+          approval_ids_json TEXT NOT NULL DEFAULT '[]',
+          policy_decisions_json TEXT NOT NULL DEFAULT '[]',
+          created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+        );
+        CREATE INDEX IF NOT EXISTS idx_sa_traces_session ON super_agent_traces(session_id);
+        CREATE INDEX IF NOT EXISTS idx_sa_traces_tenant  ON super_agent_traces(tenant_id, started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_sa_traces_user    ON super_agent_traces(user_id, started_at DESC);
+      `);
+    },
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────────────
