@@ -87,3 +87,46 @@ export function classifyRiskFromArgs(toolName: string, args: unknown): RiskLevel
   return risk;
 }
 
+export function classifyRiskFromPlanSignal(toolName: string, args: unknown): RiskLevel {
+  const text = redactSensitiveText(JSON.stringify(args ?? {})).toLowerCase();
+
+  if (toolName === 'payment.refund') {
+    const amount = Number((args as any)?.amount ?? 0);
+    if (!Number.isNaN(amount) && amount > 50) return 'high';
+    return 'high';
+  }
+
+  if (toolName === 'order.cancel') {
+    const status = String((args as any)?.currentStatus ?? '').toLowerCase();
+    if (status.includes('packed') || status.includes('shipped') || status.includes('delivered')) return 'high';
+    return 'medium';
+  }
+
+  if (toolName === 'approval.decide') {
+    return 'high';
+  }
+
+  if (toolName === 'workflow.publish') {
+    return 'high';
+  }
+
+  if (toolName.startsWith('settings.') && toolName.includes('.')) {
+    return 'high';
+  }
+
+  if (toolName.startsWith('return.')) {
+    if (toolName === 'return.approve' || toolName === 'return.reject') return 'medium';
+    return 'none';
+  }
+
+  if (toolName.startsWith('knowledge.')) {
+    return 'none';
+  }
+
+  if (toolName.startsWith('case.')) {
+    if (toolName === 'case.update_status' && /(escalat|closed|resolved)/.test(text)) return 'medium';
+    if (toolName === 'case.add_note') return 'low';
+  }
+
+  return classifyRiskFromArgs(toolName, args);
+}

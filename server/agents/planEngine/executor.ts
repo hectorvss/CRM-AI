@@ -29,7 +29,7 @@ import type {
 import { toolRegistry } from './registry.js';
 import { evaluatePlan, aggregateDecision } from './policy.js';
 import { logger } from '../../utils/logger.js';
-import { classifyRiskFromArgs, isToolBlocked } from './safety.js';
+import { classifyRiskFromArgs, classifyRiskFromPlanSignal, isToolBlocked } from './safety.js';
 
 export interface ExecutorDeps {
   /** Create an approval request when policy says `require_approval`. Returns approval id. */
@@ -280,7 +280,13 @@ export async function executePlan(
       break;
     }
 
-    const runtimeRisk = elevateRisk(decision.riskLevel, classifyRiskFromArgs(tool.name, interpolated));
+    const runtimeRisk = elevateRisk(
+      decision.riskLevel,
+      elevateRisk(
+        classifyRiskFromPlanSignal(tool.name, interpolated),
+        classifyRiskFromArgs(tool.name, interpolated),
+      ),
+    );
 
     // Execute
     const stepStart = Date.now();

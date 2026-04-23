@@ -144,7 +144,7 @@ function isWeakEntityQuery(value: string) {
 function resolveEntityReference(primary: string | null, fallback: string | null, input: string) {
   if (primary && !isWeakEntityQuery(primary)) return primary;
   if (fallback) return fallback;
-  return primary || input.trim();
+  return primary || fallback || null;
 }
 
 export function resolveRelativeTarget(text: string, context?: CommandContext | null) {
@@ -195,19 +195,20 @@ export function resolveRelativeTarget(text: string, context?: CommandContext | n
 }
 
 export function parseCommandIntent(input: string, context?: CommandContext | null): StructuredCommand {
-  const text = input.trim().toLowerCase();
-  const caseId = parseEntityId(input, /\bcas(?:[_-][a-z0-9]+|\d+)\b/i);
-  const orderId = parseEntityId(input, /\bord(?:[_-][a-z0-9]+|\d+)\b/i);
-  const paymentId = parseEntityId(input, /\bpay(?:[_-][a-z0-9]+|\d+)\b/i);
-  const returnId = parseEntityId(input, /\bret(?:[_-][a-z0-9]+|\d+)\b/i);
-  const workflowId = parseEntityId(input, /\bwf(?:[_-][a-z0-9]+|\d+)\b/i);
+  const safeInput = String(input ?? '');
+  const text = safeInput.trim().toLowerCase();
+  const caseId = parseEntityId(safeInput, /\bcas(?:[_-][a-z0-9]+|\d+)\b/i);
+  const orderId = parseEntityId(safeInput, /\bord(?:[_-][a-z0-9]+|\d+)\b/i);
+  const paymentId = parseEntityId(safeInput, /\bpay(?:[_-][a-z0-9]+|\d+)\b/i);
+  const returnId = parseEntityId(safeInput, /\bret(?:[_-][a-z0-9]+|\d+)\b/i);
+  const workflowId = parseEntityId(safeInput, /\bwf(?:[_-][a-z0-9]+|\d+)\b/i);
   const recentTarget = resolveRelativeTarget(text, context);
-  const orderQuery = input.replace(/pedido|order|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
-  const paymentQuery = input.replace(/pago|payment|refund|reembolso|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
-  const caseQuery = input.replace(/caso|case|hilo|thread|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
-  const returnQuery = input.replace(/devolucion|return|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
-  const customerQuery = input.replace(/cliente|customer|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
-  const workflowQuery = input.replace(/workflow|flujo|abrir|open|publica|publish|revisa|review|investiga|investigate/gi, '').trim();
+  const orderQuery = safeInput.replace(/pedido|order|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const paymentQuery = safeInput.replace(/pago|payment|refund|reembolso|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const caseQuery = safeInput.replace(/caso|case|hilo|thread|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const returnQuery = safeInput.replace(/devolucion|return|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const customerQuery = safeInput.replace(/cliente|customer|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
+  const workflowQuery = safeInput.replace(/workflow|flujo|abrir|open|publica|publish|revisa|review|investiga|investigate/gi, '').trim();
   const filters = [
     text.includes('pend') ? 'pending' : null,
     text.includes('bloque') ? 'blocked' : null,
@@ -269,7 +270,7 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       navigationTarget: buildNavigationTarget({ page: 'payments', entityType: 'payment' }),
     };
   } else if (caseId || ((text.includes('caso') || text.includes('case')) && caseQuery) || recentTarget?.entityType === 'case') {
-    const resolved = resolveEntityReference(caseId, recentTarget?.entityType === 'case' ? recentTarget?.entityId || null : null, caseQuery || input.trim());
+    const resolved = resolveEntityReference(caseId, recentTarget?.entityType === 'case' ? recentTarget?.entityId || null : null, caseQuery || safeInput.trim());
     command = {
       kind: 'case',
       intent,
@@ -283,7 +284,7 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       navigationTarget: buildNavigationTarget({ page: 'case_graph', entityType: 'case', entityId: resolved }),
     };
   } else if (orderId || ((text.includes('pedido') || text.includes('order')) && orderQuery) || recentTarget?.entityType === 'order') {
-    const resolved = resolveEntityReference(orderId, recentTarget?.entityType === 'order' ? recentTarget?.entityId || null : null, orderQuery || input.trim());
+    const resolved = resolveEntityReference(orderId, recentTarget?.entityType === 'order' ? recentTarget?.entityId || null : null, orderQuery || safeInput.trim());
     command = {
       kind: 'order',
       intent,
@@ -297,7 +298,7 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       navigationTarget: buildNavigationTarget({ page: 'orders', entityType: 'order', entityId: resolved }),
     };
   } else if (paymentId || ((text.includes('pago') || text.includes('payment')) && paymentQuery) || recentTarget?.entityType === 'payment') {
-    const resolved = resolveEntityReference(paymentId, recentTarget?.entityType === 'payment' ? recentTarget?.entityId || null : null, paymentQuery || input.trim());
+    const resolved = resolveEntityReference(paymentId, recentTarget?.entityType === 'payment' ? recentTarget?.entityId || null : null, paymentQuery || safeInput.trim());
     command = {
       kind: 'payment',
       intent,
@@ -311,7 +312,7 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       navigationTarget: buildNavigationTarget({ page: 'payments', entityType: 'payment', entityId: resolved }),
     };
   } else if (returnId || ((text.includes('devolucion') || text.includes('return')) && returnQuery) || recentTarget?.entityType === 'return') {
-    const resolved = resolveEntityReference(returnId, recentTarget?.entityType === 'return' ? recentTarget?.entityId || null : null, returnQuery || input.trim());
+    const resolved = resolveEntityReference(returnId, recentTarget?.entityType === 'return' ? recentTarget?.entityId || null : null, returnQuery || safeInput.trim());
     command = {
       kind: 'return',
       intent,
@@ -352,7 +353,7 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       navigationTarget: buildNavigationTarget({ page: 'super_agent', entityType: 'agent' }),
     };
   } else if (text.includes('cliente') || text.includes('customer') || recentTarget?.entityType === 'customer') {
-    const resolved = customerQuery || recentTarget?.entityId || input.trim();
+    const resolved = customerQuery || recentTarget?.entityId || safeInput.trim();
     command = {
       kind: 'customer',
       intent,
@@ -374,7 +375,7 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
   return {
     kind: 'search',
     intent,
-    query: input.trim(),
+    query: safeInput.trim(),
     targetEntityType: recentTarget?.entityType || null,
     targetEntityRef: recentTarget?.entityId || null,
     requestedAction,

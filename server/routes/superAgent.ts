@@ -16,6 +16,7 @@ import {
 } from '../data/index.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { broadcastSSE } from './sse.js';
+import { isGeneralConversationInput, normalizeSearchQuery } from '../agents/superAgent/search.js';
 import type {
   CommandContext,
   NavigationTarget,
@@ -1829,11 +1830,60 @@ async function handleAgentIntent(input: string, agents: any[]) {
 }
 
 async function handleSearchIntent(req: MultiTenantRequest, scope: CommandScope, input: string, query: string, agents: any[]) {
+  const safeQuery = normalizeSearchQuery(query || input);
+  if (isGeneralConversationInput(input) || !safeQuery) {
+    return createResponse({
+      input,
+      summary: 'I can help you investigate cases, orders, payments, returns, approvals, customers, workflows, and agents.',
+      statusLine: 'Ready',
+      sections: [
+        {
+          title: 'What I can do',
+          items: [
+            'Investigate a specific case, order, payment, return, approval, or customer.',
+            'Explain why an action is blocked or requires approval.',
+            'Navigate to the right module and keep the context for the next turn.',
+          ],
+        },
+      ],
+      actions: [
+        buildAction({
+          req,
+          label: 'Investigate a case',
+          description: 'Open the most relevant operational record and analyze the current state.',
+          targetPage: 'case_graph',
+        }),
+        buildAction({
+          req,
+          label: 'Review approvals',
+          description: 'Open the approval queue and inspect pending sensitive actions.',
+          targetPage: 'approvals',
+        }),
+        buildAction({
+          req,
+          label: 'Search customers',
+          description: 'Look for customers, orders, or payments by name, email, or ID.',
+          targetPage: 'customers',
+        }),
+      ],
+      contextPanel: null,
+      agents: [
+        ...pickAgentActivity(agents, ['supervisor', 'knowledge-retriever', 'customer-identity-agent'], 'available', 'Standing by for a focused request.'),
+      ],
+      suggestedReplies: [
+        'Investiga un pedido',
+        'Revisa pagos pendientes',
+        'Abre aprobaciones pendientes',
+      ],
+      consultedModules: [],
+    });
+  }
+
   const [cases, orders, customers, payments] = await Promise.all([
-    caseRepository.list(scope, { q: query }),
-    commerceRepository.listOrders(scope, { q: query }),
-    customerRepository.list(scope, { q: query }),
-    commerceRepository.listPayments(scope, { q: query }),
+    caseRepository.list(scope, { q: safeQuery }),
+    commerceRepository.listOrders(scope, { q: safeQuery }),
+    customerRepository.list(scope, { q: safeQuery }),
+    commerceRepository.listPayments(scope, { q: safeQuery }),
   ]);
 
   const hits = [

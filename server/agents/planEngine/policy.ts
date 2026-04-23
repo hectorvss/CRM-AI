@@ -23,7 +23,7 @@ import type {
 import type { toolRegistry as ToolRegistry } from './registry.js';
 import { createPolicyRepository } from '../../data/index.js';
 import { logger } from '../../utils/logger.js';
-import { isToolBlocked } from './safety.js';
+import { classifyRiskFromPlanSignal, isToolBlocked } from './safety.js';
 
 // ── Rule contract ────────────────────────────────────────────────────────────
 
@@ -196,6 +196,23 @@ const baselineRules: PolicyRule[] = [
     },
   },
 
+  // 8b. Knowledge writes are not part of the public agent surface yet
+  {
+    id: 'knowledge_write_requires_approval',
+    description: 'Knowledge writes require approval',
+    priority: 435,
+    evaluate({ tool }) {
+      if (tool.name.startsWith('knowledge.') && tool.sideEffect === 'write') {
+        return {
+          action: 'require_approval',
+          reason: 'Knowledge writes require approval',
+          riskElevation: 'high',
+        };
+      }
+      return null;
+    },
+  },
+
   // 9. Bulk operations should not execute blindly
   {
     id: 'bulk_operation_requires_approval',
@@ -209,6 +226,40 @@ const baselineRules: PolicyRule[] = [
           action: 'require_approval',
           reason: 'Bulk operations require approval',
           riskElevation: 'high',
+        };
+      }
+      return null;
+    },
+  },
+
+  // 10b. Approval decisions are high signal actions that should be tracked as elevated risk
+  {
+    id: 'approval_decide_requires_approval',
+    description: 'Approval decisions are sensitive and should remain elevated for traceability',
+    priority: 420,
+    evaluate({ tool }) {
+      if (tool.name === 'approval.decide') {
+        return {
+          action: 'allow',
+          reason: 'Approval decisions are allowed for authorized users but remain high risk',
+          riskElevation: 'high',
+        };
+      }
+      return null;
+    },
+  },
+
+  // 10c. Return moderation actions are medium risk by default
+  {
+    id: 'return_moderation_medium_risk',
+    description: 'Return moderation actions are treated as medium risk',
+    priority: 410,
+    evaluate({ tool }) {
+      if (tool.name === 'return.approve' || tool.name === 'return.reject') {
+        return {
+          action: 'allow',
+          reason: 'Return moderation allowed for authorized users',
+          riskElevation: 'medium',
         };
       }
       return null;
@@ -234,6 +285,13 @@ const baselineRules: PolicyRule[] = [
     description: 'Allow write operations with low/medium risk when no higher rule applies',
     priority: 50,
     evaluate({ tool }) {
+      if (tool.name === 'approval.decide') {
+        return {
+          action: 'allow',
+          reason: 'Authorized approval decisions are executed directly',
+          riskElevation: 'high',
+        };
+      }
       if (tool.sideEffect === 'write' && (tool.risk === 'low' || tool.risk === 'medium')) {
         return { action: 'allow', reason: `${tool.risk}-risk write allowed by default` };
       }
@@ -403,29 +461,18 @@ export async function evaluatePlan(
       });
       if (!result) continue;
 
-      // Risk elevation tracked independently of action
-      const riskLevel = result.riskElevation ?? tool?.risk ?? 'medium';
-
-      // Priority order: deny > require_approval > allow
-      const shouldOverride =
-        decision.action === 'deny'
-          ? false
-          : result.action === 'deny' ||
-            (result.action === 'require_approval' && decision.action === 'allow');
-
-      if (shouldOverride || decisions.length === 0 || decision.ruleId === undefined) {
-        decision = {
-          stepId: step.id,
-          tool: step.tool,
-          action: result.action,
-          riskLevel,
-          reason: result.reason,
-          ruleId: rule.id,
-        };
-      }
-
-      // Short-circuit on deny — no further rule can loosen it
-      if (result.action === 'deny') break;
+      decision = {
+        stepId: step.id,
+        tool: step.tool,
+        action: result.action,
+        riskLevel: result.riskElevation
+          ?? classifyRiskFromPlanSignal(step.tool, step.args)
+          ?? tool?.risk
+          ?? 'medium',
+        reason: result.reason,
+        ruleId: rule.id,
+      };
+      break;
     }
 
     decisions.push(decision);

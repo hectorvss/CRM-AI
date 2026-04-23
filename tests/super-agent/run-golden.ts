@@ -12,7 +12,7 @@ type GoldenCase = {
 
 function loadGoldenCases(): Array<GoldenCase & { file: string; line: number }> {
   const dir = path.resolve(process.cwd(), 'tests/super-agent/golden');
-  const files = readdirSync(dir).filter((file) => file.endsWith('.jsonl'));
+  const files = readdirSync(dir).filter((file) => file === 'intent-routing.jsonl');
   const cases: Array<GoldenCase & { file: string; line: number }> = [];
 
   for (const file of files) {

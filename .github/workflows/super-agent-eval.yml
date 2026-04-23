@@ -28,6 +28,12 @@ jobs:
       - name: Run Super Agent golden eval
         run: npm run eval:super-agent
 
+      - name: Run Super Agent policy eval
+        run: npm run eval:super-agent-policy
+
+      - name: Run Super Agent search smoke
+        run: npm run eval:super-agent-search
+
       - name: Type check
         run: npm run lint
 
