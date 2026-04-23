@@ -3,13 +3,16 @@
  *
  * Public facade for the Plan Engine.
  *
- * Import this file once at server startup (e.g. from server/index.ts) to:
- *  1. Register all ToolSpecs into the global toolRegistry.
- *  2. Expose `planEngine.plan()` — generate a Plan from a user message (dry-run safe).
- *  3. Expose `planEngine.execute()` — execute a validated Plan.
- *  4. Expose `planEngine.planAndExecute()` — convenience wrapper.
+ * Responsibilities:
+ *  1. Register all ToolSpecs at startup (idempotent).
+ *  2. Manage conversational sessions (DB-backed, TTL-aware).
+ *  3. Generate Plans via the LLM (Gemini), enforce policy, execute.
+ *  4. Extract entity slots from results (CIL slot layer).
+ *  5. Compress long sessions into L2 summaries.
+ *  6. Persist execution traces.
  *
- * Nothing outside this file needs to import from sub-modules.
+ * Shadow mode: when env SUPER_AGENT_LLM_ROUTING is not 'true', planAndExecute
+ * still runs the LLM path and logs it, but returns the caller's chosen response.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -19,6 +22,9 @@ import { executePlan, type ExecutorDeps, type ExecuteOptions } from './executor.
 import { getPlanEngineLLMProvider } from './llm.js';
 import { createAuditRepository, createApprovalRepository } from '../../data/index.js';
 import { logger } from '../../utils/logger.js';
+import * as sessionRepo from './sessionRepository.js';
+import * as traceRepo from './traceRepository.js';
+import { extractSlotsFromTrace, maybeCompressTurns } from './slots.js';
 import type {
   Plan,
   ExecutionTrace,
@@ -31,7 +37,7 @@ import type { PlanRequest, LLMResponse } from './llm.js';
 export type { Plan, ExecutionTrace, SessionState, ToolExecutionContext };
 export type { LLMResponse };
 
-// ── One-time initialisation ──────────────────────────────────────────────────
+// ── Initialisation ───────────────────────────────────────────────────────────
 
 let _initialised = false;
 
@@ -42,52 +48,14 @@ function ensureInitialised() {
   logger.info(`PlanEngine initialised — ${toolRegistry.size()} tool(s) registered`);
 }
 
-// ── Repo deps (lazy — avoids import-time DB connection) ─────────────────────
+// ── Repos ────────────────────────────────────────────────────────────────────
 
-const auditRepo = createAuditRepository();
-const approvalRepo = createApprovalRepository();
-
-// ── Session store (in-memory stub — swap for DB-backed version in Phase 2) ──
-
-const sessionStore = new Map<string, SessionState>();
-
-const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
-
-function getOrCreateSession(
-  sessionId: string,
-  userId: string,
-  tenantId: string,
-  workspaceId: string | null,
-): SessionState {
-  const existing = sessionStore.get(sessionId);
-  if (existing) return existing;
-
-  const now = new Date().toISOString();
-  const session: SessionState = {
-    id: sessionId,
-    userId,
-    tenantId,
-    workspaceId,
-    turns: [],
-    summary: '',
-    slots: {},
-    pendingApprovalIds: [],
-    createdAt: now,
-    updatedAt: now,
-    ttlAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-  };
-  sessionStore.set(sessionId, session);
-  return session;
-}
-
-function persistSession(session: SessionState): void {
-  session.updatedAt = new Date().toISOString();
-  sessionStore.set(session.id, session);
-}
+const auditRepoInst = createAuditRepository();
+const approvalRepoInst = createApprovalRepository();
 
 // ── Executor dependencies ────────────────────────────────────────────────────
 
-function buildExecutorDeps(tenantId: string, workspaceId: string | null): ExecutorDeps {
+function buildExecutorDeps(): ExecutorDeps {
   return {
     async createApproval({ plan, step, decision, context }) {
       const scope = {
@@ -95,7 +63,7 @@ function buildExecutorDeps(tenantId: string, workspaceId: string | null): Execut
         workspaceId: context.workspaceId ?? '',
         userId: context.userId ?? undefined,
       };
-      const approval = await approvalRepo.create(scope, {
+      const approval = await approvalRepoInst.create(scope, {
         caseId: null,
         actionType: step.tool,
         actionPayload: { args: step.args, planId: plan.planId },
@@ -107,34 +75,44 @@ function buildExecutorDeps(tenantId: string, workspaceId: string | null): Execut
           summary: `Plan ${plan.planId} step ${step.id}: ${step.tool} — ${decision.reason}`,
         },
       });
-      return approval.id;
+      return (approval as any).id;
     },
 
     async persistTrace(trace) {
-      // TODO (Phase 2): write to super_agent_traces table
-      logger.debug('PlanEngine trace', {
-        planId: trace.planId,
-        status: trace.status,
-        spans: trace.spans.length,
-      });
+      traceRepo.persistTrace(trace);
     },
   };
 }
 
 function buildAuditSink(tenantId: string, workspaceId: string | null, userId: string | null) {
   return async (entry: AuditEntry) => {
-    await auditRepo.log({
-      tenantId,
-      workspaceId: workspaceId ?? undefined,
-      actorId: userId ?? 'system',
-      action: entry.action,
-      entityType: entry.entityType,
-      entityId: entry.entityId,
-      oldValue: entry.oldValue,
-      newValue: entry.newValue,
-      metadata: entry.metadata,
-    });
+    try {
+      await auditRepoInst.log({
+        tenantId,
+        workspaceId: workspaceId ?? undefined,
+        actorId: userId ?? 'system',
+        action: entry.action,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        oldValue: entry.oldValue,
+        newValue: entry.newValue,
+        metadata: entry.metadata,
+      });
+    } catch (err) {
+      logger.warn('PlanEngine audit log failed', { error: String(err) });
+    }
   };
+}
+
+// ── LLM summarizer (used by L2 compressor) ───────────────────────────────────
+
+async function llmSummarize(prompt: string): Promise<string> {
+  const provider = getPlanEngineLLMProvider();
+  // Re-use the summarizeResult method with a single pseudo-step
+  return provider.summarizeResult({
+    userMessage: prompt,
+    steps: [],
+  });
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -159,24 +137,18 @@ export interface PlanEngineExecuteInput {
 }
 
 export const planEngine = {
-  /**
-   * Initialise the engine. Safe to call multiple times (idempotent).
-   * Must be called before any other method.
-   */
   init() {
     ensureInitialised();
   },
 
   /**
-   * Generate a Plan (or clarification) from a user message, using the
-   * configured LLM provider.
-   *
-   * Does NOT execute. Use `execute()` or `planAndExecute()` for that.
+   * Generate a Plan (or clarification) from a user message via Gemini.
+   * Appends the user turn to the session. Does NOT execute.
    */
   async generate(input: PlanEngineGenerateInput): Promise<LLMResponse> {
     ensureInitialised();
 
-    const session = getOrCreateSession(
+    const session = sessionRepo.getOrCreateSession(
       input.sessionId,
       input.userId,
       input.tenantId,
@@ -202,7 +174,7 @@ export const planEngine = {
 
     const response = await getPlanEngineLLMProvider().generatePlan(req);
 
-    // Append user turn to session
+    // Append user turn
     session.turns.push({
       role: 'user',
       content: input.userMessage,
@@ -210,18 +182,15 @@ export const planEngine = {
       planId: response.kind === 'plan' ? response.plan.planId : undefined,
     });
 
-    // Trim L1 to last 20 turns
-    if (session.turns.length > 20) {
-      session.turns = session.turns.slice(-20);
-    }
+    // Maybe compress L1 → L2
+    await maybeCompressTurns(session, llmSummarize);
 
-    persistSession(session);
-
+    sessionRepo.saveSession(session);
     return response;
   },
 
   /**
-   * Execute a validated Plan.
+   * Execute a validated Plan. Returns the execution trace.
    */
   async execute(input: PlanEngineExecuteInput): Promise<ExecutionTrace> {
     ensureInitialised();
@@ -236,13 +205,16 @@ export const planEngine = {
       dryRun: input.options?.dryRun === true,
     };
 
-    const deps = buildExecutorDeps(input.tenantId, input.workspaceId);
+    const deps = buildExecutorDeps();
     return executePlan(input.plan, context, deps, input.options);
   },
 
   /**
-   * Generate and immediately execute. The most common call pattern.
-   * If the LLM returns a clarification, returns it without executing.
+   * Full pipeline: generate → policy → execute. Common call pattern.
+   *
+   * Shadow mode (default): always runs the LLM path but logs results without
+   * affecting the existing /command route. Set env SUPER_AGENT_LLM_ROUTING=true
+   * to make this the primary path.
    */
   async planAndExecute(
     input: PlanEngineGenerateInput,
@@ -251,6 +223,16 @@ export const planEngine = {
     const response = await planEngine.generate(input);
 
     if (response.kind !== 'plan') {
+      // Append assistant clarification/error to session
+      const session = sessionRepo.getSession(input.sessionId);
+      if (session) {
+        session.turns.push({
+          role: 'assistant',
+          content: response.kind === 'clarification' ? response.question : response.error,
+          createdAt: new Date().toISOString(),
+        });
+        sessionRepo.saveSession(session);
+      }
       return { response };
     }
 
@@ -263,8 +245,8 @@ export const planEngine = {
       options: execOptions,
     });
 
-    // Append assistant response to session
-    const session = sessionStore.get(input.sessionId);
+    // Append assistant response + extract slots
+    const session = sessionRepo.getSession(input.sessionId);
     if (session) {
       session.turns.push({
         role: 'assistant',
@@ -272,13 +254,41 @@ export const planEngine = {
         createdAt: new Date().toISOString(),
         planId: response.plan.planId,
       });
-      persistSession(session);
+
+      // Populate entity slots from execution results
+      extractSlotsFromTrace(session, trace);
+
+      // Activate plan id on session for pending-approval continuations
+      if (trace.status === 'pending_approval') {
+        session.activePlanId = response.plan.planId;
+        session.pendingApprovalIds = [
+          ...session.pendingApprovalIds,
+          ...(trace.approvalIds ?? []),
+        ];
+      }
+
+      sessionRepo.saveSession(session);
     }
 
     return { response, trace };
   },
 
-  /** Expose the tool registry for observability / admin routes. */
+  /** Retrieve a session by id (for debug / history routes). */
+  getSession(sessionId: string): SessionState | null {
+    return sessionRepo.getSession(sessionId);
+  },
+
+  /** Retrieve an execution trace by plan id. */
+  getTrace(planId: string) {
+    return traceRepo.getTrace(planId);
+  },
+
+  /** List traces for a session. */
+  listTraces(sessionId: string, limit?: number) {
+    return traceRepo.listTracesForSession(sessionId, limit);
+  },
+
+  /** Tool catalog (for observability and admin). */
   catalog: {
     list: () => toolRegistry.listAll(),
     listForCaller: (hasPermission: (p: string) => boolean) =>

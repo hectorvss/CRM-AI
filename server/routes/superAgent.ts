@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { Router } from 'express';
+import { logger } from '../utils/logger.js';
 import {
   buildCaseState,
   buildResolveView,
@@ -2294,6 +2295,38 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           : [],
       },
     });
+
+    // ── Shadow mode: fire LLM path async (non-blocking) ─────────────────────
+    // When SUPER_AGENT_LLM_ROUTING=true the /plan endpoint is the primary
+    // path. Here we silently mirror traffic to measure LLM accuracy vs. regex.
+    const llmEnabled = process.env.SUPER_AGENT_LLM_ROUTING === 'true';
+    if (!llmEnabled && input) {
+      const shadowSessionId = `shadow-${req.userId || 'anon'}-${scope.workspaceId}`;
+      void planEngine
+        .generate({
+          userMessage: input,
+          sessionId: shadowSessionId,
+          userId: req.userId || 'system',
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId || null,
+          hasPermission: (perm: string) => hasPermission(req, perm),
+        })
+        .then((llmResp) => {
+          const diverged = llmResp.kind !== 'plan'
+            || llmResp.plan.steps.length === 0
+            || finalResponse.consultedModules?.length === 0;
+          logger.debug('Shadow mode LLM response', {
+            runId,
+            kind: llmResp.kind,
+            regexKind: command.kind,
+            diverged,
+            steps: llmResp.kind === 'plan' ? llmResp.plan.steps.map((s) => s.tool) : [],
+          });
+        })
+        .catch((err) => {
+          logger.debug('Shadow mode LLM error', { runId, error: String(err) });
+        });
+    }
 
     res.json({
       ok: true,

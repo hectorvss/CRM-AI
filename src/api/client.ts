@@ -410,6 +410,15 @@ export const superAgentApi = {
       method: 'POST',
       body: JSON.stringify({ payload, confirmed, ...options }),
     }),
+  /**
+   * Plan Engine endpoint (LLM-driven). Sends the user message and gets back
+   * { response: LLMResponse, trace?: ExecutionTrace, sessionId: string }.
+   */
+  plan: (userMessage: string, options?: { sessionId?: string; dryRun?: boolean }) =>
+    request<any>('/super-agent/plan', {
+      method: 'POST',
+      body: JSON.stringify({ userMessage, ...options }),
+    }),
 };
 
 // ── Health ────────────────────────────────────────────────

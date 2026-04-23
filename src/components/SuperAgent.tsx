@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { superAgentApi } from '../api/client';
 import type { NavigateFn, NavigationTarget, Page } from '../types';
 
+// ── Feature flag: set VITE_LLM_ROUTING=true to route through Plan Engine ─────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const LLM_ROUTING = (import.meta as any).env?.VITE_LLM_ROUTING === 'true';
+
 type MessageSection = {
   title: string;
   items: string[];
@@ -157,6 +161,71 @@ function assistantFromExecution(summary: string, sectionTitle: string, items: st
   return { id: `assistant-exec-${Date.now()}`, input: '', summary, statusLine: '', sections: [{ title: sectionTitle, items }], actions, contextPanel: null, agents: [], suggestedReplies: [], consultedModules: [] };
 }
 
+// ── Plan Engine response → AssistantPayload mapper ───────────────────────────
+
+function planResponseToPayload(planResp: any, trace: any): AssistantPayload {
+  const id = `assistant-plan-${Date.now()}`;
+  const status = trace?.status ?? 'success';
+  const summary = trace?.summary ?? planResp?.plan?.rationale ?? '';
+
+  // Build step cards from execution spans
+  const steps: StreamStep[] = (trace?.spans ?? []).map((span: any) => ({
+    id: span.stepId,
+    label: span.tool,
+    status: span.result?.ok ? 'completed' : 'failed',
+    detail: span.result?.ok
+      ? JSON.stringify(span.result?.value ?? '').slice(0, 120)
+      : span.result?.error,
+  }));
+
+  // Approval actions
+  const actions: SuperAgentAction[] = (trace?.approvalIds ?? []).map((apId: string) => ({
+    id: `nav-approval-${apId}`,
+    type: 'navigate' as const,
+    label: 'Review approval',
+    description: 'This action requires human approval.',
+    targetPage: 'approvals',
+    focusId: apId,
+    navigationTarget: { page: 'approvals', entityType: 'approval', entityId: apId, section: null, sourceContext: 'plan_engine', runId: null },
+    allowed: true,
+  }));
+
+  const statusLine =
+    status === 'pending_approval' ? 'Waiting for approval'
+    : status === 'rejected_by_policy' ? 'Blocked by policy'
+    : status === 'failed' ? 'Execution failed'
+    : '';
+
+  return {
+    id,
+    input: '',
+    summary,
+    statusLine,
+    sections: [],
+    actions,
+    contextPanel: null,
+    agents: [],
+    suggestedReplies: [],
+    consultedModules: [...new Set((trace?.spans ?? []).map((s: any) => String(s.tool?.split('.')[0] ?? '')))].filter(Boolean) as string[],
+    steps,
+  };
+}
+
+function clarificationToPayload(question: string): AssistantPayload {
+  return {
+    id: `assistant-clarify-${Date.now()}`,
+    input: '',
+    summary: question,
+    statusLine: '',
+    sections: [],
+    actions: [],
+    contextPanel: null,
+    agents: [],
+    suggestedReplies: [],
+    consultedModules: [],
+  };
+}
+
 export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps) {
   const activeSection = activeTarget?.section || 'command-center';
 
@@ -173,6 +242,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [streamActivity, setStreamActivity] = useState<StreamActivity | null>(null);
   const [isStreamConnected, setIsStreamConnected] = useState(false);
+  const [planSessionId, setPlanSessionId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const streamRunIdRef = useRef<string | null>(null);
 
@@ -261,13 +331,41 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     const runId = window.crypto?.randomUUID?.() || `run-${Date.now()}`;
     streamRunIdRef.current = runId;
     setStreamActivity({ runId, statusLine: isStreamConnected ? 'Connecting...' : 'Waiting...', text: '', steps: [], agents: [], error: null });
+
     try {
-      const result = await superAgentApi.command(finalPrompt, { runId, mode, context: buildCommandContext() });
-      const payload = result.response as AssistantPayload;
-      setMessages((c) => [...c, { id: payload.id, role: 'assistant', payload }]);
-      setPermissionMatrix(result.permissionMatrix || null);
-      if (payload.contextPanel) setContextPanel(payload.contextPanel);
-      setStreamActivity(null);
+      if (LLM_ROUTING) {
+        // ── Plan Engine path ────────────────────────────────────────────────
+        const result = await superAgentApi.plan(finalPrompt, {
+          sessionId: planSessionId ?? undefined,
+          dryRun: mode === 'investigate',
+        });
+
+        // Persist session id for multi-turn continuity
+        if (result.sessionId) setPlanSessionId(result.sessionId);
+
+        const resp = result.response;
+        let payload: AssistantPayload;
+
+        if (resp?.kind === 'plan') {
+          payload = planResponseToPayload(resp, result.trace);
+        } else if (resp?.kind === 'clarification') {
+          payload = clarificationToPayload(resp.question);
+        } else {
+          payload = assistantFromError(finalPrompt, resp?.error ?? 'Unexpected response from Plan Engine.');
+        }
+
+        setMessages((c) => [...c, { id: payload.id, role: 'assistant', payload }]);
+        if (payload.contextPanel) setContextPanel(payload.contextPanel);
+        setStreamActivity(null);
+      } else {
+        // ── Legacy regex path (default) ─────────────────────────────────────
+        const result = await superAgentApi.command(finalPrompt, { runId, mode, context: buildCommandContext() });
+        const payload = result.response as AssistantPayload;
+        setMessages((c) => [...c, { id: payload.id, role: 'assistant', payload }]);
+        setPermissionMatrix(result.permissionMatrix || null);
+        if (payload.contextPanel) setContextPanel(payload.contextPanel);
+        setStreamActivity(null);
+      }
     } catch (error) {
       const fallback = assistantFromError(finalPrompt, error instanceof Error ? error.message : 'Unable to process command.');
       setMessages((c) => [...c, { id: fallback.id, role: 'assistant', payload: fallback }]);
