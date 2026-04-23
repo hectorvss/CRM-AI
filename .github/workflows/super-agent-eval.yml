@@ -31,6 +31,9 @@ jobs:
       - name: Run Super Agent policy eval
         run: npm run eval:super-agent-policy
 
+      - name: Run Super Agent tool catalog eval
+        run: npm run eval:super-agent-catalog
+
       - name: Run Super Agent search smoke
         run: npm run eval:super-agent-search
 

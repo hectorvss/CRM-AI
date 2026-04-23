@@ -292,7 +292,7 @@ const baselineRules: PolicyRule[] = [
     priority: 100,
     evaluate({ tool }) {
       if (tool.sideEffect === 'read') {
-        return { action: 'allow', reason: 'Read-only tool' };
+        return { action: 'allow', reason: 'Read-only tool', riskElevation: 'none' };
       }
       return null;
     },

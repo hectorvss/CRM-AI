@@ -13,6 +13,7 @@
     "lint": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc --noEmit",
     "eval:super-agent": "tsx tests/super-agent/run-golden.ts",
     "eval:super-agent-policy": "tsx tests/super-agent/run-policy.ts",
+    "eval:super-agent-catalog": "tsx tests/super-agent/run-tool-catalog.ts",
     "eval:super-agent-search": "tsx tests/super-agent/run-search-smoke.ts",
     "worker": "tsx server/worker-standalone.ts",
     "seed:supabase-demo": "tsx seed_sample_data.ts"

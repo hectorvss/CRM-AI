@@ -21,6 +21,15 @@ import { approvalGetTool, approvalListTool, approvalDecideTool } from './approva
 import { customerGetTool, customerListTool } from './customers.js';
 // ── Knowledge
 import { knowledgeSearchTool } from './knowledge.js';
+import { workflowGetTool, workflowListTool, workflowPublishTool } from './workflows.js';
+import {
+  reportAgentsTool,
+  reportApprovalsTool,
+  reportCostsTool,
+  reportIntentsTool,
+  reportOverviewTool,
+  reportSlaTool,
+} from './reports.js';
 // ── Agent Delegates (bridge to catalog agent implementations)
 import {
   agentDraftReplyTool,
@@ -62,6 +71,15 @@ export function registerAllTools(): void {
 
   // Knowledge
   toolRegistry.register(knowledgeSearchTool);
+  toolRegistry.register(workflowListTool);
+  toolRegistry.register(workflowGetTool);
+  toolRegistry.register(workflowPublishTool);
+  toolRegistry.register(reportOverviewTool);
+  toolRegistry.register(reportIntentsTool);
+  toolRegistry.register(reportAgentsTool);
+  toolRegistry.register(reportApprovalsTool);
+  toolRegistry.register(reportCostsTool);
+  toolRegistry.register(reportSlaTool);
 
   // Agent Delegates
   toolRegistry.register(agentDraftReplyTool);

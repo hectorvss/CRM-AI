@@ -99,7 +99,7 @@ export interface ToolSpec<TArgs = unknown, TReturns = unknown> {
   /** One-line description surfaced to the LLM. */
   description: string;
   /** Category for cataloguing and policy rules. */
-  category: 'case' | 'order' | 'payment' | 'return' | 'customer' | 'approval' | 'workflow' | 'knowledge' | 'search' | 'system';
+  category: 'case' | 'order' | 'payment' | 'return' | 'customer' | 'approval' | 'workflow' | 'knowledge' | 'report' | 'search' | 'system';
   /** Typed arg validator. */
   args: Schema<TArgs>;
   /** Typed returns validator (documentation + LLM hint). */
@@ -228,7 +228,7 @@ export interface Turn {
 }
 
 export interface Slot {
-  type: 'customer' | 'order' | 'payment' | 'case' | 'return' | 'approval' | 'filter';
+  type: 'customer' | 'order' | 'payment' | 'case' | 'return' | 'approval' | 'workflow' | 'report' | 'filter';
   value: unknown;
   confidence: number;
   mentionedAt: string;

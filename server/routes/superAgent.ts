@@ -220,6 +220,12 @@ function pageFromEntityType(entityType?: string | null) {
       return 'customers';
     case 'workflow':
       return 'workflows';
+    case 'knowledge':
+      return 'knowledge';
+    case 'report':
+      return 'reports';
+    case 'agents':
+      return 'super_agent';
     default:
       return 'super_agent';
   }
@@ -301,6 +307,255 @@ function deriveEvidence(response: any) {
   return Array.isArray(response?.contextPanel?.evidence)
     ? response.contextPanel.evidence.map((item: any) => `${item.label}: ${item.value}`)
     : [];
+}
+
+function asObject(value: any): Record<string, any> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function firstResultRecord(value: any): Record<string, any> | null {
+  if (Array.isArray(value)) return asObject(value[0]);
+  return asObject(value);
+}
+
+function pickFirstString(value: Record<string, any> | null, keys: string[]) {
+  if (!value) return null;
+  for (const key of keys) {
+    const candidate = value[key];
+    if (candidate !== undefined && candidate !== null && String(candidate).trim()) return String(candidate);
+  }
+  return null;
+}
+
+function entityInfoFromPlanSpan(span: any) {
+  const tool = String(span?.tool || '');
+  const root = tool.split('.')[0];
+  const action = tool.split('.').slice(1).join('.');
+  const args = asObject(span?.args) || {};
+  const value = span?.result?.value;
+  const record = firstResultRecord(value);
+
+  if (!span?.result?.ok) return null;
+  if (root === 'case') {
+    return {
+      entityType: 'case',
+      entityId: pickFirstString(record, ['id', 'case_id', 'caseId']) || pickFirstString(args, ['caseId', 'case_id', 'id']),
+      page: 'case_graph',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'order') {
+    return {
+      entityType: 'order',
+      entityId: pickFirstString(record, ['id', 'order_id', 'orderId']) || pickFirstString(args, ['orderId', 'order_id', 'id']),
+      page: 'orders',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'payment') {
+    return {
+      entityType: 'payment',
+      entityId: pickFirstString(record, ['id', 'payment_id', 'paymentId']) || pickFirstString(args, ['paymentId', 'payment_id', 'id']),
+      page: 'payments',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'return') {
+    return {
+      entityType: 'return',
+      entityId: pickFirstString(record, ['id', 'return_id', 'returnId']) || pickFirstString(args, ['returnId', 'return_id', 'id']),
+      page: 'returns',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'approval') {
+    return {
+      entityType: 'approval',
+      entityId: pickFirstString(record, ['id', 'approval_id', 'approvalId']) || pickFirstString(args, ['approvalId', 'approval_id', 'id']),
+      page: 'approvals',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'customer') {
+    return {
+      entityType: 'customer',
+      entityId: pickFirstString(record, ['id', 'customer_id', 'customerId']) || pickFirstString(args, ['customerId', 'customer_id', 'id']),
+      page: 'customers',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'workflow') {
+    return {
+      entityType: 'workflow',
+      entityId: pickFirstString(record, ['id', 'workflowId', 'workflow_id']) || pickFirstString(args, ['workflowId', 'workflow_id', 'id']),
+      page: 'workflows',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'knowledge') {
+    return {
+      entityType: 'knowledge',
+      entityId: pickFirstString(record, ['id', 'article_id', 'policy_id']) || null,
+      page: 'knowledge',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'report') {
+    return {
+      entityType: 'report',
+      entityId: null,
+      page: 'reports',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  if (root === 'agent') {
+    return {
+      entityType: 'agents',
+      entityId: pickFirstString(args, ['agentSlug', 'slug']) || null,
+      page: 'super_agent',
+      section: action || null,
+      record,
+      tool,
+    };
+  }
+  return null;
+}
+
+function inferPlanNavigationTargetFromTrace(trace: any, runId: string): NavigationTarget | null {
+  const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+  for (const span of spans) {
+    const info = entityInfoFromPlanSpan(span);
+    if (!info) continue;
+    if (!info.entityId && info.entityType !== 'report' && info.entityType !== 'agents') continue;
+    return buildNavigationTarget({
+      page: info.page,
+      entityType: info.entityType,
+      entityId: info.entityId || null,
+      section: info.section,
+      sourceContext: 'plan_engine',
+      runId,
+    });
+  }
+  return null;
+}
+
+function displayTitleForPlanEntity(info: ReturnType<typeof entityInfoFromPlanSpan>) {
+  if (!info) return 'Super Agent result';
+  const record = info.record;
+  return pickFirstString(record, [
+    'case_number',
+    'order_number',
+    'payment_reference',
+    'return_number',
+    'canonical_name',
+    'name',
+    'title',
+    'slug',
+    'id',
+  ]) || (info.entityId ? `${titleCase(info.entityType)} ${info.entityId}` : titleCase(info.entityType));
+}
+
+function buildPlanPanelFacts(record: Record<string, any> | null) {
+  if (!record) return [];
+  const keys = [
+    ['Status', ['status', 'version_status', 'approval_status', 'refund_status']],
+    ['Risk', ['risk_level', 'risk']],
+    ['Amount', ['amount', 'total', 'refund_amount']],
+    ['Customer', ['customer_name', 'canonical_name', 'customer_id']],
+    ['Updated', ['updated_at', 'publishedAt', 'published_at']],
+  ] as const;
+
+  return keys.flatMap(([label, candidates]) => {
+    const value = pickFirstString(record, candidates as unknown as string[]);
+    return value ? [{ label, value }] : [];
+  }).slice(0, 5);
+}
+
+function buildPlanContextPanelFromTrace(trace: any, navigationTarget: NavigationTarget | null): ContextPanel | null {
+  if (!navigationTarget) return null;
+  const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+  const info = spans.map(entityInfoFromPlanSpan).find((candidate) =>
+    candidate?.entityType === navigationTarget.entityType
+    && String(candidate?.entityId || '') === String(navigationTarget.entityId || ''),
+  ) || spans.map(entityInfoFromPlanSpan).find(Boolean);
+  if (!info) return null;
+
+  const record = info.record;
+  return {
+    entityType: info.entityType,
+    entityId: info.entityId || null,
+    title: displayTitleForPlanEntity(info),
+    subtitle: `${titleCase(info.entityType)} context from ${info.tool}`,
+    status: pickFirstString(record, ['status', 'version_status', 'approval_status']) || null,
+    risk: pickFirstString(record, ['risk_level', 'risk']) || null,
+    description: pickFirstString(record, ['summary', 'description', 'reason', 'resolution_notes']) || null,
+    facts: buildPlanPanelFacts(record),
+    evidence: [
+      { label: 'Tool', value: info.tool, tone: 'success' },
+      { label: 'Trace', value: trace?.planId || navigationTarget.runId || 'current run', tone: 'neutral' },
+    ],
+    timeline: record
+      ? [
+          { label: 'Created', value: formatWhen(record.created_at), time: record.created_at || null },
+          { label: 'Updated', value: formatWhen(record.updated_at || record.published_at), time: record.updated_at || record.published_at || null },
+        ].filter((item) => item.value !== 'N/A')
+      : [],
+    related: [
+      {
+        label: `Open ${titleCase(info.entityType)}`,
+        value: 'Open module',
+        targetPage: info.page,
+        focusId: info.entityId || null,
+        navigationTarget,
+      },
+    ],
+  };
+}
+
+function derivePlanFactsFromTrace(trace: any) {
+  const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+  return spans.flatMap((span: any) => {
+    const info = entityInfoFromPlanSpan(span);
+    if (!info) {
+      return span?.result?.ok
+        ? [`${span.tool}: ${toText(span.result?.value)}`]
+        : [`${span.tool}: ${span?.result?.error || 'Failed'}`];
+    }
+    const title = displayTitleForPlanEntity(info);
+    const status = pickFirstString(info.record, ['status', 'version_status', 'approval_status', 'refund_status']);
+    return [`${span.tool}: ${title}${status ? ` (${status})` : ''}`];
+  }).slice(0, 8);
+}
+
+function derivePlanEvidenceFromTrace(trace: any) {
+  const spans = Array.isArray(trace?.spans) ? trace.spans : [];
+  const evidence = spans.map((span: any) => {
+    const status = span?.result?.ok ? 'ok' : 'failed';
+    const latency = typeof span?.latencyMs === 'number' ? `${span.latencyMs}ms` : 'n/a';
+    return `${span.tool}: ${status}, risk ${span.riskLevel || 'n/a'}, ${latency}`;
+  });
+  if (Array.isArray(trace?.approvalIds) && trace.approvalIds.length) {
+    evidence.unshift(`Approval required: ${trace.approvalIds.join(', ')}`);
+  }
+  return evidence;
 }
 
 function resolveRelativeTarget(text: string, context?: CommandContext | null) {
@@ -1104,6 +1359,10 @@ function buildResponseFromPlanOutcome(
           : span.result?.error || 'Failed',
       }))
     : [];
+  const navigationTarget = inferPlanNavigationTargetFromTrace(trace, runId);
+  const contextPanel = buildPlanContextPanelFromTrace(trace, navigationTarget);
+  const evidence = derivePlanEvidenceFromTrace(trace);
+  const facts = derivePlanFactsFromTrace(trace);
 
   return createResponse({
     input,
@@ -1126,14 +1385,14 @@ function buildResponseFromPlanOutcome(
           focusId: approvalId,
         }))
       : [],
-    contextPanel: null,
+    contextPanel,
     agents: [],
     suggestedReplies: [],
     consultedModules,
-    facts: steps.map((step: any) => `${step.label}: ${step.value}`),
+    facts: facts.length ? facts : steps.map((step: any) => `${step.label}: ${step.value}`),
     conflicts: [],
     sources: consultedModules,
-    evidence: trace?.approvalIds?.length ? [`Approval required: ${trace.approvalIds.join(', ')}`] : [],
+    evidence,
     steps: Array.isArray(trace?.spans)
       ? trace.spans.map((span: any) => ({
           id: span.stepId,
@@ -1144,7 +1403,7 @@ function buildResponseFromPlanOutcome(
       : [],
     runId,
     structuredIntent: response?.kind === 'plan' ? response.plan : null,
-    navigationTarget: null,
+    navigationTarget,
   });
 }
 
