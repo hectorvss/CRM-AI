@@ -245,6 +245,79 @@ function listPoliciesSqlite(scope: KnowledgeScope) {
   return db.prepare(`SELECT * FROM policy_rules WHERE tenant_id = ? AND is_active = 1`).all(scope.tenantId).map(parseRow);
 }
 
+function resolveOwnerSqlite(ownerUserId: string | null | undefined) {
+  return ownerUserId ?? null;
+}
+
+async function createArticleSqlite(scope: KnowledgeScope, input: any) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const id = randomUUID();
+  const reviewCycleDays = input.review_cycle_days ?? 90;
+  const ownerUserId = resolveOwnerSqlite(input.owner_user_id ?? scope.userId ?? null);
+  const payload = {
+    id,
+    tenant_id: scope.tenantId,
+    workspace_id: scope.workspaceId,
+    domain_id: input.domain_id ?? null,
+    title: input.title,
+    content: input.content,
+    content_structured: input.content_structured ?? null,
+    type: input.type ?? 'article',
+    status: input.status ?? 'draft',
+    owner_user_id: ownerUserId,
+    review_cycle_days: reviewCycleDays,
+    last_reviewed_at: now,
+    next_review_at: new Date(Date.now() + reviewCycleDays * 24 * 60 * 60 * 1000).toISOString(),
+    version: 1,
+    linked_workflow_ids: JSON.stringify(input.linked_workflow_ids ?? []),
+    linked_approval_policy_ids: JSON.stringify(input.linked_approval_policy_ids ?? []),
+    created_at: now,
+    updated_at: now,
+  };
+  const fields = Object.keys(payload);
+  db.prepare(`INSERT INTO knowledge_articles (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`)
+    .run(...Object.values(payload));
+  return getArticleSqlite(scope, id);
+}
+
+async function updateArticleSqlite(scope: KnowledgeScope, articleId: string, input: any) {
+  const db = getDb();
+  const existing = await getArticleSqlite(scope, articleId);
+  if (!existing) return null;
+  const now = new Date().toISOString();
+  const nextVersion = input.content !== undefined || input.title !== undefined
+    ? (Number(existing.version) || 1) + 1
+    : Number(existing.version) || 1;
+  const ownerUserId = resolveOwnerSqlite(input.owner_user_id ?? existing.owner_user_id ?? scope.userId ?? null);
+  const payload: Record<string, unknown> = {
+    domain_id: input.domain_id ?? existing.domain_id ?? null,
+    title: input.title ?? existing.title,
+    content: input.content ?? existing.content,
+    content_structured: input.content_structured ?? existing.content_structured ?? null,
+    type: input.type ?? existing.type ?? 'article',
+    status: input.status ?? existing.status,
+    owner_user_id: ownerUserId,
+    review_cycle_days: input.review_cycle_days ?? existing.review_cycle_days ?? 90,
+    version: nextVersion,
+    linked_workflow_ids: JSON.stringify(input.linked_workflow_ids ?? existing.linked_workflow_ids ?? []),
+    linked_approval_policy_ids: JSON.stringify(input.linked_approval_policy_ids ?? existing.linked_approval_policy_ids ?? []),
+    updated_at: now,
+  };
+  const fields = Object.keys(payload);
+  db.prepare(`UPDATE knowledge_articles SET ${fields.map((field) => `${field} = ?`).join(', ')} WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
+    .run(...Object.values(payload), articleId, scope.tenantId, scope.workspaceId);
+  return getArticleSqlite(scope, articleId);
+}
+
+async function publishArticleSqlite(scope: KnowledgeScope, articleId: string) {
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.prepare(`UPDATE knowledge_articles SET status = ?, last_reviewed_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
+    .run('published', now, now, articleId, scope.tenantId, scope.workspaceId);
+  return getArticleSqlite(scope, articleId);
+}
+
 export interface KnowledgeRepository {
   listArticles(scope: KnowledgeScope, filters: KnowledgeArticleFilters): Promise<any[]>;
   getArticle(scope: KnowledgeScope, articleId: string): Promise<any | null>;
@@ -271,9 +344,9 @@ export function createKnowledgeRepository(): KnowledgeRepository {
   return {
     listArticles: async (scope, filters) => listArticlesSqlite(scope, filters),
     getArticle: async (scope, articleId) => getArticleSqlite(scope, articleId),
-    createArticle: async () => null,
-    updateArticle: async () => null,
-    publishArticle: async () => null,
+    createArticle: async (scope, input) => createArticleSqlite(scope, input),
+    updateArticle: async (scope, articleId, input) => updateArticleSqlite(scope, articleId, input),
+    publishArticle: async (scope, articleId) => publishArticleSqlite(scope, articleId),
     listDomains: async (scope) => listDomainsSqlite(scope),
     listPolicies: async (scope) => listPoliciesSqlite(scope),
   };

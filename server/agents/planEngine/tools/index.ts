@@ -21,6 +21,33 @@ import { approvalGetTool, approvalListTool, approvalDecideTool } from './approva
 import { customerGetTool, customerListTool } from './customers.js';
 // ── Knowledge
 import { knowledgeSearchTool } from './knowledge.js';
+import {
+  knowledgeCreateTool,
+  knowledgeGetTool,
+  knowledgeListDomainsTool,
+  knowledgeListPoliciesTool,
+  knowledgeListTool,
+  knowledgePublishTool,
+  knowledgeUpdateTool,
+} from './knowledgeWrite.js';
+import {
+  settingsGetWorkspaceTool,
+  settingsUpdateWorkspaceTool,
+  settingsListFeatureFlagsTool,
+  settingsUpdateFeatureFlagTool,
+} from './settings.js';
+import {
+  integrationListConnectorsTool,
+  integrationGetConnectorTool,
+  integrationListCapabilitiesTool,
+  integrationListWebhooksTool,
+  integrationGetWebhookTool,
+  integrationCreateWebhookTool,
+  integrationUpdateWebhookTool,
+  integrationGetCanonicalEventTool,
+  integrationCreateCanonicalEventTool,
+  integrationUpdateCanonicalEventTool,
+} from './integrations.js';
 import { workflowGetTool, workflowListTool, workflowPublishTool } from './workflows.js';
 import {
   reportAgentsTool,
@@ -71,6 +98,27 @@ export function registerAllTools(): void {
 
   // Knowledge
   toolRegistry.register(knowledgeSearchTool);
+  toolRegistry.register(knowledgeListTool);
+  toolRegistry.register(knowledgeGetTool);
+  toolRegistry.register(knowledgeCreateTool);
+  toolRegistry.register(knowledgeUpdateTool);
+  toolRegistry.register(knowledgePublishTool);
+  toolRegistry.register(knowledgeListDomainsTool);
+  toolRegistry.register(knowledgeListPoliciesTool);
+  toolRegistry.register(settingsGetWorkspaceTool);
+  toolRegistry.register(settingsUpdateWorkspaceTool);
+  toolRegistry.register(settingsListFeatureFlagsTool);
+  toolRegistry.register(settingsUpdateFeatureFlagTool);
+  toolRegistry.register(integrationListConnectorsTool);
+  toolRegistry.register(integrationGetConnectorTool);
+  toolRegistry.register(integrationListCapabilitiesTool);
+  toolRegistry.register(integrationListWebhooksTool);
+  toolRegistry.register(integrationGetWebhookTool);
+  toolRegistry.register(integrationCreateWebhookTool);
+  toolRegistry.register(integrationUpdateWebhookTool);
+  toolRegistry.register(integrationGetCanonicalEventTool);
+  toolRegistry.register(integrationCreateCanonicalEventTool);
+  toolRegistry.register(integrationUpdateCanonicalEventTool);
   toolRegistry.register(workflowListTool);
   toolRegistry.register(workflowGetTool);
   toolRegistry.register(workflowPublishTool);

@@ -320,6 +320,9 @@ export async function executePlan(
       result,
       riskLevel: runtimeRisk,
       dryRun: options.dryRun === true,
+      compensations: result.ok && tool.compensate
+        ? [{ tool: tool.compensate, args: parsed.value }]
+        : result.compensations,
     };
     spans.push(span);
     completed.set(step.id, span);

@@ -23,6 +23,7 @@ import type {
   StructuredCommand,
 } from '../agents/superAgent/intent.js';
 import { parseCommandIntent as parseSuperAgentCommandIntent } from '../agents/superAgent/intent.js';
+import type { Plan } from '../agents/planEngine/types.js';
 
 const router = Router();
 
@@ -556,6 +557,75 @@ function derivePlanEvidenceFromTrace(trace: any) {
     evidence.unshift(`Approval required: ${trace.approvalIds.join(', ')}`);
   }
   return evidence;
+}
+
+function buildExecutePlan(payload: SuperAgentActionPayload, runId: string): Plan {
+  const now = new Date().toISOString();
+  const args = (() => {
+    switch (payload.kind) {
+      case 'case.update_status':
+        return {
+          caseId: payload.entityId,
+          status: String(payload.params?.status || 'resolved'),
+          reason: payload.params?.reason ?? payload.params?.note ?? null,
+        };
+      case 'case.add_internal_note':
+        return {
+          caseId: payload.entityId,
+          content: String(payload.params?.content || payload.params?.note || ''),
+        };
+      case 'order.cancel':
+        return {
+          orderId: payload.entityId,
+          reason: payload.params?.reason ?? null,
+          currentStatus: String(payload.params?.currentStatus || ''),
+        };
+      case 'payment.refund':
+        return {
+          paymentId: payload.entityId,
+          amount: payload.params?.amount ?? null,
+          reason: payload.params?.reason ?? null,
+        };
+      case 'approval.decide':
+        return {
+          approvalId: payload.entityId,
+          decision: payload.params?.decision === 'rejected' ? 'rejected' : 'approved',
+          note: payload.params?.note ?? null,
+        };
+      case 'workflow.publish':
+        return {
+          workflowId: payload.entityId,
+          reason: payload.params?.reason ?? null,
+        };
+    }
+  })();
+
+  const tool =
+    payload.kind === 'case.update_status' ? 'case.update_status'
+    : payload.kind === 'case.add_internal_note' ? 'case.add_note'
+    : payload.kind === 'order.cancel' ? 'order.cancel'
+    : payload.kind === 'payment.refund' ? 'payment.refund'
+    : payload.kind === 'approval.decide' ? 'approval.decide'
+    : 'workflow.publish';
+
+  return {
+    planId: runId,
+    sessionId: runId,
+    createdAt: now,
+    confidence: 1,
+    rationale: `Manual execute payload routed through PlanEngine for ${payload.kind}.`,
+    needsApproval: false,
+    responseTemplate: undefined,
+    steps: [
+      {
+        id: 's0',
+        tool,
+        args,
+        dependsOn: [],
+        rationale: `Execute ${payload.kind} via unified runtime`,
+      },
+    ],
+  };
 }
 
 function resolveRelativeTarget(text: string, context?: CommandContext | null) {
@@ -2951,23 +3021,62 @@ router.post('/execute', async (req: MultiTenantRequest, res) => {
       },
     });
 
-    const result = await executeAction(req, scope, payload);
-    if (!result.ok) {
-      emitSuperAgentEvent(scope, result.approvalRequired ? 'action_completed' : 'run_failed', {
+    const plan = buildExecutePlan(payload, runId);
+    const trace = await planEngine.execute({
+      plan,
+      userId: req.userId || 'system',
+      tenantId: scope.tenantId,
+      workspaceId: scope.workspaceId || null,
+      hasPermission: (perm: string) => hasPermission(req, perm),
+      options: { dryRun: false },
+    });
+
+    const approvalId = trace.approvalIds?.[0] || null;
+    const approval = approvalId ? await approvalRepository.get(scope, approvalId) : null;
+
+    if (trace.status === 'pending_approval') {
+      emitSuperAgentEvent(scope, 'action_completed', {
         runId,
         action: {
           kind: payload.kind,
           entityType: payload.entityType,
           entityId: payload.entityId,
         },
-        approvalRequired: result.approvalRequired === true,
-        approvalId: result.approval?.id || null,
-        error: result.error || null,
+        approvalRequired: true,
+        approvalId,
+        trace,
       });
-      res.status(result.approvalRequired ? 202 : 403).json(result);
+      res.status(202).json({
+        ok: false,
+        approvalRequired: true,
+        approval,
+        approvalId,
+        trace,
+        result: null,
+      });
       return;
     }
 
+    if (trace.status === 'rejected_by_policy' || trace.status === 'invalid_args' || trace.status === 'failed') {
+      emitSuperAgentEvent(scope, 'run_failed', {
+        runId,
+        action: {
+          kind: payload.kind,
+          entityType: payload.entityType,
+          entityId: payload.entityId,
+        },
+        error: trace.summary,
+        trace,
+      });
+      res.status(trace.status === 'rejected_by_policy' ? 403 : 500).json({
+        ok: false,
+        error: trace.summary,
+        trace,
+      });
+      return;
+    }
+
+    const firstResult = trace.spans.find((span) => span.result?.ok);
     emitSuperAgentEvent(scope, 'action_completed', {
       runId,
       action: {
@@ -2975,10 +3084,15 @@ router.post('/execute', async (req: MultiTenantRequest, res) => {
         entityType: payload.entityType,
         entityId: payload.entityId,
       },
-      result: result.result || null,
+      result: firstResult?.result?.value || null,
+      trace,
     });
 
-    res.json(result);
+    res.json({
+      ok: true,
+      result: firstResult?.result?.value || null,
+      trace,
+    });
   } catch (error) {
     console.error('Super Agent execute error:', error);
     try {

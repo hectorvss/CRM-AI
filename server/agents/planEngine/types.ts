@@ -99,7 +99,7 @@ export interface ToolSpec<TArgs = unknown, TReturns = unknown> {
   /** One-line description surfaced to the LLM. */
   description: string;
   /** Category for cataloguing and policy rules. */
-  category: 'case' | 'order' | 'payment' | 'return' | 'customer' | 'approval' | 'workflow' | 'knowledge' | 'report' | 'search' | 'system';
+  category: 'case' | 'order' | 'payment' | 'return' | 'customer' | 'approval' | 'workflow' | 'knowledge' | 'report' | 'integration' | 'settings' | 'search' | 'system';
   /** Typed arg validator. */
   args: Schema<TArgs>;
   /** Typed returns validator (documentation + LLM hint). */
@@ -174,6 +174,8 @@ export interface ExecutionSpan {
   riskLevel: RiskLevel;
   /** Whether this span was a dry-run (no DB writes). */
   dryRun: boolean;
+  /** Suggested rollback actions when the tool advertises compensation. */
+  compensations?: Array<{ tool: string; args: unknown }>;
 }
 
 export type ExecutionStatus =

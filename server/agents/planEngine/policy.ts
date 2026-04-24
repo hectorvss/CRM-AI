@@ -213,6 +213,23 @@ const baselineRules: PolicyRule[] = [
     },
   },
 
+  // 8c. Integration writes can affect inbound/outbound data contracts
+  {
+    id: 'integration_write_requires_approval',
+    description: 'Integration writes require approval',
+    priority: 432,
+    evaluate({ tool }) {
+      if (tool.name.startsWith('integration.') && tool.sideEffect === 'write') {
+        return {
+          action: 'require_approval',
+          reason: 'Integration writes can change operational data contracts',
+          riskElevation: 'high',
+        };
+      }
+      return null;
+    },
+  },
+
   // 9. Bulk operations should not execute blindly
   {
     id: 'bulk_operation_requires_approval',
