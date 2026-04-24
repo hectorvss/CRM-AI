@@ -575,10 +575,10 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
 
   const emptyHints =
     activeSection === 'live-runs'
-      ? ['Review pending payments', 'Open pending approvals', 'Investigate a conflicted order']
+      ? ['Review pending payments', 'Open pending approvals']
       : activeSection === 'guardrails'
-      ? ['Explain why an action is blocked', 'Open pending approvals', 'Show permission matrix']
-      : (bootstrap?.quickActions || []).slice(0, 4);
+      ? ['Explain why an action is blocked', 'Open pending approvals']
+      : (bootstrap?.quickActions || []).slice(0, 3);
 
   const sectionTitle =
     activeSection === 'live-runs' ? 'Live Runs'
@@ -692,50 +692,28 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                       <span className="font-medium text-gray-700 dark:text-gray-300">Super Agent</span>
                       {msg.payload.statusLine ? <span>{msg.payload.statusLine}</span> : null}
-                      {msg.payload.consultedModules.length > 0 ? <span>Consulted {compactList(msg.payload.consultedModules, ', ')}</span> : null}
                       {msg.payload.runId ? <span>Run {msg.payload.runId.slice(0, 8)}</span> : null}
                     </div>
 
                     <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
 
-                    {msg.payload.structuredIntent ? (
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
-                        {msg.payload.structuredIntent.intent ? <span>{String(msg.payload.structuredIntent.intent)}</span> : null}
-                        {msg.payload.structuredIntent.targetEntityType ? <span>{String(msg.payload.structuredIntent.targetEntityType)}</span> : null}
-                        {msg.payload.structuredIntent.targetEntityRef ? <span>{String(msg.payload.structuredIntent.targetEntityRef)}</span> : null}
-                      </div>
-                    ) : null}
-
-                    {[
-                      ...(msg.payload.sections || []),
-                      ...(msg.payload.facts?.length ? [{ title: 'Found', items: msg.payload.facts }] : []),
-                      ...(msg.payload.conflicts?.length ? [{ title: 'Conflict', items: msg.payload.conflicts }] : []),
-                      ...(msg.payload.evidence?.length ? [{ title: 'Evidence', items: msg.payload.evidence }] : []),
-                      ...(msg.payload.sources?.length ? [{ title: 'Sources', items: msg.payload.sources }] : []),
-                    ].map((section) => (
-                      <p key={`${msg.id}-${section.title}`} className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
-                        <span className="font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{section.title}</span>{' '}
-                        {compactList(section.items)}
-                      </p>
-                    ))}
-
-                    {msg.payload.steps?.length ? (
+                    {compactList([
+                      msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
+                      msg.payload.agents.length ? `Agents: ${compactList(msg.payload.agents.map((agent) => agent.name), ', ')}` : null,
+                      msg.payload.steps?.length ? `Thinking: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
+                    ], ' · ') ? (
                       <p className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
-                        <span className="font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Thinking</span>{' '}
-                        {compactList(msg.payload.steps.map((step) => step.detail ? `${step.label}: ${step.detail}` : step.label))}
-                      </p>
-                    ) : null}
-
-                    {msg.payload.agents.length > 0 ? (
-                      <p className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
-                        <span className="font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Agents</span>{' '}
-                        {compactList(msg.payload.agents.map((agent) => agent.name))}
+                        {compactList([
+                          msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
+                          msg.payload.agents.length ? `Agents: ${compactList(msg.payload.agents.map((agent) => agent.name), ', ')}` : null,
+                          msg.payload.steps?.length ? `Thinking: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
+                        ], ' · ')}
                       </p>
                     ) : null}
 
                     {msg.payload.actions.length > 0 ? (
                       <div className="flex flex-wrap gap-2 pt-1">
-                        {msg.payload.actions.map((action) => (
+                        {msg.payload.actions.slice(0, 2).map((action) => (
                           <button
                             key={action.id}
                             type="button"
@@ -755,7 +733,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
 
                     {msg.payload.suggestedReplies.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5 pt-1">
-                        {msg.payload.suggestedReplies.map((reply) => (
+                        {msg.payload.suggestedReplies.slice(0, 2).map((reply) => (
                           <button
                             key={`${msg.id}-${reply}`}
                             type="button"
