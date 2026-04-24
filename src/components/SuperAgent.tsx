@@ -297,6 +297,10 @@ function clarificationToPayload(question: string): AssistantPayload {
   };
 }
 
+function compactList(items: Array<string | null | undefined>, separator = ' · ') {
+  return items.map((item) => String(item || '').trim()).filter(Boolean).join(separator);
+}
+
 export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps) {
   const activeSection = activeTarget?.section || 'command-center';
 
@@ -684,167 +688,85 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                 </div>
               ) : (
                 <div key={msg.id} className={msg.muted ? 'opacity-50' : ''}>
-                  <div className="flex gap-3">
-                    <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gray-900 text-white dark:bg-white dark:text-black">
-                      <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+                  <div className="max-w-2xl space-y-2">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                      <span className="font-medium text-gray-700 dark:text-gray-300">Super Agent</span>
+                      {msg.payload.statusLine ? <span>{msg.payload.statusLine}</span> : null}
+                      {msg.payload.consultedModules.length > 0 ? <span>Consulted {compactList(msg.payload.consultedModules, ', ')}</span> : null}
+                      {msg.payload.runId ? <span>Run {msg.payload.runId.slice(0, 8)}</span> : null}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Super Agent</p>
-                        {msg.payload.statusLine ? (
-                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                            {msg.payload.statusLine}
-                          </span>
-                        ) : null}
-                        {msg.payload.consultedModules.length > 0 ? (
-                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                            Thinking across {msg.payload.consultedModules.join(', ')}
-                          </span>
-                        ) : null}
+
+                    <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
+
+                    {msg.payload.structuredIntent ? (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
+                        {msg.payload.structuredIntent.intent ? <span>{String(msg.payload.structuredIntent.intent)}</span> : null}
+                        {msg.payload.structuredIntent.targetEntityType ? <span>{String(msg.payload.structuredIntent.targetEntityType)}</span> : null}
+                        {msg.payload.structuredIntent.targetEntityRef ? <span>{String(msg.payload.structuredIntent.targetEntityRef)}</span> : null}
                       </div>
+                    ) : null}
 
-                      <div className="mt-3">
-                        <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
-                        {msg.payload.structuredIntent ? (
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {msg.payload.structuredIntent.intent ? (
-                              <span className="text-[11px] font-medium uppercase text-gray-400 dark:text-gray-500">
-                                {String(msg.payload.structuredIntent.intent)}
-                              </span>
-                            ) : null}
-                            {msg.payload.structuredIntent.targetEntityType ? (
-                              <span className="text-[11px] font-medium uppercase text-gray-400 dark:text-gray-500">
-                                {String(msg.payload.structuredIntent.targetEntityType)}
-                              </span>
-                            ) : null}
-                            {msg.payload.runId ? (
-                              <span className="text-[11px] font-medium text-gray-300 dark:text-gray-600">
-                                Run {msg.payload.runId.slice(0, 8)}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : null}
+                    {[
+                      ...(msg.payload.sections || []),
+                      ...(msg.payload.facts?.length ? [{ title: 'Found', items: msg.payload.facts }] : []),
+                      ...(msg.payload.conflicts?.length ? [{ title: 'Conflict', items: msg.payload.conflicts }] : []),
+                      ...(msg.payload.evidence?.length ? [{ title: 'Evidence', items: msg.payload.evidence }] : []),
+                      ...(msg.payload.sources?.length ? [{ title: 'Sources', items: msg.payload.sources }] : []),
+                    ].map((section) => (
+                      <p key={`${msg.id}-${section.title}`} className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
+                        <span className="font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{section.title}</span>{' '}
+                        {compactList(section.items)}
+                      </p>
+                    ))}
 
-                        {[
-                          ...msg.payload.sections,
-                          ...(msg.payload.facts?.length ? [{ title: 'What I found', items: msg.payload.facts }] : []),
-                          ...(msg.payload.conflicts?.length ? [{ title: 'Conflicts', items: msg.payload.conflicts }] : []),
-                        ].map((s) => (
-                          <div key={`${msg.id}-${s.title}`} className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
-                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">{s.title}</p>
-                            <div className="mt-2 space-y-2">
-                              {s.items.map((item) => (
-                                <p key={item} className="text-sm leading-6 text-gray-700 dark:text-gray-300">{item}</p>
-                              ))}
-                            </div>
-                          </div>
+                    {msg.payload.steps?.length ? (
+                      <p className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
+                        <span className="font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Thinking</span>{' '}
+                        {compactList(msg.payload.steps.map((step) => step.detail ? `${step.label}: ${step.detail}` : step.label))}
+                      </p>
+                    ) : null}
+
+                    {msg.payload.agents.length > 0 ? (
+                      <p className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
+                        <span className="font-medium uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Agents</span>{' '}
+                        {compactList(msg.payload.agents.map((agent) => agent.name))}
+                      </p>
+                    ) : null}
+
+                    {msg.payload.actions.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {msg.payload.actions.map((action) => (
+                          <button
+                            key={action.id}
+                            type="button"
+                            onClick={() => handleAction(action)}
+                            disabled={action.allowed === false}
+                            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-40 ${
+                              action.type === 'navigate'
+                                ? 'border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-300'
+                                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
+                            }`}
+                          >
+                            {action.label}
+                          </button>
                         ))}
-
-                        {msg.payload.steps?.length ? (
-                          <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
-                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">Thinking and running</p>
-                            <div className="mt-2 space-y-2">
-                              {msg.payload.steps.map((step) => (
-                                <div key={step.id} className="flex items-start gap-3">
-                                  <span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${
-                                    step.status === 'completed'
-                                      ? 'bg-emerald-500'
-                                      : step.status === 'failed'
-                                        ? 'bg-red-500'
-                                        : 'animate-pulse bg-blue-500'
-                                  }`} />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white">{step.label}</p>
-                                    {step.detail ? <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{step.detail}</p> : null}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {msg.payload.sources?.length ? (
-                          <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
-                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">Sources consulted</p>
-                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                              {msg.payload.sources.map((source) => (
-                                <span key={`${msg.id}-${source}`} className="text-xs text-gray-500 dark:text-gray-400">
-                                  {source}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {msg.payload.evidence?.length ? (
-                          <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
-                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">Evidence</p>
-                            <div className="mt-2 space-y-2">
-                              {msg.payload.evidence.map((item) => (
-                                <p key={`${msg.id}-${item}`} className="text-sm leading-6 text-gray-700 dark:text-gray-300">{item}</p>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {msg.payload.agents.length > 0 ? (
-                          <div className="mt-5 border-t border-gray-100 pt-4 dark:border-gray-800">
-                            <p className="text-[11px] font-semibold uppercase text-gray-400 dark:text-gray-500">Agents involved</p>
-                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                              {msg.payload.agents.map((agent) => (
-                                <span key={agent.slug} className="inline-flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                                  <span className={`h-1.5 w-1.5 rounded-full ${
-                                    agent.status === 'executed'
-                                      ? 'bg-emerald-500'
-                                      : agent.status === 'blocked'
-                                        ? 'bg-red-500'
-                                        : agent.status === 'proposed'
-                                          ? 'bg-amber-500'
-                                          : 'bg-blue-500'
-                                  }`} />
-                                  {agent.name}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {msg.payload.actions.length > 0 ? (
-                          <div className="mt-5 flex flex-wrap gap-2">
-                            {msg.payload.actions.map((action) => (
-                              <button
-                                key={action.id}
-                                type="button"
-                                onClick={() => handleAction(action)}
-                                disabled={action.allowed === false}
-                                className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${
-                                  action.type === 'navigate'
-                                    ? 'border-gray-200 text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:text-gray-300'
-                                    : 'border-transparent bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                                }`}
-                              >
-                                {action.label}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-
-                        {msg.payload.suggestedReplies.length > 0 ? (
-                          <div className="mt-4 flex flex-wrap gap-1.5">
-                            {msg.payload.suggestedReplies.map((reply) => (
-                              <button
-                                key={`${msg.id}-${reply}`}
-                                type="button"
-                                onClick={() => void sendPrompt(reply)}
-                                className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                              >
-                                {reply}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
                       </div>
-                    </div>
+                    ) : null}
+
+                    {msg.payload.suggestedReplies.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {msg.payload.suggestedReplies.map((reply) => (
+                          <button
+                            key={`${msg.id}-${reply}`}
+                            type="button"
+                            onClick={() => void sendPrompt(reply)}
+                            className="rounded-full border border-gray-200 px-3 py-1 text-[11px] text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          >
+                            {reply}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )

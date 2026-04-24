@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 
@@ -329,25 +328,13 @@ export interface KnowledgeRepository {
 }
 
 export function createKnowledgeRepository(): KnowledgeRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      listArticles: listArticlesSupabase,
-      getArticle: getArticleSupabase,
-      createArticle: createArticleSupabase,
-      updateArticle: updateArticleSupabase,
-      publishArticle: publishArticleSupabase,
-      listDomains: listDomainsSupabase,
-      listPolicies: listPoliciesSupabase,
-    };
-  }
-
   return {
-    listArticles: async (scope, filters) => listArticlesSqlite(scope, filters),
-    getArticle: async (scope, articleId) => getArticleSqlite(scope, articleId),
-    createArticle: async (scope, input) => createArticleSqlite(scope, input),
-    updateArticle: async (scope, articleId, input) => updateArticleSqlite(scope, articleId, input),
-    publishArticle: async (scope, articleId) => publishArticleSqlite(scope, articleId),
-    listDomains: async (scope) => listDomainsSqlite(scope),
-    listPolicies: async (scope) => listPoliciesSqlite(scope),
+    listArticles: listArticlesSupabase,
+    getArticle: getArticleSupabase,
+    createArticle: createArticleSupabase,
+    updateArticle: updateArticleSupabase,
+    publishArticle: publishArticleSupabase,
+    listDomains: listDomainsSupabase,
+    listPolicies: listPoliciesSupabase,
   };
 }
