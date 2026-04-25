@@ -308,6 +308,74 @@ function compactList(items: Array<string | null | undefined>, separator = ' · '
   return items.map((item) => String(item || '').trim()).filter(Boolean).join(separator);
 }
 
+// ── Thinking Indicator Component ──────────────────────────────────────────
+
+function ThinkingIndicator() {
+  return (
+    <div className="flex gap-1">
+      <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" />
+      <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }} />
+      <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.4s' }} />
+    </div>
+  );
+}
+
+function ThinkingCard() {
+  return (
+    <div className="max-w-2xl rounded-lg bg-gray-50 p-4 border border-gray-100 dark:bg-gray-900 dark:border-gray-800">
+      <div className="flex items-center gap-2">
+        <ThinkingIndicator />
+        <span className="text-sm text-gray-600 dark:text-gray-400">Thinking...</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Agent Card Component ──────────────────────────────────────────
+
+function AgentCardComponent({ agent }: { agent: AgentCard }) {
+  const statusColor =
+    agent.status === 'executed' ? 'bg-emerald-500'
+    : agent.status === 'proposed' || agent.status === 'consulted' ? 'bg-amber-500'
+    : agent.status === 'blocked' ? 'bg-red-500'
+    : 'bg-gray-400';
+
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-gray-50 dark:bg-gray-800 px-3 py-2 border border-gray-200 dark:border-gray-700">
+      <div className={`h-2 w-2 rounded-full ${statusColor}`} />
+      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{agent.name}</span>
+    </div>
+  );
+}
+
+// ── Streaming Steps Component ─────────────────────────────────────────
+
+function StreamingStepsComponent({ steps }: { steps: StreamStep[] }) {
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5 pt-2 border-t border-gray-200 dark:border-gray-700">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Execution steps</p>
+      <div className="space-y-1">
+        {steps.map((step) => (
+          <div key={step.id} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+            {step.status === 'completed' && (
+              <span className="text-emerald-500 font-semibold">✓</span>
+            )}
+            {step.status === 'running' && (
+              <span className="text-amber-500 animate-pulse">⏳</span>
+            )}
+            {step.status === 'failed' && (
+              <span className="text-red-500 font-semibold">✗</span>
+            )}
+            <span className="truncate">{step.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps) {
   const activeSection = activeTarget?.section || 'command-center';
 
@@ -605,7 +673,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
 
         {/* Scroll area */}
         <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-52 pt-10">
-          <div className="mx-auto flex max-w-2xl flex-col gap-6">
+          <div className="mx-auto flex max-w-2xl flex-col gap-4">
 
             {/* Loading */}
             {isBootstrapping ? (
@@ -688,79 +756,97 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             {/* Messages */}
             {messages.map((msg) =>
               msg.role === 'user' ? (
-                <div key={msg.id} className="flex justify-end">
-                  <div className="max-w-lg rounded-2xl bg-gray-100 px-4 py-3 text-sm leading-6 text-gray-900 dark:bg-gray-800 dark:text-white">
+                <div key={msg.id} className="flex justify-end items-end gap-2">
+                  <span className="text-[12px] text-gray-500 dark:text-gray-400">You</span>
+                  <div className="max-w-lg rounded-lg bg-gray-100 px-4 py-3 text-sm leading-6 text-gray-900 dark:bg-gray-800 dark:text-white">
                     {msg.text}
                   </div>
                 </div>
               ) : (
                 <div key={msg.id} className={msg.muted ? 'opacity-50' : ''}>
-                  <div className="max-w-2xl space-y-2">
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                      <span className="font-medium text-gray-700 dark:text-gray-300">Super Agent</span>
-                      {msg.payload.statusLine ? <span>{msg.payload.statusLine}</span> : null}
-                      {msg.payload.runId ? <span>Run {msg.payload.runId.slice(0, 8)}</span> : null}
+                  {/* Show thinking card if actively thinking (empty text, thinking status) */}
+                  {msg.payload.summary === 'Thinking through your request...' && !msg.payload.narrative ? (
+                    <ThinkingCard />
+                  ) : (
+                    <div className="max-w-2xl rounded-lg bg-white p-4 shadow-sm border border-gray-100 dark:bg-gray-900 dark:border-gray-800 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">Assistant</span>
+                        {msg.payload.statusLine ? <span>{msg.payload.statusLine}</span> : null}
+                        {msg.payload.runId ? <span>Run {msg.payload.runId.slice(0, 8)}</span> : null}
+                      </div>
+
+                      {msg.payload.narrative ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-7 text-gray-900 dark:text-white">
+                          {msg.payload.narrative.split('\n').map((line: string, idx: number) => (
+                            <p key={idx} className="mb-2">{line}</p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
+                      )}
+
+                      {compactList([
+                        msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
+                        msg.payload.steps?.length ? `Steps: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
+                      ], ' · ') ? (
+                        <p className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
+                          {compactList([
+                            msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
+                            msg.payload.steps?.length ? `Steps: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
+                          ], ' · ')}
+                        </p>
+                      ) : null}
+
+                      {/* Agent Cards */}
+                      {msg.payload.agents.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {msg.payload.agents.map((agent) => (
+                            <AgentCardComponent key={agent.slug} agent={agent} />
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {/* Streaming Steps */}
+                      {msg.payload.steps && msg.payload.steps.length > 0 ? (
+                        <StreamingStepsComponent steps={msg.payload.steps} />
+                      ) : null}
+
+                      {msg.payload.actions.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {msg.payload.actions.slice(0, 2).map((action) => (
+                            <button
+                              key={action.id}
+                              type="button"
+                              onClick={() => handleAction(action)}
+                              disabled={action.allowed === false}
+                              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
+                                action.type === 'execute'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50'
+                                  : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+                              }`}
+                            >
+                              {action.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      {msg.payload.suggestedReplies.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {msg.payload.suggestedReplies.slice(0, 2).map((reply) => (
+                            <button
+                              key={`${msg.id}-${reply}`}
+                              type="button"
+                              onClick={() => void sendPrompt(reply)}
+                              className="rounded-full border border-gray-200 px-3 py-1 text-[11px] text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                              {reply}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-
-                    {msg.payload.narrative ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-7 text-gray-900 dark:text-white">
-                        {msg.payload.narrative.split('\n').map((line: string, idx: number) => (
-                          <p key={idx} className="mb-2">{line}</p>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
-                    )}
-
-                    {compactList([
-                      msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
-                      msg.payload.agents.length ? `Agents: ${compactList(msg.payload.agents.map((agent) => agent.name), ', ')}` : null,
-                      msg.payload.steps?.length ? `Thinking: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
-                    ], ' · ') ? (
-                      <p className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
-                        {compactList([
-                          msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
-                          msg.payload.agents.length ? `Agents: ${compactList(msg.payload.agents.map((agent) => agent.name), ', ')}` : null,
-                          msg.payload.steps?.length ? `Thinking: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
-                        ], ' · ')}
-                      </p>
-                    ) : null}
-
-                    {msg.payload.actions.length > 0 ? (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {msg.payload.actions.slice(0, 2).map((action) => (
-                          <button
-                            key={action.id}
-                            type="button"
-                            onClick={() => handleAction(action)}
-                            disabled={action.allowed === false}
-                            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-40 ${
-                              action.type === 'navigate'
-                                ? 'border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-300'
-                                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
-                            }`}
-                          >
-                            {action.label}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {msg.payload.suggestedReplies.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {msg.payload.suggestedReplies.slice(0, 2).map((reply) => (
-                          <button
-                            key={`${msg.id}-${reply}`}
-                            type="button"
-                            onClick={() => void sendPrompt(reply)}
-                            className="rounded-full border border-gray-200 px-3 py-1 text-[11px] text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                          >
-                            {reply}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                  )}
                 </div>
               )
             )}
@@ -830,7 +916,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
               </div>
             ) : null}
 
-            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
               <textarea
                 value={composerText}
                 onChange={(e) => setComposerText(e.target.value)}
@@ -844,12 +930,14 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                 className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
               />
               <div className="flex items-center justify-between px-3 pb-3 pt-1">
-                <div className="flex gap-1">
+                <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setMode('investigate')}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      mode === 'investigate' ? 'bg-gray-900 text-white dark:bg-white dark:text-black' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      mode === 'investigate'
+                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
                     }`}
                   >
                     Investigate
@@ -857,8 +945,10 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   <button
                     type="button"
                     onClick={() => setMode('operate')}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      mode === 'operate' ? 'bg-secondary text-white' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      mode === 'operate'
+                        ? 'bg-secondary text-white'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
                     }`}
                   >
                     Operate
