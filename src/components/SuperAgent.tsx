@@ -333,7 +333,11 @@ function ThinkingCard() {
 
 // ── Agent Card Component ──────────────────────────────────────────
 
-function AgentCardComponent({ agent }: { agent: AgentCard }) {
+interface AgentCardProps {
+  agent: AgentCard;
+}
+
+const AgentCardComponent: React.FC<AgentCardProps> = ({ agent }) => {
   const statusColor =
     agent.status === 'executed' ? 'bg-emerald-500'
     : agent.status === 'proposed' || agent.status === 'consulted' ? 'bg-amber-500'
@@ -346,7 +350,7 @@ function AgentCardComponent({ agent }: { agent: AgentCard }) {
       <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{agent.name}</span>
     </div>
   );
-}
+};
 
 // ── Streaming Steps Component ─────────────────────────────────────────
 
