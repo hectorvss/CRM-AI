@@ -3216,10 +3216,16 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       },
     });
 
-    // ── Shadow mode: fire LLM path async (non-blocking) ─────────────────────
-    // When SUPER_AGENT_LLM_ROUTING=true the /plan endpoint is the primary
-    // path. Here we silently mirror traffic to measure LLM accuracy vs. regex.
-    const llmEnabled = process.env.SUPER_AGENT_LLM_ROUTING === 'true';
+    // ── Routing: LLM Plan Engine vs regex fallback ──────────────────────────
+    // The LLM Plan Engine understands natural language ("Aurora Salazar",
+    // "investiga un pedido"); the regex parser only matches entity IDs.
+    // Default: enable LLM routing whenever a Gemini key is configured.
+    // Disable explicitly with SUPER_AGENT_LLM_ROUTING=false.
+    const llmEnabled =
+      process.env.SUPER_AGENT_LLM_ROUTING === 'true'
+      || (process.env.SUPER_AGENT_LLM_ROUTING !== 'false'
+          && Boolean(process.env.GEMINI_API_KEY)
+          && process.env.GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY');
     if (llmEnabled && input) {
       const { response: llmResponse, trace } = await planEngine.planAndExecute(
         {

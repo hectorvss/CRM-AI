@@ -690,28 +690,12 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
               </div>
             ) : null}
 
-            {/* Empty state */}
+            {/* Empty state — minimalist ChatGPT-style */}
             {!isBootstrapping && messages.length === 0 ? (
-              <div className="flex flex-col items-center text-center pt-16 pb-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white dark:bg-white dark:text-black">
-                  <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-                </div>
-                <h2 className="mt-4 text-xl font-semibold text-gray-900 dark:text-white">{sectionTitle}</h2>
-                <p className="mt-1.5 text-sm text-gray-400 dark:text-gray-500 max-w-xs">{sectionSubtitle}</p>
-                {emptyHints.length > 0 ? (
-                  <div className="mt-8 flex flex-wrap justify-center gap-2">
-                    {emptyHints.map((hint) => (
-                      <button
-                        key={hint}
-                        type="button"
-                        onClick={() => void sendPrompt(hint)}
-                        className="rounded-full border border-gray-200 px-4 py-2 text-sm text-gray-600 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200"
-                      >
-                        {hint}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+              <div className="flex flex-col items-center justify-center text-center min-h-[40vh]">
+                <h1 className="text-3xl font-medium text-gray-900 dark:text-white tracking-tight">
+                  What can I help with?
+                </h1>
               </div>
             ) : null}
 
