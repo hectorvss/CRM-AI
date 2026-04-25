@@ -73,6 +73,11 @@ type UiAction = {
   requiresConfirmation?: boolean;
   blockedReason?: string | null;
   payload?: SuperAgentActionPayload;
+  verificationDisplay?: {
+    beforeState?: Record<string, any>;
+    afterState?: Record<string, any>;
+    impacts?: string[];
+  };
 };
 
 type ContextPanel = {
@@ -799,6 +804,7 @@ function buildAction({
   payload,
   sensitive = false,
   requiresConfirmation = false,
+  verificationDisplay,
 }: {
   label: string;
   description: string;
@@ -810,6 +816,11 @@ function buildAction({
   payload?: SuperAgentActionPayload;
   sensitive?: boolean;
   requiresConfirmation?: boolean;
+  verificationDisplay?: {
+    beforeState?: Record<string, any>;
+    afterState?: Record<string, any>;
+    impacts?: string[];
+  };
 }): UiAction {
   const allowed = permission ? hasPermission(req, permission) : true;
   return {
@@ -833,6 +844,7 @@ function buildAction({
     requiresConfirmation,
     blockedReason: allowed ? null : `Missing permission: ${permission}`,
     payload,
+    verificationDisplay,
   };
 }
 
@@ -1357,6 +1369,7 @@ function getWorkflowActions(req: MultiTenantRequest, workflow: any) {
 function createResponse(input: {
   input: string;
   summary: string;
+  narrative?: string;
   statusLine: string;
   sections: Array<{ title: string; items: string[] }>;
   actions?: UiAction[];
@@ -1377,6 +1390,7 @@ function createResponse(input: {
     id: crypto.randomUUID(),
     input: input.input,
     summary: input.summary,
+    narrative: input.narrative,
     statusLine: input.statusLine,
     sections: input.sections,
     actions: input.actions || [],
@@ -1398,6 +1412,7 @@ function createResponse(input: {
 function buildResponseFromPlanOutcome(
   input: string,
   runId: string,
+  mode: 'investigate' | 'operate' = 'investigate',
   response: any,
   trace: any,
 ): ReturnType<typeof createResponse> {
@@ -1434,9 +1449,30 @@ function buildResponseFromPlanOutcome(
   const evidence = derivePlanEvidenceFromTrace(trace);
   const facts = derivePlanFactsFromTrace(trace);
 
+  // Build narrative based on mode and response kind
+  let narrative: string | undefined;
+  if (response?.kind === 'clarification') {
+    narrative = response.question;
+  } else if (response?.kind === 'plan' && mode === 'operate') {
+    // In operate mode, show plan summary with impact
+    const planSteps = response.plan?.steps ?? [];
+    const stepSummary = planSteps.map((s: any) => `${s.tool}: ${s.rationale || ''}`).join('\n');
+    narrative = `I'm ready to execute this plan:\n\n${stepSummary}\n\nThis will affect the entities mentioned above. Please confirm to proceed.`;
+  } else if (response?.kind === 'plan' && mode === 'investigate') {
+    // In investigate mode, show findings
+    narrative = summary;
+  } else if (trace?.status === 'pending_approval') {
+    narrative = `Action requires approval. ${summary}`;
+  } else if (trace?.status === 'rejected_by_policy') {
+    narrative = `This action was blocked by policy. ${summary}`;
+  } else {
+    narrative = summary;
+  }
+
   return createResponse({
     input,
     summary,
+    narrative,
     statusLine,
     sections: response?.kind === 'plan'
       ? [
@@ -2635,11 +2671,12 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
             tenantId: scope.tenantId,
             workspaceId: scope.workspaceId || null,
             hasPermission: (perm: string) => hasPermission(req, perm),
+            mode,
           },
           { dryRun: mode !== 'operate' },
         );
 
-        const finalResponse = buildResponseFromPlanOutcome(input, runId, llmResponse, trace);
+        const finalResponse = buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
 
         if (finalResponse.navigationTarget) {
           planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
@@ -2911,11 +2948,12 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           tenantId: scope.tenantId,
           workspaceId: scope.workspaceId || null,
           hasPermission: (perm: string) => hasPermission(req, perm),
+          mode,
         },
         { dryRun: mode === 'investigate' },
       );
 
-      const finalResponse = buildResponseFromPlanOutcome(input, runId, llmResponse, trace);
+      const finalResponse = buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
 
       if (finalResponse.navigationTarget) {
         planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
@@ -3144,11 +3182,12 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
         tenantId: scope.tenantId,
         workspaceId: scope.workspaceId || null,
         hasPermission: (perm: string) => hasPermission(req, perm),
+        mode: dryRun === true ? 'investigate' : 'operate',
       },
       { dryRun: dryRun === true },
     );
 
-    const plannedResponse = buildResponseFromPlanOutcome(userMessage.trim(), effectiveSessionId, response, trace);
+    const plannedResponse = buildResponseFromPlanOutcome(userMessage.trim(), effectiveSessionId, 'investigate', response, trace);
     if (plannedResponse.navigationTarget) {
       planEngine.rememberTarget(effectiveSessionId, plannedResponse.navigationTarget);
     }

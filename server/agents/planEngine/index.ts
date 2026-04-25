@@ -244,6 +244,11 @@ export interface PlanEngineGenerateInput {
   hasPermission: (perm: string) => boolean;
   domainContext?: unknown;
   /**
+   * Operating mode: 'investigate' for exploration, 'operate' for execution.
+   * Defaults to 'investigate'.
+   */
+  mode?: 'investigate' | 'operate';
+  /**
    * Agent ID or slug whose AI Studio configuration should drive this run.
    * Defaults to "supervisor" — the primary Plan Engine agent.
    * AI Studio sets this by navigating to Agents → [agent] → Reasoning/Safety/Knowledge.
@@ -298,6 +303,7 @@ export const planEngine = {
       },
       availableTools,
       domainContext: input.domainContext,
+      mode: input.mode || 'investigate',
       planId,
       agentConfig,
     };

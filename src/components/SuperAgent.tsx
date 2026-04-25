@@ -30,6 +30,11 @@ type SuperAgentAction = {
   requiresConfirmation?: boolean;
   blockedReason?: string | null;
   payload?: Record<string, any>;
+  verificationDisplay?: {
+    beforeState?: Record<string, any>;
+    afterState?: Record<string, any>;
+    impacts?: string[];
+  };
 };
 
 type ContextPanel = {
@@ -57,6 +62,7 @@ type AssistantPayload = {
   id: string;
   input: string;
   summary: string;
+  narrative?: string;  // NEW: Multi-paragraph conversational response
   statusLine: string;
   sections: MessageSection[];
   actions: SuperAgentAction[];
@@ -154,6 +160,7 @@ function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<s
     id: String(payload.id || `assistant-${Date.now()}`),
     input: String(payload.input || fallbackInput || ''),
     summary: String(payload.summary || payload.question || payload.error || 'Super Agent is ready.'),
+    narrative: payload.narrative ? String(payload.narrative) : undefined,
     statusLine: String(payload.statusLine || ''),
     sections: Array.isArray(payload.sections)
       ? payload.sections.map((section: any, index: number) => ({
@@ -695,7 +702,15 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                       {msg.payload.runId ? <span>Run {msg.payload.runId.slice(0, 8)}</span> : null}
                     </div>
 
-                    <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
+                    {msg.payload.narrative ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-7 text-gray-900 dark:text-white">
+                        {msg.payload.narrative.split('\n').map((line: string, idx: number) => (
+                          <p key={idx} className="mb-2">{line}</p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
+                    )}
 
                     {compactList([
                       msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
@@ -763,14 +778,53 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             ) : null}
 
             {pendingAction ? (
-              <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
-                <p className="text-xs text-gray-500 dark:text-gray-400">{pendingAction.description}</p>
-                <div className="mt-2 flex gap-2">
-                  <button type="button" onClick={() => setPendingAction(null)} className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 dark:border-gray-700 dark:text-gray-300">
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Confirm Operation</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{pendingAction.description}</p>
+                </div>
+
+                {pendingAction.verificationDisplay && (
+                  <div className="mb-3 space-y-2 rounded-lg bg-white p-3 dark:bg-gray-900">
+                    {pendingAction.verificationDisplay.beforeState && (
+                      <div>
+                        <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Before:</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 font-mono">
+                          {Object.entries(pendingAction.verificationDisplay.beforeState)
+                            .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+                            .join(' · ')}
+                        </p>
+                      </div>
+                    )}
+                    {pendingAction.verificationDisplay.afterState && (
+                      <div>
+                        <p className="text-xs font-medium text-gray-700 dark:text-gray-300">After:</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 font-mono">
+                          {Object.entries(pendingAction.verificationDisplay.afterState)
+                            .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+                            .join(' · ')}
+                        </p>
+                      </div>
+                    )}
+                    {pendingAction.verificationDisplay.impacts && pendingAction.verificationDisplay.impacts.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Impact:</p>
+                        <ul className="text-xs text-gray-600 dark:text-gray-400 list-disc list-inside">
+                          {pendingAction.verificationDisplay.impacts.map((impact, idx) => (
+                            <li key={idx}>{impact}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setPendingAction(null)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">
                     Cancel
                   </button>
-                  <button type="button" onClick={() => void confirmPendingAction()} disabled={isExecuting} className="rounded-lg bg-black px-3 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-black">
-                    {isExecuting ? 'Executing...' : `Confirm — ${pendingAction.label}`}
+                  <button type="button" onClick={() => void confirmPendingAction()} disabled={isExecuting} className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50 dark:bg-amber-700 dark:hover:bg-amber-800">
+                    {isExecuting ? 'Executing...' : `Execute — ${pendingAction.label}`}
                   </button>
                 </div>
               </div>

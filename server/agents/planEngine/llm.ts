@@ -68,6 +68,8 @@ export interface PlanRequest {
   domainContext?: unknown;
   /** Model-visible hint: planId to embed in the generated plan. */
   planId: string;
+  /** Operating mode: 'investigate' for discovery, 'operate' for execution. */
+  mode?: 'investigate' | 'operate';
   /**
    * Live agent configuration from agent_versions.
    * Sourced from AI Studio's Reasoning / Safety / Knowledge tabs.
@@ -89,7 +91,7 @@ export interface LLMProvider {
 
 // ── Gemini system prompt ─────────────────────────────────────────────────────
 
-function buildSystemPrompt(tools: CatalogEntry[], agentConfig?: AgentRuntimeConfig): string {
+function buildSystemPrompt(tools: CatalogEntry[], agentConfig?: AgentRuntimeConfig, mode?: 'investigate' | 'operate'): string {
   // Filter tools based on agentConfig allow/block lists
   let effectiveTools = tools;
   if (agentConfig?.allowedTools?.length) {
@@ -129,13 +131,20 @@ ${argFields}`;
     ? `\n\n## Safety & constraints\n${agentConfig.safetyInstructions}`
     : '';
 
+  // Mode-specific instructions
+  const modeInstructions = mode === 'operate'
+    ? `\n\n## Operating Mode: OPERATE\nThe user is in OPERATE mode. They want to execute actions, not just explore.\n- Produce plans focused on clarity about side effects\n- Highlight what will change (entities, statuses, notifications)\n- Set needsApproval: true for any action that affects customer-facing data\n- Be concise; the user is ready to execute`
+    : mode === 'investigate'
+      ? `\n\n## Operating Mode: INVESTIGATE\nThe user is in INVESTIGATE mode. They want to explore and understand, not execute.\n- Produce plans focused on gathering information and insights\n- Suggest follow-up questions like "Drill into...", "Compare with...", "Ask about..."\n- Do NOT suggest approval-requiring actions; focus on read-only exploration\n- Be thorough; the user is gathering context`
+      : '';
+
   return `${persona}
 
 ## Your job
 Given the conversation history and the user's latest message, produce a JSON plan or ask a clarifying question.
 
 ## Available tools
-${toolDocs}${knowledgeSection}${safetySection}
+${toolDocs}${knowledgeSection}${safetySection}${modeInstructions}
 
 ## Output format — you MUST respond with valid JSON, one of:
 
@@ -234,8 +243,33 @@ function buildContextMessages(req: PlanRequest): Array<{ role: 'user' | 'model';
     });
   }
 
-  // Recent turns (L1 — last 10)
-  const recentTurns = (req.session.turns ?? []).slice(-10);
+  // Pronoun resolution hints (active slots)
+  if (req.session.slots && Object.keys(req.session.slots).length > 0) {
+    const slotHints = Object.entries(req.session.slots)
+      .filter(([_, v]) => v.ttlTurns > 0)  // Not expired
+      .map(([k, v]) => {
+        const val = String(JSON.stringify(v.value)).slice(0, 50);
+        return `${k}: ${v.type} (${val})`;
+      })
+      .join('\n');
+
+    if (slotHints) {
+      messages.push({
+        role: 'user',
+        parts: [{
+          text: `[Active references]\nWhen the user says "that case", "the order", "the customer", etc., refer to these active slots:\n${slotHints}`
+        }],
+      });
+      messages.push({
+        role: 'model',
+        parts: [{ text: '{"kind":"clarification","question":"(pronoun context loaded)"}' }],
+      });
+    }
+  }
+
+  // Recent turns (L1 — more in operate mode for safety)
+  const turnLimit = req.mode === 'operate' ? 20 : 15;
+  const recentTurns = (req.session.turns ?? []).slice(-turnLimit);
   for (const turn of recentTurns) {
     if (turn.role === 'user') {
       messages.push({ role: 'user', parts: [{ text: redactSensitiveText(turn.content) }] });
@@ -313,7 +347,7 @@ class GeminiProvider implements LLMProvider {
 
   async generatePlan(req: PlanRequest): Promise<LLMResponse> {
     const { agentConfig } = req;
-    const systemPrompt = buildSystemPrompt(req.availableTools, agentConfig);
+    const systemPrompt = buildSystemPrompt(req.availableTools, agentConfig, req.mode);
     const contextMessages = buildContextMessages(req);
 
     // Resolve model/generation overrides from AI Studio Reasoning tab

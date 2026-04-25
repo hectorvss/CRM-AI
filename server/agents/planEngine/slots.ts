@@ -108,8 +108,8 @@ function setSlot(session: SessionState, type: Slot['type'], value: unknown): voi
 
 // ── L2 Summarizer ─────────────────────────────────────────────────────────────
 
-const L1_MAX_TURNS = 20;   // compress when turns exceed this
-const L1_KEEP_TURNS = 8;   // keep the N most recent after compression
+const L1_MAX_TURNS = 25;   // compress when turns exceed this
+const L1_KEEP_TURNS = 12;  // keep the N most recent after compression (more for operate safety)
 
 /**
  * If the session has too many turns, compress the older ones into session.summary
@@ -144,8 +144,8 @@ export async function maybeCompressTurns(
     : 'none';
 
   const prompt = session.summary
-    ? `Previous summary:\n${session.summary}\n\nLive session context:\nRecent navigation targets:\n${recentTargetsText || 'none'}\n\nActive slots:\n${slotText || 'none'}\n\nPending approvals:\n${pendingApprovalsText}\n\nNew conversation to add:\n${conversationText}\n\nWrite a concise updated summary (max 200 words) of what the user is working on, which entities are active, what action or approval is pending, and the most important facts discovered. Plain text, no lists.`
-    : `Summarise this support agent conversation (max 200 words). Focus on: what the user investigated, entities found (IDs, statuses), active navigation targets, pending approvals, and actions taken. Plain text, no lists.\n\nRecent navigation targets:\n${recentTargetsText || 'none'}\n\nActive slots:\n${slotText || 'none'}\n\nPending approvals:\n${pendingApprovalsText}\n\n${conversationText}`;
+    ? `Previous summary:\n${session.summary}\n\nLive session context:\nRecent navigation targets:\n${recentTargetsText || 'none'}\n\nActive slots:\n${slotText || 'none'}\n\nPending approvals:\n${pendingApprovalsText}\n\nNew conversation to add:\n${conversationText}\n\nWrite a concise updated summary (max 300 words) preserving: (1) all major decisions made (approved, rejected, deferred), (2) which entities are active, (3) what investigation or action is pending, (4) key facts discovered. CRITICAL: Do not lose decision context. Plain text, no lists.`
+    : `Summarise this support agent conversation (max 300 words). CRITICAL: Preserve all decisions made (what was approved, rejected, deferred). Include: (1) what the user investigated, (2) entities found (IDs, statuses), (3) active navigation targets, (4) pending approvals, (5) important decisions. Plain text, no lists.\n\nRecent navigation targets:\n${recentTargetsText || 'none'}\n\nActive slots:\n${slotText || 'none'}\n\nPending approvals:\n${pendingApprovalsText}\n\n${conversationText}`;
 
   try {
     const summary = await llmSummarize(prompt);
