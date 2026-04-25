@@ -1181,6 +1181,16 @@ function getCaseActions(req: MultiTenantRequest, bundle: any) {
   ];
 
   if (hasPermission(req, 'cases.write')) {
+    const payload: SuperAgentActionPayload = {
+      kind: 'case.update_status',
+      entityType: 'case',
+      entityId: bundle.case.id,
+      caseId: bundle.case.id,
+      params: {
+        status: 'resolved',
+        reason: 'Resolved from Super Agent',
+      },
+    };
     actions.push(
       buildAction({
         req,
@@ -1189,16 +1199,8 @@ function getCaseActions(req: MultiTenantRequest, bundle: any) {
         permission: 'cases.write',
         sensitive: true,
         requiresConfirmation: true,
-        payload: {
-          kind: 'case.update_status',
-          entityType: 'case',
-          entityId: bundle.case.id,
-          caseId: bundle.case.id,
-          params: {
-            status: 'resolved',
-            reason: 'Resolved from Super Agent',
-          },
-        },
+        payload,
+        verificationDisplay: buildVerificationDisplay(payload, bundle.case),
       }),
     );
   }
@@ -1218,6 +1220,14 @@ function getOrderActions(req: MultiTenantRequest, order: any) {
   ];
 
   if (hasPermission(req, 'cases.write') && !String(order.status || '').toLowerCase().includes('cancel')) {
+    const payload: SuperAgentActionPayload = {
+      kind: 'order.cancel',
+      entityType: 'order',
+      entityId: order.id,
+      params: {
+        reason: 'Cancelled from Super Agent',
+      },
+    };
     actions.push(
       buildAction({
         req,
@@ -1226,14 +1236,8 @@ function getOrderActions(req: MultiTenantRequest, order: any) {
         permission: 'cases.write',
         sensitive: true,
         requiresConfirmation: true,
-        payload: {
-          kind: 'order.cancel',
-          entityType: 'order',
-          entityId: order.id,
-          params: {
-            reason: 'Cancelled from Super Agent',
-          },
-        },
+        payload,
+        verificationDisplay: buildVerificationDisplay(payload, order),
       }),
     );
   }
@@ -1253,6 +1257,15 @@ function getPaymentActions(req: MultiTenantRequest, payment: any) {
   ];
 
   if (hasPermission(req, 'cases.write') && !String(payment.status || '').toLowerCase().includes('refund')) {
+    const payload: SuperAgentActionPayload = {
+      kind: 'payment.refund',
+      entityType: 'payment',
+      entityId: payment.id,
+      params: {
+        reason: 'Refund issued from Super Agent',
+        amount: Number(payment.amount || 0),
+      },
+    };
     actions.push(
       buildAction({
         req,
@@ -1261,15 +1274,8 @@ function getPaymentActions(req: MultiTenantRequest, payment: any) {
         permission: 'cases.write',
         sensitive: true,
         requiresConfirmation: true,
-        payload: {
-          kind: 'payment.refund',
-          entityType: 'payment',
-          entityId: payment.id,
-          params: {
-            reason: 'Refund issued from Super Agent',
-            amount: Number(payment.amount || 0),
-          },
-        },
+        payload,
+        verificationDisplay: buildVerificationDisplay(payload, payment),
       }),
     );
   }
@@ -1289,6 +1295,16 @@ function getApprovalActions(req: MultiTenantRequest, approval: any) {
   ];
 
   if (hasPermission(req, 'approvals.decide') && String(approval.status || 'pending') === 'pending') {
+    const approvePayload: SuperAgentActionPayload = {
+      kind: 'approval.decide',
+      entityType: 'approval',
+      entityId: approval.id,
+      caseId: approval.case_id || null,
+      params: {
+        decision: 'approved',
+        note: 'Approved from Super Agent',
+      },
+    };
     actions.push(
       buildAction({
         req,
@@ -1297,18 +1313,20 @@ function getApprovalActions(req: MultiTenantRequest, approval: any) {
         permission: 'approvals.decide',
         sensitive: true,
         requiresConfirmation: true,
-        payload: {
-          kind: 'approval.decide',
-          entityType: 'approval',
-          entityId: approval.id,
-          caseId: approval.case_id || null,
-          params: {
-            decision: 'approved',
-            note: 'Approved from Super Agent',
-          },
-        },
+        payload: approvePayload,
+        verificationDisplay: buildVerificationDisplay(approvePayload, approval),
       }),
     );
+    const rejectPayload: SuperAgentActionPayload = {
+      kind: 'approval.decide',
+      entityType: 'approval',
+      entityId: approval.id,
+      caseId: approval.case_id || null,
+      params: {
+        decision: 'rejected',
+        note: 'Rejected from Super Agent',
+      },
+    };
     actions.push(
       buildAction({
         req,
@@ -1317,16 +1335,8 @@ function getApprovalActions(req: MultiTenantRequest, approval: any) {
         permission: 'approvals.decide',
         sensitive: true,
         requiresConfirmation: true,
-        payload: {
-          kind: 'approval.decide',
-          entityType: 'approval',
-          entityId: approval.id,
-          caseId: approval.case_id || null,
-          params: {
-            decision: 'rejected',
-            note: 'Rejected from Super Agent',
-          },
-        },
+        payload: rejectPayload,
+        verificationDisplay: buildVerificationDisplay(rejectPayload, approval),
       }),
     );
   }
@@ -1346,6 +1356,11 @@ function getWorkflowActions(req: MultiTenantRequest, workflow: any) {
   ];
 
   if (hasPermission(req, 'workflows.write') && String(workflow.version_status || '').toLowerCase() === 'draft') {
+    const payload: SuperAgentActionPayload = {
+      kind: 'workflow.publish',
+      entityType: 'workflow',
+      entityId: workflow.id,
+    };
     actions.push(
       buildAction({
         req,
@@ -1354,16 +1369,240 @@ function getWorkflowActions(req: MultiTenantRequest, workflow: any) {
         permission: 'workflows.write',
         sensitive: true,
         requiresConfirmation: true,
-        payload: {
-          kind: 'workflow.publish',
-          entityType: 'workflow',
-          entityId: workflow.id,
-        },
+        payload,
+        verificationDisplay: buildVerificationDisplay(payload, workflow),
       }),
     );
   }
 
   return actions;
+}
+
+// ── Verification Display Builder ──────────────────────────────────────────────
+//
+// Populates beforeState / afterState / impacts so the UI's confirmation modal
+// can show "what will change" instead of just an action label.
+
+function buildVerificationDisplay(
+  payload: SuperAgentActionPayload,
+  entity: any,
+): { beforeState?: Record<string, any>; afterState?: Record<string, any>; impacts?: string[] } | undefined {
+  if (!entity) return undefined;
+  const params = payload.params || {};
+
+  switch (payload.kind) {
+    case 'case.update_status': {
+      const newStatus = params.status || 'resolved';
+      return {
+        beforeState: {
+          status: entity.status || 'open',
+          updated_at: entity.updated_at || null,
+        },
+        afterState: {
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+        },
+        impacts: [
+          `Case status will change from "${entity.status || 'open'}" to "${newStatus}"`,
+          'Customer will be notified by email if notifications are enabled',
+          'Change recorded in the audit trail',
+        ],
+      };
+    }
+    case 'case.add_internal_note': {
+      return {
+        beforeState: { notes_count: entity.notes_count ?? 0 },
+        afterState: { notes_count: (entity.notes_count ?? 0) + 1 },
+        impacts: [
+          'Internal note will be visible to other agents',
+          'Note will not be shown to the customer',
+          'Change recorded in the audit trail',
+        ],
+      };
+    }
+    case 'order.cancel': {
+      return {
+        beforeState: {
+          status: entity.status || 'unknown',
+          total: entity.total ?? null,
+        },
+        afterState: {
+          status: 'cancelled',
+          total: entity.total ?? null,
+        },
+        impacts: [
+          `Order ${entity.external_order_id || entity.id} will be cancelled`,
+          'Reserved inventory will be released',
+          'Customer will receive a cancellation email',
+          entity.payment_status === 'paid' ? 'Refund process will be initiated automatically' : 'No refund needed (not paid)',
+          'Change recorded in the audit trail',
+        ].filter(Boolean),
+      };
+    }
+    case 'payment.refund': {
+      const amount = Number(params.amount ?? entity.amount ?? 0);
+      return {
+        beforeState: {
+          status: entity.status || 'captured',
+          amount,
+        },
+        afterState: {
+          status: 'refunded',
+          amount,
+          refunded_at: new Date().toISOString(),
+        },
+        impacts: [
+          `Refund of ${amount.toLocaleString('en-US', { style: 'currency', currency: entity.currency || 'EUR' })} will be issued`,
+          'Bank charge will be reversed (typically 3-5 business days)',
+          'Customer will receive a refund confirmation email',
+          'Change recorded in the audit trail',
+        ],
+      };
+    }
+    case 'approval.decide': {
+      const decision = params.decision || 'approved';
+      return {
+        beforeState: {
+          status: entity.status || 'pending',
+          requested_by: entity.requested_by || null,
+        },
+        afterState: {
+          status: decision,
+          decided_by: 'current user',
+          decided_at: new Date().toISOString(),
+        },
+        impacts: decision === 'approved'
+          ? [
+              'Pending action will be released for execution',
+              'Requester will be notified of the approval',
+              'Decision recorded in the audit trail',
+            ]
+          : [
+              'Pending action will be cancelled',
+              'Requester will be notified of the rejection',
+              'Decision recorded in the audit trail',
+            ],
+      };
+    }
+    case 'workflow.publish': {
+      return {
+        beforeState: {
+          version_status: entity.version_status || 'draft',
+          version: entity.version || 1,
+        },
+        afterState: {
+          version_status: 'published',
+          version: (Number(entity.version) || 1) + 1,
+          published_at: new Date().toISOString(),
+        },
+        impacts: [
+          'New workflow version will become active for new cases',
+          'Existing in-flight cases will continue on their current version',
+          'Change recorded in the audit trail',
+        ],
+      };
+    }
+    default:
+      return undefined;
+  }
+}
+
+// ── Suggested Replies Generator ──────────────────────────────────────────────
+//
+// Produces 2-4 contextual chips so the conversation can continue naturally,
+// based on the entity touched and the operating mode.
+
+function generateSuggestedReplies(input: {
+  userMessage: string;
+  mode: 'investigate' | 'operate';
+  trace?: any;
+  structuredIntent?: StructuredCommand | null;
+  status?: string;
+}): string[] {
+  const replies = new Set<string>();
+  const intent = input.structuredIntent;
+  const isOperate = input.mode === 'operate';
+
+  // Status-driven priority suggestions
+  if (input.status === 'pending_approval') {
+    replies.add('Open pending approvals');
+  }
+  if (input.status === 'rejected_by_policy') {
+    replies.add('Why was this blocked?');
+  }
+  if (input.status === 'failed') {
+    replies.add('Retry');
+  }
+
+  // Entity-type contextual replies
+  const entityType =
+    intent?.targetEntityType
+    || (intent?.kind === 'case' ? 'case'
+      : intent?.kind === 'order' ? 'order'
+      : intent?.kind === 'payment' ? 'payment'
+      : intent?.kind === 'return' ? 'return'
+      : intent?.kind === 'approval_queue' ? 'approval'
+      : intent?.kind === 'customer' ? 'customer'
+      : intent?.kind === 'workflow' ? 'workflow'
+      : null);
+
+  switch (entityType) {
+    case 'order':
+      replies.add('Show the customer');
+      replies.add('List recent payments');
+      if (isOperate) replies.add('Cancel this order');
+      else replies.add('Show order timeline');
+      break;
+    case 'payment':
+      replies.add('Open the related order');
+      replies.add('Show payment history');
+      if (isOperate) replies.add('Refund this payment');
+      break;
+    case 'case':
+      replies.add('Show case timeline');
+      replies.add('Show related orders');
+      if (isOperate) replies.add('Mark as resolved');
+      else replies.add('Add an internal note');
+      break;
+    case 'approval':
+      replies.add('Show requestor history');
+      if (isOperate) {
+        replies.add('Approve');
+        replies.add('Reject');
+      } else {
+        replies.add('Why does this need approval?');
+      }
+      break;
+    case 'return':
+      replies.add('Open the related order');
+      if (isOperate) {
+        replies.add('Approve return');
+        replies.add('Reject return');
+      }
+      break;
+    case 'customer':
+      replies.add('Show recent orders');
+      replies.add('Show open cases');
+      replies.add('Show payment history');
+      break;
+    case 'workflow':
+      replies.add('Show workflow history');
+      if (isOperate) replies.add('Publish workflow');
+      break;
+    default:
+      // Generic suggestions when no entity is detected
+      if (isOperate) {
+        replies.add('Review pending approvals');
+        replies.add('List blocked actions');
+      } else {
+        replies.add('Show recent cases');
+        replies.add('Review pending approvals');
+        replies.add('Show high-risk items');
+      }
+  }
+
+  // Cap at 4 replies, deduped
+  return Array.from(replies).slice(0, 4);
 }
 
 function createResponse(input: {
@@ -1409,13 +1648,13 @@ function createResponse(input: {
   };
 }
 
-function buildResponseFromPlanOutcome(
+async function buildResponseFromPlanOutcome(
   input: string,
   runId: string,
   mode: 'investigate' | 'operate' = 'investigate',
   response: any,
   trace: any,
-): ReturnType<typeof createResponse> {
+): Promise<ReturnType<typeof createResponse>> {
   const consultedModules: string[] = Array.from(
     new Set(
       (trace?.spans ?? [])
@@ -1429,12 +1668,21 @@ function buildResponseFromPlanOutcome(
     || response?.question
     || response?.error
     || 'Super Agent completed the requested operation.';
+
+  // Status line — mode-aware
+  const traceStatus = trace?.status;
   const statusLine =
     response?.kind === 'clarification' ? 'Clarification required'
-    : trace?.status === 'pending_approval' ? 'Waiting for approval'
-    : trace?.status === 'rejected_by_policy' ? 'Blocked by policy'
-    : trace?.status === 'failed' ? 'Execution failed'
-    : 'Completed';
+    : traceStatus === 'pending_approval' ? 'Awaiting approval'
+    : traceStatus === 'rejected_by_policy' ? 'Blocked by policy'
+    : traceStatus === 'failed' ? 'Execution failed'
+    : mode === 'operate' && response?.kind === 'plan' && response.plan?.needsApproval
+      ? 'Awaiting confirmation'
+      : mode === 'operate' && traceStatus === 'success'
+        ? 'Executed'
+        : mode === 'investigate'
+          ? 'Investigated'
+          : 'Completed';
 
   const steps = Array.isArray(trace?.spans)
     ? trace.spans.map((span: any) => ({
@@ -1449,25 +1697,66 @@ function buildResponseFromPlanOutcome(
   const evidence = derivePlanEvidenceFromTrace(trace);
   const facts = derivePlanFactsFromTrace(trace);
 
-  // Build narrative based on mode and response kind
-  let narrative: string | undefined;
+  // ── Item 1: Conversational narrative via LLM (with deterministic fallback) ──
+  let narrative: string;
   if (response?.kind === 'clarification') {
     narrative = response.question;
-  } else if (response?.kind === 'plan' && mode === 'operate') {
-    // In operate mode, show plan summary with impact
-    const planSteps = response.plan?.steps ?? [];
-    const stepSummary = planSteps.map((s: any) => `${s.tool}: ${s.rationale || ''}`).join('\n');
-    narrative = `I'm ready to execute this plan:\n\n${stepSummary}\n\nThis will affect the entities mentioned above. Please confirm to proceed.`;
-  } else if (response?.kind === 'plan' && mode === 'investigate') {
-    // In investigate mode, show findings
-    narrative = summary;
-  } else if (trace?.status === 'pending_approval') {
-    narrative = `Action requires approval. ${summary}`;
-  } else if (trace?.status === 'rejected_by_policy') {
-    narrative = `This action was blocked by policy. ${summary}`;
+  } else if (response?.kind === 'error') {
+    narrative = `I couldn't complete that — ${response.error || 'unknown error'}.`;
+  } else if (response?.kind === 'plan') {
+    // Try LLM-composed narrative for successful or partial executions
+    try {
+      const provider = getPlanEngineLLMProvider();
+      narrative = await provider.composeNarrative({
+        userMessage: input,
+        mode,
+        traceSummary: summary,
+        spans: (trace?.spans ?? []).map((span: any) => ({
+          tool: String(span.tool || ''),
+          ok: !!span.result?.ok,
+          value: span.result?.value,
+          error: span.result?.error || null,
+        })),
+        needsApproval: response.plan?.needsApproval === true,
+        status: traceStatus,
+      });
+      if (!narrative || narrative.trim().length === 0) {
+        narrative = summary;
+      }
+    } catch (err) {
+      logger.debug('composeNarrative skipped — using summary fallback', { error: String(err) });
+      // Deterministic fallback by mode
+      if (mode === 'operate' && response.plan?.needsApproval) {
+        narrative = `I prepared the action but it needs your confirmation. ${summary}`;
+      } else if (mode === 'operate') {
+        narrative = `Done. ${summary}`;
+      } else {
+        narrative = summary;
+      }
+    }
   } else {
     narrative = summary;
   }
+
+  // ── Item 2: Filter actions by mode (investigate suppresses execute) ─────────
+  const traceApprovalActions: UiAction[] = Array.isArray(trace?.approvalIds) && trace.approvalIds.length
+    ? trace.approvalIds.map((approvalId: string) => buildAction({
+        req: { permissions: [] } as MultiTenantRequest,
+        label: 'Review approval',
+        description: 'Open the required approval request.',
+        targetPage: 'approvals',
+        focusId: approvalId,
+      }))
+    : [];
+
+  // ── Item 4: Contextual suggested replies ────────────────────────────────────
+  const suggestedReplies = generateSuggestedReplies({
+    userMessage: input,
+    mode,
+    trace,
+    structuredIntent: response?.kind === 'plan' ? (response.plan?.structuredIntent ?? null) : null,
+    status: traceStatus,
+  });
 
   return createResponse({
     input,
@@ -1482,18 +1771,10 @@ function buildResponseFromPlanOutcome(
       : response?.kind === 'clarification'
         ? [{ title: 'Clarification', items: [response.question] }]
         : [{ title: 'Execution', items: [response?.error || 'Unknown LLM error'] }],
-    actions: Array.isArray(trace?.approvalIds) && trace.approvalIds.length
-      ? trace.approvalIds.map((approvalId: string) => buildAction({
-          req: { permissions: [] } as MultiTenantRequest,
-          label: 'Review approval',
-          description: 'Open the required approval request.',
-          targetPage: 'approvals',
-          focusId: approvalId,
-        }))
-      : [],
+    actions: traceApprovalActions,
     contextPanel,
     agents: [],
-    suggestedReplies: [],
+    suggestedReplies,
     consultedModules,
     facts: facts.length ? facts : steps.map((step: any) => `${step.label}: ${step.value}`),
     conflicts: [],
@@ -2676,7 +2957,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           { dryRun: mode !== 'operate' },
         );
 
-        const finalResponse = buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
+        const finalResponse = await buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
 
         if (finalResponse.navigationTarget) {
           planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
@@ -2953,7 +3234,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
         { dryRun: mode === 'investigate' },
       );
 
-      const finalResponse = buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
+      const finalResponse = await buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
 
       if (finalResponse.navigationTarget) {
         planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
@@ -3158,6 +3439,7 @@ router.post('/execute', async (req: MultiTenantRequest, res) => {
 //   Returns the tool catalog visible to the caller.
 
 import { planEngine } from '../agents/planEngine/index.js';
+import { getPlanEngineLLMProvider } from '../agents/planEngine/llm.js';
 
 router.post('/plan', async (req: MultiTenantRequest, res) => {
   try {
@@ -3187,7 +3469,7 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
       { dryRun: dryRun === true },
     );
 
-    const plannedResponse = buildResponseFromPlanOutcome(userMessage.trim(), effectiveSessionId, 'investigate', response, trace);
+    const plannedResponse = await buildResponseFromPlanOutcome(userMessage.trim(), effectiveSessionId, 'investigate', response, trace);
     if (plannedResponse.navigationTarget) {
       planEngine.rememberTarget(effectiveSessionId, plannedResponse.navigationTarget);
     }

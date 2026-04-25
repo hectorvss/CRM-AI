@@ -82,11 +82,22 @@ export type LLMResponse =
   | { kind: 'clarification'; question: string }
   | { kind: 'error'; error: string };
 
+export interface NarrativeRequest {
+  userMessage: string;
+  mode: 'investigate' | 'operate';
+  traceSummary: string;
+  spans: Array<{ tool: string; ok: boolean; value?: unknown; error?: string | null }>;
+  needsApproval?: boolean;
+  status?: string;
+}
+
 export interface LLMProvider {
   /** Generate a Plan (or clarification) from a conversation turn. */
   generatePlan(req: PlanRequest): Promise<LLMResponse>;
   /** Produce a short, user-facing summary of a completed execution trace. */
   summarizeResult(input: { userMessage: string; steps: Array<{ tool: string; result: unknown }> }): Promise<string>;
+  /** Compose a conversational narrative (2-4 sentences) for the assistant message. */
+  composeNarrative(req: NarrativeRequest): Promise<string>;
 }
 
 // ── Gemini system prompt ─────────────────────────────────────────────────────
@@ -382,6 +393,64 @@ class GeminiProvider implements LLMProvider {
       },
       { label: 'planEngine.generatePlan' },
     );
+  }
+
+  async composeNarrative(req: NarrativeRequest): Promise<string> {
+    const model = this.genAI.getGenerativeModel({
+      model: this.modelName,
+      generationConfig: { temperature: 0.4, maxOutputTokens: 280 },
+    });
+
+    const spansText = (req.spans || [])
+      .slice(0, 6)
+      .map((s, i) => {
+        const valuePart = s.ok
+          ? redactSensitiveText(String(JSON.stringify(redactStructuredValue(s.value)) ?? '')).slice(0, 220)
+          : `error: ${s.error || 'failed'}`;
+        return `${i + 1}. ${s.tool}: ${valuePart}`;
+      })
+      .join('\n');
+
+    const modeGuidance = req.mode === 'operate'
+      ? `The user is in OPERATE mode. ${
+          req.needsApproval
+            ? 'This action needs approval. Explain WHAT will change, WHO it affects, and ask for confirmation.'
+            : 'Confirm what was changed and the immediate impact.'
+        }`
+      : 'The user is in INVESTIGATE mode. Summarise findings clearly: what entities were checked, current status, anything notable. Do NOT propose write actions.';
+
+    const statusHint = req.status === 'pending_approval'
+      ? 'Note: execution is paused waiting for approval — surface that explicitly.'
+      : req.status === 'rejected_by_policy'
+        ? 'Note: the plan was blocked by a guardrail — explain what blocked it without panic.'
+        : req.status === 'failed'
+          ? 'Note: execution failed — say so honestly and suggest next step.'
+          : '';
+
+    const prompt = `User said: "${redactSensitiveText(req.userMessage)}"
+
+${modeGuidance}
+${statusHint}
+
+What was actually executed (system trace):
+${spansText || 'No tools executed — pure conversation.'}
+
+Final system summary: ${redactSensitiveText(req.traceSummary || '(none)')}
+
+Write the assistant reply as 2-4 short conversational sentences in the user's language (default English; switch to Spanish if the user wrote in Spanish). Plain prose only — no bullet lists, no markdown, no JSON, no preamble like "Here's what I found:".`;
+
+    try {
+      return await withGeminiRetry(
+        async () => {
+          const result = await model.generateContent(prompt);
+          return result.response.text().trim();
+        },
+        { label: 'planEngine.composeNarrative' },
+      );
+    } catch (err) {
+      logger.warn('composeNarrative failed — using deterministic fallback', { error: String(err) });
+      return req.traceSummary || 'Done.';
+    }
   }
 
   async summarizeResult(input: {
