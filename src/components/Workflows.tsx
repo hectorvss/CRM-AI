@@ -604,6 +604,27 @@ function fromFlowEdges(flowEdges: Edge[]): WorkflowEdge[] {
   }));
 }
 
+function isSameFlowNode(a: Node<FlowNodeData>, b: Node<FlowNodeData>) {
+  return a.id === b.id
+    && a.position.x === b.position.x
+    && a.position.y === b.position.y
+    && a.type === b.type
+    && a.data.workflowNode.id === b.data.workflowNode.id
+    && a.data.workflowNode.key === b.data.workflowNode.key
+    && a.data.selected === b.data.selected
+    && a.data.latestStatus === b.data.latestStatus
+    && (a.data.diagnostics?.length ?? 0) === (b.data.diagnostics?.length ?? 0);
+}
+
+function isSameFlowEdge(a: Edge, b: Edge) {
+  return a.id === b.id
+    && a.source === b.source
+    && a.target === b.target
+    && String(a.label ?? '') === String(b.label ?? '')
+    && String(a.sourceHandle ?? '') === String(b.sourceHandle ?? '')
+    && String(a.targetHandle ?? '') === String(b.targetHandle ?? '');
+}
+
 function templateEdges(template: (typeof TEMPLATES)[number], nodes: WorkflowNode[]) {
   if (!('edges' in template) || !template.edges) return makeEdges(nodes);
   return template.edges.map((edge, index) => {
@@ -952,15 +973,27 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   }), [handleSelectNode, handleAddNode, handleEditNode, handleExecuteNode, handleToggleNode, handleDuplicateNode, handleDeleteNode, handleOpenNodeMenu]);
 
   useEffect(() => {
-    setFlowNodes(toFlowNodes(workflowNodes, catalog, selectedNodeId, latestSteps, diagnostics, nodeHandlers));
-  }, [workflowNodes, catalog.length, selectedNodeId, runResult, dryRun, stepResult, validation, nodeHandlers]);
+    const nextNodes = toFlowNodes(workflowNodes, catalog, selectedNodeId, latestSteps, diagnostics, nodeHandlers);
+    setFlowNodes((current) => {
+      if (current.length === nextNodes.length && current.every((node, index) => isSameFlowNode(node, nextNodes[index] as Node<FlowNodeData>))) {
+        return current;
+      }
+      return nextNodes;
+    });
+  }, [workflowNodes, catalog, selectedNodeId, latestSteps, diagnostics, nodeHandlers]);
 
   useEffect(() => {
-    setFlowEdges(toFlowEdges(workflowEdges, {
+    const nextEdges = toFlowEdges(workflowEdges, {
       onAddEdge: (edgeId) => openAddPanel({ edgeId }),
       onDeleteEdge: (edgeId) => deleteEdge(edgeId),
       onRenameEdge: (edgeId) => renameEdge(edgeId),
-    }));
+    });
+    setFlowEdges((current) => {
+      if (current.length === nextEdges.length && current.every((edge, index) => isSameFlowEdge(edge, nextEdges[index] as Edge))) {
+        return current;
+      }
+      return nextEdges;
+    });
   }, [workflowEdges, openAddPanel]);
 
   useEffect(() => {
