@@ -1518,4 +1518,53 @@ router.post('/:id/publish', requirePermission('workflows.write'), async (req: Mu
   }
 });
 
+router.post('/:id/archive', requirePermission('workflows.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
+
+    const versions = await workflowRepository.listVersions(wf.id);
+    const currentVersion = wf.current_version_id
+      ? await workflowRepository.getVersion(wf.current_version_id)
+      : versions[0];
+
+    if (!currentVersion) {
+      return res.status(400).json({ error: 'No version available to archive' });
+    }
+
+    if (currentVersion.status === 'archived') {
+      return res.status(409).json({ error: 'Workflow is already archived' });
+    }
+
+    await workflowRepository.updateVersion(currentVersion.id, { status: 'archived' });
+
+    // Clear the current_version_id so the workflow is no longer "published"
+    await workflowRepository.updateDefinition(wf.id, tenantId, workspaceId, {
+      currentVersionId: null,
+    });
+
+    const updated = await workflowRepository.getDefinition(wf.id, tenantId, workspaceId);
+
+    await auditRepository.logEvent({ tenantId, workspaceId }, {
+      actorId: req.userId ?? 'system',
+      action: 'WORKFLOW_ARCHIVED',
+      entityType: 'workflow',
+      entityId: wf.id,
+      oldValue: { status: currentVersion.status },
+      newValue: { status: 'archived', versionId: currentVersion.id },
+    });
+
+    res.json({
+      ...updated,
+      archived: true,
+      versionId: currentVersion.id,
+    });
+  } catch (error) {
+    console.error('Error archiving workflow:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

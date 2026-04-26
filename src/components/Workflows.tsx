@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   addEdge,
@@ -1391,27 +1391,88 @@ function WorkflowEditorTopbar(props: {
   onSave: () => void;
   onPublish: () => void;
 }) {
+  const [testOpen, setTestOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const testRef = useRef<HTMLDivElement>(null);
+  const manageRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (testRef.current && !testRef.current.contains(e.target as Node)) setTestOpen(false);
+      if (manageRef.current && !manageRef.current.contains(e.target as Node)) setManageOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  function dropdownItem(label: string, onClick: () => void, danger = false) {
+    return (
+      <button
+        key={label}
+        onClick={() => { onClick(); setTestOpen(false); setManageOpen(false); }}
+        className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-medium transition-colors ${danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800'}`}
+      >
+        {label}
+      </button>
+    );
+  }
+
   return (
-    <div className="flex-shrink-0 border-b border-gray-200 bg-white">
+    <div className="flex-shrink-0 border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
       <div className="flex h-16 items-center justify-between px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <button onClick={props.onBack} className="text-sm font-medium text-gray-500 hover:text-gray-900">Workflows</button>
-          <span className="text-gray-300">/</span>
-          <input value={props.workflow?.name ?? ''} onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, name: event.target.value } : workflow)} className="min-w-[260px] bg-transparent text-sm font-semibold text-gray-900 outline-none" />
-          <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
+          <button onClick={props.onBack} className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Workflows</button>
+          <span className="text-gray-300 dark:text-gray-600">/</span>
+          <input value={props.workflow?.name ?? ''} onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, name: event.target.value } : workflow)} className="min-w-[260px] bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white" />
+          <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={props.onValidate} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Validate</button>
-          <button onClick={props.onTidy} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Tidy up</button>
-          <button onClick={props.onDryRun} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Dry-run</button>
-          <button onClick={props.onRun} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Run</button>
-          <button onClick={props.onTrigger} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Trigger event</button>
-          <button onClick={props.onRetry} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Retry</button>
-          <button onClick={props.onResume} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Resume</button>
-          <button onClick={props.onCancel} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Cancel</button>
-          <button onClick={props.onRollback} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Rollback</button>
-          <button onClick={props.onSave} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Save</button>
-          <button onClick={props.onPublish} className="rounded-lg bg-black px-4 py-1.5 text-xs font-bold text-white hover:opacity-90">Publish</button>
+
+          {/* Dropdown 1 — Test & Run */}
+          <div ref={testRef} className="relative">
+            <button
+              onClick={() => { setTestOpen((o) => !o); setManageOpen(false); }}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+            >
+              Test & Run
+              <svg className={`h-3 w-3 transition-transform ${testOpen ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 4l4 4 4-4"/></svg>
+            </button>
+            {testOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                {dropdownItem('Validate', props.onValidate)}
+                {dropdownItem('Tidy up', props.onTidy)}
+                <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                {dropdownItem('Dry-run', props.onDryRun)}
+                {dropdownItem('Run', props.onRun)}
+                {dropdownItem('Trigger event', props.onTrigger)}
+              </div>
+            )}
+          </div>
+
+          {/* Dropdown 2 — Manage runs */}
+          <div ref={manageRef} className="relative">
+            <button
+              onClick={() => { setManageOpen((o) => !o); setTestOpen(false); }}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+            >
+              Manage
+              <svg className={`h-3 w-3 transition-transform ${manageOpen ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 4l4 4 4-4"/></svg>
+            </button>
+            {manageOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-xl border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                {dropdownItem('Retry', props.onRetry)}
+                {dropdownItem('Resume', props.onResume)}
+                {dropdownItem('Rollback', props.onRollback)}
+                <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                {dropdownItem('Cancel', props.onCancel, true)}
+              </div>
+            )}
+          </div>
+
+          {/* Always-visible primary actions */}
+          <button onClick={props.onSave} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">Save</button>
+          <button onClick={props.onPublish} className="rounded-lg bg-black px-4 py-1.5 text-xs font-bold text-white hover:opacity-90 dark:bg-white dark:text-black">Publish</button>
         </div>
       </div>
       <div className="-mb-px flex justify-center">
