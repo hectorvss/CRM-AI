@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   addEdge,
@@ -698,6 +698,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const [editorNodeId, setEditorNodeId] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<'parameters' | 'settings'>('parameters');
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const { data: apiWorkflows, loading, error } = useApi(() => workflowsApi.list(), [], []);
   const { data: catalogPayload } = useApi(() => workflowsApi.catalog(), [], null);
@@ -710,6 +711,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const stepRunWorkflow = useMutation((payload: { id: string; body: Record<string, any> }) => workflowsApi.stepRun(payload.id, payload.body));
   const runWorkflow = useMutation((id: string) => workflowsApi.run(id));
   const rollbackWorkflow = useMutation((id: string) => workflowsApi.rollback(id));
+  const archiveWorkflow = useMutation((id: string) => workflowsApi.archive(id));
   const retryWorkflowRun = useMutation((runId: string) => workflowsApi.retryRun(runId));
   const resumeWorkflowRun = useMutation((runId: string) => workflowsApi.resumeRun(runId));
   const cancelWorkflowRun = useMutation((runId: string) => workflowsApi.cancelRun(runId));
@@ -1000,28 +1002,179 @@ function loadBuilderState(workflow: Workflow) {
     setFlowEdges((items) => items.map((item) => item.id === edgeId ? { ...item, label } : item));
   }
 
-  async function saveWorkflow() {
-    if (!selectedWorkflow) return;
-    syncFromFlow();
-    const nodesToSave = fromFlowNodes(flowNodes, workflowNodes);
-    const edgesToSave = fromFlowEdges(flowEdges);
+  function buildDraftBody(overrides: Partial<Pick<Workflow, 'name' | 'description' | 'category'>> = {}) {
+    const nodes = flowNodes.length ? fromFlowNodes(flowNodes, workflowNodes) : workflowNodes;
+    const edges = flowEdges.length ? fromFlowEdges(flowEdges) : workflowEdges;
+    return {
+      name: overrides.name ?? selectedWorkflow?.name ?? 'Workflow',
+      description: overrides.description ?? selectedWorkflow?.description ?? '',
+      category: overrides.category ?? selectedWorkflow?.category ?? 'General',
+      trigger: { type: nodes[0]?.key ?? 'manual.run' },
+      nodes,
+      edges,
+    };
+  }
+
+  async function persistWorkflowDraft(overrides: Partial<Pick<Workflow, 'name' | 'description' | 'category'>> = {}) {
+    if (!selectedWorkflow) return null;
     const updated = await updateWorkflow.mutate({
       id: selectedWorkflow.id,
-      body: {
-        name: selectedWorkflow.name,
-        description: selectedWorkflow.description,
-        category: selectedWorkflow.category,
-        trigger: { type: nodesToSave[0]?.key ?? 'manual.run' },
-        nodes: nodesToSave,
-        edges: edgesToSave,
-      },
+      body: buildDraftBody(overrides),
     });
     if (updated?.id) {
       const workflow = mapWorkflow(updated);
       setSelectedWorkflow(workflow);
-      setWorkflowNodes(nodesToSave);
-      setWorkflowEdges(edgesToSave);
-      setMessage('Workflow draft saved.');
+      setWorkflowNodes(workflow.currentVersion?.nodes ?? workflowNodes);
+      setWorkflowEdges(workflow.currentVersion?.edges ?? workflowEdges);
+    }
+    return updated;
+  }
+
+  async function saveWorkflow() {
+    if (!selectedWorkflow) return;
+    syncFromFlow();
+    const updated = await persistWorkflowDraft();
+    if (updated?.id) setMessage('Workflow draft saved.');
+  }
+
+  function downloadCurrentWorkflow() {
+    if (!selectedWorkflow) return;
+    const payload = {
+      id: selectedWorkflow.id,
+      name: selectedWorkflow.name,
+      description: selectedWorkflow.description,
+      category: selectedWorkflow.category,
+      currentVersion: {
+        nodes: workflowNodes,
+        edges: workflowEdges,
+      },
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${selectedWorkflow.name.replace(/[^a-z0-9_-]+/gi, '_').toLowerCase() || 'workflow'}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setMessage('Workflow exported as JSON.');
+  }
+
+  async function shareCurrentWorkflow() {
+    if (!selectedWorkflow) return;
+    const url = window.location.href;
+    await navigator.clipboard.writeText(url);
+    setMessage('Workflow link copied to clipboard.');
+  }
+
+  async function renameCurrentWorkflow() {
+    if (!selectedWorkflow) return;
+    const next = window.prompt('Rename workflow', selectedWorkflow.name);
+    if (!next || next === selectedWorkflow.name) return;
+    await persistWorkflowDraft({ name: next });
+    setMessage('Workflow renamed.');
+  }
+
+  async function moveCurrentWorkflow() {
+    if (!selectedWorkflow) return;
+    const next = window.prompt('Move workflow to category', selectedWorkflow.category);
+    if (!next || next === selectedWorkflow.category) return;
+    await persistWorkflowDraft({ category: next });
+    setMessage(`Workflow moved to ${next}.`);
+  }
+
+  async function editWorkflowDescription() {
+    if (!selectedWorkflow) return;
+    setActiveTab('overview');
+    setMessage('Edit the workflow description in Overview.');
+  }
+
+  async function importWorkflowFromUrl() {
+    if (!selectedWorkflow) return;
+    const source = window.prompt('Import workflow JSON from URL');
+    if (!source) return;
+    try {
+      const response = await fetch(source, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const raw = await response.json();
+      const imported = mapWorkflow(raw);
+      setSelectedWorkflow(imported);
+      setWorkflowNodes(imported.currentVersion?.nodes ?? []);
+      setWorkflowEdges(imported.currentVersion?.edges ?? []);
+      setSelectedNodeId(imported.currentVersion?.nodes?.[0]?.id ?? null);
+      setEditorNodeId(null);
+      setActiveTab('builder');
+      setMessage('Workflow imported from URL.');
+    } catch (error) {
+      setMessage(`Import from URL failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  function importWorkflowFromFile() {
+    importFileInputRef.current?.click();
+  }
+
+  async function handleWorkflowFileImport(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const raw = JSON.parse(await file.text());
+      const imported = mapWorkflow(raw);
+      setSelectedWorkflow(imported);
+      setWorkflowNodes(imported.currentVersion?.nodes ?? []);
+      setWorkflowEdges(imported.currentVersion?.edges ?? []);
+      setSelectedNodeId(imported.currentVersion?.nodes?.[0]?.id ?? null);
+      setEditorNodeId(null);
+      setActiveTab('builder');
+      setMessage('Workflow imported from file.');
+    } catch (error) {
+      setMessage(`Import from file failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function pushWorkflowToGit() {
+    if (!selectedWorkflow) return;
+    const payload = {
+      id: selectedWorkflow.id,
+      name: selectedWorkflow.name,
+      description: selectedWorkflow.description,
+      category: selectedWorkflow.category,
+      nodes: workflowNodes,
+      edges: workflowEdges,
+    };
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    setMessage('Workflow JSON copied for git push.');
+  }
+
+  async function archiveCurrentWorkflow() {
+    if (!selectedWorkflow) return;
+    const archived = await archiveWorkflow.mutate(selectedWorkflow.id);
+    if (archived?.id) {
+      setSelectedWorkflow(mapWorkflow(archived));
+      setMessage('Workflow archived.');
+    }
+  }
+
+  async function duplicateCurrentWorkflow() {
+    if (!selectedWorkflow) return;
+    const created = await createWorkflow.mutate({
+      ...buildDraftBody({
+        name: `${selectedWorkflow.name} copy`,
+      }),
+    });
+    if (created?.id) {
+      const workflow = mapWorkflow(created);
+      setSelectedWorkflow(workflow);
+      setWorkflowNodes(workflow.currentVersion?.nodes ?? []);
+      setWorkflowEdges(workflow.currentVersion?.edges ?? []);
+      setSelectedNodeId(workflow.currentVersion?.nodes?.[0]?.id ?? null);
+      setEditorNodeId(null);
+      setView('builder');
+      setActiveTab('builder');
+      setMessage('Workflow duplicated.');
     }
   }
 
@@ -1187,6 +1340,16 @@ function loadBuilderState(workflow: Workflow) {
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 onBack={() => setView('list')}
+                onEditDescription={editWorkflowDescription}
+                onDuplicate={duplicateCurrentWorkflow}
+                onDownload={downloadCurrentWorkflow}
+                onShare={shareCurrentWorkflow}
+                onMove={moveCurrentWorkflow}
+                onRename={renameCurrentWorkflow}
+                onImportFromUrl={importWorkflowFromUrl}
+                onImportFromFile={importWorkflowFromFile}
+                onPushToGit={pushWorkflowToGit}
+                onArchive={archiveCurrentWorkflow}
                 onValidate={validateCurrentWorkflow}
                 onTidy={tidyWorkflow}
                 onDryRun={runDryRun}
@@ -1287,6 +1450,13 @@ function loadBuilderState(workflow: Workflow) {
           )}
         </AnimatePresence>
 
+        <input
+          ref={importFileInputRef}
+          type="file"
+          accept="application/json"
+          className="hidden"
+          onChange={handleWorkflowFileImport}
+        />
         <TemplateModal open={templateOpen} onClose={() => setTemplateOpen(false)} onCreate={createFromTemplate} />
         {editorNode && (
           <WorkflowNodeEditorModal
@@ -1379,6 +1549,16 @@ function WorkflowEditorTopbar(props: {
   activeTab: WorkflowTab;
   setActiveTab: (tab: WorkflowTab) => void;
   onBack: () => void;
+  onEditDescription: () => void;
+  onDuplicate: () => void;
+  onDownload: () => void;
+  onShare: () => void;
+  onMove: () => void;
+  onRename: () => void;
+  onImportFromUrl: () => void;
+  onImportFromFile: () => void;
+  onPushToGit: () => void;
+  onArchive: () => void;
   onValidate: () => void;
   onTidy: () => void;
   onDryRun: () => void;
@@ -1391,6 +1571,33 @@ function WorkflowEditorTopbar(props: {
   onSave: () => void;
   onPublish: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [menuOpen]);
+
+  const closeMenu = () => setMenuOpen(false);
+  const runAndClose = (action: () => void) => () => {
+    action();
+    closeMenu();
+  };
+
   return (
     <div className="flex-shrink-0 border-b border-gray-200 bg-white">
       <div className="flex h-16 items-center justify-between px-6">
@@ -1401,15 +1608,79 @@ function WorkflowEditorTopbar(props: {
           <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={props.onValidate} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Validate</button>
-          <button onClick={props.onTidy} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Tidy up</button>
-          <button onClick={props.onDryRun} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Dry-run</button>
-          <button onClick={props.onRun} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Run</button>
-          <button onClick={props.onTrigger} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Trigger event</button>
-          <button onClick={props.onRetry} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Retry</button>
-          <button onClick={props.onResume} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Resume</button>
-          <button onClick={props.onCancel} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Cancel</button>
-          <button onClick={props.onRollback} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Rollback</button>
+          <div className="relative" ref={menuRef}>
+            <button onClick={() => setMenuOpen((value) => !value)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen}>
+              …
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+                <div className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Workflow actions</div>
+                <div className="border-t border-gray-100" />
+                <div className="p-2">
+                  <button onClick={runAndClose(props.onEditDescription)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Edit description</span>
+                  </button>
+                  <button onClick={runAndClose(props.onRename)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Rename</span>
+                  </button>
+                  <button onClick={runAndClose(props.onMove)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Move</span>
+                  </button>
+                  <button onClick={runAndClose(props.onDuplicate)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Duplicate</span>
+                  </button>
+                  <button onClick={runAndClose(props.onDownload)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Download</span>
+                  </button>
+                  <button onClick={runAndClose(props.onShare)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Share</span>
+                  </button>
+                  <button onClick={runAndClose(props.onImportFromUrl)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Import from URL...</span>
+                  </button>
+                  <button onClick={runAndClose(props.onImportFromFile)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Import from file...</span>
+                  </button>
+                  <button onClick={runAndClose(props.onPushToGit)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Push to git</span>
+                  </button>
+                  <button onClick={runAndClose(props.onValidate)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Validate</span>
+                  </button>
+                  <button onClick={runAndClose(props.onTidy)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Tidy up</span>
+                  </button>
+                  <button onClick={runAndClose(props.onDryRun)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Dry-run</span>
+                  </button>
+                  <button onClick={runAndClose(props.onRun)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Run</span>
+                  </button>
+                  <button onClick={runAndClose(props.onTrigger)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Trigger event</span>
+                  </button>
+                  <button onClick={runAndClose(props.onRetry)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Retry</span>
+                  </button>
+                  <button onClick={runAndClose(props.onResume)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Resume</span>
+                  </button>
+                  <button onClick={runAndClose(props.onCancel)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Cancel</span>
+                  </button>
+                  <button onClick={runAndClose(props.onRollback)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Rollback</span>
+                  </button>
+                  <button onClick={runAndClose(props.onArchive)} className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
+                    <span>Archive</span>
+                  </button>
+                  <button onClick={() => { closeMenu(); props.setActiveTab('overview'); }} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                    <span>Settings</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <button onClick={props.onSave} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Save</button>
           <button onClick={props.onPublish} className="rounded-lg bg-black px-4 py-1.5 text-xs font-bold text-white hover:opacity-90">Publish</button>
         </div>

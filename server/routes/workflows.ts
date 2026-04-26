@@ -1518,4 +1518,43 @@ router.post('/:id/publish', requirePermission('workflows.write'), async (req: Mu
   }
 });
 
+router.post('/:id/archive', requirePermission('workflows.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
+
+    const currentVersion = wf.current_version_id
+      ? await workflowRepository.getVersion(wf.current_version_id)
+      : await workflowRepository.getLatestVersion(wf.id);
+
+    if (!currentVersion) {
+      return res.status(400).json({ error: 'No version available to archive' });
+    }
+
+    await workflowRepository.updateVersion(currentVersion.id, { status: 'archived' });
+
+    const updated = await workflowRepository.getDefinition(wf.id, tenantId, workspaceId);
+    const version = await workflowRepository.getVersion(currentVersion.id);
+
+    await auditRepository.logEvent({ tenantId, workspaceId }, {
+      actorId: req.userId ?? 'system',
+      action: 'WORKFLOW_ARCHIVED',
+      entityType: 'workflow',
+      entityId: wf.id,
+      newValue: { workflow: updated, version },
+    });
+
+    res.json({
+      ...updated,
+      current_version: version,
+      metrics: await workflowRepository.getMetrics(wf.id, tenantId),
+    });
+  } catch (error) {
+    console.error('Error archiving workflow:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

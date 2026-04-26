@@ -242,6 +242,11 @@ export const workflowsApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  archive: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/archive`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   retryRun: (runId: string, payload: Record<string, any> = {}) =>
     request<any>(`/workflows/runs/${runId}/retry`, {
       method: 'POST',
