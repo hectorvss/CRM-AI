@@ -162,6 +162,11 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'case.created', label: 'Case created', category: 'Trigger', icon: 'assignment', description: 'Starts when a case is created.' },
   { type: 'trigger', key: 'message.received', label: 'Message received', category: 'Trigger', icon: 'chat', description: 'Starts when a message arrives.' },
   { type: 'trigger', key: 'order.updated', label: 'Order updated', category: 'Trigger', icon: 'shopping_bag', description: 'Starts when order data changes.' },
+  { type: 'trigger', key: 'case.updated', label: 'Case updated', category: 'Trigger', icon: 'published_with_changes', description: 'Starts when a case changes.' },
+  { type: 'trigger', key: 'customer.updated', label: 'Customer updated', category: 'Trigger', icon: 'manage_accounts', description: 'Starts when customer data changes.' },
+  { type: 'trigger', key: 'sla.breached', label: 'SLA breached', category: 'Trigger', icon: 'timer_off', description: 'Starts when a case breaches SLA.' },
+  { type: 'trigger', key: 'payment.dispute.created', label: 'Payment dispute created', category: 'Trigger', icon: 'report', description: 'Starts when a payment dispute appears.' },
+  { type: 'trigger', key: 'shipment.updated', label: 'Shipment updated', category: 'Trigger', icon: 'local_shipping', description: 'Starts when shipment status changes.' },
   { type: 'trigger', key: 'manual.run', label: 'Manual run', category: 'Trigger', icon: 'play_arrow', description: 'Starts when a user runs it.' },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Flow', icon: 'alt_route', requiresConfig: true, description: 'Branch based on a numeric amount.' },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Flow', icon: 'rule', requiresConfig: true, description: 'Branch based on status.' },
@@ -186,17 +191,41 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'utility', key: 'data.split_items', label: 'Split items', category: 'Data transformation', icon: 'split_scene', requiresConfig: true, description: 'Split a string or array into multiple items.' },
   { type: 'utility', key: 'data.dedupe', label: 'Deduplicate', category: 'Data transformation', icon: 'content_copy', requiresConfig: true, description: 'Remove duplicate entries from a list.' },
   { type: 'utility', key: 'data.map_fields', label: 'Map fields', category: 'Data transformation', icon: 'map', requiresConfig: true, description: 'Map one object structure into another.' },
+  { type: 'utility', key: 'data.pick_fields', label: 'Pick fields', category: 'Data transformation', icon: 'select_all', requiresConfig: true, description: 'Keep only selected fields from a payload.' },
+  { type: 'utility', key: 'data.merge_objects', label: 'Merge objects', category: 'Data transformation', icon: 'join_inner', requiresConfig: true, description: 'Merge multiple objects into one payload.' },
+  { type: 'utility', key: 'data.validate_required', label: 'Validate required fields', category: 'Data transformation', icon: 'fact_check', requiresConfig: true, description: 'Block the flow if required fields are missing.' },
+  { type: 'utility', key: 'data.calculate', label: 'Calculate value', category: 'Data transformation', icon: 'calculate', requiresConfig: true, description: 'Compute a numeric value from workflow data.' },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true, description: 'Assign a case to a user or team.' },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true, description: 'Send a customer reply.' },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true, description: 'Add a private note to the case.' },
+  { type: 'action', key: 'case.update_status', label: 'Update case status', category: 'Action', icon: 'published_with_changes', requiresConfig: true, description: 'Move a case to a new operational status.' },
+  { type: 'action', key: 'case.set_priority', label: 'Set case priority', category: 'Action', icon: 'priority_high', requiresConfig: true, description: 'Update priority, severity, or risk.' },
+  { type: 'action', key: 'case.add_tag', label: 'Add case tag', category: 'Action', icon: 'sell', requiresConfig: true, description: 'Append a tag to the case.' },
   { type: 'action', key: 'order.cancel', label: 'Cancel order', category: 'Action', icon: 'block', requiresConfig: true, sensitive: true, description: 'Cancel an eligible order.' },
+  { type: 'action', key: 'order.hold', label: 'Place order hold', category: 'Action', icon: 'pause_circle', requiresConfig: true, sensitive: true, description: 'Pause fulfillment while an issue is reviewed.' },
+  { type: 'action', key: 'order.release', label: 'Release order hold', category: 'Action', icon: 'play_circle', requiresConfig: true, description: 'Release a previously held order.' },
   { type: 'action', key: 'payment.refund', label: 'Issue refund', category: 'Action', icon: 'currency_exchange', requiresConfig: true, sensitive: true, description: 'Issue a safe refund or request approval.' },
+  { type: 'action', key: 'payment.mark_dispute', label: 'Mark payment dispute', category: 'Action', icon: 'gavel', requiresConfig: true, sensitive: true, description: 'Mark a payment as disputed and route finance review.' },
   { type: 'action', key: 'return.create', label: 'Create return', category: 'Action', icon: 'assignment_return', requiresConfig: true, description: 'Create a return record.' },
+  { type: 'action', key: 'return.approve', label: 'Approve return', category: 'Action', icon: 'task_alt', requiresConfig: true, description: 'Approve a return for processing.' },
+  { type: 'action', key: 'return.reject', label: 'Reject return', category: 'Action', icon: 'do_not_disturb_on', requiresConfig: true, description: 'Reject a return with a reason.' },
   { type: 'action', key: 'approval.create', label: 'Request approval', category: 'Human review', icon: 'verified', requiresConfig: true, description: 'Ask a human to approve a risky action.' },
+  { type: 'action', key: 'approval.escalate', label: 'Escalate approval', category: 'Human review', icon: 'escalator_warning', requiresConfig: true, description: 'Create a higher-priority approval request.' },
   { type: 'agent', key: 'agent.run', label: 'AI Agent', category: 'AI', icon: 'smart_toy', requiresConfig: true, description: 'Run a specialist CRM-AI agent.' },
+  { type: 'agent', key: 'agent.classify', label: 'Classify case', category: 'AI', icon: 'category', requiresConfig: true, description: 'Classify intent, priority, or risk from context.' },
+  { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'AI', icon: 'sentiment_satisfied', requiresConfig: true, description: 'Detect sentiment and frustration signals.' },
+  { type: 'agent', key: 'agent.summarize', label: 'Summarize context', category: 'AI', icon: 'summarize', requiresConfig: true, description: 'Create a concise operational summary.' },
+  { type: 'agent', key: 'agent.draft_reply', label: 'Draft reply', category: 'AI', icon: 'edit_square', requiresConfig: true, description: 'Draft a customer-ready response.' },
   { type: 'policy', key: 'policy.evaluate', label: 'Evaluate policy', category: 'Core', icon: 'shield', requiresConfig: true, description: 'Apply a policy decision.' },
+  { type: 'policy', key: 'core.audit_log', label: 'Write audit log', category: 'Core', icon: 'receipt_long', requiresConfig: true, description: 'Write an explicit audit event.' },
+  { type: 'policy', key: 'core.idempotency_check', label: 'Idempotency check', category: 'Core', icon: 'fingerprint', requiresConfig: true, description: 'Prevent duplicate executions for the same key.' },
+  { type: 'policy', key: 'core.rate_limit', label: 'Rate limit gate', category: 'Core', icon: 'speed', requiresConfig: true, description: 'Pause or block flows that exceed a configured limit.' },
   { type: 'knowledge', key: 'knowledge.search', label: 'Search knowledge', category: 'Knowledge', icon: 'menu_book', requiresConfig: true, description: 'Retrieve relevant articles or SOPs.' },
+  { type: 'knowledge', key: 'knowledge.validate_policy', label: 'Validate policy answer', category: 'Knowledge', icon: 'policy', requiresConfig: true, description: 'Check a proposed action against retrieved policy.' },
+  { type: 'knowledge', key: 'knowledge.attach_evidence', label: 'Attach evidence', category: 'Knowledge', icon: 'attach_file', requiresConfig: true, description: 'Attach workflow evidence to context.' },
   { type: 'integration', key: 'connector.call', label: 'Call connector', category: 'Integration', icon: 'hub', requiresConfig: true, description: 'Call an enabled connector capability.' },
+  { type: 'integration', key: 'connector.emit_event', label: 'Emit integration event', category: 'Integration', icon: 'send', requiresConfig: true, description: 'Create a canonical event for downstream systems.' },
+  { type: 'integration', key: 'connector.check_health', label: 'Check connector health', category: 'Integration', icon: 'monitor_heart', requiresConfig: true, description: 'Check connector availability before continuing.' },
   { type: 'utility', key: 'delay', label: 'Delay', category: 'Flow', icon: 'schedule', requiresConfig: true, description: 'Pause execution.' },
   { type: 'utility', key: 'retry', label: 'Retry', category: 'Flow', icon: 'refresh', requiresConfig: true, description: 'Retry after failure.' },
   { type: 'utility', key: 'stop', label: 'Stop workflow', category: 'Flow', icon: 'stop_circle', description: 'Stop the workflow.' },
@@ -464,7 +493,7 @@ function categoryForSpec(spec: NodeSpec) {
   if (spec.key.startsWith('data.')) return 'Data transformation';
   if (spec.type === 'agent') return 'AI';
   if (spec.type === 'condition' || spec.type === 'utility') return 'Flow';
-  if (spec.type === 'action') return spec.key === 'approval.create' ? 'Human review' : 'Action';
+  if (spec.type === 'action') return spec.key.startsWith('approval.') ? 'Human review' : 'Action';
   if (spec.type === 'policy') return 'Core';
   if (spec.type === 'knowledge') return 'Knowledge';
   if (spec.type === 'integration') return 'Integration';
@@ -493,32 +522,36 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Other', items: pick(['flow.compare', 'flow.branch', 'flow.switch', 'flow.wait', 'flow.subworkflow', 'flow.stop_error', 'flow.noop']) },
     ],
     'Data transformation': [
-      { title: 'Popular', items: pick(['data.set_fields', 'data.rename_fields', 'data.map_fields']) },
-      { title: 'Other', items: pick(['data.extract_json', 'data.normalize_text', 'data.format_date', 'data.split_items', 'data.dedupe']) },
+      { title: 'Popular', items: pick(['data.set_fields', 'data.pick_fields', 'data.map_fields', 'data.validate_required']) },
+      { title: 'Other', items: pick(['data.rename_fields', 'data.merge_objects', 'data.calculate', 'data.extract_json', 'data.normalize_text', 'data.format_date', 'data.split_items', 'data.dedupe']) },
     ],
     AI: [
-      { title: 'Popular', items: pick(['agent.run']) },
-      { title: 'Other', items: pick(['knowledge.search']) },
+      { title: 'Popular', items: pick(['agent.run', 'agent.classify', 'agent.draft_reply']) },
+      { title: 'Other', items: pick(['agent.sentiment', 'agent.summarize', 'knowledge.search']) },
     ],
     Action: [
-      { title: 'Cases', items: pick(['case.assign', 'case.reply', 'case.note']) },
-      { title: 'Commerce', items: pick(['order.cancel', 'payment.refund', 'return.create']) },
+      { title: 'Cases', items: pick(['case.assign', 'case.update_status', 'case.set_priority', 'case.add_tag', 'case.reply', 'case.note']) },
+      { title: 'Orders', items: pick(['order.hold', 'order.release', 'order.cancel']) },
+      { title: 'Payments', items: pick(['payment.refund', 'payment.mark_dispute']) },
+      { title: 'Returns', items: pick(['return.create', 'return.approve', 'return.reject']) },
     ],
     'Human review': [
-      { title: 'Approvals', items: pick(['approval.create']) },
+      { title: 'Approvals', items: pick(['approval.create', 'approval.escalate']) },
     ],
     Core: [
-      { title: 'Policy', items: pick(['policy.evaluate']) },
-      { title: 'Runtime', items: pick(['stop', 'retry', 'delay']) },
+      { title: 'Policy', items: pick(['policy.evaluate', 'core.idempotency_check', 'core.rate_limit']) },
+      { title: 'Runtime', items: pick(['core.audit_log', 'stop', 'retry', 'delay']) },
     ],
     Integration: [
-      { title: 'Connectors', items: pick(['connector.call']) },
+      { title: 'Connectors', items: pick(['connector.check_health', 'connector.call', 'connector.emit_event']) },
     ],
     Knowledge: [
-      { title: 'Knowledge', items: pick(['knowledge.search']) },
+      { title: 'Knowledge', items: pick(['knowledge.search', 'knowledge.validate_policy', 'knowledge.attach_evidence']) },
     ],
     Trigger: [
-      { title: 'Popular', items: pick(['manual.run', 'case.created', 'message.received', 'order.updated', 'payment.failed', 'return.created', 'approval.decided', 'webhook.received']) },
+      { title: 'Support', items: pick(['manual.run', 'case.created', 'case.updated', 'message.received', 'sla.breached']) },
+      { title: 'Commerce', items: pick(['order.updated', 'shipment.updated', 'payment.failed', 'payment.dispute.created', 'return.created']) },
+      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'webhook.received']) },
     ],
   };
 

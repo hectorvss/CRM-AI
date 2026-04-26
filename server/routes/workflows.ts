@@ -35,6 +35,11 @@ const NODE_CATALOG = [
   { type: 'trigger', key: 'return.created', label: 'Return created', category: 'Trigger', icon: 'keyboard_return', requiresConfig: false },
   { type: 'trigger', key: 'approval.decided', label: 'Approval decided', category: 'Trigger', icon: 'task_alt', requiresConfig: false },
   { type: 'trigger', key: 'webhook.received', label: 'Webhook received', category: 'Trigger', icon: 'webhook', requiresConfig: true },
+  { type: 'trigger', key: 'case.updated', label: 'Case updated', category: 'Trigger', icon: 'published_with_changes', requiresConfig: false },
+  { type: 'trigger', key: 'customer.updated', label: 'Customer updated', category: 'Trigger', icon: 'manage_accounts', requiresConfig: false },
+  { type: 'trigger', key: 'sla.breached', label: 'SLA breached', category: 'Trigger', icon: 'timer_off', requiresConfig: false },
+  { type: 'trigger', key: 'payment.dispute.created', label: 'Payment dispute created', category: 'Trigger', icon: 'report', requiresConfig: false },
+  { type: 'trigger', key: 'shipment.updated', label: 'Shipment updated', category: 'Trigger', icon: 'local_shipping', requiresConfig: false },
   { type: 'trigger', key: 'manual.run', label: 'Manual run', category: 'Trigger', icon: 'play_arrow', requiresConfig: false },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Condition', icon: 'attach_money', requiresConfig: true },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Condition', icon: 'rule', requiresConfig: true },
@@ -59,23 +64,47 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'data.split_items', label: 'Split items', category: 'Data transformation', icon: 'split_scene', requiresConfig: true },
   { type: 'utility', key: 'data.dedupe', label: 'Deduplicate', category: 'Data transformation', icon: 'content_copy', requiresConfig: true },
   { type: 'utility', key: 'data.map_fields', label: 'Map fields', category: 'Data transformation', icon: 'map', requiresConfig: true },
+  { type: 'utility', key: 'data.pick_fields', label: 'Pick fields', category: 'Data transformation', icon: 'select_all', requiresConfig: true },
+  { type: 'utility', key: 'data.merge_objects', label: 'Merge objects', category: 'Data transformation', icon: 'join_inner', requiresConfig: true },
+  { type: 'utility', key: 'data.validate_required', label: 'Validate required fields', category: 'Data transformation', icon: 'fact_check', requiresConfig: true },
+  { type: 'utility', key: 'data.calculate', label: 'Calculate value', category: 'Data transformation', icon: 'calculate', requiresConfig: true },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true },
+  { type: 'action', key: 'case.update_status', label: 'Update case status', category: 'Action', icon: 'published_with_changes', requiresConfig: true },
+  { type: 'action', key: 'case.set_priority', label: 'Set case priority', category: 'Action', icon: 'priority_high', requiresConfig: true },
+  { type: 'action', key: 'case.add_tag', label: 'Add case tag', category: 'Action', icon: 'sell', requiresConfig: true },
   { type: 'action', key: 'order.cancel', label: 'Cancel order', category: 'Action', icon: 'block', requiresConfig: true, sensitive: true },
+  { type: 'action', key: 'order.hold', label: 'Place order hold', category: 'Action', icon: 'pause_circle', requiresConfig: true, sensitive: true },
+  { type: 'action', key: 'order.release', label: 'Release order hold', category: 'Action', icon: 'play_circle', requiresConfig: true },
   { type: 'action', key: 'payment.refund', label: 'Issue refund', category: 'Action', icon: 'currency_exchange', requiresConfig: true, sensitive: true },
+  { type: 'action', key: 'payment.mark_dispute', label: 'Mark payment dispute', category: 'Action', icon: 'gavel', requiresConfig: true, sensitive: true },
   { type: 'action', key: 'return.create', label: 'Create return', category: 'Action', icon: 'assignment_return', requiresConfig: true },
+  { type: 'action', key: 'return.approve', label: 'Approve return', category: 'Action', icon: 'task_alt', requiresConfig: true },
+  { type: 'action', key: 'return.reject', label: 'Reject return', category: 'Action', icon: 'do_not_disturb_on', requiresConfig: true },
   { type: 'action', key: 'approval.create', label: 'Request approval', category: 'Action', icon: 'verified', requiresConfig: true },
+  { type: 'action', key: 'approval.escalate', label: 'Escalate approval', category: 'Action', icon: 'escalator_warning', requiresConfig: true },
   { type: 'agent', key: 'agent.run', label: 'Run specialist agent', category: 'Agent', icon: 'smart_toy', requiresConfig: true },
+  { type: 'agent', key: 'agent.classify', label: 'Classify case', category: 'Agent', icon: 'category', requiresConfig: true },
+  { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'Agent', icon: 'sentiment_satisfied', requiresConfig: true },
+  { type: 'agent', key: 'agent.summarize', label: 'Summarize context', category: 'Agent', icon: 'summarize', requiresConfig: true },
+  { type: 'agent', key: 'agent.draft_reply', label: 'Draft reply', category: 'Agent', icon: 'edit_square', requiresConfig: true },
   { type: 'policy', key: 'policy.evaluate', label: 'Evaluate policy', category: 'Policy', icon: 'shield', requiresConfig: true },
+  { type: 'policy', key: 'core.audit_log', label: 'Write audit log', category: 'Policy', icon: 'receipt_long', requiresConfig: true },
+  { type: 'policy', key: 'core.idempotency_check', label: 'Idempotency check', category: 'Policy', icon: 'fingerprint', requiresConfig: true },
+  { type: 'policy', key: 'core.rate_limit', label: 'Rate limit gate', category: 'Policy', icon: 'speed', requiresConfig: true },
   { type: 'knowledge', key: 'knowledge.search', label: 'Search knowledge', category: 'Knowledge', icon: 'menu_book', requiresConfig: true },
+  { type: 'knowledge', key: 'knowledge.validate_policy', label: 'Validate policy answer', category: 'Knowledge', icon: 'policy', requiresConfig: true },
+  { type: 'knowledge', key: 'knowledge.attach_evidence', label: 'Attach evidence', category: 'Knowledge', icon: 'attach_file', requiresConfig: true },
   { type: 'integration', key: 'connector.call', label: 'Call connector', category: 'Integration', icon: 'hub', requiresConfig: true },
+  { type: 'integration', key: 'connector.emit_event', label: 'Emit integration event', category: 'Integration', icon: 'send', requiresConfig: true },
+  { type: 'integration', key: 'connector.check_health', label: 'Check connector health', category: 'Integration', icon: 'monitor_heart', requiresConfig: true },
   { type: 'utility', key: 'delay', label: 'Delay', category: 'Utility', icon: 'schedule', requiresConfig: true },
   { type: 'utility', key: 'retry', label: 'Retry', category: 'Utility', icon: 'refresh', requiresConfig: true },
   { type: 'utility', key: 'stop', label: 'Stop workflow', category: 'Utility', icon: 'stop_circle', requiresConfig: false },
 ];
 
-const SENSITIVE_KEYS = new Set(['order.cancel', 'payment.refund', 'connector.call']);
+const SENSITIVE_KEYS = new Set(['order.cancel', 'order.hold', 'payment.refund', 'payment.mark_dispute', 'connector.call', 'connector.emit_event']);
 const PAUSED_STATUSES = new Set(['waiting', 'waiting_approval', 'paused']);
 
 function parseMaybeJsonArray(value: any): any[] {
@@ -291,10 +320,17 @@ function resolveNodeConfig(config: Record<string, any> = {}, context: any) {
 }
 
 function compareValues(left: any, operator: string, right: any) {
+  const normalizedOperator = String(operator || '==').toLowerCase();
+  if (normalizedOperator === 'exists') return left !== undefined && left !== null && String(left).length > 0;
+  if (normalizedOperator === 'not_exists') return left === undefined || left === null || String(left).length === 0;
+  if (normalizedOperator === 'contains') return String(left ?? '').toLowerCase().includes(String(right ?? '').toLowerCase());
+  if (normalizedOperator === 'not_contains') return !String(left ?? '').toLowerCase().includes(String(right ?? '').toLowerCase());
+  if (normalizedOperator === 'in') return asArray(right).map((item) => String(item).toLowerCase()).includes(String(left ?? '').toLowerCase());
+  if (normalizedOperator === 'not_in') return !asArray(right).map((item) => String(item).toLowerCase()).includes(String(left ?? '').toLowerCase());
   const numericLeft = Number(left);
   const numericRight = Number(right);
   const canCompareNumber = Number.isFinite(numericLeft) && Number.isFinite(numericRight);
-  switch (operator) {
+  switch (normalizedOperator) {
     case '>': return canCompareNumber ? numericLeft > numericRight : String(left) > String(right);
     case '>=': return canCompareNumber ? numericLeft >= numericRight : String(left) >= String(right);
     case '<': return canCompareNumber ? numericLeft < numericRight : String(left) < String(right);
@@ -450,6 +486,11 @@ function workflowMatchesTrigger(version: any, eventType: string) {
     'return.created': ['return.created', 'return_created'],
     'approval.decided': ['approval.decided', 'approval_decided', 'approval.approved', 'approval.rejected'],
     'webhook.received': ['webhook.received', 'webhook_received'],
+    'case.updated': ['case.updated', 'case_updated'],
+    'customer.updated': ['customer.updated', 'customer_updated'],
+    'sla.breached': ['sla.breached', 'sla_breached', 'sla.breach'],
+    'payment.dispute.created': ['payment.dispute.created', 'payment_dispute_created', 'dispute.created'],
+    'shipment.updated': ['shipment.updated', 'shipment_updated', 'fulfillment.updated'],
     'manual.run': ['manual.run', 'manual'],
   };
   const accepted = new Set([normalizedEvent, ...(aliases[normalizedEvent] ?? []).map(normalizeTriggerName)]);
@@ -627,6 +668,50 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
       return { status: 'completed', output: { data: mapped, mapped: true } };
     }
 
+    if (node.key === 'data.pick_fields') {
+      const fields = asArray(config.fields || config.field || config.keys).map((field) => String(field));
+      const payload = base && typeof base === 'object' ? base : {};
+      const picked = Object.fromEntries(fields.map((field) => [field, readContextPath(payload, field) ?? readContextPath(context, field)]));
+      context.data = picked;
+      return { status: 'completed', output: { data: picked, fields } };
+    }
+
+    if (node.key === 'data.merge_objects') {
+      const left = readContextPath(context, config.left || 'data') ?? {};
+      const right = readContextPath(context, config.right || 'trigger') ?? {};
+      const merged = {
+        ...(left && typeof left === 'object' && !Array.isArray(left) ? left : {}),
+        ...(right && typeof right === 'object' && !Array.isArray(right) ? right : {}),
+      };
+      context.data = merged;
+      return { status: 'completed', output: { data: merged, merged: true } };
+    }
+
+    if (node.key === 'data.validate_required') {
+      const fields = asArray(config.fields || config.required || config.field).map((field) => String(field));
+      const payload = base && typeof base === 'object' ? base : context;
+      const missing = fields.filter((field) => {
+        const value = readContextPath(payload, field) ?? readContextPath(context, field);
+        return value === undefined || value === null || String(value).trim() === '';
+      });
+      context.validation = { requiredFields: fields, missing };
+      return {
+        status: missing.length ? 'blocked' : 'completed',
+        output: { valid: missing.length === 0, missing, fields },
+        error: missing.length ? `Missing required fields: ${missing.join(', ')}` : null,
+      };
+    }
+
+    if (node.key === 'data.calculate') {
+      const left = Number(readContextPath(context, config.left || config.source || 'data.amount') ?? config.leftValue ?? 0);
+      const right = Number(readContextPath(context, config.right || 'data.value') ?? config.rightValue ?? config.value ?? 0);
+      const operation = String(config.operation || config.operator || '+');
+      const result = operation === '-' ? left - right : operation === '*' ? left * right : operation === '/' ? (right === 0 ? 0 : left / right) : left + right;
+      const target = String(config.target || 'calculated');
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: result };
+      return { status: 'completed', output: { data: context.data, result, operation, target } };
+    }
+
     context.data = base;
     return { status: 'completed', output: { data: base, transformed: true } };
   }
@@ -668,6 +753,44 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return { status: 'completed', output: { messageId: message.id } };
   }
 
+  if (node.key === 'case.update_status') {
+    if (!context.case?.id) return { status: 'failed', error: 'case.update_status requires case context' };
+    const nextStatus = config.status || config.to || 'open';
+    const previousStatus = context.case.status ?? null;
+    await caseRepository.update(scope, context.case.id, { status: nextStatus });
+    await caseRepository.addStatusHistory(scope, {
+      caseId: context.case.id,
+      fromStatus: previousStatus,
+      toStatus: nextStatus,
+      changedBy: scope.userId || 'workflow',
+      reason: config.reason || `Status updated by ${node.label}`,
+    }).catch(() => undefined);
+    context.case = { ...context.case, status: nextStatus };
+    return { status: 'completed', output: { caseId: context.case.id, previousStatus, status: nextStatus } };
+  }
+
+  if (node.key === 'case.set_priority') {
+    if (!context.case?.id) return { status: 'failed', error: 'case.set_priority requires case context' };
+    const updates: Record<string, any> = {};
+    if (config.priority) updates.priority = config.priority;
+    if (config.severity) updates.severity = config.severity;
+    if (config.risk_level || config.riskLevel) updates.risk_level = config.risk_level || config.riskLevel;
+    if (Object.keys(updates).length === 0) updates.priority = 'high';
+    await caseRepository.update(scope, context.case.id, updates);
+    context.case = { ...context.case, ...updates };
+    return { status: 'completed', output: { caseId: context.case.id, updates } };
+  }
+
+  if (node.key === 'case.add_tag') {
+    if (!context.case?.id) return { status: 'failed', error: 'case.add_tag requires case context' };
+    const tag = String(config.tag || config.value || 'workflow').trim();
+    const currentTags = Array.isArray(context.case.tags) ? context.case.tags : [];
+    const tags = Array.from(new Set([...currentTags, tag].filter(Boolean)));
+    await caseRepository.update(scope, context.case.id, { tags });
+    context.case = { ...context.case, tags };
+    return { status: 'completed', output: { caseId: context.case.id, tags } };
+  }
+
   if (node.key === 'order.cancel') {
     const orderId = config.order_id || config.orderId || context.order?.id;
     if (!orderId) return { status: 'failed', error: 'order.cancel requires order context' };
@@ -684,6 +807,22 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
       system_states: { ...(order.system_states ?? {}), canonical: 'cancelled', workflow: 'cancelled' },
     });
     return { status: 'completed', output: { orderId, status: 'cancelled' } };
+  }
+
+  if (node.key === 'order.hold' || node.key === 'order.release') {
+    const orderId = config.order_id || config.orderId || context.order?.id;
+    if (!orderId) return { status: 'failed', error: `${node.key} requires order context` };
+    const order = await commerceRepository.getOrder(scope, orderId);
+    if (!order) return { status: 'failed', error: 'Order not found' };
+    const hold = node.key === 'order.hold';
+    const workflowStatus = hold ? 'held' : 'released';
+    await commerceRepository.updateOrder(scope, orderId, {
+      approval_status: hold ? 'pending' : 'not_required',
+      last_update: config.reason || (hold ? 'Placed on hold by workflow' : 'Released by workflow'),
+      system_states: { ...(order.system_states ?? {}), workflow: workflowStatus, hold: hold ? 'active' : 'released' },
+    });
+    context.order = { ...order, system_states: { ...(order.system_states ?? {}), workflow: workflowStatus, hold: hold ? 'active' : 'released' } };
+    return { status: hold && config.requires_approval ? 'waiting_approval' : 'completed', output: { orderId, hold, status: workflowStatus } };
   }
 
   if (node.key === 'payment.refund') {
@@ -706,6 +845,22 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return { status: 'completed', output: { paymentId, amount, status: 'refunded' } };
   }
 
+  if (node.key === 'payment.mark_dispute') {
+    const paymentId = config.payment_id || config.paymentId || context.payment?.id;
+    if (!paymentId) return { status: 'failed', error: 'payment.mark_dispute requires payment context' };
+    const payment = await commerceRepository.getPayment(scope, paymentId);
+    if (!payment) return { status: 'failed', error: 'Payment not found' };
+    await commerceRepository.updatePayment(scope, paymentId, {
+      status: config.status || payment.status || 'disputed',
+      dispute_status: config.dispute_status || 'open',
+      dispute_id: config.dispute_id || config.disputeId || payment.dispute_id || `workflow_dispute_${Date.now()}`,
+      approval_status: 'pending',
+      system_states: { ...(payment.system_states ?? {}), dispute: 'Open', workflow: 'dispute_review' },
+      last_update: config.reason || 'Marked as disputed by workflow',
+    });
+    return { status: 'waiting_approval', output: { paymentId, dispute: 'open' } };
+  }
+
   if (node.key === 'return.create') {
     const returnId = await commerceRepository.upsertReturn(scope, {
       externalId: config.external_return_id || `workflow_return_${Date.now()}`,
@@ -723,6 +878,19 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return { status: 'completed', output: { returnId } };
   }
 
+  if (node.key === 'return.approve' || node.key === 'return.reject') {
+    const returnId = config.return_id || config.returnId || context.return?.id;
+    if (!returnId) return { status: 'failed', error: `${node.key} requires return context` };
+    const approved = node.key === 'return.approve';
+    await commerceRepository.updateReturn(scope, returnId, {
+      status: approved ? 'approved' : 'rejected',
+      approval_status: approved ? 'approved' : 'rejected',
+      refund_status: approved ? (config.refund_status || 'pending') : 'not_required',
+      return_reason: config.reason || (approved ? 'Approved by workflow' : 'Rejected by workflow'),
+    });
+    return { status: 'completed', output: { returnId, approved } };
+  }
+
   if (node.key === 'approval.create') {
     const approval = await approvalRepository.create(scope, {
       caseId: config.case_id || context.case?.id || null,
@@ -736,10 +904,55 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return { status: 'waiting_approval', output: { approvalId: approval.id } };
   }
 
+  if (node.key === 'approval.escalate') {
+    const approval = await approvalRepository.create(scope, {
+      caseId: config.case_id || context.case?.id || null,
+      actionType: config.action_type || 'workflow_escalation',
+      actionPayload: { nodeId: node.id, escalationReason: config.reason || 'Workflow escalation', context: { caseId: context.case?.id } },
+      riskLevel: config.risk_level || 'high',
+      priority: config.priority || 'urgent',
+      assignedTeamId: config.team_id || config.queue || 'manager',
+      evidencePackage: { workflowNode: node.label, escalation: true },
+    });
+    return { status: 'waiting_approval', output: { approvalId: approval.id, escalated: true } };
+  }
+
   if (node.key === 'policy.evaluate') {
-    const result = { decision: config.decision || 'allow', policy: config.policy || 'default' };
+    const decision = config.decision || (compareValues(readContextPath(context, config.field || 'data.risk'), config.operator || '!=', config.blockValue || 'critical') ? 'allow' : 'block');
+    const result = { decision, policy: config.policy || 'default' };
     context.policy = result;
     return { status: result.decision === 'block' ? 'blocked' : 'completed', output: result };
+  }
+
+  if (node.key === 'core.audit_log') {
+    const entityType = config.entity_type || config.entityType || (context.case ? 'case' : 'workflow');
+    const entityId = config.entity_id || config.entityId || context.case?.id || node.id;
+    await auditRepository.logEvent({ tenantId: scope.tenantId, workspaceId: scope.workspaceId }, {
+      actorId: scope.userId ?? 'workflow',
+      actorType: 'system',
+      action: config.action || 'WORKFLOW_NODE_AUDIT',
+      entityType,
+      entityId,
+      metadata: { nodeId: node.id, label: node.label, message: config.message || null, data: context.data ?? {} },
+    });
+    return { status: 'completed', output: { audited: true, entityType, entityId } };
+  }
+
+  if (node.key === 'core.idempotency_check') {
+    const key = String(config.key || config.idempotencyKey || `${node.id}:${context.case?.id ?? context.order?.id ?? context.trigger?.id ?? 'manual'}`);
+    context.idempotency = context.idempotency ?? {};
+    if (context.idempotency[key]) return { status: 'skipped', output: { duplicate: true, key } };
+    context.idempotency[key] = true;
+    return { status: 'completed', output: { duplicate: false, key } };
+  }
+
+  if (node.key === 'core.rate_limit') {
+    const limit = Number(config.limit || 1);
+    const bucket = String(config.bucket || node.id);
+    context.rateLimits = context.rateLimits ?? {};
+    context.rateLimits[bucket] = Number(context.rateLimits[bucket] || 0) + 1;
+    const allowed = context.rateLimits[bucket] <= limit;
+    return { status: allowed ? 'completed' : 'waiting', output: { bucket, count: context.rateLimits[bucket], limit, allowed } };
   }
 
   if (node.key === 'knowledge.search') {
@@ -759,6 +972,51 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     }));
     context.knowledge = { query, articles: top };
     return { status: 'completed', output: { query, count: top.length, articles: top } };
+  }
+
+  if (node.key === 'knowledge.validate_policy') {
+    const policyText = String(config.policy || context.knowledge?.articles?.[0]?.title || '');
+    const proposedAction = String(config.action || config.proposedAction || context.agent?.intent || '');
+    const blockedTerms = asArray(config.blocked_terms || config.blockedTerms || 'forbidden|not allowed|manager required').map((term) => String(term).toLowerCase());
+    const requiresReview = blockedTerms.some((term) => policyText.toLowerCase().includes(term)) || ['refund', 'cancel', 'dispute'].includes(proposedAction.toLowerCase()) && config.require_review !== false;
+    context.policy = { decision: requiresReview ? 'review' : 'allow', policy: config.policy || 'knowledge', proposedAction };
+    return { status: requiresReview ? 'waiting_approval' : 'completed', output: context.policy };
+  }
+
+  if (node.key === 'knowledge.attach_evidence') {
+    const evidence = {
+      title: config.title || context.knowledge?.articles?.[0]?.title || 'Workflow evidence',
+      source: config.source || 'knowledge',
+      articles: context.knowledge?.articles ?? [],
+      note: config.note || null,
+    };
+    context.evidence = [...(Array.isArray(context.evidence) ? context.evidence : []), evidence];
+    return { status: 'completed', output: { evidenceAttached: true, evidence } };
+  }
+
+  if (['agent.classify', 'agent.sentiment', 'agent.summarize', 'agent.draft_reply'].includes(node.key)) {
+    const text = String(config.text || config.content || context.case?.summary || context.case?.description || context.trigger?.message || '');
+    const lower = text.toLowerCase();
+    if (node.key === 'agent.classify') {
+      const intent = config.intent || (lower.includes('refund') ? 'refund' : lower.includes('return') ? 'return' : lower.includes('cancel') ? 'cancellation' : 'support');
+      const riskLevel = config.risk_level || (lower.includes('fraud') || lower.includes('chargeback') ? 'high' : lower.includes('angry') ? 'medium' : 'low');
+      context.agent = { ...(context.agent ?? {}), intent, riskLevel, confidence: 0.82 };
+      return { status: 'completed', output: context.agent };
+    }
+    if (node.key === 'agent.sentiment') {
+      const sentiment = lower.includes('angry') || lower.includes('bad') || lower.includes('damaged') ? 'negative' : lower.includes('thanks') || lower.includes('great') ? 'positive' : 'neutral';
+      context.agent = { ...(context.agent ?? {}), sentiment, confidence: 0.78 };
+      return { status: 'completed', output: context.agent };
+    }
+    if (node.key === 'agent.summarize') {
+      const summary = config.summary || text.slice(0, 240) || `Case ${context.case?.case_number ?? context.case?.id ?? 'context'} summarized by workflow.`;
+      context.agent = { ...(context.agent ?? {}), summary };
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), summary };
+      return { status: 'completed', output: { summary } };
+    }
+    const draft = config.content || config.template || `Thanks for reaching out. We have reviewed your case and will follow the next approved step.`;
+    context.agent = { ...(context.agent ?? {}), draftReply: resolveTemplateValue(draft, context) };
+    return { status: 'completed', output: { draftReply: context.agent.draftReply } };
   }
 
   if (node.key === 'agent.run') {
@@ -833,6 +1091,39 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
       status: 'processed',
     });
     context.integration = { connectorId, system: connector.system, capabilityKey, canonicalEventId: canonicalEvent.id };
+    return { status: 'completed', output: context.integration };
+  }
+
+  if (node.key === 'connector.check_health') {
+    const connectorId = config.connector_id || config.connectorId || config.connector;
+    if (!connectorId) return { status: 'failed', error: 'connector.check_health requires connector id' };
+    const connector = await integrationRepository.getConnector({ tenantId: scope.tenantId }, connectorId);
+    if (!connector) return { status: 'failed', error: 'Connector not found' };
+    const healthy = !['disabled', 'error', 'failed'].includes(String(connector.status || connector.health_status || '').toLowerCase());
+    context.integration = { connectorId, system: connector.system, healthy, status: connector.status ?? connector.health_status ?? 'unknown' };
+    return { status: healthy ? 'completed' : 'blocked', output: context.integration };
+  }
+
+  if (node.key === 'connector.emit_event') {
+    const connectorId = config.connector_id || config.connectorId || config.connector;
+    const connector = connectorId ? await integrationRepository.getConnector({ tenantId: scope.tenantId }, connectorId) : null;
+    const sourceSystem = connector?.system || config.source_system || config.sourceSystem || 'workflow';
+    const eventType = config.event_type || config.eventType || config.capability || 'workflow.event';
+    const canonicalEvent = await integrationRepository.createCanonicalEvent({ tenantId: scope.tenantId }, {
+      sourceSystem,
+      sourceEntityType: config.source_entity_type || config.sourceEntityType || 'workflow',
+      sourceEntityId: config.source_entity_id || config.sourceEntityId || node.id,
+      eventType,
+      eventCategory: config.event_category || config.eventCategory || 'workflow',
+      canonicalEntityType: config.entity_type || config.entityType || (context.case ? 'case' : 'workflow'),
+      canonicalEntityId: config.entity_id || config.entityId || context.case?.id || node.id,
+      normalizedPayload: { nodeId: node.id, trigger: context.trigger, data: context.data },
+      dedupeKey: config.dedupe_key || `${node.id}:${eventType}:${Date.now()}`,
+      caseId: context.case?.id ?? null,
+      workspaceId: scope.workspaceId,
+      status: 'processed',
+    });
+    context.integration = { sourceSystem, eventType, canonicalEventId: canonicalEvent.id };
     return { status: 'completed', output: context.integration };
   }
 
