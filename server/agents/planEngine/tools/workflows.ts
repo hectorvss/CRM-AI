@@ -4,7 +4,11 @@
  * Workflow ToolSpecs for the unified Super Agent runtime.
  */
 
+import { randomUUID } from 'crypto';
 import { createWorkflowRepository } from '../../../data/index.js';
+import { getDb } from '../../../db/client.js';
+import { getDatabaseProvider } from '../../../db/provider.js';
+import { getSupabaseAdmin } from '../../../db/supabase.js';
 import type { ToolSpec } from '../types.js';
 import { s } from '../schema.js';
 
@@ -156,6 +160,105 @@ export const workflowPublishTool: ToolSpec<{ workflowId: string; reason?: string
         versionId: draftVersion.id,
         status: 'published',
         publishedAt: now,
+      },
+    };
+  },
+};
+
+// ── workflow.trigger ──────────────────────────────────────────────────────────
+
+interface WorkflowTriggerArgs {
+  workflowId: string;
+  payload?: unknown;
+}
+
+export const workflowTriggerTool: ToolSpec<WorkflowTriggerArgs, unknown> = {
+  name: 'workflow.trigger',
+  version: '1.0.0',
+  description:
+    'Manually trigger a published workflow. Creates a queued run that will be picked up by the workflow engine. ' +
+    'The workflow must have a published version. Returns the runId for tracking. ' +
+    'Use payload to pass context data (e.g. caseId, customerId) to the workflow.',
+  category: 'workflow',
+  sideEffect: 'external',
+  risk: 'medium',
+  idempotent: false,
+  requiredPermission: 'workflows.write',
+  args: s.object({
+    workflowId: s.string({ description: 'UUID of the workflow definition to trigger' }),
+    payload: s.any('Optional context payload passed to the workflow (e.g. { caseId, customerId })'),
+  }),
+  returns: s.any('{ runId, workflowId, status: "queued" }'),
+  async run({ args, context }) {
+    const scope = workflowScope(context);
+    const workflow = await workflowRepo.getDefinition(args.workflowId, scope.tenantId, scope.workspaceId);
+    if (!workflow) return { ok: false, error: 'Workflow not found', errorCode: 'NOT_FOUND' };
+    if (!workflow.current_version_id) {
+      return { ok: false, error: 'Workflow has no published version — publish a draft version first', errorCode: 'NOT_PUBLISHED' };
+    }
+
+    if (context.dryRun) {
+      return {
+        ok: true,
+        value: {
+          runId: `dry_${randomUUID()}`,
+          workflowId: args.workflowId,
+          status: 'queued',
+          dryRun: true,
+        },
+      };
+    }
+
+    const runId = randomUUID();
+    const now   = new Date().toISOString();
+
+    if (getDatabaseProvider() === 'supabase') {
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase.from('workflow_runs').insert({
+        id: runId,
+        workflow_version_id: workflow.current_version_id,
+        tenant_id: scope.tenantId,
+        trigger_type: 'manual.run',
+        trigger_payload: args.payload ?? {},
+        status: 'pending',
+        context: { dryRun: false, source: 'plan-engine', planId: context.planId },
+        started_at: now,
+        ended_at: null,
+        error: null,
+      });
+      if (error) throw error;
+    } else {
+      const db = getDb();
+      db.prepare(`
+        INSERT INTO workflow_runs
+          (id, workflow_version_id, tenant_id, trigger_type, trigger_payload, status, context, started_at)
+        VALUES (?, ?, ?, 'manual.run', ?, 'pending', ?, ?)
+      `).run(
+        runId,
+        workflow.current_version_id,
+        scope.tenantId,
+        JSON.stringify(args.payload ?? {}),
+        JSON.stringify({ dryRun: false, source: 'plan-engine', planId: context.planId }),
+        now,
+      );
+    }
+
+    await context.audit({
+      action: 'PLAN_ENGINE_WORKFLOW_TRIGGERED',
+      entityType: 'workflow',
+      entityId: args.workflowId,
+      newValue: { runId, trigger: 'manual.run', payload: args.payload ?? {} },
+      metadata: { source: 'plan-engine', planId: context.planId },
+    });
+
+    return {
+      ok: true,
+      value: {
+        runId,
+        workflowId: args.workflowId,
+        versionId: workflow.current_version_id,
+        status: 'queued',
+        triggeredAt: now,
       },
     };
   },

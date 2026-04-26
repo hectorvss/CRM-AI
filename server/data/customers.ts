@@ -399,6 +399,7 @@ export interface CustomerRepository {
   getIdentity(scope: CustomerScope, system: string, externalId: string): Promise<any | null>;
   createStub(scope: CustomerScope, input: any): Promise<string>;
   upsertCustomer(scope: CustomerScope, customer: any): Promise<string>;
+  update(scope: CustomerScope, customerId: string, updates: Record<string, any>): Promise<void>;
 }
 
 export function createCustomerRepository(): CustomerRepository {
@@ -452,6 +453,16 @@ export function createCustomerRepository(): CustomerRepository {
         });
         if (identityError) throw identityError;
         return id;
+      },
+
+      update: async (scope, customerId, updates) => {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase
+          .from('customers')
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq('id', customerId)
+          .eq('tenant_id', scope.tenantId);
+        if (error) throw error;
       },
 
       upsertCustomer: async (scope, customer) => {
@@ -522,6 +533,18 @@ export function createCustomerRepository(): CustomerRepository {
         VALUES (?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP)
       `).run(crypto.randomUUID(), id, scope.tenantId, scope.workspaceId, input.identitySystem, input.identityExternalId);
       return id;
+    },
+
+    update: async (scope, customerId, updates) => {
+      const db = getDb();
+      const allowed = ['segment', 'risk_level', 'preferred_channel', 'fraud_flag', 'fraud_risk', 'updated_at'];
+      const fields = Object.entries(updates).filter(([k]) => allowed.includes(k));
+      if (fields.length === 0) return;
+      const setClause = fields.map(([k]) => `${k} = ?`).join(', ');
+      const values = fields.map(([, v]) => v);
+      db.prepare(
+        `UPDATE customers SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`
+      ).run(...values, customerId, scope.tenantId);
     },
 
     upsertCustomer: async (scope, customer) => {

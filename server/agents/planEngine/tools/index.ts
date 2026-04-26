@@ -12,13 +12,22 @@ import { orderGetTool, orderListTool, orderCancelTool } from './orders.js';
 // ── Payments
 import { paymentGetTool, paymentRefundTool } from './payments.js';
 // ── Cases
-import { caseGetTool, caseUpdateStatusTool, caseAddNoteTool } from './cases.js';
+import {
+  caseGetTool,
+  caseUpdateStatusTool,
+  caseAddNoteTool,
+  caseListTool,
+  caseUpdatePriorityTool,
+  caseUpdateAssignmentTool,
+} from './cases.js';
 // ── Returns
-import { returnGetTool, returnListTool, returnApproveTool, returnRejectTool } from './returns.js';
+import { returnGetTool, returnListTool, returnApproveTool, returnRejectTool, returnUpdateStatusTool } from './returns.js';
 // ── Approvals
 import { approvalGetTool, approvalListTool, approvalDecideTool } from './approvals.js';
 // ── Customers
-import { customerGetTool, customerListTool } from './customers.js';
+import { customerGetTool, customerListTool, customerUpdateTool } from './customers.js';
+// ── Messaging
+import { messageSendTool } from './messaging.js';
 // ── Knowledge
 import { knowledgeSearchTool } from './knowledge.js';
 import {
@@ -48,7 +57,7 @@ import {
   integrationCreateCanonicalEventTool,
   integrationUpdateCanonicalEventTool,
 } from './integrations.js';
-import { workflowGetTool, workflowListTool, workflowPublishTool } from './workflows.js';
+import { workflowGetTool, workflowListTool, workflowPublishTool, workflowTriggerTool } from './workflows.js';
 import {
   reportAgentsTool,
   reportApprovalsTool,
@@ -78,7 +87,10 @@ export function registerAllTools(): void {
 
   // Cases
   toolRegistry.register(caseGetTool);
+  toolRegistry.register(caseListTool);
   toolRegistry.register(caseUpdateStatusTool);
+  toolRegistry.register(caseUpdatePriorityTool);
+  toolRegistry.register(caseUpdateAssignmentTool);
   toolRegistry.register(caseAddNoteTool);
 
   // Returns
@@ -86,6 +98,7 @@ export function registerAllTools(): void {
   toolRegistry.register(returnListTool);
   toolRegistry.register(returnApproveTool);
   toolRegistry.register(returnRejectTool);
+  toolRegistry.register(returnUpdateStatusTool);
 
   // Approvals
   toolRegistry.register(approvalGetTool);
@@ -95,6 +108,10 @@ export function registerAllTools(): void {
   // Customers
   toolRegistry.register(customerGetTool);
   toolRegistry.register(customerListTool);
+  toolRegistry.register(customerUpdateTool);
+
+  // Messaging
+  toolRegistry.register(messageSendTool);
 
   // Knowledge
   toolRegistry.register(knowledgeSearchTool);
@@ -119,9 +136,14 @@ export function registerAllTools(): void {
   toolRegistry.register(integrationGetCanonicalEventTool);
   toolRegistry.register(integrationCreateCanonicalEventTool);
   toolRegistry.register(integrationUpdateCanonicalEventTool);
+
+  // Workflows
   toolRegistry.register(workflowListTool);
   toolRegistry.register(workflowGetTool);
   toolRegistry.register(workflowPublishTool);
+  toolRegistry.register(workflowTriggerTool);
+
+  // Reports
   toolRegistry.register(reportOverviewTool);
   toolRegistry.register(reportIntentsTool);
   toolRegistry.register(reportAgentsTool);
