@@ -148,6 +148,7 @@ type FlowNodeData = {
   selected?: boolean;
   latestStatus?: string;
   diagnostics?: WorkflowDiagnostic[];
+  onSelect: (nodeId: string) => void;
   onAdd: (nodeId: string, handle?: string) => void;
   onEdit: (nodeId: string) => void;
   onExecute: (nodeId: string) => void;
@@ -513,7 +514,7 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
       <div className={`group relative flex flex-col items-center ${node.disabled ? 'opacity-45' : ''}`}>
         <span className="absolute -left-7 top-12 material-symbols-outlined text-sm text-red-400">bolt</span>
         <button
-          onClick={() => data.onEdit(node.id)}
+          onClick={() => data.onSelect(node.id)}
           onContextMenu={(event) => {
             event.preventDefault();
             data.onMenu(node.id, { x: event.clientX, y: event.clientY });
@@ -536,7 +537,7 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
       <div className={`group relative flex flex-col items-center ${node.disabled ? 'opacity-45' : ''}`}>
         <Handle type="target" id="main" position={Position.Top} className="!h-4 !w-4 !rotate-45 !rounded-none !border-gray-400 !bg-white" />
         <button
-          onClick={() => data.onEdit(node.id)}
+          onClick={() => data.onSelect(node.id)}
           onContextMenu={(event) => {
             event.preventDefault();
             data.onMenu(node.id, { x: event.clientX, y: event.clientY });
@@ -559,7 +560,7 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
     <div className={`group relative ${node.disabled ? 'opacity-45' : ''}`}>
       <Handle type="target" id="main" position={Position.Left} className="!h-4 !w-4 !border-gray-400 !bg-white" />
       <button
-        onClick={() => data.onEdit(node.id)}
+        onClick={() => data.onSelect(node.id)}
         onContextMenu={(event) => {
           event.preventDefault();
           data.onMenu(node.id, { x: event.clientX, y: event.clientY });
@@ -720,7 +721,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const workflowCategories = workflows.map((workflow) => String(workflow.category));
   const filters: string[] = ['All', ...Array.from(new Set<string>(workflowCategories))];
   const selectedNode = workflowNodes.find((node) => node.id === selectedNodeId) ?? null;
-  const editorNode = workflowNodes.find((node) => node.id === editorNodeId) ?? selectedNode;
+  const editorNode = workflowNodes.find((node) => node.id === editorNodeId) ?? null;
   const latestSteps = stepResult ? [stepResult] : runResult?.steps ?? dryRun?.steps ?? [];
   const diagnostics: WorkflowDiagnostic[] = validation?.diagnostics ?? dryRun?.validation?.diagnostics ?? stepResult?.diagnostics ?? [];
   const connectors = Array.isArray(connectorsPayload) ? connectorsPayload : [];
@@ -734,6 +735,11 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const handleAddNode = useCallback((nodeId: string, handle?: string) => {
     setSelectedNodeId(nodeId);
     setAddPanel({ sourceNodeId: nodeId, sourceHandle: handle ?? 'main' });
+  }, []);
+
+  const handleSelectNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setContextMenu(null);
   }, []);
 
   const handleEditNode = useCallback((nodeId: string) => {
@@ -782,6 +788,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   }, []);
 
   const nodeHandlers = useMemo(() => ({
+    onSelect: handleSelectNode,
     onAdd: handleAddNode,
     onEdit: handleEditNode,
     onExecute: handleExecuteNode,
@@ -789,7 +796,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     onDuplicate: handleDuplicateNode,
     onDelete: handleDeleteNode,
     onMenu: handleOpenNodeMenu,
-  }), [handleAddNode, handleEditNode, handleExecuteNode, handleToggleNode, handleDuplicateNode, handleDeleteNode, handleOpenNodeMenu]);
+  }), [handleSelectNode, handleAddNode, handleEditNode, handleExecuteNode, handleToggleNode, handleDuplicateNode, handleDeleteNode, handleOpenNodeMenu]);
 
   useEffect(() => {
     setFlowNodes(toFlowNodes(workflowNodes, catalog, selectedNodeId, latestSteps, diagnostics, nodeHandlers));
@@ -1213,7 +1220,7 @@ function loadBuilderState(workflow: Workflow) {
                       onEdgesChange={onFlowEdgesChange}
                       onConnect={onConnect}
                       onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-                      onNodeDoubleClick={(_, node) => setEditorNodeId(node.id)}
+                      onNodeDoubleClick={(_, node) => setSelectedNodeId(node.id)}
                       onNodeDragStop={onNodeDragStop}
                       onEdgeClick={(_, edge) => setAddPanel({ edgeId: edge.id })}
                       fitView
