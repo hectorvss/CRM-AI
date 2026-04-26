@@ -219,6 +219,8 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'AI', icon: 'sentiment_satisfied', requiresConfig: true, description: 'Detect sentiment and frustration signals.' },
   { type: 'agent', key: 'agent.summarize', label: 'Summarize context', category: 'AI', icon: 'summarize', requiresConfig: true, description: 'Create a concise operational summary.' },
   { type: 'agent', key: 'agent.draft_reply', label: 'Draft reply', category: 'AI', icon: 'edit_square', requiresConfig: true, description: 'Draft a customer-ready response.' },
+  { type: 'agent', key: 'ai.generate_text', label: 'Generate text (LLM)', category: 'AI', icon: 'auto_awesome', requiresConfig: true, description: 'Generate text using Gemini LLM from a prompt.' },
+  { type: 'utility', key: 'data.http_request', label: 'HTTP request', category: 'Integration', icon: 'http', requiresConfig: true, description: 'Make an outbound HTTP request and capture the response.' },
   { type: 'policy', key: 'policy.evaluate', label: 'Evaluate policy', category: 'Core', icon: 'shield', requiresConfig: true, description: 'Apply a policy decision.' },
   { type: 'policy', key: 'core.audit_log', label: 'Write audit log', category: 'Core', icon: 'receipt_long', requiresConfig: true, description: 'Write an explicit audit event.' },
   { type: 'policy', key: 'core.idempotency_check', label: 'Idempotency check', category: 'Core', icon: 'fingerprint', requiresConfig: true, description: 'Prevent duplicate executions for the same key.' },
@@ -630,6 +632,21 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
   'retry': [
     { key: 'maxAttempts', label: 'Max attempts', type: 'number', placeholder: '3' },
     { key: 'backoffMs', label: 'Backoff ms', type: 'number', placeholder: '1000' },
+  ],
+  // ── AI ────────────────────────────────────────────────────────────────────
+  'ai.generate_text': [
+    { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'e.g. Summarize this case: {{case.description}}', hint: 'Supports {{template}} interpolation from workflow context' },
+    { key: 'target', label: 'Output variable', type: 'text', placeholder: 'generatedText', hint: 'Result stored as context.agent.<variable> and context.data.<variable>' },
+    { key: 'maxTokens', label: 'Max tokens (optional)', type: 'number', placeholder: '512' },
+    { key: 'model', label: 'Model override (optional)', type: 'text', placeholder: 'e.g. gemini-2.5-pro' },
+  ],
+  // ── HTTP ──────────────────────────────────────────────────────────────────
+  'data.http_request': [
+    { key: 'url', label: 'URL', type: 'text', placeholder: 'https://api.example.com/endpoint', hint: 'Supports {{template}} interpolation' },
+    { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] },
+    { key: 'body', label: 'Request body (JSON, optional)', type: 'textarea', placeholder: '{"key":"{{order.id}}"}' },
+    { key: 'headers', label: 'Headers (JSON, optional)', type: 'textarea', placeholder: '{"Authorization":"Bearer {{token}}"}' },
+    { key: 'target', label: 'Output variable', type: 'text', placeholder: 'httpResult', hint: 'Response stored as context.data.<variable>' },
   ],
   // Triggers with optional config
   'webhook.received': [

@@ -15,6 +15,9 @@ import {
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { runAgent } from '../agents/runner.js';
 import { sendEmail, sendWhatsApp, sendSms } from '../pipeline/channelSenders.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { withGeminiRetry } from '../ai/geminiRetry.js';
+import { config as appConfig } from '../config.js';
 
 const router = Router();
 const workflowRepository = createWorkflowRepository();
@@ -106,6 +109,8 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'delay', label: 'Delay', category: 'Utility', icon: 'schedule', requiresConfig: true },
   { type: 'utility', key: 'retry', label: 'Retry', category: 'Utility', icon: 'refresh', requiresConfig: true },
   { type: 'utility', key: 'stop', label: 'Stop workflow', category: 'Utility', icon: 'stop_circle', requiresConfig: false },
+  { type: 'agent', key: 'ai.generate_text', label: 'Generate text (AI)', category: 'Agent', icon: 'auto_awesome', requiresConfig: true },
+  { type: 'utility', key: 'data.http_request', label: 'HTTP request', category: 'Data transformation', icon: 'http', requiresConfig: true },
 ];
 
 const SENSITIVE_KEYS = new Set(['order.cancel', 'order.hold', 'payment.refund', 'payment.mark_dispute', 'connector.call', 'connector.emit_event']);
@@ -497,6 +502,24 @@ function buildStepDryRun(nodes: any[] = [], edges: any[] = [], nodeId: string, t
     parentState: previous ? 'available' : 'root',
     node,
   };
+}
+
+/** Parse a human duration string (e.g. "2h", "30m", "1d") into an ISO expiry timestamp. */
+function resolveDelayUntil(duration: string): string | null {
+  const str = String(duration).trim().toLowerCase();
+  const match = str.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)$/);
+  if (!match) return null;
+  const amount = parseFloat(match[1]);
+  const unit = match[2];
+  const ms = unit === 'ms' ? amount
+    : unit === 's'  ? amount * 1_000
+    : unit === 'm'  ? amount * 60_000
+    : unit === 'h'  ? amount * 3_600_000
+    : unit === 'd'  ? amount * 86_400_000
+    : unit === 'w'  ? amount * 604_800_000
+    : 0;
+  if (!ms) return null;
+  return new Date(Date.now() + ms).toISOString();
 }
 
 function normalizeTriggerName(value: string | null | undefined) {
@@ -1187,12 +1210,76 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return { status: 'completed', output: { to, messageId: result.messageId, simulated: result.simulated } };
   }
 
+  // ── AI text generation (real Gemini) ────────────────────────────────────────
+  if (node.key === 'ai.generate_text') {
+    const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
+    if (!prompt) return { status: 'failed', error: 'ai.generate_text: prompt is required' };
+    const geminiKey = appConfig.ai.geminiApiKey;
+    if (!geminiKey) {
+      // Graceful fallback when no API key configured
+      const fallback = `[AI unavailable — configure GEMINI_API_KEY] ${prompt.slice(0, 120)}`;
+      const target = config.target || config.output || 'generatedText';
+      context.agent = { ...(context.agent ?? {}), [target]: fallback };
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: fallback };
+      return { status: 'completed', output: { text: fallback, target, simulated: true } };
+    }
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: appConfig.ai.geminiModel || 'gemini-2.5-pro' });
+    const systemInstruction = resolveTemplateValue(config.system || config.systemPrompt || '', context);
+    const fullPrompt = systemInstruction ? `${systemInstruction}\n\n${prompt}` : prompt;
+    const maxTokens = Number(config.maxTokens || config.max_tokens || 512);
+    const result = await withGeminiRetry(
+      () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: fullPrompt }] }], generationConfig: { maxOutputTokens: maxTokens } }),
+      { label: 'workflow.ai.generate_text' },
+    );
+    const text = result.response.text().trim();
+    const target = config.target || config.output || 'generatedText';
+    context.agent = { ...(context.agent ?? {}), [target]: text };
+    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: text };
+    return { status: 'completed', output: { text, target, length: text.length } };
+  }
+
+  // ── HTTP request (outbound) ──────────────────────────────────────────────────
+  if (node.key === 'data.http_request') {
+    const url = resolveTemplateValue(config.url || config.endpoint || '', context);
+    if (!url) return { status: 'failed', error: 'data.http_request: url is required' };
+    const method = String(config.method || 'GET').toUpperCase();
+    const rawHeaders = parseMaybeJsonObject(config.headers);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...rawHeaders };
+    const bodyTemplate = config.body || config.payload || '';
+    const bodyStr = bodyTemplate ? resolveTemplateValue(bodyTemplate, context) : undefined;
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: bodyStr && method !== 'GET' && method !== 'HEAD' ? bodyStr : undefined,
+        signal: AbortSignal.timeout(15_000),
+      });
+      const responseText = await response.text();
+      let responseData: any = responseText;
+      try { responseData = JSON.parse(responseText); } catch { /* keep as string */ }
+      const target = config.target || config.output || 'httpResponse';
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: responseData };
+      return {
+        status: response.ok ? 'completed' : 'failed',
+        output: { status: response.status, ok: response.ok, data: responseData, target },
+        ...(response.ok ? {} : { error: `HTTP ${response.status} ${response.statusText}` }),
+      };
+    } catch (fetchErr: any) {
+      return { status: 'failed', error: `HTTP request failed: ${fetchErr?.message ?? String(fetchErr)}` };
+    }
+  }
+
   if (['agent', 'integration', 'knowledge'].includes(node.type)) {
     return { status: 'failed', error: `Unsupported ${node.type} node key: ${node.key}` };
   }
 
   if (node.key === 'delay' || node.key === 'flow.wait') {
-    return { status: 'waiting', output: { delay: config.duration || config.timeout || 'manual_resume' } };
+    const duration = config.duration || config.timeout || null;
+    // Store delay expiry in context so the scheduler can resume at the right time
+    const delayUntil = duration ? resolveDelayUntil(duration) : null;
+    context.delayUntil = delayUntil;
+    return { status: 'waiting', output: { delay: duration || 'manual_resume', delayUntil } };
   }
 
   if (node.key === 'flow.merge') {
@@ -1200,7 +1287,17 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
   }
 
   if (node.key === 'flow.loop') {
-    return { status: 'completed', output: { looped: true, batchSize: Number(config.batchSize || config.batch_size || 1), maxIterations: Number(config.maxIterations || config.max_iterations || 100) } };
+    // Expand iteration: collect items and set loop context for downstream nodes
+    const sourcePath = config.source || config.field || 'data.items';
+    const rawItems = asArray(readContextPath(context, sourcePath) ?? context.data);
+    const maxIter = Math.min(Number(config.maxIterations || config.max_iterations || 50), 200);
+    const batchSize = Number(config.batchSize || config.batch_size || 1);
+    const items = rawItems.slice(0, maxIter);
+    context.loopItems = items;
+    context.loopIndex = 0;
+    context.loopItem = items[0] ?? null;
+    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), items };
+    return { status: 'completed', output: { items, count: items.length, batchSize, currentItem: items[0] ?? null } };
   }
 
   if (node.key === 'flow.subworkflow') {
