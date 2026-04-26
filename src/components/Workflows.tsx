@@ -880,20 +880,34 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const loadWorkflowRun = useMutation((runId: string) => workflowsApi.getRun(runId));
 
   const workflows = useMemo<Workflow[]>(() => Array.isArray(apiWorkflows) ? apiWorkflows.map(mapWorkflow) : [], [apiWorkflows]);
-  const catalog: NodeSpec[] = Array.isArray(catalogPayload?.nodes) ? catalogPayload.nodes.map((node: NodeSpec) => ({ ...node, category: categoryForSpec(node) })) : FALLBACK_CATALOG;
-  const workflowCategories = workflows.map((workflow) => String(workflow.category));
-  const filters: string[] = ['All', ...Array.from(new Set<string>(workflowCategories))];
-  const selectedNode = workflowNodes.find((node) => node.id === selectedNodeId) ?? null;
-  const editorNode = workflowNodes.find((node) => node.id === editorNodeId) ?? null;
-  const latestSteps = stepResult ? [stepResult] : runResult?.steps ?? dryRun?.steps ?? [];
-  const diagnostics: WorkflowDiagnostic[] = validation?.diagnostics ?? dryRun?.validation?.diagnostics ?? stepResult?.diagnostics ?? [];
-  const connectors = Array.isArray(connectorsPayload) ? connectorsPayload : [];
+  const catalog: NodeSpec[] = useMemo(() => {
+    if (!Array.isArray(catalogPayload?.nodes)) return FALLBACK_CATALOG;
+    return catalogPayload.nodes.map((node: NodeSpec) => ({ ...node, category: categoryForSpec(node) }));
+  }, [catalogPayload]);
+  const workflowCategories = useMemo(() => workflows.map((workflow) => String(workflow.category)), [workflows]);
+  const filters: string[] = useMemo(() => ['All', ...Array.from(new Set<string>(workflowCategories))], [workflowCategories]);
+  const selectedNode = useMemo(() => workflowNodes.find((node) => node.id === selectedNodeId) ?? null, [workflowNodes, selectedNodeId]);
+  const editorNode = useMemo(() => workflowNodes.find((node) => node.id === editorNodeId) ?? null, [workflowNodes, editorNodeId]);
+  const latestSteps = useMemo(() => (stepResult ? [stepResult] : runResult?.steps ?? dryRun?.steps ?? []), [stepResult, runResult?.steps, dryRun?.steps]);
+  const diagnostics: WorkflowDiagnostic[] = useMemo(() => validation?.diagnostics ?? dryRun?.validation?.diagnostics ?? stepResult?.diagnostics ?? [], [validation?.diagnostics, dryRun?.validation?.diagnostics, stepResult?.diagnostics]);
+  const connectors = useMemo(() => (Array.isArray(connectorsPayload) ? connectorsPayload : []), [connectorsPayload]);
 
-  const filtered = workflows.filter((workflow) => {
+  const filtered = useMemo(() => workflows.filter((workflow) => {
     const matchesFilter = activeFilter === 'All' || workflow.category === activeFilter;
     const haystack = `${workflow.name} ${workflow.description} ${workflow.category} ${workflow.status}`.toLowerCase();
     return matchesFilter && (!query.trim() || haystack.includes(query.trim().toLowerCase()));
-  });
+  }), [workflows, activeFilter, query]);
+
+  const openAddPanel = useCallback((mode: AddPanelMode = {}) => {
+    setAddPanel(mode);
+    setAddPanelView('categories');
+    setAddSearch('');
+  }, []);
+
+  const openAddCategory = useCallback((category: string) => {
+    setAddCategory(category);
+    setAddPanelView('category');
+  }, []);
 
   const handleAddNode = useCallback((nodeId: string, handle?: string) => {
     setSelectedNodeId(nodeId);
@@ -949,17 +963,6 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const handleOpenNodeMenu = useCallback((nodeId: string, point: { x: number; y: number }) => {
     setContextMenu({ nodeId, ...point });
   }, []);
-
-  function openAddPanel(mode: AddPanelMode = {}) {
-    setAddPanel(mode);
-    setAddPanelView('categories');
-    setAddSearch('');
-  }
-
-  function openAddCategory(category: string) {
-    setAddCategory(category);
-    setAddPanelView('category');
-  }
 
   const nodeHandlers = useMemo(() => ({
     onSelect: handleSelectNode,
