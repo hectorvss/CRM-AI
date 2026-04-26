@@ -1622,10 +1622,18 @@ function generateSuggestedReplies(input: {
       replies.add('Show recent orders');
       replies.add('Show open cases');
       replies.add('Show payment history');
+      if (isOperate) replies.add('Flag for fraud review');
+      else replies.add('Show linked identities');
       break;
     case 'workflow':
-      replies.add('Show workflow history');
-      if (isOperate) replies.add('Publish workflow');
+      replies.add('Show recent runs');
+      replies.add('Show workflow definition');
+      if (isOperate) {
+        replies.add('Trigger workflow manually');
+        replies.add('Publish workflow');
+      } else {
+        replies.add('Compare with previous version');
+      }
       break;
     default:
       // Generic suggestions when no entity is detected
@@ -1637,6 +1645,26 @@ function generateSuggestedReplies(input: {
         replies.add('Review pending approvals');
         replies.add('Show high-risk items');
       }
+  }
+
+  // Trace-driven post-action suggestions
+  if (input.trace?.spans && Array.isArray(input.trace.spans)) {
+    const toolsUsed: string[] = input.trace.spans.map((s: any) => s.tool).filter(Boolean);
+    if (toolsUsed.includes('message.send_to_customer')) {
+      replies.add('Send another message');
+    }
+    if (toolsUsed.includes('case.update_status')) {
+      replies.add('Add an internal note');
+    }
+    if (toolsUsed.some((t: string) => t.startsWith('payment.'))) {
+      replies.add('Show payment history');
+    }
+    if (toolsUsed.some((t: string) => t.startsWith('return.'))) {
+      replies.add('Open the linked order');
+    }
+    if (toolsUsed.includes('workflow.trigger')) {
+      replies.add('Show run status');
+    }
   }
 
   // Cap at 4 replies, deduped
@@ -2903,17 +2931,116 @@ async function executeAction(req: MultiTenantRequest, scope: CommandScope, paylo
   }
 }
 
+// ── GET /alerts ───────────────────────────────────────────────────────────────
+// Returns proactive workspace-level alerts: SLA brechas, churn risk, fraud flags.
+// Called from the frontend bootstrap to surface proactive suggestions.
+
+router.get('/alerts', async (req: MultiTenantRequest, res) => {
+  try {
+    const scope = getScope(req);
+    if (!hasPermission(req, 'cases.read')) {
+      res.json({ alerts: [] });
+      return;
+    }
+
+    const now = new Date();
+    const in4h = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString();
+
+    const alerts: Array<{
+      id: string;
+      type: 'sla_breach_risk' | 'churn_risk' | 'fraud_flag' | 'high_risk_customer';
+      severity: 'warning' | 'critical';
+      title: string;
+      description: string;
+      entityType: string;
+      entityId?: string;
+      suggestedQuery: string;
+    }> = [];
+
+    // SLA at-risk cases (open cases with sla_resolution_deadline in next 4h OR already breached)
+    const slaCases = await caseRepository.list(scope, { status: 'open' }) as any[];
+    const slaAtRisk = slaCases.filter((c: any) => {
+      if (!c.sla_resolution_deadline) return false;
+      const deadline = new Date(c.sla_resolution_deadline);
+      return deadline <= new Date(in4h);
+    });
+    if (slaAtRisk.length > 0) {
+      const breached = slaAtRisk.filter((c: any) => new Date(c.sla_resolution_deadline) < now).length;
+      const atRisk = slaAtRisk.length - breached;
+      if (breached > 0) {
+        alerts.push({
+          id: `sla_breached_${scope.tenantId}`,
+          type: 'sla_breach_risk',
+          severity: 'critical',
+          title: `${breached} case${breached > 1 ? 's' : ''} with breached SLA`,
+          description: `${breached} open case${breached > 1 ? 's have' : ' has'} exceeded the resolution SLA deadline.`,
+          entityType: 'case',
+          suggestedQuery: 'Show cases with breached SLA',
+        });
+      }
+      if (atRisk > 0) {
+        alerts.push({
+          id: `sla_at_risk_${scope.tenantId}`,
+          type: 'sla_breach_risk',
+          severity: 'warning',
+          title: `${atRisk} case${atRisk > 1 ? 's' : ''} approaching SLA breach`,
+          description: `${atRisk} open case${atRisk > 1 ? 's are' : ' is'} within 4 hours of the SLA resolution deadline.`,
+          entityType: 'case',
+          suggestedQuery: 'Show cases near SLA breach',
+        });
+      }
+    }
+
+    // High-risk + fraud-flagged customers
+    const allCustomers = await customerRepository.list(scope, {}) as any[];
+    const fraudCustomers = allCustomers.filter((c: any) => c.fraud_flag);
+    const highRiskCustomers = allCustomers.filter((c: any) =>
+      !c.fraud_flag && (c.risk_level === 'high' || c.risk_level === 'critical'),
+    );
+
+    if (fraudCustomers.length > 0) {
+      alerts.push({
+        id: `fraud_customers_${scope.tenantId}`,
+        type: 'fraud_flag',
+        severity: 'critical',
+        title: `${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} flagged for fraud`,
+        description: `${fraudCustomers.length} customer profile${fraudCustomers.length > 1 ? 's have' : ' has'} an active fraud flag requiring review.`,
+        entityType: 'customer',
+        suggestedQuery: 'Show customers with fraud flag',
+      });
+    }
+
+    if (highRiskCustomers.length > 0) {
+      alerts.push({
+        id: `high_risk_customers_${scope.tenantId}`,
+        type: 'high_risk_customer',
+        severity: 'warning',
+        title: `${highRiskCustomers.length} high-risk customer${highRiskCustomers.length > 1 ? 's' : ''}`,
+        description: `${highRiskCustomers.length} customer${highRiskCustomers.length > 1 ? 's have' : ' has'} a high or critical risk level.`,
+        entityType: 'customer',
+        suggestedQuery: 'Show high-risk customers',
+      });
+    }
+
+    res.json({ alerts, generatedAt: now.toISOString() });
+  } catch (error) {
+    logger.error('Super Agent alerts error', error instanceof Error ? error : new Error(String(error)));
+    res.json({ alerts: [] });
+  }
+});
+
 router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
   try {
     const scope = getScope(req);
     const permissionMatrix = buildPermissionMatrix(req);
-    const [workspace, cases, orders, payments, approvals, agents] = await Promise.all([
+    const [workspace, cases, orders, payments, approvals, agents, allCustomers] = await Promise.all([
       workspaceRepository.getById(scope.workspaceId, scope.tenantId),
       hasPermission(req, 'cases.read') ? caseRepository.list(scope, {}) : Promise.resolve([]),
       hasPermission(req, 'cases.read') ? commerceRepository.listOrders(scope, {}) : Promise.resolve([]),
       hasPermission(req, 'cases.read') ? commerceRepository.listPayments(scope, {}) : Promise.resolve([]),
       hasPermission(req, 'approvals.read') ? approvalRepository.list(scope, { status: 'pending' }) : Promise.resolve([]),
       hasPermission(req, 'agents.read') ? agentRepository.listAgents(scope) : Promise.resolve([]),
+      hasPermission(req, 'cases.read') ? customerRepository.list(scope, {}) : Promise.resolve([]),
     ]);
 
     const counts = {
@@ -2922,6 +3049,29 @@ router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
       payments: payments.length,
       approvals: approvals.length,
     };
+
+    // Compute proactive alerts for the bootstrap response
+    const now = new Date();
+    const in4h = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString();
+    const slaAtRisk = (cases as any[]).filter((c: any) => {
+      if (!c.sla_resolution_deadline || c.status === 'closed' || c.status === 'resolved') return false;
+      return new Date(c.sla_resolution_deadline) <= new Date(in4h);
+    });
+    const fraudCustomers = (allCustomers as any[]).filter((c: any) => c.fraud_flag);
+    const highRiskCustomers = (allCustomers as any[]).filter((c: any) =>
+      !c.fraud_flag && (c.risk_level === 'high' || c.risk_level === 'critical'),
+    );
+
+    const proactiveAlerts: string[] = [];
+    if (slaAtRisk.length > 0) {
+      proactiveAlerts.push(`⚠️ ${slaAtRisk.length} case${slaAtRisk.length > 1 ? 's' : ''} near SLA breach`);
+    }
+    if (fraudCustomers.length > 0) {
+      proactiveAlerts.push(`🚨 ${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} with fraud flag`);
+    }
+    if (highRiskCustomers.length > 0) {
+      proactiveAlerts.push(`⚠️ ${highRiskCustomers.length} high-risk customer${highRiskCustomers.length > 1 ? 's' : ''}`);
+    }
 
     res.json({
       welcomeTitle: 'Super Agent',
@@ -2941,6 +3091,7 @@ router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
         runtime: agent.runtime || 'system',
         mode: agent.mode || agent.version_status || 'available',
       })),
+      proactiveAlerts,
     });
   } catch (error) {
     console.error('Super Agent bootstrap error:', error);

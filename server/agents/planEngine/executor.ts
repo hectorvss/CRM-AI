@@ -335,6 +335,56 @@ export async function executePlan(
         tool: step.tool,
         error: result.error,
       });
+
+      // Auto-rollback: execute compensation tools for previously completed write steps
+      if (!options.dryRun) {
+        const toCompensate = [...completed.values()]
+          .filter((s) => s.result.ok && s.compensations && s.compensations.length > 0)
+          .reverse(); // Last-in, first-out
+
+        for (const prevSpan of toCompensate) {
+          for (const comp of (prevSpan.compensations ?? [])) {
+            const compTool = toolRegistry.get(comp.tool);
+            if (!compTool) {
+              logger.warn('PlanEngine auto-rollback: compensation tool not found', { tool: comp.tool });
+              continue;
+            }
+            try {
+              const compResult = await compTool.run({
+                args: comp.args,
+                context: { ...context, dryRun: false },
+              });
+              const compSpan: ExecutionSpan = {
+                stepId: `compensate_${prevSpan.stepId}`,
+                tool: comp.tool,
+                version: compTool.version,
+                startedAt: new Date().toISOString(),
+                endedAt: new Date().toISOString(),
+                latencyMs: 0,
+                args: comp.args,
+                result: compResult,
+                riskLevel: 'none',
+                dryRun: false,
+                compensations: [],
+              };
+              spans.push(compSpan);
+              logger.info('PlanEngine auto-rollback executed', {
+                planId: plan.planId,
+                compensatedStep: prevSpan.stepId,
+                compensationTool: comp.tool,
+                ok: compResult.ok,
+              });
+            } catch (compErr) {
+              logger.error(
+                'PlanEngine auto-rollback failed',
+                compErr instanceof Error ? compErr : new Error(String(compErr)),
+                { planId: plan.planId, compensatedStep: prevSpan.stepId, compensationTool: comp.tool },
+              );
+            }
+          }
+        }
+      }
+
       if (step.continueOnFailure) {
         continue;
       }

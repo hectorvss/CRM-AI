@@ -96,6 +96,7 @@ type BootstrapData = {
   quickActions: string[];
   contextPanel: ContextPanel;
   localAgents: Array<{ slug: string; name: string; runtime?: string; mode?: string }>;
+  proactiveAlerts?: string[];
 };
 
 type ConversationMessage =
@@ -690,12 +691,28 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
               </div>
             ) : null}
 
-            {/* Empty state — minimalist ChatGPT-style */}
+            {/* Empty state — minimalist ChatGPT-style with proactive alerts */}
             {!isBootstrapping && messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center min-h-[40vh]">
+              <div className="flex flex-col items-center justify-center text-center min-h-[40vh] gap-4">
                 <h1 className="text-3xl font-medium text-gray-900 dark:text-white tracking-tight">
                   What can I help with?
                 </h1>
+                {bootstrap?.proactiveAlerts && bootstrap.proactiveAlerts.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-2 max-w-lg">
+                    {bootstrap.proactiveAlerts.map((alert) => (
+                      <button
+                        key={alert}
+                        type="button"
+                        onClick={() => {
+                          setComposerText(alert.replace(/^[⚠️🚨]\s*/, '').trim());
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-800/40 dark:bg-amber-900/20 dark:text-amber-300"
+                      >
+                        {alert}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : null}
 
