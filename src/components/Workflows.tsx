@@ -1956,36 +1956,38 @@ function WorkflowAddNodePanel(props: {
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <div className="p-5">
+            <div className="border-b border-gray-100 p-5">
               <div className="flex items-center gap-2 rounded-xl border border-gray-300 px-3 py-2 focus-within:ring-2 focus-within:ring-black/10">
                 <span className="material-symbols-outlined text-base text-gray-400">search</span>
                 <input value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search nodes..." className="w-full bg-transparent text-sm outline-none" />
               </div>
-              <div className="mt-5 space-y-2">
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 [scrollbar-gutter:stable]">
+              <div className="space-y-2 pb-8">
                 {props.categories.map((category) => (
-                  <button
-                    key={category.category}
-                    onClick={() => props.onOpenCategory(category.category)}
-                    className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
-                      props.activeCategory === category.category
-                        ? 'border-gray-300 bg-gray-50 text-gray-900 shadow-sm'
-                        : 'border-transparent text-gray-700 hover:border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-gray-700 shadow-sm">
-                      <span className="material-symbols-outlined text-xl">{category.icon}</span>
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="text-sm font-semibold">{category.title}</span>
-                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-500">{category.count}</span>
+                    <button
+                      key={category.category}
+                      onClick={() => props.onOpenCategory(category.category)}
+                      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                        props.activeCategory === category.category
+                          ? 'border-gray-300 bg-gray-50 text-gray-900 shadow-sm'
+                          : 'border-transparent text-gray-700 hover:border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-gray-700 shadow-sm">
+                        <span className="material-symbols-outlined text-xl">{category.icon}</span>
                       </span>
-                      <span className="mt-1 block text-xs leading-5 text-gray-500">{category.subtitle}</span>
-                    </span>
-                    <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
-                  </button>
-                ))}
-              </div>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="text-sm font-semibold">{category.title}</span>
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-500">{category.count}</span>
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-gray-500">{category.subtitle}</span>
+                      </span>
+                      <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
+                    </button>
+                  ))}
+                </div>
             </div>
           </motion.div>
         ) : (
