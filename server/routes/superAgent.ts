@@ -3417,60 +3417,69 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       },
     });
 
-    // ── Routing: LLM Plan Engine vs regex fallback ──────────────────────────
-    // The LLM Plan Engine understands natural language ("Aurora Salazar",
-    // "investiga un pedido"); the regex parser only matches entity IDs.
-    // Default: enable LLM routing whenever a Gemini key is configured.
-    // Disable explicitly with SUPER_AGENT_LLM_ROUTING=false.
+    // ── Routing: LLM Plan Engine (secondary path) ───────────────────────────
+    // This secondary LLM block runs ONLY when useLlmFirst=false (i.e. when
+    // SUPER_AGENT_LEGACY_ROUTING=true forces the regex path first).
+    // When useLlmFirst=true the LLM already ran above (lines 3147-3273) and
+    // either returned early (success) or fell through here after failing.
+    // Running it a second time without a try-catch was causing the 500.
     const llmEnabled =
       process.env.SUPER_AGENT_LLM_ROUTING === 'true'
       || (process.env.SUPER_AGENT_LLM_ROUTING !== 'false'
           && Boolean(process.env.GEMINI_API_KEY)
           && process.env.GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY');
-    if (llmEnabled && input) {
-      const { response: llmResponse, trace } = await planEngine.planAndExecute(
-        {
-          userMessage: input,
-          sessionId,
-          userId: req.userId || 'system',
+    if (llmEnabled && input && !useLlmFirst) {
+      try {
+        const { response: llmResponse, trace } = await planEngine.planAndExecute(
+          {
+            userMessage: input,
+            sessionId,
+            userId: req.userId || 'system',
+            tenantId: scope.tenantId,
+            workspaceId: scope.workspaceId || null,
+            hasPermission: (perm: string) => hasPermission(req, perm),
+            mode,
+          },
+          { dryRun: mode === 'investigate' },
+        );
+
+        const llmFinalResponse = await buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
+
+        if (llmFinalResponse.navigationTarget) {
+          planEngine.rememberTarget(sessionId, llmFinalResponse.navigationTarget);
+        }
+
+        await auditRepository.log({
           tenantId: scope.tenantId,
-          workspaceId: scope.workspaceId || null,
-          hasPermission: (perm: string) => hasPermission(req, perm),
-          mode,
-        },
-        { dryRun: mode === 'investigate' },
-      );
+          workspaceId: scope.workspaceId,
+          actorId: req.userId || 'system',
+          action: 'SUPER_AGENT_COMMAND',
+          entityType: llmFinalResponse.navigationTarget?.entityType || 'workspace',
+          entityId: llmFinalResponse.navigationTarget?.entityId || scope.workspaceId,
+          metadata: {
+            source: 'super-agent',
+            input,
+            runId,
+            sessionId,
+            llmRouting: true,
+            consultedModules: llmFinalResponse.consultedModules || [],
+            navigationTarget: llmFinalResponse.navigationTarget || null,
+          },
+        });
 
-      const finalResponse = await buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
-
-      if (finalResponse.navigationTarget) {
-        planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
-      }
-
-      await auditRepository.log({
-        tenantId: scope.tenantId,
-        workspaceId: scope.workspaceId,
-        actorId: req.userId || 'system',
-        action: 'SUPER_AGENT_COMMAND',
-        entityType: finalResponse.navigationTarget?.entityType || 'workspace',
-        entityId: finalResponse.navigationTarget?.entityId || scope.workspaceId,
-        metadata: {
-          source: 'super-agent',
-          input,
-          runId,
+        return res.json({
+          ok: true,
           sessionId,
-          llmRouting: true,
-          consultedModules: finalResponse.consultedModules || [],
-          navigationTarget: finalResponse.navigationTarget || null,
-        },
-      });
-
-      return res.json({
-        ok: true,
-        sessionId,
-        permissionMatrix: buildPermissionMatrix(req),
-        response: finalResponse,
-      });
+          permissionMatrix: buildPermissionMatrix(req),
+          response: llmFinalResponse,
+        });
+      } catch (llmSecondaryError) {
+        logger.warn('LLM secondary path failed, using legacy response', {
+          runId,
+          error: llmSecondaryError instanceof Error ? llmSecondaryError.message : String(llmSecondaryError),
+        });
+        // Fall through — send the already-computed legacy finalResponse below
+      }
     }
 
     if (!llmEnabled && input) {
