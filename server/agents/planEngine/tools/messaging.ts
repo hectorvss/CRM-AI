@@ -14,6 +14,7 @@ import { createCaseRepository, createConversationRepository, createCustomerRepos
 import { enqueue } from '../../../queue/client.js';
 import { JobType } from '../../../queue/types.js';
 import { logger } from '../../../utils/logger.js';
+import { sendEmail, sendWhatsApp, sendSms } from '../../../pipeline/channelSenders.js';
 import type { ToolSpec } from '../types.js';
 import { s } from '../schema.js';
 
@@ -138,14 +139,44 @@ export const messageSendTool: ToolSpec<MessageSendArgs, unknown> = {
         logger.warn('message.send_to_customer: no conversation for case, simulating', { caseId: args.caseId });
       }
     } else {
-      // No case context — fire direct. Record simulated flag per channel credential availability.
-      messageId = randomUUID();
-      simulated = true; // direct sends without a conversation thread are logged only
-      logger.info('message.send_to_customer: no caseId provided, message logged but not delivered via pipeline', {
-        customerId: args.customerId,
-        channel,
-        messageId,
-      });
+      // No case context — send directly via channel without threading into a conversation.
+      try {
+        let result: { messageId: string; simulated: boolean };
+        switch (channel) {
+          case 'email': {
+            if (!email) return { ok: false, error: 'Customer has no email address on record', errorCode: 'NO_CONTACT' };
+            result = await sendEmail(email, args.subject || 'Message from support', args.message, 'direct');
+            break;
+          }
+          case 'whatsapp': {
+            if (!phone) return { ok: false, error: 'Customer has no phone number on record for whatsapp', errorCode: 'NO_CONTACT' };
+            result = await sendWhatsApp(phone, args.message);
+            break;
+          }
+          case 'sms': {
+            if (!phone) return { ok: false, error: 'Customer has no phone number on record for sms', errorCode: 'NO_CONTACT' };
+            result = await sendSms(phone, args.message);
+            break;
+          }
+          default:
+            result = { messageId: `webchat_${randomUUID()}`, simulated: true };
+            break;
+        }
+        messageId = result.messageId;
+        simulated = result.simulated;
+        logger.info('message.send_to_customer: direct send (no caseId)', {
+          customerId: args.customerId,
+          channel,
+          messageId,
+          simulated,
+        });
+      } catch (sendErr) {
+        return {
+          ok: false,
+          error: `Direct channel send failed: ${sendErr instanceof Error ? sendErr.message : String(sendErr)}`,
+          errorCode: 'SEND_FAILED',
+        };
+      }
     }
 
     await context.audit({

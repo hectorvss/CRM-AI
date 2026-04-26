@@ -957,6 +957,16 @@ function buildOrderPanel(order: any, context: any): ContextPanel {
   const linkedCases = Array.isArray(order.related_cases) ? order.related_cases : [];
   const timeline = Array.isArray(order.events) ? order.events : [];
   const canonical = context?.case_state || context || {};
+  const lineItems: any[] = Array.isArray(order.line_items) ? order.line_items : [];
+
+  // Build per-item facts (up to 10) so the LLM can reason about products
+  const lineItemFacts = lineItems.slice(0, 10).map((item: any, idx: number) => {
+    const name = item.name || item.sku || `Item ${idx + 1}`;
+    const qty  = item.quantity ?? 1;
+    const price = item.price != null ? formatMoney(item.price, item.currency || order.currency || 'USD') : '';
+    const sku  = item.sku ? ` [${item.sku}]` : '';
+    return { label: `Item ${idx + 1}`, value: `${name}${sku} × ${qty}${price ? ` — ${price}` : ''}` };
+  });
 
   return {
     entityType: 'order',
@@ -976,6 +986,8 @@ function buildOrderPanel(order: any, context: any): ContextPanel {
       { label: 'Country', value: toText(order.country) },
       { label: 'Brand', value: toText(order.brand) },
       ...(order.tracking_number ? [{ label: 'Tracking', value: order.tracking_number }] : []),
+      ...(lineItems.length > 0 ? [{ label: 'Products', value: `${lineItems.length} item${lineItems.length !== 1 ? 's' : ''}` }] : []),
+      ...lineItemFacts,
     ],
     evidence: [
       { label: 'Conflict', value: order.conflict_detected || canonical?.conflict?.summary || 'No active mismatch reported for this order.', tone: order.conflict_detected ? 'warning' : 'success' },
