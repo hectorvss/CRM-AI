@@ -14,6 +14,7 @@ import {
 } from '../data/index.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { runAgent } from '../agents/runner.js';
+import { sendEmail, sendWhatsApp, sendSms } from '../pipeline/channelSenders.js';
 
 const router = Router();
 const workflowRepository = createWorkflowRepository();
@@ -84,6 +85,9 @@ const NODE_CATALOG = [
   { type: 'action', key: 'return.reject', label: 'Reject return', category: 'Action', icon: 'do_not_disturb_on', requiresConfig: true },
   { type: 'action', key: 'approval.create', label: 'Request approval', category: 'Action', icon: 'verified', requiresConfig: true },
   { type: 'action', key: 'approval.escalate', label: 'Escalate approval', category: 'Action', icon: 'escalator_warning', requiresConfig: true },
+  { type: 'action', key: 'notification.email', label: 'Send email', category: 'Notification', icon: 'mail', requiresConfig: true },
+  { type: 'action', key: 'notification.whatsapp', label: 'Send WhatsApp', category: 'Notification', icon: 'chat', requiresConfig: true },
+  { type: 'action', key: 'notification.sms', label: 'Send SMS', category: 'Notification', icon: 'sms', requiresConfig: true },
   { type: 'agent', key: 'agent.run', label: 'Run specialist agent', category: 'Agent', icon: 'smart_toy', requiresConfig: true },
   { type: 'agent', key: 'agent.classify', label: 'Classify case', category: 'Agent', icon: 'category', requiresConfig: true },
   { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'Agent', icon: 'sentiment_satisfied', requiresConfig: true },
@@ -425,17 +429,44 @@ function resolveExecutionOrder(nodes: any[] = [], edges: any[] = []) {
 }
 
 function pickNextNode(nodes: any[] = [], edges: any[] = [], currentNode: any, context: any) {
+  return pickNextNodes(nodes, edges, currentNode, context)[0] ?? null;
+}
+
+/**
+ * Returns the list of next nodes to execute after currentNode.
+ * For conditions: returns the single branch matching the evaluated result.
+ * For flow.branch (parallel fan-out): returns ALL connected nodes.
+ * For everything else: returns the single "next/success" node.
+ */
+function pickNextNodes(nodes: any[] = [], edges: any[] = [], currentNode: any, context: any): any[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   const outgoing = (edges ?? []).filter((edge) => edge.source === currentNode.id);
-  if (outgoing.length === 0) return null;
+  if (outgoing.length === 0) return [];
+
+  // flow.branch = parallel fan-out: execute ALL connected targets
+  if (currentNode.key === 'flow.branch') {
+    return outgoing.map((edge) => byId.get(edge.target)).filter(Boolean);
+  }
 
   if (currentNode.type === 'condition') {
     const expectedLabel = String(context.condition?.route ?? (context.condition?.result ? 'true' : 'false')).toLowerCase();
     const branch = outgoing.find((edge) => String(edge.label ?? '').toLowerCase() === expectedLabel);
-    if (branch) return nodes.find((node) => node.id === branch.target) ?? null;
+    if (branch) {
+      const target = byId.get(branch.target);
+      return target ? [target] : [];
+    }
+    // No matching branch found — follow default/next if available, otherwise stop
+    const fallback = outgoing.find((edge) => !edge.label || ['next', 'default'].includes(String(edge.label).toLowerCase()));
+    if (fallback) {
+      const target = byId.get(fallback.target);
+      return target ? [target] : [];
+    }
+    return [];
   }
 
   const next = outgoing.find((edge) => !edge.label || ['next', 'success'].includes(String(edge.label).toLowerCase())) ?? outgoing[0];
-  return nodes.find((node) => node.id === next.target) ?? null;
+  const target = byId.get(next.target);
+  return target ? [target] : [];
 }
 
 function buildStepDryRun(nodes: any[] = [], edges: any[] = [], nodeId: string, triggerPayload: any = {}) {
@@ -1127,6 +1158,35 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return { status: 'completed', output: context.integration };
   }
 
+  // ── Notification nodes ──────────────────────────────────────────────────────
+  if (node.key === 'notification.email') {
+    const to = resolveTemplateValue(config.to || config.email || context.customer?.email || context.case?.customer_email || '', context);
+    const subject = resolveTemplateValue(config.subject || 'Update from support', context);
+    const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
+    if (!to) return { status: 'failed', error: 'notification.email: no recipient — set "to" or ensure customer.email is in context' };
+    const result = await sendEmail(to, subject, content, config.ref || context.case?.id || 'workflow').catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
+    if ((result as any).error) return { status: 'failed', error: `Email send failed: ${(result as any).error}` };
+    return { status: 'completed', output: { to, subject, messageId: result.messageId, simulated: result.simulated } };
+  }
+
+  if (node.key === 'notification.whatsapp') {
+    const to = resolveTemplateValue(config.to || config.phone || context.customer?.phone || '', context);
+    const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
+    if (!to) return { status: 'failed', error: 'notification.whatsapp: no recipient — set "to" or ensure customer.phone is in context' };
+    const result = await sendWhatsApp(to, content).catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
+    if ((result as any).error) return { status: 'failed', error: `WhatsApp send failed: ${(result as any).error}` };
+    return { status: 'completed', output: { to, messageId: result.messageId, simulated: result.simulated } };
+  }
+
+  if (node.key === 'notification.sms') {
+    const to = resolveTemplateValue(config.to || config.phone || context.customer?.phone || '', context);
+    const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
+    if (!to) return { status: 'failed', error: 'notification.sms: no recipient — set "to" or ensure customer.phone is in context' };
+    const result = await sendSms(to, content).catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
+    if ((result as any).error) return { status: 'failed', error: `SMS send failed: ${(result as any).error}` };
+    return { status: 'completed', output: { to, messageId: result.messageId, simulated: result.simulated } };
+  }
+
   if (['agent', 'integration', 'knowledge'].includes(node.type)) {
     return { status: 'failed', error: `Unsupported ${node.type} node key: ${node.key}` };
   }
@@ -1215,49 +1275,64 @@ async function executeWorkflowVersion({
   if (runError) throw runError;
 
   const steps: any[] = [];
+  // BFS queue: each entry carries the node plus the input data snapshot for that branch
+  const queue: Array<{ node: any; branchInput: any; order: number }> = [
+    { node: getStartNode(validation.nodes), branchInput: triggerPayload ?? {}, order: 0 },
+  ];
   const visited = new Set<string>();
-  let currentNode = getStartNode(validation.nodes);
   let finalStatus = 'completed';
   let finalError: string | null = null;
-  let order = 0;
+  const MAX_STEPS = validation.nodes.length * 4; // guard against runaway graphs
 
-  while (currentNode && !visited.has(currentNode.id) && order < validation.nodes.length) {
+  while (queue.length > 0 && steps.length < MAX_STEPS) {
+    const { node: currentNode, branchInput, order } = queue.shift()!;
+    if (!currentNode || visited.has(currentNode.id)) continue;
     visited.add(currentNode.id);
+
     const startedAt = new Date().toISOString();
     const result = await executeWorkflowNode({ tenantId, workspaceId, userId }, currentNode, workflowContext);
     const endedAt = new Date().toISOString();
+
     const step = {
       id: crypto.randomUUID(),
       workflow_run_id: runId,
       node_id: currentNode.id,
       node_type: currentNode.type,
       status: result.status,
-      input: order === 0 ? triggerPayload ?? {} : { fromPreviousStep: true },
+      input: order === 0 ? branchInput : { fromPreviousStep: true },
       output: result.output ?? {},
       started_at: startedAt,
       ended_at: endedAt,
-      error: result.error ?? null,
+      error: (result as any).error ?? null,
     };
     steps.push(step);
+
     workflowContext.lastOutput = result.output ?? null;
     workflowContext.lastNode = { id: currentNode.id, key: currentNode.key, label: currentNode.label, status: result.status };
     if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
-      workflowContext.data = result.output.data ?? result.output;
+      workflowContext.data = (result.output as any).data ?? result.output;
     }
-    order += 1;
 
     if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) {
+      // Blocking result: record final status, drain remaining queue as skipped
       finalStatus = result.status === 'waiting_approval' ? 'waiting' : result.status;
-      finalError = result.error ?? result.output?.reason ?? null;
+      finalError = (result as any).error ?? (result.output as any)?.reason ?? null;
       break;
     }
 
-    currentNode = pickNextNode(validation.nodes, validation.edges, currentNode, workflowContext);
+    // Enqueue next nodes (may be multiple for flow.branch fan-out)
+    const nextNodes = pickNextNodes(validation.nodes, validation.edges, currentNode, workflowContext);
+    for (const nextNode of nextNodes) {
+      if (!visited.has(nextNode.id)) {
+        queue.push({ node: nextNode, branchInput: result.output ?? {}, order: order + 1 });
+      }
+    }
   }
 
-  if (currentNode && visited.has(currentNode.id)) {
+  // Cycle detection: if queue still has items that were already visited
+  if (steps.length >= MAX_STEPS) {
     finalStatus = 'failed';
-    finalError = `Cycle detected at node ${currentNode.label ?? currentNode.id}`;
+    finalError = 'Workflow exceeded maximum step count — possible cycle detected';
   }
 
   if (steps.length > 0) {

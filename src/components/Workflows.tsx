@@ -211,6 +211,9 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'action', key: 'return.reject', label: 'Reject return', category: 'Action', icon: 'do_not_disturb_on', requiresConfig: true, description: 'Reject a return with a reason.' },
   { type: 'action', key: 'approval.create', label: 'Request approval', category: 'Human review', icon: 'verified', requiresConfig: true, description: 'Ask a human to approve a risky action.' },
   { type: 'action', key: 'approval.escalate', label: 'Escalate approval', category: 'Human review', icon: 'escalator_warning', requiresConfig: true, description: 'Create a higher-priority approval request.' },
+  { type: 'action', key: 'notification.email', label: 'Send email', category: 'Action', icon: 'mail', requiresConfig: true, description: 'Send an email directly to the customer.' },
+  { type: 'action', key: 'notification.whatsapp', label: 'Send WhatsApp', category: 'Action', icon: 'chat', requiresConfig: true, description: 'Send a WhatsApp message to the customer.' },
+  { type: 'action', key: 'notification.sms', label: 'Send SMS', category: 'Action', icon: 'sms', requiresConfig: true, description: 'Send an SMS to the customer.' },
   { type: 'agent', key: 'agent.run', label: 'AI Agent', category: 'AI', icon: 'smart_toy', requiresConfig: true, description: 'Run a specialist CRM-AI agent.' },
   { type: 'agent', key: 'agent.classify', label: 'Classify case', category: 'AI', icon: 'category', requiresConfig: true, description: 'Classify intent, priority, or risk from context.' },
   { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'AI', icon: 'sentiment_satisfied', requiresConfig: true, description: 'Detect sentiment and frustration signals.' },
@@ -363,6 +366,281 @@ const TEMPLATES = [
 ] as const;
 
 const CONFIG_FIELDS = ['field', 'operator', 'value', 'amount', 'reason', 'agent', 'policy', 'connector', 'content', 'queue', 'query', 'expression', 'source', 'target', 'branch', 'mode', 'timeout', 'batchSize', 'maxIterations', 'workflow', 'comparison', 'fallback', 'errorMessage', 'path', 'delimiter', 'format', 'mapping', 'operation', 'input', 'output'];
+
+type FieldType = 'text' | 'textarea' | 'number' | 'select';
+interface NodeFieldDef { key: string; label: string; type: FieldType; options?: string[]; placeholder?: string; hint?: string; }
+
+const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
+  // ── Flow / Conditions ──────────────────────────────────────────────────────
+  'flow.if': [
+    { key: 'field', label: 'Field path', type: 'text', placeholder: 'e.g. case.priority', hint: 'Use dot notation — e.g. customer.segment' },
+    { key: 'operator', label: 'Operator', type: 'select', options: ['==', '!=', '>', '>=', '<', '<=', 'contains', 'not_contains', 'exists', 'not_exists', 'in'] },
+    { key: 'value', label: 'Compare to', type: 'text', placeholder: 'e.g. high or {{customer.segment}}' },
+  ],
+  'flow.filter': [
+    { key: 'source', label: 'Items path', type: 'text', placeholder: 'e.g. data.items' },
+    { key: 'field', label: 'Filter by field', type: 'text', placeholder: 'e.g. status' },
+    { key: 'operator', label: 'Operator', type: 'select', options: ['==', '!=', '>', '<', 'contains', 'exists'] },
+    { key: 'value', label: 'Value', type: 'text', placeholder: 'e.g. open' },
+  ],
+  'flow.switch': [
+    { key: 'field', label: 'Route by field', type: 'text', placeholder: 'e.g. customer.segment', hint: 'The value determines which branch to follow' },
+    { key: 'comparison', label: 'Branches (pipe-separated)', type: 'text', placeholder: 'vip|standard|enterprise', hint: 'Last value is the fallback branch' },
+  ],
+  'flow.branch': [
+    { key: 'branches', label: 'Branch labels (pipe-separated)', type: 'text', placeholder: 'branch1|branch2|branch3', hint: 'All branches execute in parallel' },
+  ],
+  'flow.compare': [
+    { key: 'left', label: 'Left value path', type: 'text', placeholder: 'e.g. data.amount' },
+    { key: 'operator', label: 'Operator', type: 'select', options: ['==', '!=', '>', '>=', '<', '<='] },
+    { key: 'right', label: 'Right value path', type: 'text', placeholder: 'e.g. data.limit or literal' },
+  ],
+  'flow.wait': [
+    { key: 'timeout', label: 'Duration', type: 'text', placeholder: 'e.g. 2h, 30m, 1d', hint: 'Workflow pauses until this duration elapses' },
+    { key: 'mode', label: 'Resume mode', type: 'select', options: ['auto', 'manual_resume'] },
+  ],
+  'flow.loop': [
+    { key: 'source', label: 'Items path', type: 'text', placeholder: 'e.g. data.items', hint: 'Array to iterate over' },
+    { key: 'batchSize', label: 'Batch size', type: 'number', placeholder: '1' },
+    { key: 'maxIterations', label: 'Max iterations', type: 'number', placeholder: '100' },
+  ],
+  'flow.subworkflow': [
+    { key: 'workflow', label: 'Workflow ID or name', type: 'text', placeholder: 'e.g. review_case_flow' },
+  ],
+  'flow.stop_error': [
+    { key: 'errorMessage', label: 'Error message', type: 'text', placeholder: 'e.g. Stopped: missing required data' },
+  ],
+  'flow.merge': [
+    { key: 'mode', label: 'Merge mode', type: 'select', options: ['wait-all', 'first-wins', 'any'], hint: 'wait-all: wait for all branches; first-wins: continue on first arrival' },
+  ],
+  'amount.threshold': [
+    { key: 'field', label: 'Amount field', type: 'text', placeholder: 'e.g. payment.amount' },
+    { key: 'operator', label: 'Operator', type: 'select', options: ['>', '>=', '<', '<=', '=='] },
+    { key: 'value', label: 'Threshold', type: 'number', placeholder: 'e.g. 250' },
+  ],
+  'status.matches': [
+    { key: 'field', label: 'Status field', type: 'text', placeholder: 'e.g. case.status or customer.segment' },
+    { key: 'operator', label: 'Operator', type: 'select', options: ['==', '!=', 'in', 'contains'] },
+    { key: 'value', label: 'Expected value', type: 'text', placeholder: 'e.g. open or vip|premium' },
+  ],
+  'risk.level': [
+    { key: 'field', label: 'Risk field', type: 'text', placeholder: 'e.g. payment.risk_level or agent.riskLevel' },
+    { key: 'operator', label: 'Comparison', type: 'select', options: ['==', '!=', '>=', '>'] },
+    { key: 'value', label: 'Risk threshold', type: 'select', options: ['low', 'medium', 'high', 'critical'] },
+  ],
+  // ── Data ──────────────────────────────────────────────────────────────────
+  'data.set_fields': [
+    { key: 'field', label: 'Target field', type: 'text', placeholder: 'e.g. case.resolved_at' },
+    { key: 'value', label: 'Value or template', type: 'text', placeholder: 'e.g. {{trigger.date}} or static text' },
+  ],
+  'data.rename_fields': [
+    { key: 'mapping', label: 'Mapping (JSON)', type: 'textarea', placeholder: '{"old_name": "new_name"}' },
+  ],
+  'data.extract_json': [
+    { key: 'source', label: 'Source field', type: 'text', placeholder: 'e.g. trigger.body' },
+    { key: 'path', label: 'JSON path (optional)', type: 'text', placeholder: 'e.g. data.user.id' },
+  ],
+  'data.normalize_text': [
+    { key: 'field', label: 'Text field', type: 'text', placeholder: 'e.g. trigger.message' },
+  ],
+  'data.format_date': [
+    { key: 'field', label: 'Date field', type: 'text', placeholder: 'e.g. case.created_at' },
+    { key: 'format', label: 'Output format', type: 'select', options: ['iso', 'date', 'time'] },
+  ],
+  'data.split_items': [
+    { key: 'field', label: 'Source field', type: 'text', placeholder: 'e.g. trigger.items' },
+    { key: 'delimiter', label: 'Delimiter', type: 'text', placeholder: 'e.g. , or \\n' },
+  ],
+  'data.dedupe': [{ key: 'field', label: 'Items field', type: 'text', placeholder: 'e.g. data.items' }],
+  'data.map_fields': [
+    { key: 'mapping', label: 'Mapping (JSON)', type: 'textarea', placeholder: '{"target_key": "source.path"}' },
+  ],
+  'data.pick_fields': [
+    { key: 'fields', label: 'Fields to keep (comma-separated)', type: 'text', placeholder: 'id, name, status' },
+  ],
+  'data.merge_objects': [
+    { key: 'left', label: 'First object path', type: 'text', placeholder: 'e.g. data' },
+    { key: 'right', label: 'Second object path', type: 'text', placeholder: 'e.g. trigger' },
+  ],
+  'data.validate_required': [
+    { key: 'fields', label: 'Required fields (comma-separated)', type: 'text', placeholder: 'case.id, payment.amount' },
+  ],
+  'data.calculate': [
+    { key: 'left', label: 'Left operand path', type: 'text', placeholder: 'e.g. data.amount' },
+    { key: 'operation', label: 'Operation', type: 'select', options: ['+', '-', '*', '/'] },
+    { key: 'right', label: 'Right operand path or value', type: 'text', placeholder: 'e.g. data.fee or 0.1' },
+    { key: 'target', label: 'Store result as', type: 'text', placeholder: 'e.g. total' },
+  ],
+  // ── Case actions ──────────────────────────────────────────────────────────
+  'case.assign': [
+    { key: 'userId', label: 'Assign to user ID', type: 'text', placeholder: 'e.g. {{trigger.userId}} or a fixed ID' },
+    { key: 'teamId', label: 'Assign to team', type: 'text', placeholder: 'e.g. senior_support' },
+  ],
+  'case.reply': [
+    { key: 'content', label: 'Reply content', type: 'textarea', placeholder: 'Hi {{customer.name}}, we have reviewed your case...' },
+  ],
+  'case.note': [
+    { key: 'content', label: 'Note content', type: 'textarea', placeholder: 'Internal note about this workflow step...' },
+  ],
+  'case.update_status': [
+    { key: 'status', label: 'New status', type: 'select', options: ['open', 'pending', 'in_progress', 'resolved', 'closed', 'waiting_customer'] },
+    { key: 'reason', label: 'Reason (optional)', type: 'text', placeholder: 'e.g. Resolved by workflow' },
+  ],
+  'case.set_priority': [
+    { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high', 'critical'] },
+    { key: 'severity', label: 'Severity (optional)', type: 'select', options: ['', 'low', 'medium', 'high', 'critical'] },
+    { key: 'riskLevel', label: 'Risk level (optional)', type: 'select', options: ['', 'low', 'medium', 'high', 'critical'] },
+  ],
+  'case.add_tag': [
+    { key: 'tag', label: 'Tag', type: 'text', placeholder: 'e.g. vip-escalation or auto-resolved' },
+  ],
+  // ── Order actions ─────────────────────────────────────────────────────────
+  'order.cancel': [
+    { key: 'orderId', label: 'Order ID (optional)', type: 'text', placeholder: '{{order.id}}', hint: 'Leave blank to use context order' },
+    { key: 'reason', label: 'Cancellation reason', type: 'text', placeholder: 'e.g. Customer requested cancellation' },
+  ],
+  'order.hold': [
+    { key: 'orderId', label: 'Order ID (optional)', type: 'text', placeholder: '{{order.id}}' },
+    { key: 'reason', label: 'Hold reason', type: 'text', placeholder: 'e.g. Fraud review' },
+    { key: 'requires_approval', label: 'Requires approval', type: 'select', options: ['false', 'true'] },
+  ],
+  'order.release': [
+    { key: 'orderId', label: 'Order ID (optional)', type: 'text', placeholder: '{{order.id}}' },
+    { key: 'reason', label: 'Release reason', type: 'text', placeholder: 'e.g. Fraud review completed' },
+  ],
+  // ── Payment actions ───────────────────────────────────────────────────────
+  'payment.refund': [
+    { key: 'paymentId', label: 'Payment ID (optional)', type: 'text', placeholder: '{{payment.id}}' },
+    { key: 'amount', label: 'Refund amount', type: 'text', placeholder: '{{payment.amount}} or a fixed number' },
+    { key: 'reason', label: 'Reason', type: 'text', placeholder: 'e.g. Customer refund approved' },
+  ],
+  'payment.mark_dispute': [
+    { key: 'paymentId', label: 'Payment ID (optional)', type: 'text', placeholder: '{{payment.id}}' },
+    { key: 'dispute_status', label: 'Dispute status', type: 'select', options: ['open', 'under_review', 'won', 'lost'] },
+    { key: 'reason', label: 'Reason', type: 'text', placeholder: 'e.g. Chargeback initiated' },
+  ],
+  // ── Return actions ────────────────────────────────────────────────────────
+  'return.create': [
+    { key: 'reason', label: 'Return reason', type: 'text', placeholder: 'e.g. Defective product' },
+    { key: 'amount', label: 'Return amount', type: 'text', placeholder: '{{order.total_amount}}' },
+    { key: 'method', label: 'Return method', type: 'select', options: ['workflow', 'store_credit', 'original_payment', 'exchange'] },
+  ],
+  'return.approve': [
+    { key: 'returnId', label: 'Return ID (optional)', type: 'text', placeholder: '{{return.id}}' },
+    { key: 'refund_status', label: 'Refund status', type: 'select', options: ['pending', 'approved', 'completed'] },
+    { key: 'reason', label: 'Reason (optional)', type: 'text' },
+  ],
+  'return.reject': [
+    { key: 'returnId', label: 'Return ID (optional)', type: 'text', placeholder: '{{return.id}}' },
+    { key: 'reason', label: 'Rejection reason', type: 'text', placeholder: 'e.g. Return window expired' },
+  ],
+  // ── Approval ──────────────────────────────────────────────────────────────
+  'approval.create': [
+    { key: 'queue', label: 'Approver queue', type: 'text', placeholder: 'e.g. manager or finance' },
+    { key: 'action_type', label: 'Action type', type: 'text', placeholder: 'e.g. payment_refund_approval' },
+    { key: 'priority', label: 'Priority', type: 'select', options: ['normal', 'urgent', 'low'] },
+    { key: 'reason', label: 'Context note (optional)', type: 'text' },
+  ],
+  'approval.escalate': [
+    { key: 'queue', label: 'Escalation queue', type: 'text', placeholder: 'e.g. manager or exec' },
+    { key: 'reason', label: 'Escalation reason', type: 'text', placeholder: 'e.g. No response within SLA window' },
+    { key: 'priority', label: 'Priority', type: 'select', options: ['urgent', 'normal', 'critical'] },
+  ],
+  // ── Notifications ─────────────────────────────────────────────────────────
+  'notification.email': [
+    { key: 'to', label: 'To email', type: 'text', placeholder: '{{customer.email}} or fixed address' },
+    { key: 'subject', label: 'Subject', type: 'text', placeholder: 'e.g. Your case has been resolved' },
+    { key: 'content', label: 'Body', type: 'textarea', placeholder: 'Hi {{customer.name}},\n\nYour case {{case.case_number}} has been...' },
+  ],
+  'notification.whatsapp': [
+    { key: 'to', label: 'Phone number', type: 'text', placeholder: '{{customer.phone}} or +34...' },
+    { key: 'content', label: 'Message', type: 'textarea', placeholder: 'Hi {{customer.name}}, your case has been updated...' },
+  ],
+  'notification.sms': [
+    { key: 'to', label: 'Phone number', type: 'text', placeholder: '{{customer.phone}} or +34...' },
+    { key: 'content', label: 'Message (160 char max)', type: 'textarea', placeholder: 'Case update: your request has been processed.' },
+  ],
+  // ── AI ────────────────────────────────────────────────────────────────────
+  'agent.run': [
+    { key: 'agent', label: 'Agent slug', type: 'text', placeholder: 'e.g. triage-agent or refund-agent' },
+    { key: 'trigger_event', label: 'Trigger event (optional)', type: 'text', placeholder: 'e.g. workflow_node' },
+  ],
+  'agent.classify': [
+    { key: 'text', label: 'Text to classify', type: 'text', placeholder: '{{case.description}} or {{trigger.message}}' },
+    { key: 'intent', label: 'Override intent (optional)', type: 'text' },
+  ],
+  'agent.sentiment': [
+    { key: 'text', label: 'Text to analyze', type: 'text', placeholder: '{{trigger.message}} or {{case.summary}}' },
+  ],
+  'agent.summarize': [
+    { key: 'text', label: 'Content to summarize', type: 'text', placeholder: '{{case.description}}' },
+  ],
+  'agent.draft_reply': [
+    { key: 'content', label: 'Reply template', type: 'textarea', placeholder: 'Thanks for reaching out, {{customer.name}}...' },
+  ],
+  // ── Policy / Core ─────────────────────────────────────────────────────────
+  'policy.evaluate': [
+    { key: 'policy', label: 'Policy name', type: 'text', placeholder: 'e.g. refund_policy' },
+    { key: 'field', label: 'Risk field to check', type: 'text', placeholder: 'e.g. data.risk_level' },
+    { key: 'operator', label: 'Block if', type: 'select', options: ['==', '!=', '>=', '>'] },
+    { key: 'blockValue', label: 'Block value', type: 'text', placeholder: 'e.g. critical' },
+  ],
+  'core.audit_log': [
+    { key: 'action', label: 'Audit action label', type: 'text', placeholder: 'e.g. WORKFLOW_EXECUTED' },
+    { key: 'message', label: 'Log message (optional)', type: 'text', placeholder: 'e.g. Case processed by workflow' },
+    { key: 'entityType', label: 'Entity type', type: 'select', options: ['case', 'order', 'payment', 'customer', 'workflow'] },
+    { key: 'entityId', label: 'Entity ID (optional)', type: 'text', placeholder: '{{case.id}}' },
+  ],
+  'core.idempotency_check': [
+    { key: 'key', label: 'Idempotency key', type: 'text', placeholder: '{{case.id}}:refund — leave blank for auto' },
+  ],
+  'core.rate_limit': [
+    { key: 'limit', label: 'Max executions', type: 'number', placeholder: '1' },
+    { key: 'bucket', label: 'Bucket name (optional)', type: 'text', placeholder: 'Leave blank to use node ID' },
+  ],
+  // ── Knowledge ─────────────────────────────────────────────────────────────
+  'knowledge.search': [
+    { key: 'query', label: 'Search query', type: 'text', placeholder: '{{case.intent}} or fixed terms' },
+    { key: 'type', label: 'Article type (optional)', type: 'text', placeholder: 'e.g. policy or sop' },
+    { key: 'limit', label: 'Max results', type: 'number', placeholder: '5' },
+  ],
+  'knowledge.validate_policy': [
+    { key: 'policy', label: 'Policy text or key', type: 'text', placeholder: 'e.g. refund_policy' },
+    { key: 'action', label: 'Proposed action', type: 'text', placeholder: 'e.g. {{agent.intent}}' },
+  ],
+  'knowledge.attach_evidence': [
+    { key: 'title', label: 'Evidence title', type: 'text', placeholder: 'e.g. Damage inspection policy' },
+    { key: 'note', label: 'Note (optional)', type: 'text' },
+  ],
+  // ── Integration ───────────────────────────────────────────────────────────
+  'connector.call': [
+    { key: 'capability', label: 'Capability key', type: 'text', placeholder: 'e.g. payment.lookup or order.sync' },
+    { key: 'entityType', label: 'Entity type (optional)', type: 'text', placeholder: 'e.g. order' },
+    { key: 'entityId', label: 'Entity ID (optional)', type: 'text', placeholder: '{{order.id}}' },
+  ],
+  'connector.emit_event': [
+    { key: 'eventType', label: 'Event type', type: 'text', placeholder: 'e.g. order.fulfilled' },
+    { key: 'sourceSystem', label: 'Source system (optional)', type: 'text', placeholder: 'e.g. shopify' },
+  ],
+  // ── Utility ───────────────────────────────────────────────────────────────
+  'delay': [
+    { key: 'duration', label: 'Duration', type: 'text', placeholder: 'e.g. 2h, 30m, 1d, 7d', hint: 'Pause execution for this duration' },
+    { key: 'mode', label: 'Resume mode', type: 'select', options: ['auto', 'manual_resume'] },
+  ],
+  'retry': [
+    { key: 'maxAttempts', label: 'Max attempts', type: 'number', placeholder: '3' },
+    { key: 'backoffMs', label: 'Backoff ms', type: 'number', placeholder: '1000' },
+  ],
+  // Triggers with optional config
+  'webhook.received': [
+    { key: 'path', label: 'Webhook path', type: 'text', placeholder: 'e.g. /hooks/myworkflow' },
+  ],
+  'case.created': [{ key: 'filter', label: 'Filter expression (optional)', type: 'text', placeholder: 'e.g. case.priority == high' }],
+};
+
+function nodeFieldsForKey(key: string): NodeFieldDef[] {
+  return NODE_FIELD_SCHEMAS[key] ?? [];
+}
 const EDITOR_TABS = [
   { id: 'builder', label: 'Editor' },
   { id: 'runs', label: 'Executions' },
@@ -2091,6 +2369,75 @@ function WorkflowContextMenu(props: {
   );
 }
 
+/** Renders smart per-node config fields based on NODE_FIELD_SCHEMAS. Falls back to generic CONFIG_FIELDS if no schema defined. */
+function NodeConfigFields({ node, onConfig, size = 'lg' }: {
+  node: WorkflowNode;
+  onConfig: (key: string, value: string) => void;
+  size?: 'sm' | 'lg';
+}) {
+  const fields = nodeFieldsForKey(node.key);
+  const inputCls = size === 'lg'
+    ? 'mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400'
+    : 'mt-1.5 w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-gray-400';
+
+  // No schema defined → generic fallback for any existing config keys
+  if (fields.length === 0) {
+    const existingKeys = Object.keys(node.config ?? {}).filter((k) => k !== '_meta');
+    if (existingKeys.length === 0) {
+      return <div className="py-6 text-center text-xs text-gray-400">No configuration required for this node.</div>;
+    }
+    return (
+      <div className="space-y-3">
+        {existingKeys.map((key) => (
+          <label key={key} className="block">
+            <span className="text-xs font-semibold capitalize text-gray-600">{key}</span>
+            <input value={node.config[key] ?? ''} onChange={(e) => onConfig(key, e.target.value)} className={inputCls} />
+          </label>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {fields.map((field) => (
+        <label key={field.key} className="block">
+          <span className="text-xs font-semibold text-gray-600">{field.label}</span>
+          {field.hint && <span className="ml-2 text-[10px] text-gray-400">{field.hint}</span>}
+          {field.type === 'textarea' ? (
+            <textarea
+              value={node.config[field.key] ?? ''}
+              onChange={(e) => onConfig(field.key, e.target.value)}
+              placeholder={field.placeholder ?? `{{${field.key}}}`}
+              rows={3}
+              className={`${inputCls} resize-none`}
+            />
+          ) : field.type === 'select' && field.options ? (
+            <select
+              value={node.config[field.key] ?? ''}
+              onChange={(e) => onConfig(field.key, e.target.value)}
+              className={inputCls}
+            >
+              {field.options[0] !== '' && <option value="">Select…</option>}
+              {field.options.map((opt) => (
+                <option key={opt} value={opt}>{opt || '— none —'}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type={field.type === 'number' ? 'number' : 'text'}
+              value={node.config[field.key] ?? ''}
+              onChange={(e) => onConfig(field.key, e.target.value)}
+              placeholder={field.placeholder ?? `{{${field.key}}}`}
+              className={inputCls}
+            />
+          )}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 function WorkflowNodeEditorModal(props: {
   node: WorkflowNode;
   spec?: NodeSpec;
@@ -2159,16 +2506,10 @@ function WorkflowNodeEditorModal(props: {
             <div className="h-[calc(100%-64px)] overflow-y-auto p-5">
               {props.mode === 'parameters' ? (
                 <div className="space-y-4">
-                  <label className="block">
-                    <span className="text-xs font-semibold text-gray-600">Description</span>
-                    <textarea value={props.spec?.description ?? ''} readOnly className="mt-2 h-20 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 outline-none" />
-                  </label>
-                  {CONFIG_FIELDS.map((field) => (
-                    <label key={field} className="block">
-                      <span className="text-xs font-semibold capitalize text-gray-600">{field}</span>
-                      <input value={props.node.config[field] ?? ''} onChange={(event) => props.onConfig(field, event.target.value)} placeholder={`{{${field}}}`} className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
-                    </label>
-                  ))}
+                  {props.spec?.description && (
+                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-xs text-gray-500">{props.spec.description}</div>
+                  )}
+                  <NodeConfigFields node={props.node} onConfig={props.onConfig} size="lg" />
                   {props.node.type === 'integration' && (
                     <label className="block">
                       <span className="text-xs font-semibold text-gray-600">Connection</span>
@@ -2180,7 +2521,7 @@ function WorkflowNodeEditorModal(props: {
                         <option value="">Select connector...</option>
                         {props.connectors.map((connector) => (
                           <option key={connector.id} value={connector.id}>
-                            {connector.name || connector.system || connector.id} Â· {connector.status || 'unknown'}
+                            {connector.name || connector.system || connector.id} · {connector.status || 'unknown'}
                           </option>
                         ))}
                       </select>
@@ -2297,16 +2638,10 @@ function WorkflowNodeEditorPanel(props: {
           <div className="h-[calc(100%-40px)] overflow-y-auto p-4">
             {props.mode === 'parameters' ? (
               <div className="space-y-3">
-                <label className="block">
-                  <span className="text-xs font-semibold text-gray-600">Description</span>
-                  <textarea value={props.spec?.description ?? ''} readOnly className="mt-2 h-16 w-full resize-none rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 outline-none" />
-                </label>
-                {CONFIG_FIELDS.map((field) => (
-                  <label key={field} className="block">
-                    <span className="text-xs font-semibold capitalize text-gray-600">{field}</span>
-                    <input value={props.node.config[field] ?? ''} onChange={(event) => props.onConfig(field, event.target.value)} placeholder={`{{${field}}}`} className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
-                  </label>
-                ))}
+                {props.spec?.description && (
+                  <div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-500">{props.spec.description}</div>
+                )}
+                <NodeConfigFields node={props.node} onConfig={props.onConfig} size="sm" />
                 {props.node.type === 'integration' && (
                   <label className="block">
                     <span className="text-xs font-semibold text-gray-600">Connection</span>
@@ -2318,7 +2653,7 @@ function WorkflowNodeEditorPanel(props: {
                       <option value="">Select connector...</option>
                       {props.connectors.map((connector) => (
                         <option key={connector.id} value={connector.id}>
-                          {connector.name || connector.system || connector.id} Â· {connector.status || 'unknown'}
+                          {connector.name || connector.system || connector.id} · {connector.status || 'unknown'}
                         </option>
                       ))}
                     </select>
