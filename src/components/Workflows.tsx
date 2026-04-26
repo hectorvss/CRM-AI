@@ -1832,10 +1832,10 @@ function WorkflowEditorTopbar(props: {
           <div className="relative" ref={menuRef}>
             <div className="flex items-center gap-2">
               <button onClick={() => setMenuOpen((value) => value === 'edit' ? null : 'edit')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen === 'edit'} aria-label="Edit workflow actions">
-                ...
+                Edit
               </button>
               <button onClick={() => setMenuOpen((value) => value === 'run' ? null : 'run')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen === 'run'} aria-label="Run workflow actions">
-                ...
+                Run
               </button>
             </div>
 
