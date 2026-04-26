@@ -40,6 +40,17 @@ const NODE_CATALOG = [
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Condition', icon: 'rule', requiresConfig: true },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Condition', icon: 'gpp_maybe', requiresConfig: true },
   { type: 'condition', key: 'conflict.exists', label: 'Conflict exists', category: 'Condition', icon: 'sync_problem', requiresConfig: false },
+  { type: 'condition', key: 'flow.if', label: 'If', category: 'Flow', icon: 'question_mark', requiresConfig: true },
+  { type: 'condition', key: 'flow.filter', label: 'Filter', category: 'Flow', icon: 'filter_alt', requiresConfig: true },
+  { type: 'condition', key: 'flow.switch', label: 'Switch', category: 'Flow', icon: 'shuffle', requiresConfig: true },
+  { type: 'condition', key: 'flow.compare', label: 'Compare datasets', category: 'Flow', icon: 'compare_arrows', requiresConfig: true },
+  { type: 'condition', key: 'flow.branch', label: 'Branch', category: 'Flow', icon: 'account_tree', requiresConfig: true },
+  { type: 'utility', key: 'flow.merge', label: 'Merge branches', category: 'Flow', icon: 'merge', requiresConfig: true },
+  { type: 'utility', key: 'flow.loop', label: 'Loop over items', category: 'Flow', icon: 'repeat', requiresConfig: true },
+  { type: 'utility', key: 'flow.wait', label: 'Wait', category: 'Flow', icon: 'hourglass_top', requiresConfig: true },
+  { type: 'utility', key: 'flow.subworkflow', label: 'Execute sub-workflow', category: 'Flow', icon: 'subdirectory_arrow_right', requiresConfig: true },
+  { type: 'utility', key: 'flow.stop_error', label: 'Stop and error', category: 'Flow', icon: 'error', requiresConfig: true },
+  { type: 'utility', key: 'flow.noop', label: 'No-op', category: 'Flow', icon: 'passkey', requiresConfig: false },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true },
@@ -351,7 +362,7 @@ function pickNextNode(nodes: any[] = [], edges: any[] = [], currentNode: any, co
   if (outgoing.length === 0) return null;
 
   if (currentNode.type === 'condition') {
-    const expectedLabel = context.condition?.result ? 'true' : 'false';
+    const expectedLabel = String(context.condition?.route ?? (context.condition?.result ? 'true' : 'false')).toLowerCase();
     const branch = outgoing.find((edge) => String(edge.label ?? '').toLowerCase() === expectedLabel);
     if (branch) return nodes.find((node) => node.id === branch.target) ?? null;
   }
@@ -430,6 +441,22 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
       const result = Boolean(context.case?.has_reconciliation_conflicts || context.order?.has_conflict || context.payment?.has_conflict || context.return?.has_conflict);
       context.condition = { result };
       return { status: result ? 'completed' : 'skipped', output: { result } };
+    }
+    if (node.key === 'flow.switch') {
+      const source = config.field || config.branch || 'customer.segment';
+      const rawRoute = String(readContextPath(context, source) ?? config.value ?? config.comparison ?? 'other').trim();
+      const branches = String(config.comparison || config.branches || config.value || 'vip|standard|other')
+        .split('|')
+        .map((value: string) => value.trim())
+        .filter(Boolean);
+      const normalizedRoute = branches.find((branch: string) => branch.toLowerCase() === rawRoute.toLowerCase()) ?? (branches.at(-1) ?? rawRoute || 'other');
+      context.condition = {
+        result: normalizedRoute !== (branches.at(-1) ?? 'other'),
+        route: normalizedRoute,
+        left: rawRoute,
+        branches,
+      };
+      return { status: normalizedRoute === (branches.at(-1) ?? 'other') ? 'skipped' : 'completed', output: context.condition };
     }
     const left = readContextPath(context, config.field);
     const result = compareValues(left, config.operator ?? '==', config.value);
@@ -646,8 +673,28 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     return { status: 'failed', error: `Unsupported ${node.type} node key: ${node.key}` };
   }
 
-  if (node.key === 'delay') {
-    return { status: 'waiting', output: { delay: config.duration || 'manual_resume' } };
+  if (node.key === 'delay' || node.key === 'flow.wait') {
+    return { status: 'waiting', output: { delay: config.duration || config.timeout || 'manual_resume' } };
+  }
+
+  if (node.key === 'flow.merge') {
+    return { status: 'completed', output: { merged: true, mode: config.mode || 'wait-all' } };
+  }
+
+  if (node.key === 'flow.loop') {
+    return { status: 'completed', output: { looped: true, batchSize: Number(config.batchSize || config.batch_size || 1), maxIterations: Number(config.maxIterations || config.max_iterations || 100) } };
+  }
+
+  if (node.key === 'flow.subworkflow') {
+    return { status: 'completed', output: { subWorkflowId: config.workflow || config.workflowId || null, invoked: true } };
+  }
+
+  if (node.key === 'flow.stop_error') {
+    return { status: 'failed', error: config.errorMessage || 'Stopped by flow.stop_error', output: { stopped: true } };
+  }
+
+  if (node.key === 'flow.noop') {
+    return { status: 'completed', output: { passedThrough: true } };
   }
 
   if (node.key === 'stop') {
