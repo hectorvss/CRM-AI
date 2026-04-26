@@ -1,9 +1,11 @@
 import { Router, Response } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { createCustomerRepository } from '../data/index.js';
+import { requirePermission } from '../middleware/authorization.js';
+import { createAuditRepository, createCustomerRepository } from '../data/index.js';
 
 const router = Router();
 const customerRepository = createCustomerRepository();
+const auditRepository = createAuditRepository();
 
 router.use(extractMultiTenant);
 
@@ -21,6 +23,43 @@ router.get('/', async (req: MultiTenantRequest, res: Response) => {
     res.json(customers);
   } catch (error) {
     console.error('Error fetching customers:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/', requirePermission('customers.write'), async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const payload = req.body ?? {};
+    const name = String(payload.canonical_name ?? payload.canonicalName ?? payload.name ?? '').trim();
+    const email = String(payload.canonical_email ?? payload.canonicalEmail ?? payload.email ?? '').trim();
+
+    if (!name && !email) {
+      return res.status(400).json({ error: 'Customer name or email is required' });
+    }
+
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const id = await customerRepository.createStub(scope, {
+      ...payload,
+      canonicalName: name || email || 'Unknown Customer',
+      canonicalEmail: email || null,
+      email: email || null,
+      identitySystem: payload.identitySystem ?? payload.source ?? 'manual',
+      identityExternalId: payload.identityExternalId ?? payload.external_id ?? (email || `manual_${Date.now()}`),
+    });
+
+    await auditRepository.log(scope, {
+      actorId: req.userId || 'system',
+      action: 'CUSTOMER_CREATED',
+      entityType: 'customer',
+      entityId: id,
+      newValue: { id, name, email },
+      metadata: { source: 'customers_api' },
+    });
+
+    const created = await customerRepository.getDetail(scope, id);
+    res.status(201).json(created ?? { id, canonical_name: name, canonical_email: email });
+  } catch (error) {
+    console.error('Error creating customer:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

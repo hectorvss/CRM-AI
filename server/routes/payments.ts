@@ -1,9 +1,13 @@
 import { Router, Response } from 'express';
+import crypto from 'crypto';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { requirePermission } from '../middleware/authorization.js';
+import { createAuditRepository } from '../data/index.js';
 import { createCommerceRepository } from '../data/commerce.js';
 
 const router = Router();
 const commerceRepo = createCommerceRepository();
+const auditRepository = createAuditRepository();
 
 // Apply multi-tenant middleware to all payment routes
 router.use(extractMultiTenant);
@@ -56,6 +60,83 @@ router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
     res.json(payment);
   } catch (error) {
     console.error('Error fetching payment detail:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/refund', requirePermission('payments.write'), async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const payment = await commerceRepo.getPayment(scope, req.params.id);
+    if (!payment) return res.status(404).json({ error: 'Payment not found' });
+
+    const amount = Number(req.body?.amount ?? payment.amount ?? 0);
+    const reason = String(req.body?.reason ?? '').trim() || 'Refund requested from CRM-AI';
+    const sensitive = amount > 250 || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase());
+    const blocked = ['disputed', 'blocked', 'chargeback'].includes(String(payment.status ?? '').toLowerCase());
+
+    if (blocked) {
+      await commerceRepo.updatePayment(scope, req.params.id, {
+        approval_status: 'blocked',
+        recommended_action: 'Refund blocked because payment is disputed or blocked.',
+        has_conflict: true,
+        conflict_detected: 'Refund attempted on blocked payment',
+        last_update: reason,
+      });
+      await auditRepository.log(scope, {
+        actorId: req.userId || 'system',
+        action: 'PAYMENT_REFUND_BLOCKED',
+        entityType: 'payment',
+        entityId: req.params.id,
+        oldValue: { status: payment.status },
+        newValue: { approval_status: 'blocked' },
+        metadata: { amount, reason },
+      });
+      return res.status(409).json({ error: 'Refund blocked by payment status', blocked: true });
+    }
+
+    if (sensitive) {
+      await commerceRepo.updatePayment(scope, req.params.id, {
+        approval_status: 'approval_needed',
+        refund_amount: amount,
+        refund_type: amount >= Number(payment.amount ?? 0) ? 'full' : 'partial',
+        recommended_action: 'Approval required before refund execution.',
+        last_update: reason,
+      });
+      await auditRepository.log(scope, {
+        actorId: req.userId || 'system',
+        action: 'PAYMENT_REFUND_APPROVAL_REQUIRED',
+        entityType: 'payment',
+        entityId: req.params.id,
+        oldValue: { approval_status: payment.approval_status },
+        newValue: { approval_status: 'approval_needed', refund_amount: amount },
+        metadata: { amount, reason, riskLevel: payment.risk_level },
+      });
+      return res.status(202).json({ success: true, requiresApproval: true, paymentId: req.params.id, amount });
+    }
+
+    await commerceRepo.updatePayment(scope, req.params.id, {
+      status: 'refunded',
+      refund_amount: amount,
+      refund_type: amount >= Number(payment.amount ?? 0) ? 'full' : 'partial',
+      approval_status: 'approved',
+      refund_ids: [...(Array.isArray(payment.refund_ids) ? payment.refund_ids : []), `rf_${crypto.randomUUID()}`],
+      system_states: { ...(payment.system_states ?? {}), canonical: 'refunded', crm_ai: 'refunded' },
+      last_update: reason,
+    });
+    await auditRepository.log(scope, {
+      actorId: req.userId || 'system',
+      action: 'PAYMENT_REFUNDED',
+      entityType: 'payment',
+      entityId: req.params.id,
+      oldValue: { status: payment.status, refund_amount: payment.refund_amount },
+      newValue: { status: 'refunded', refund_amount: amount },
+      metadata: { reason },
+    });
+    const updated = await commerceRepo.getPayment(scope, req.params.id);
+    res.json({ success: true, payment: updated });
+  } catch (error) {
+    console.error('Error refunding payment:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -116,6 +197,75 @@ returnsRouter.get('/:id', async (req: MultiTenantRequest, res: Response) => {
     res.json(ret);
   } catch (error) {
     console.error('Error fetching return detail:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+returnsRouter.post('/', requirePermission('returns.write'), async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const id = await commerceRepo.upsertReturn(scope, {
+      externalId: req.body?.external_return_id ?? req.body?.externalId ?? `manual_return_${Date.now()}`,
+      orderId: req.body?.order_id ?? req.body?.orderId ?? null,
+      customerId: req.body?.customer_id ?? req.body?.customerId ?? null,
+      status: req.body?.status ?? 'pending_review',
+      totalAmount: Number(req.body?.return_value ?? req.body?.amount ?? 0),
+      currency: req.body?.currency ?? 'USD',
+      source: 'crm_ai',
+    });
+    await commerceRepo.updateReturn(scope, id, {
+      order_id: req.body?.order_id ?? req.body?.orderId ?? null,
+      customer_id: req.body?.customer_id ?? req.body?.customerId ?? null,
+      return_reason: req.body?.return_reason ?? req.body?.reason ?? null,
+      method: req.body?.method ?? 'manual',
+      approval_status: req.body?.approval_status ?? 'not_required',
+      summary: req.body?.summary ?? 'Return created from CRM-AI',
+    });
+    await auditRepository.log(scope, {
+      actorId: req.userId || 'system',
+      action: 'RETURN_CREATED',
+      entityType: 'return',
+      entityId: id,
+      newValue: { id, ...req.body },
+      metadata: { source: 'returns_api' },
+    });
+    const created = await commerceRepo.getReturn(scope, id);
+    res.status(201).json(created ?? { id });
+  } catch (error) {
+    console.error('Error creating return:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+returnsRouter.patch('/:id/status', requirePermission('returns.write'), async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const ret = await commerceRepo.getReturn(scope, req.params.id);
+    if (!ret) return res.status(404).json({ error: 'Return not found' });
+    const status = String(req.body?.status ?? '').trim();
+    if (!status) return res.status(400).json({ error: 'Status is required' });
+
+    await commerceRepo.updateReturn(scope, req.params.id, {
+      status,
+      inspection_status: req.body?.inspection_status ?? ret.inspection_status,
+      refund_status: req.body?.refund_status ?? ret.refund_status,
+      approval_status: req.body?.approval_status ?? ret.approval_status,
+      last_update: req.body?.reason ?? `Return status changed to ${status}`,
+      system_states: { ...(ret.system_states ?? {}), canonical: status, crm_ai: status },
+    });
+    await auditRepository.log(scope, {
+      actorId: req.userId || 'system',
+      action: 'RETURN_STATUS_UPDATED',
+      entityType: 'return',
+      entityId: req.params.id,
+      oldValue: { status: ret.status },
+      newValue: { status },
+      metadata: { reason: req.body?.reason ?? null },
+    });
+    const updated = await commerceRepo.getReturn(scope, req.params.id);
+    res.json({ success: true, return: updated });
+  } catch (error) {
+    console.error('Error updating return status:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

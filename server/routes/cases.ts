@@ -256,6 +256,11 @@ router.post('/:id/internal-note', async (req: MultiTenantRequest, res: Response)
   }
 });
 
+router.post('/:id/notes', async (req: MultiTenantRequest, res: Response) => {
+  req.url = `/${req.params.id}/internal-note`;
+  router.handle(req, res);
+});
+
 router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
   try {
     const { content, draft_reply_id } = req.body;

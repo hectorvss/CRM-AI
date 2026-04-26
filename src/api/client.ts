@@ -128,6 +128,16 @@ export const returnsApi = {
   },
   get: (id: string) => request<any>(`/returns/${id}`),
   context: (id: string) => request<any>(`/returns/${id}/context`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/returns', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateStatus: (id: string, payload: Record<string, any>) =>
+    request<any>(`/returns/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
 };
 
 // ── Approvals ─────────────────────────────────────────────
@@ -190,6 +200,7 @@ export const knowledgeApi = {
 // ── Workflows ─────────────────────────────────────────────
 export const workflowsApi = {
   list: () => request<any>('/workflows').then(unwrapList),
+  catalog: () => request<any>('/workflows/catalog'),
   create: (payload: Record<string, any>) =>
     request<any>('/workflows', {
       method: 'POST',
@@ -206,6 +217,37 @@ export const workflowsApi = {
       method: 'POST',
       body: '{}',
     }),
+  validate: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/validate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  dryRun: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/dry-run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  run: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  rollback: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  retryRun: (runId: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/runs/${runId}/retry`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  triggerEvent: (payload: Record<string, any>) =>
+    request<any>('/workflows/events/trigger', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getRun: (runId: string) => request<any>(`/workflows/runs/${runId}`),
   recentRuns: () => request<any>('/workflows/runs/recent').then(unwrapList),
 };
 
