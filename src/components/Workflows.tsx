@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   addEdge,
@@ -2080,37 +2081,50 @@ function WorkflowCardDropdown(props: {
   onAction: (workflow: Workflow, action: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const items = props.kind === 'manage' ? CARD_MANAGE_ITEMS : CARD_RUN_ITEMS;
 
+  // Close on outside click or scroll
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const close = (e: MouseEvent) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false);
     };
-    document.addEventListener('pointerdown', handler);
-    return () => document.removeEventListener('pointerdown', handler);
+    const closeOnScroll = () => setOpen(false);
+    document.addEventListener('pointerdown', close);
+    window.addEventListener('scroll', closeOnScroll, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      window.removeEventListener('scroll', closeOnScroll, { capture: true });
+    };
   }, [open]);
 
-  return (
-    <div ref={ref} className="relative" onClick={(e) => e.stopPropagation()}>
-      <button
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-        title={props.kind === 'manage' ? 'Manage' : 'Run & Test'}
-        className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition
-          ${props.kind === 'manage'
-            ? 'border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
-            : 'border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
-          }`}
-      >
-        <span className="material-symbols-outlined text-base leading-none">
-          {props.kind === 'manage' ? 'settings' : 'play_circle'}
-        </span>
-        <span>{props.kind === 'manage' ? 'Manage' : 'Run'}</span>
-        <span className="material-symbols-outlined text-xs leading-none">expand_more</span>
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+  function handleToggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (open) { setOpen(false); return; }
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setOpen(true);
+  }
+
+  const menu = open && menuPos
+    ? createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 9999 }}
+          className="w-52 rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900"
+          onClick={(e) => e.stopPropagation()}
+        >
           {items.map((item) => (
             <button
               key={item.action}
@@ -2122,8 +2136,26 @@ function WorkflowCardDropdown(props: {
               {item.label}
             </button>
           ))}
-        </div>
-      )}
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <button
+        ref={btnRef}
+        onClick={handleToggle}
+        title={props.kind === 'manage' ? 'Manage' : 'Run & Test'}
+        className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+      >
+        <span className="material-symbols-outlined text-base leading-none">
+          {props.kind === 'manage' ? 'settings' : 'play_circle'}
+        </span>
+        <span>{props.kind === 'manage' ? 'Manage' : 'Run'}</span>
+        <span className="material-symbols-outlined text-xs leading-none">expand_more</span>
+      </button>
+      {menu}
     </div>
   );
 }
