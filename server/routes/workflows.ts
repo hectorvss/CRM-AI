@@ -51,6 +51,14 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'flow.subworkflow', label: 'Execute sub-workflow', category: 'Flow', icon: 'subdirectory_arrow_right', requiresConfig: true },
   { type: 'utility', key: 'flow.stop_error', label: 'Stop and error', category: 'Flow', icon: 'error', requiresConfig: true },
   { type: 'utility', key: 'flow.noop', label: 'No-op', category: 'Flow', icon: 'passkey', requiresConfig: false },
+  { type: 'utility', key: 'data.set_fields', label: 'Set fields', category: 'Data transformation', icon: 'edit_note', requiresConfig: true },
+  { type: 'utility', key: 'data.rename_fields', label: 'Rename fields', category: 'Data transformation', icon: 'drive_file_rename_outline', requiresConfig: true },
+  { type: 'utility', key: 'data.extract_json', label: 'Extract JSON', category: 'Data transformation', icon: 'data_object', requiresConfig: true },
+  { type: 'utility', key: 'data.normalize_text', label: 'Normalize text', category: 'Data transformation', icon: 'text_format', requiresConfig: true },
+  { type: 'utility', key: 'data.format_date', label: 'Format date', category: 'Data transformation', icon: 'event', requiresConfig: true },
+  { type: 'utility', key: 'data.split_items', label: 'Split items', category: 'Data transformation', icon: 'split_scene', requiresConfig: true },
+  { type: 'utility', key: 'data.dedupe', label: 'Deduplicate', category: 'Data transformation', icon: 'content_copy', requiresConfig: true },
+  { type: 'utility', key: 'data.map_fields', label: 'Map fields', category: 'Data transformation', icon: 'map', requiresConfig: true },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true },
@@ -304,9 +312,32 @@ function readContextPath(context: any, path: string) {
   return String(path || '').split('.').reduce((cursor, part) => cursor?.[part], context);
 }
 
+function asArray(value: any) {
+  if (Array.isArray(value)) return value;
+  if (value == null) return [];
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return trimmed.split(/[\n,|]+/).map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return [value];
+}
+
+function cloneJson(value: any) {
+  if (Array.isArray(value)) return value.map((item) => cloneJson(item));
+  if (value && typeof value === 'object') return { ...value };
+  return value;
+}
+
 async function buildWorkflowContext(scope: { tenantId: string; workspaceId: string; userId?: string }, payload: any) {
   const context: any = {
     trigger: payload ?? {},
+    data: payload && typeof payload === 'object' ? { ...payload } : payload ?? {},
     case: null,
     order: null,
     payment: null,
@@ -442,6 +473,44 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
       context.condition = { result };
       return { status: result ? 'completed' : 'skipped', output: { result } };
     }
+    if (node.key === 'flow.if') {
+      const left = readContextPath(context, config.field || config.source || config.path || 'data.value');
+      const right = config.value ?? config.right ?? config.expected ?? config.compareTo ?? config.comparison;
+      const operator = config.operator ?? config.comparisonOperator ?? '==';
+      const result = compareValues(left, operator, right);
+      context.condition = { result, left, operator, right };
+      return { status: result ? 'completed' : 'skipped', output: context.condition };
+    }
+    if (node.key === 'flow.filter') {
+      const source = readContextPath(context, config.source || config.field || 'data.items');
+      const list = asArray(source);
+      const field = config.field || 'value';
+      const operator = config.operator || '==';
+      const expected = config.value ?? config.expected ?? config.right ?? config.comparison;
+      const filtered = list.filter((item) => {
+        const candidate = item && typeof item === 'object' ? readContextPath(item, field) ?? item[field] : item;
+        return compareValues(candidate, operator, expected);
+      });
+      context.data = Array.isArray(source) ? filtered : { ...(source && typeof source === 'object' ? source : {}), items: filtered };
+      context.condition = { result: filtered.length > 0, filteredCount: filtered.length, operator, expected };
+      return { status: filtered.length > 0 ? 'completed' : 'skipped', output: { ...context.condition, items: filtered } };
+    }
+    if (node.key === 'flow.compare') {
+      const left = readContextPath(context, config.left || config.sourceA || config.fieldA || config.field || 'data.left');
+      const right = readContextPath(context, config.right || config.sourceB || config.fieldB || 'data.right') ?? config.value ?? config.expected;
+      const operator = config.operator ?? '==';
+      const result = compareValues(left, operator, right);
+      context.condition = { result, left, operator, right };
+      return { status: 'completed', output: context.condition };
+    }
+    if (node.key === 'flow.branch') {
+      const branches = String(config.branches || config.routes || config.options || 'true|false')
+        .split('|')
+        .map((value: string) => value.trim())
+        .filter(Boolean);
+      context.condition = { result: true, route: branches[0] ?? 'true', branches };
+      return { status: 'completed', output: context.condition };
+    }
     if (node.key === 'flow.switch') {
       const source = config.field || config.branch || 'customer.segment';
       const rawRoute = String(readContextPath(context, source) ?? config.value ?? config.comparison ?? 'other').trim();
@@ -463,6 +532,103 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     const result = compareValues(left, config.operator ?? '==', config.value);
     context.condition = { result, left, operator: config.operator ?? '==', right: config.value };
     return { status: result ? 'completed' : 'skipped', output: context.condition };
+  }
+
+  if (node.key.startsWith('data.')) {
+    const source = readContextPath(context, config.source || config.path || 'data');
+    const base = cloneJson(source && typeof source === 'object' ? source : context.data && typeof context.data === 'object' ? context.data : {});
+
+    if (node.key === 'data.set_fields') {
+      const field = String(config.field || config.target || 'value');
+      const value = resolveTemplateValue(config.value ?? config.content ?? config.output ?? '', context);
+      if (base && typeof base === 'object') {
+        base[field] = value;
+      }
+      context.data = base;
+      return { status: 'completed', output: { data: base, updated: { [field]: value } } };
+    }
+
+    if (node.key === 'data.rename_fields') {
+      const mapping = parseMaybeJsonObject(config.mapping);
+      const renamed: Record<string, any> = {};
+      Object.entries(base && typeof base === 'object' ? base : {}).forEach(([key, value]) => {
+        const targetKey = mapping[key] ?? mapping[String(key)] ?? (key === config.source ? config.target : key);
+        renamed[String(targetKey ?? key)] = value;
+      });
+      context.data = renamed;
+      return { status: 'completed', output: { data: renamed, renamed: true } };
+    }
+
+    if (node.key === 'data.extract_json') {
+      const raw = readContextPath(context, config.source || config.field || config.path || 'trigger');
+      let extracted: any = raw;
+      if (typeof raw === 'string') {
+        try {
+          extracted = JSON.parse(raw);
+        } catch {
+          extracted = { raw };
+        }
+      }
+      if (config.path && extracted && typeof extracted === 'object') {
+        extracted = readContextPath(extracted, config.path);
+      }
+      context.data = extracted ?? {};
+      return { status: 'completed', output: { data: extracted, extracted: true } };
+    }
+
+    if (node.key === 'data.normalize_text') {
+      const raw = readContextPath(context, config.source || config.field || 'trigger.message') ?? config.value ?? '';
+      const normalized = String(raw).trim().replace(/\s+/g, ' ').toLowerCase();
+      context.data = { text: normalized };
+      return { status: 'completed', output: { data: { text: normalized }, normalized: true } };
+    }
+
+    if (node.key === 'data.format_date') {
+      const raw = readContextPath(context, config.source || config.field || 'trigger.date') ?? config.value ?? new Date().toISOString();
+      const date = new Date(raw);
+      const formatted = Number.isNaN(date.getTime())
+        ? String(raw)
+        : (config.format === 'date' ? date.toLocaleDateString() : config.format === 'time' ? date.toLocaleTimeString() : date.toISOString());
+      context.data = { date: formatted };
+      return { status: 'completed', output: { data: { date: formatted }, formatted: true } };
+    }
+
+    if (node.key === 'data.split_items') {
+      const raw = readContextPath(context, config.source || config.field || 'trigger.items') ?? config.value ?? '';
+      const delimiter = config.delimiter || '\n';
+      const items = Array.isArray(raw)
+        ? raw
+        : String(raw)
+          .split(delimiter)
+          .map((value) => value.trim())
+          .filter(Boolean);
+      context.data = { items };
+      return { status: 'completed', output: { data: { items }, split: true, count: items.length } };
+    }
+
+    if (node.key === 'data.dedupe') {
+      const raw = asArray(readContextPath(context, config.source || config.field || 'trigger.items'));
+      const seen = new Set<string>();
+      const items = raw.filter((value) => {
+        const key = JSON.stringify(value);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      context.data = { items };
+      return { status: 'completed', output: { data: { items }, deduped: true, count: items.length } };
+    }
+
+    if (node.key === 'data.map_fields') {
+      const mapping = parseMaybeJsonObject(config.mapping);
+      const payload = base && typeof base === 'object' ? base : {};
+      const mapped = Object.fromEntries(Object.entries(mapping).map(([targetKey, sourcePath]) => [targetKey, readContextPath(context, String(sourcePath)) ?? payload[String(sourcePath)] ?? null]));
+      context.data = mapped;
+      return { status: 'completed', output: { data: mapped, mapped: true } };
+    }
+
+    context.data = base;
+    return { status: 'completed', output: { data: base, transformed: true } };
   }
 
   if (node.key === 'case.assign') {
@@ -782,6 +948,11 @@ async function executeWorkflowVersion({
       error: result.error ?? null,
     };
     steps.push(step);
+    workflowContext.lastOutput = result.output ?? null;
+    workflowContext.lastNode = { id: currentNode.id, key: currentNode.key, label: currentNode.label, status: result.status };
+    if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
+      workflowContext.data = result.output.data ?? result.output;
+    }
     order += 1;
 
     if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) {
@@ -909,6 +1080,11 @@ async function continueWorkflowRun({
       ended_at: endedAt,
       error: result.error ?? null,
     });
+    workflowContext.lastOutput = result.output ?? null;
+    workflowContext.lastNode = { id: nextNode.id, key: nextNode.key, label: nextNode.label, status: result.status };
+    if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
+      workflowContext.data = result.output.data ?? result.output;
+    }
     guard += 1;
 
     if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) {

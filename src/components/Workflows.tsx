@@ -167,17 +167,25 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Flow', icon: 'rule', requiresConfig: true, description: 'Branch based on status.' },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Flow', icon: 'gpp_maybe', requiresConfig: true, description: 'Branch based on risk.' },
   { type: 'condition', key: 'conflict.exists', label: 'Conflict exists', category: 'Flow', icon: 'sync_problem', description: 'Branch if a conflict exists.' },
-  { type: 'condition', key: 'flow.if', label: 'If', category: 'Flow', icon: 'question_mark', requiresConfig: true, description: 'Route items to true or false branches.' },
+  { type: 'condition', key: 'flow.if', label: 'If', category: 'Flow', icon: 'question_mark', requiresConfig: true, description: 'Route items to different branches (true/false).' },
   { type: 'condition', key: 'flow.filter', label: 'Filter', category: 'Flow', icon: 'filter_alt', requiresConfig: true, description: 'Keep only items matching a condition.' },
   { type: 'condition', key: 'flow.switch', label: 'Switch', category: 'Flow', icon: 'shuffle', requiresConfig: true, description: 'Route items to different branches by rules.' },
   { type: 'condition', key: 'flow.compare', label: 'Compare datasets', category: 'Flow', icon: 'compare_arrows', requiresConfig: true, description: 'Compare two inputs and branch on the result.' },
   { type: 'condition', key: 'flow.branch', label: 'Branch', category: 'Flow', icon: 'account_tree', requiresConfig: true, description: 'Split one flow into multiple routes.' },
-  { type: 'utility', key: 'flow.merge', label: 'Merge branches', category: 'Flow', icon: 'merge', requiresConfig: true, description: 'Join parallel branches into one stream.' },
-  { type: 'utility', key: 'flow.loop', label: 'Loop over items', category: 'Flow', icon: 'repeat', requiresConfig: true, description: 'Iterate over items in batches or one by one.' },
+  { type: 'utility', key: 'flow.merge', label: 'Merge', category: 'Flow', icon: 'merge', requiresConfig: true, description: 'Join parallel branches into one stream.' },
+  { type: 'utility', key: 'flow.loop', label: 'Loop Over Items (Split in Batches)', category: 'Flow', icon: 'repeat', requiresConfig: true, description: 'Iterate over items in batches or one by one.' },
   { type: 'utility', key: 'flow.wait', label: 'Wait', category: 'Flow', icon: 'hourglass_top', requiresConfig: true, description: 'Pause before continuing the flow.' },
   { type: 'utility', key: 'flow.subworkflow', label: 'Execute sub-workflow', category: 'Flow', icon: 'subdirectory_arrow_right', requiresConfig: true, description: 'Call another workflow as a reusable step.' },
   { type: 'utility', key: 'flow.stop_error', label: 'Stop and error', category: 'Flow', icon: 'error', requiresConfig: true, description: 'Stop execution and raise an explicit error.' },
   { type: 'utility', key: 'flow.noop', label: 'No-op', category: 'Flow', icon: 'passkey', description: 'Pass data through without changes.' },
+  { type: 'utility', key: 'data.set_fields', label: 'Set fields', category: 'Data transformation', icon: 'edit_note', requiresConfig: true, description: 'Set or override fields in the payload.' },
+  { type: 'utility', key: 'data.rename_fields', label: 'Rename fields', category: 'Data transformation', icon: 'drive_file_rename_outline', requiresConfig: true, description: 'Rename keys in an object payload.' },
+  { type: 'utility', key: 'data.extract_json', label: 'Extract JSON', category: 'Data transformation', icon: 'data_object', requiresConfig: true, description: 'Parse structured JSON from text.' },
+  { type: 'utility', key: 'data.normalize_text', label: 'Normalize text', category: 'Data transformation', icon: 'text_format', requiresConfig: true, description: 'Trim, lowercase, and normalize text values.' },
+  { type: 'utility', key: 'data.format_date', label: 'Format date', category: 'Data transformation', icon: 'event', requiresConfig: true, description: 'Convert a date into a standardized format.' },
+  { type: 'utility', key: 'data.split_items', label: 'Split items', category: 'Data transformation', icon: 'split_scene', requiresConfig: true, description: 'Split a string or array into multiple items.' },
+  { type: 'utility', key: 'data.dedupe', label: 'Deduplicate', category: 'Data transformation', icon: 'content_copy', requiresConfig: true, description: 'Remove duplicate entries from a list.' },
+  { type: 'utility', key: 'data.map_fields', label: 'Map fields', category: 'Data transformation', icon: 'map', requiresConfig: true, description: 'Map one object structure into another.' },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true, description: 'Assign a case to a user or team.' },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true, description: 'Send a customer reply.' },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true, description: 'Add a private note to the case.' },
@@ -325,13 +333,25 @@ const TEMPLATES = [
   },
 ] as const;
 
-const CONFIG_FIELDS = ['field', 'operator', 'value', 'amount', 'reason', 'agent', 'policy', 'connector', 'content', 'queue', 'query', 'expression', 'source', 'target', 'branch', 'mode', 'timeout', 'batchSize', 'maxIterations', 'workflow', 'comparison', 'fallback', 'errorMessage'];
+const CONFIG_FIELDS = ['field', 'operator', 'value', 'amount', 'reason', 'agent', 'policy', 'connector', 'content', 'queue', 'query', 'expression', 'source', 'target', 'branch', 'mode', 'timeout', 'batchSize', 'maxIterations', 'workflow', 'comparison', 'fallback', 'errorMessage', 'path', 'delimiter', 'format', 'mapping', 'operation', 'input', 'output'];
 const EDITOR_TABS = [
   { id: 'builder', label: 'Editor' },
   { id: 'runs', label: 'Executions' },
   { id: 'evaluations', label: 'Evaluations' },
 ] as const;
 const ADD_GROUPS = ['AI', 'Action', 'Data transformation', 'Flow', 'Core', 'Human review', 'Integration', 'Knowledge', 'Trigger'] as const;
+
+const CATEGORY_META: Record<string, { title: string; subtitle: string; icon: string }> = {
+  AI: { title: 'AI', subtitle: 'Build specialist agents and context-aware assistive steps.', icon: 'smart_toy' },
+  Action: { title: 'Action', subtitle: 'Write into cases, orders, payments, returns, and more.', icon: 'bolt' },
+  'Data transformation': { title: 'Data transformation', subtitle: 'Map, clean, reshape, and prepare workflow data.', icon: 'transform' },
+  Flow: { title: 'Flow', subtitle: 'Branch, merge, loop, wait, and coordinate execution.', icon: 'account_tree' },
+  Core: { title: 'Core', subtitle: 'Policies, utilities, and internal system controls.', icon: 'shield' },
+  'Human review': { title: 'Human review', subtitle: 'Pause for approvals and manual decisions.', icon: 'verified' },
+  Integration: { title: 'Integration', subtitle: 'Call connectors and external capabilities.', icon: 'hub' },
+  Knowledge: { title: 'Knowledge', subtitle: 'Search SOPs, policies, and product knowledge.', icon: 'menu_book' },
+  Trigger: { title: 'Trigger', subtitle: 'Start workflows from events or manual runs.', icon: 'play_circle' },
+};
 
 function makeNode(spec: Pick<WorkflowNode, 'type' | 'key' | 'label'> & { config?: Record<string, any>; position?: { x: number; y: number } }, index: number): WorkflowNode {
   return {
@@ -441,6 +461,7 @@ function nodeTone(type: NodeType) {
 }
 
 function categoryForSpec(spec: NodeSpec) {
+  if (spec.key.startsWith('data.')) return 'Data transformation';
   if (spec.type === 'agent') return 'AI';
   if (spec.type === 'condition' || spec.type === 'utility') return 'Flow';
   if (spec.type === 'action') return spec.key === 'approval.create' ? 'Human review' : 'Action';
@@ -448,6 +469,75 @@ function categoryForSpec(spec: NodeSpec) {
   if (spec.type === 'knowledge') return 'Knowledge';
   if (spec.type === 'integration') return 'Integration';
   return spec.category || 'Core';
+}
+
+type AddPanelSection = {
+  title: string;
+  items: NodeSpec[];
+};
+
+function getAddPanelSections(category: string, catalog: NodeSpec[], search: string): AddPanelSection[] {
+  const normalizedSearch = search.trim().toLowerCase();
+  const specs = catalog.filter((spec) => {
+    const matchesCategory = categoryForSpec(spec) === category;
+    const haystack = `${spec.label} ${spec.key} ${spec.description ?? ''}`.toLowerCase();
+    return matchesCategory && (!normalizedSearch || haystack.includes(normalizedSearch));
+  });
+
+  const byKey = new Map(specs.map((spec) => [spec.key, spec]));
+  const pick = (keys: string[]) => keys.map((key) => byKey.get(key)).filter(Boolean) as NodeSpec[];
+
+  const sectionsByCategory: Record<string, AddPanelSection[]> = {
+    Flow: [
+      { title: 'Popular', items: pick(['flow.filter', 'flow.if', 'flow.loop', 'flow.merge']) },
+      { title: 'Other', items: pick(['flow.compare', 'flow.branch', 'flow.switch', 'flow.wait', 'flow.subworkflow', 'flow.stop_error', 'flow.noop']) },
+    ],
+    'Data transformation': [
+      { title: 'Popular', items: pick(['data.set_fields', 'data.rename_fields', 'data.map_fields']) },
+      { title: 'Other', items: pick(['data.extract_json', 'data.normalize_text', 'data.format_date', 'data.split_items', 'data.dedupe']) },
+    ],
+    AI: [
+      { title: 'Popular', items: pick(['agent.run']) },
+      { title: 'Other', items: pick(['knowledge.search']) },
+    ],
+    Action: [
+      { title: 'Cases', items: pick(['case.assign', 'case.reply', 'case.note']) },
+      { title: 'Commerce', items: pick(['order.cancel', 'payment.refund', 'return.create']) },
+    ],
+    'Human review': [
+      { title: 'Approvals', items: pick(['approval.create']) },
+    ],
+    Core: [
+      { title: 'Policy', items: pick(['policy.evaluate']) },
+      { title: 'Runtime', items: pick(['stop', 'retry', 'delay']) },
+    ],
+    Integration: [
+      { title: 'Connectors', items: pick(['connector.call']) },
+    ],
+    Knowledge: [
+      { title: 'Knowledge', items: pick(['knowledge.search']) },
+    ],
+    Trigger: [
+      { title: 'Popular', items: pick(['manual.run', 'case.created', 'message.received', 'order.updated', 'payment.failed', 'return.created', 'approval.decided', 'webhook.received']) },
+    ],
+  };
+
+  const sections = sectionsByCategory[category] ?? [{ title: 'Available blocks', items: specs }];
+  return sections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => {
+      if (normalizedSearch) return `${item.label} ${item.key} ${item.description ?? ''}`.toLowerCase().includes(normalizedSearch);
+      return true;
+    }),
+  })).filter((section) => section.items.length > 0);
+}
+
+function getCategoryOverview(catalog: NodeSpec[]) {
+  return ADD_GROUPS.map((category) => {
+    const items = catalog.filter((spec) => categoryForSpec(spec) === category);
+    const meta = CATEGORY_META[category] ?? { title: category, subtitle: 'Browse available blocks.', icon: 'grid_view' };
+    return { category, ...meta, count: items.length, items };
+  });
 }
 
 function toFlowNodes(
@@ -742,6 +832,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const [templateOpen, setTemplateOpen] = useState(false);
   const [runResult, setRunResult] = useState<any | null>(null);
   const [addPanel, setAddPanel] = useState<AddPanelMode>(null);
+  const [addPanelView, setAddPanelView] = useState<'categories' | 'category'>('categories');
   const [addSearch, setAddSearch] = useState('');
   const [addCategory, setAddCategory] = useState<string>('AI');
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
@@ -785,8 +876,8 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
 
   const handleAddNode = useCallback((nodeId: string, handle?: string) => {
     setSelectedNodeId(nodeId);
-    setAddPanel({ sourceNodeId: nodeId, sourceHandle: handle ?? 'main' });
-  }, []);
+    openAddPanel({ sourceNodeId: nodeId, sourceHandle: handle ?? 'main' });
+  }, [openAddPanel]);
 
   const handleSelectNode = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -838,6 +929,17 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     setContextMenu({ nodeId, ...point });
   }, []);
 
+  const openAddPanel = useCallback((mode: AddPanelMode = {}) => {
+    setAddPanel(mode);
+    setAddPanelView('categories');
+    setAddSearch('');
+  }, []);
+
+  const openAddCategory = useCallback((category: string) => {
+    setAddCategory(category);
+    setAddPanelView('category');
+  }, []);
+
   const nodeHandlers = useMemo(() => ({
     onSelect: handleSelectNode,
     onAdd: handleAddNode,
@@ -855,11 +957,21 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
 
   useEffect(() => {
     setFlowEdges(toFlowEdges(workflowEdges, {
-      onAddEdge: (edgeId) => setAddPanel({ edgeId }),
+      onAddEdge: (edgeId) => openAddPanel({ edgeId }),
       onDeleteEdge: (edgeId) => deleteEdge(edgeId),
       onRenameEdge: (edgeId) => renameEdge(edgeId),
     }));
-  }, [workflowEdges]);
+  }, [workflowEdges, openAddPanel]);
+
+  useEffect(() => {
+    if (addPanel) {
+      setAddPanelView('categories');
+      setAddSearch('');
+    } else {
+      setAddPanelView('categories');
+      setAddSearch('');
+    }
+  }, [addPanel]);
 
   useEffect(() => {
     if (!focusWorkflowId || workflows.length === 0) return;
@@ -1353,12 +1465,8 @@ function loadBuilderState(workflow: Workflow) {
     setWorkflowNodes((items) => items.map((item) => item.id === node.id ? { ...item, position: node.position } : item));
   }
 
-  const visibleCatalog = catalog.filter((spec) => {
-    const group = categoryForSpec(spec);
-    const matchesCategory = addCategory === group || (addCategory === 'Data transformation' && spec.type === 'condition');
-    const haystack = `${spec.label} ${spec.key} ${spec.description ?? ''}`.toLowerCase();
-    return matchesCategory && (!addSearch.trim() || haystack.includes(addSearch.trim().toLowerCase()));
-  });
+  const addCategories = useMemo(() => getCategoryOverview(catalog), [catalog]);
+  const addSections = useMemo(() => getAddPanelSections(addCategory, catalog, addSearch), [catalog, addCategory, addSearch]);
 
   if (loading && workflows.length === 0) {
     return <LoadingState title="Loading workflows" message="Fetching workflow definitions from Supabase." />;
@@ -1457,17 +1565,18 @@ function loadBuilderState(workflow: Workflow) {
                       </Panel>
                     </ReactFlow>
 
-                    <button onClick={() => setAddPanel({})} className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-xl shadow-sm hover:bg-gray-50">+</button>
+                    <button onClick={() => openAddPanel({})} className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-xl shadow-sm hover:bg-gray-50">+</button>
 
                     {addPanel && (
                       <WorkflowAddNodePanel
-                        catalog={catalog}
-                        categories={ADD_GROUPS as unknown as string[]}
+                        screen={addPanelView}
                         activeCategory={addCategory}
-                        setActiveCategory={setAddCategory}
+                        categories={addCategories}
+                        sections={addSections}
+                        onOpenCategory={openAddCategory}
+                        onBack={() => setAddPanelView('categories')}
                         search={addSearch}
                         setSearch={setAddSearch}
-                        visibleCatalog={visibleCatalog}
                         onClose={() => setAddPanel(null)}
                         onSelect={(spec) => addNode(spec)}
                       />
@@ -1752,52 +1861,134 @@ function WorkflowEditorTopbar(props: {
 }
 
 function WorkflowAddNodePanel(props: {
-  catalog: NodeSpec[];
-  categories: string[];
+  screen: 'categories' | 'category';
   activeCategory: string;
-  setActiveCategory: (category: string) => void;
+  categories: Array<{ category: string; title: string; subtitle: string; icon: string; count: number }>;
+  sections: AddPanelSection[];
+  onOpenCategory: (category: string) => void;
+  onBack: () => void;
   search: string;
   setSearch: (search: string) => void;
-  visibleCatalog: NodeSpec[];
   onClose: () => void;
   onSelect: (spec: NodeSpec) => void;
 }) {
   return (
-    <aside className="absolute right-0 top-0 z-30 h-full w-[390px] border-l border-gray-200 bg-white shadow-xl">
-      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-        <div>
-          <h3 className="text-lg font-bold text-gray-900">What happens next?</h3>
-          <p className="mt-1 text-xs text-gray-500">Choose the next CRM-AI operation.</p>
-        </div>
-        <button onClick={props.onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><span className="material-symbols-outlined">close</span></button>
-      </div>
-      <div className="p-5">
-        <div className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 focus-within:ring-2 focus-within:ring-black/10">
-          <span className="material-symbols-outlined text-base text-gray-400">search</span>
-          <input value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search nodes..." className="w-full bg-transparent text-sm outline-none" />
-        </div>
-        <div className="mt-5 space-y-1">
-          {props.categories.map((category) => (
-            <button key={category} onClick={() => props.setActiveCategory(category)} className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition ${props.activeCategory === category ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
-              <span className="text-sm font-semibold">{category}</span>
-              <span className="material-symbols-outlined text-base">chevron_right</span>
-            </button>
-          ))}
-        </div>
-        <div className="mt-5 border-t border-gray-100 pt-5">
-          {props.visibleCatalog.map((spec) => (
-            <button key={spec.key} onClick={() => props.onSelect(spec)} className="flex w-full items-center gap-4 rounded-xl px-2 py-3 text-left hover:bg-gray-50">
-              <span className="material-symbols-outlined text-2xl text-gray-500">{spec.icon}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-gray-900">{spec.label}</span>
-                <span className="block text-xs text-gray-500">{spec.description ?? spec.key}</span>
-              </span>
-              <span className="material-symbols-outlined text-base text-gray-400">arrow_forward</span>
-            </button>
-          ))}
-          {props.visibleCatalog.length === 0 && <div className="py-10 text-center text-sm text-gray-500">No nodes found.</div>}
-        </div>
-      </div>
+    <aside className="absolute right-0 top-0 z-30 h-full w-[420px] border-l border-gray-200 bg-white shadow-xl">
+      <AnimatePresence mode="wait" initial={false}>
+        {props.screen === 'categories' ? (
+          <motion.div
+            key="categories"
+            initial={{ opacity: 0, x: 14 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -14 }}
+            className="flex h-full flex-col"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">What happens next?</h3>
+                <p className="mt-1 text-xs text-gray-500">Choose the next CRM-AI operation.</p>
+              </div>
+              <button onClick={props.onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-5">
+              <div className="flex items-center gap-2 rounded-xl border border-gray-300 px-3 py-2 focus-within:ring-2 focus-within:ring-black/10">
+                <span className="material-symbols-outlined text-base text-gray-400">search</span>
+                <input value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search nodes..." className="w-full bg-transparent text-sm outline-none" />
+              </div>
+              <div className="mt-5 space-y-2">
+                {props.categories.map((category) => (
+                  <button
+                    key={category.category}
+                    onClick={() => props.onOpenCategory(category.category)}
+                    className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                      props.activeCategory === category.category
+                        ? 'border-gray-300 bg-gray-50 text-gray-900 shadow-sm'
+                        : 'border-transparent text-gray-700 hover:border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-gray-700 shadow-sm">
+                      <span className="material-symbols-outlined text-xl">{category.icon}</span>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">{category.title}</span>
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-500">{category.count}</span>
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-gray-500">{category.subtitle}</span>
+                    </span>
+                    <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="category"
+            initial={{ opacity: 0, x: 14 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -14 }}
+            className="flex h-full flex-col"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <button onClick={props.onBack} className="flex items-center gap-2 text-gray-500 hover:text-gray-900">
+                <span className="material-symbols-outlined text-lg">arrow_back</span>
+                <span className="text-sm font-semibold">Back</span>
+              </button>
+              <button onClick={props.onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="border-b border-gray-100 px-5 py-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 text-gray-700">
+                  <span className="material-symbols-outlined text-xl">{CATEGORY_META[props.activeCategory]?.icon ?? 'grid_view'}</span>
+                </span>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">{CATEGORY_META[props.activeCategory]?.title ?? props.activeCategory}</h3>
+                  <p className="mt-1 text-xs text-gray-500">{CATEGORY_META[props.activeCategory]?.subtitle ?? 'Choose a block for this category.'}</p>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-2 rounded-xl border border-gray-300 px-3 py-2 focus-within:ring-2 focus-within:ring-black/10">
+                <span className="material-symbols-outlined text-base text-gray-400">search</span>
+                <input value={props.search} onChange={(event) => props.setSearch(event.target.value)} placeholder="Search nodes..." className="w-full bg-transparent text-sm outline-none" />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {props.sections.length > 0 ? (
+                <div className="space-y-5">
+                  {props.sections.map((section) => (
+                    <section key={section.title}>
+                      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                        <h4 className="text-sm font-bold text-gray-700">{section.title}</h4>
+                        <span className="text-[11px] uppercase tracking-[0.24em] text-gray-400">{section.items.length}</span>
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {section.items.map((spec) => (
+                          <button key={spec.key} onClick={() => props.onSelect(spec)} className="flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-gray-50">
+                            <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm">
+                              <span className="material-symbols-outlined text-lg">{spec.icon}</span>
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-semibold text-gray-900">{spec.label}</span>
+                              <span className="mt-1 block text-xs leading-5 text-gray-500">{spec.description ?? spec.key}</span>
+                            </span>
+                            <span className="material-symbols-outlined mt-1 text-base text-gray-400">arrow_forward</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-gray-500">No nodes found.</div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </aside>
   );
 }
