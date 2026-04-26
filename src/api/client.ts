@@ -227,6 +227,11 @@ export const workflowsApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  stepRun: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/step-run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   run: (id: string, payload: Record<string, any> = {}) =>
     request<any>(`/workflows/${id}/run`, {
       method: 'POST',
@@ -239,6 +244,16 @@ export const workflowsApi = {
     }),
   retryRun: (runId: string, payload: Record<string, any> = {}) =>
     request<any>(`/workflows/runs/${runId}/retry`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  resumeRun: (runId: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/runs/${runId}/resume`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  cancelRun: (runId: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/runs/${runId}/cancel`, {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

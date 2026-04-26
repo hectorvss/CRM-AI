@@ -56,6 +56,9 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'stop', label: 'Stop workflow', category: 'Utility', icon: 'stop_circle', requiresConfig: false },
 ];
 
+const SENSITIVE_KEYS = new Set(['order.cancel', 'payment.refund', 'connector.call']);
+const PAUSED_STATUSES = new Set(['waiting', 'waiting_approval', 'paused']);
+
 function normalizeNodes(nodes: any[] = []) {
   return nodes.map((node, index) => ({
     id: node.id ?? `node_${index + 1}`,
@@ -64,32 +67,80 @@ function normalizeNodes(nodes: any[] = []) {
     label: node.label ?? node.name ?? node.key ?? 'Untitled node',
     position: node.position ?? { x: 160 + index * 240, y: 160 + (index % 3) * 100 },
     config: node.config ?? {},
+    disabled: Boolean(node.disabled),
+    ui: node.ui ?? {},
+    credentialsRef: node.credentialsRef ?? node.credentials_ref ?? node.config?.connector_id ?? node.config?.connectorId ?? node.config?.connector ?? null,
+    retryPolicy: node.retryPolicy ?? node.retry_policy ?? null,
   }));
+}
+
+function buildDiagnostic(nodeId: string | null, severity: 'error' | 'warning' | 'info', code: string, message: string, blocking = severity === 'error') {
+  return { nodeId, severity, code, message, blocking };
 }
 
 function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
   const normalized = normalizeNodes(nodes);
   const errors: string[] = [];
   const warnings: string[] = [];
+  const diagnostics: any[] = [];
   const catalogByKey = new Map(NODE_CATALOG.map((node) => [node.key, node]));
 
-  if (normalized.length === 0) errors.push('Add at least one trigger node.');
-  if (!normalized.some((node) => node.type === 'trigger')) errors.push('A workflow needs one trigger.');
+  if (normalized.length === 0) {
+    const diagnostic = buildDiagnostic(null, 'error', 'workflow.empty', 'Add at least one trigger node.');
+    errors.push(diagnostic.message);
+    diagnostics.push(diagnostic);
+  }
+  if (!normalized.some((node) => node.type === 'trigger')) {
+    const diagnostic = buildDiagnostic(null, 'error', 'workflow.missing_trigger', 'A workflow needs one trigger.');
+    errors.push(diagnostic.message);
+    diagnostics.push(diagnostic);
+  }
 
   const nodeIds = new Set(normalized.map((node) => node.id));
   for (const edge of edges ?? []) {
-    if (!nodeIds.has(edge.source)) errors.push(`Edge ${edge.id ?? ''} has an unknown source.`);
-    if (!nodeIds.has(edge.target)) errors.push(`Edge ${edge.id ?? ''} has an unknown target.`);
+    if (!nodeIds.has(edge.source)) {
+      const diagnostic = buildDiagnostic(edge.source ?? null, 'error', 'edge.unknown_source', `Edge ${edge.id ?? ''} has an unknown source.`);
+      errors.push(diagnostic.message);
+      diagnostics.push(diagnostic);
+    }
+    if (!nodeIds.has(edge.target)) {
+      const diagnostic = buildDiagnostic(edge.target ?? null, 'error', 'edge.unknown_target', `Edge ${edge.id ?? ''} has an unknown target.`);
+      errors.push(diagnostic.message);
+      diagnostics.push(diagnostic);
+    }
   }
 
   for (const node of normalized) {
     const spec = catalogByKey.get(node.key);
-    if (!spec) warnings.push(`${node.label} uses a custom node key (${node.key}).`);
-    if (spec?.requiresConfig && Object.keys(node.config ?? {}).length === 0) {
-      errors.push(`${node.label} needs configuration before publishing.`);
+    if (node.disabled) {
+      diagnostics.push(buildDiagnostic(node.id, 'info', 'node.disabled', `${node.label} is disabled and will be skipped.`, false));
+      continue;
     }
-  if (spec?.sensitive && !normalized.some((candidate) => candidate.type === 'policy' || candidate.key === 'policy.evaluate' || candidate.key === 'approval.create')) {
-      errors.push(`${node.label} is sensitive and requires a policy or approval node.`);
+    if (!spec) {
+      const diagnostic = buildDiagnostic(node.id, 'warning', 'node.custom_key', `${node.label} uses a custom node key (${node.key}).`, false);
+      warnings.push(diagnostic.message);
+      diagnostics.push(diagnostic);
+    }
+    if (spec?.requiresConfig && Object.keys(node.config ?? {}).length === 0) {
+      const diagnostic = buildDiagnostic(node.id, 'error', 'node.missing_config', `${node.label} needs configuration before publishing.`);
+      errors.push(diagnostic.message);
+      diagnostics.push(diagnostic);
+    }
+    if (node.key === 'connector.call' && !(node.credentialsRef || node.config?.connector_id || node.config?.connectorId || node.config?.connector)) {
+      const diagnostic = buildDiagnostic(node.id, 'error', 'connector.missing_connection', `${node.label} needs a connector connection before publishing.`);
+      errors.push(diagnostic.message);
+      diagnostics.push(diagnostic);
+    }
+    if (node.key === 'delay' && !(node.config?.duration || node.config?.until || node.config?.mode === 'manual_resume')) {
+      diagnostics.push(buildDiagnostic(node.id, 'warning', 'delay.manual_resume', `${node.label} has no duration and will wait for manual resume.`, false));
+    }
+    if (SENSITIVE_KEYS.has(node.key) && !node.retryPolicy) {
+      diagnostics.push(buildDiagnostic(node.id, 'warning', 'runtime.retry_missing', `${node.label} has no retry policy configured.`, false));
+    }
+    if (spec?.sensitive && !normalized.some((candidate) => !candidate.disabled && (candidate.type === 'policy' || candidate.key === 'policy.evaluate' || candidate.key === 'approval.create'))) {
+      const diagnostic = buildDiagnostic(node.id, 'error', 'sensitive.missing_guardrail', `${node.label} is sensitive and requires a policy or approval node.`);
+      errors.push(diagnostic.message);
+      diagnostics.push(diagnostic);
     }
   }
 
@@ -97,6 +148,7 @@ function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
     ok: errors.length === 0,
     errors,
     warnings,
+    diagnostics,
     nodes: normalized,
     edges: edges ?? [],
   };
@@ -114,10 +166,15 @@ function buildDryRun(nodes: any[] = [], edges: any[] = [], triggerPayload: any =
       label: node.label,
       type: node.type,
       key: node.key,
-      status: blocked ? 'blocked' : 'would_run',
+      status: node.disabled ? 'skipped' : blocked ? 'blocked' : 'would_run',
       order: index + 1,
       input: index === 0 ? triggerPayload : { fromPreviousStep: true },
-      output: blocked ? { reason: 'Validation error' } : { simulated: true, sideEffects: 'none' },
+      output: node.disabled
+        ? { reason: 'Node is disabled' }
+        : blocked ? { reason: 'Validation error' } : { simulated: true, sideEffects: 'none' },
+      durationMs: node.disabled ? 0 : 20 + index * 7,
+      evidence: [{ type: 'workflow_node', id: node.id, label: node.label }],
+      navigationTarget: { page: 'workflows', entityType: 'workflow_node', entityId: node.id },
       sensitive: Boolean(spec?.sensitive),
     };
   });
@@ -237,6 +294,36 @@ function pickNextNode(nodes: any[] = [], edges: any[] = [], currentNode: any, co
   return nodes.find((node) => node.id === next.target) ?? null;
 }
 
+function buildStepDryRun(nodes: any[] = [], edges: any[] = [], nodeId: string, triggerPayload: any = {}) {
+  const dryRun = buildDryRun(nodes, edges, triggerPayload);
+  const executionOrder = dryRun.steps ?? [];
+  const index = executionOrder.findIndex((step: any) => step.nodeId === nodeId || step.node_id === nodeId);
+  if (index === -1) {
+    const error: any = new Error('Workflow node not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  const step = executionOrder[index];
+  const previous = index > 0 ? executionOrder[index - 1] : null;
+  const node = dryRun.validation.nodes.find((item: any) => item.id === nodeId);
+  return {
+    ok: step.status !== 'blocked',
+    dryRun: true,
+    nodeId,
+    label: step.label,
+    status: step.status,
+    input: previous?.output ? { previousOutput: previous.output, trigger: triggerPayload } : triggerPayload,
+    output: step.output,
+    error: step.status === 'blocked' ? step.output?.reason ?? 'Validation error' : null,
+    durationMs: step.durationMs ?? 0,
+    evidence: step.evidence ?? [{ type: 'workflow_node', id: nodeId, label: step.label }],
+    navigationTarget: { page: 'workflows', entityType: 'workflow_node', entityId: nodeId },
+    diagnostics: dryRun.validation.diagnostics.filter((diagnostic: any) => !diagnostic.nodeId || diagnostic.nodeId === nodeId),
+    parentState: previous ? 'available' : 'root',
+    node,
+  };
+}
+
 function normalizeTriggerName(value: string | null | undefined) {
   return String(value ?? '').trim().toLowerCase().replace(/_/g, '.');
 }
@@ -261,6 +348,10 @@ function workflowMatchesTrigger(version: any, eventType: string) {
 }
 
 async function executeWorkflowNode(scope: { tenantId: string; workspaceId: string; userId?: string }, node: any, context: any) {
+  if (node.disabled) {
+    return { status: 'skipped', output: { reason: 'Node is disabled' } };
+  }
+
   const config = resolveNodeConfig(node.config ?? {}, context);
 
   if (node.type === 'trigger') {
@@ -617,6 +708,131 @@ async function executeWorkflowVersion({
   return { id: runId, status: finalStatus, error: finalError, steps, retryOfRunId };
 }
 
+async function continueWorkflowRun({
+  tenantId,
+  workspaceId,
+  userId,
+  run,
+  version,
+  resumePayload,
+}: {
+  tenantId: string;
+  workspaceId: string;
+  userId?: string;
+  run: any;
+  version: any;
+  resumePayload?: any;
+}) {
+  if (!PAUSED_STATUSES.has(String(run.status))) {
+    const error: any = new Error('Workflow run is not paused or waiting');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const validation = validateWorkflowDefinition(version.nodes ?? [], version.edges ?? []);
+  if (!validation.ok) {
+    const error: any = new Error('Workflow is not executable');
+    error.statusCode = 422;
+    error.validation = validation;
+    throw error;
+  }
+
+  const supabase = getSupabaseAdmin();
+  const workflowContext = {
+    ...(run.context?.workflowContext ?? {}),
+    resume: {
+      resumedAt: new Date().toISOString(),
+      resumedBy: userId ?? 'system',
+      payload: resumePayload ?? {},
+    },
+  };
+
+  const currentNode = validation.nodes.find((node: any) => node.id === run.current_node_id) ?? null;
+  let nextNode = currentNode
+    ? pickNextNode(validation.nodes, validation.edges, currentNode, workflowContext)
+    : getStartNode(validation.nodes);
+
+  const resumedStep = {
+    id: crypto.randomUUID(),
+    workflow_run_id: run.id,
+    node_id: run.current_node_id ?? 'resume',
+    node_type: 'resume',
+    status: 'resumed',
+    input: resumePayload ?? {},
+    output: { resumed: true, previousStatus: run.status },
+    started_at: new Date().toISOString(),
+    ended_at: new Date().toISOString(),
+    error: null,
+  };
+
+  const steps: any[] = [resumedStep];
+  const visited = new Set<string>();
+  let finalStatus = 'completed';
+  let finalError: string | null = null;
+  let guard = 0;
+
+  await supabase
+    .from('workflow_runs')
+    .update({ status: 'running', ended_at: null, error: null })
+    .eq('id', run.id)
+    .eq('tenant_id', tenantId);
+
+  while (nextNode && !visited.has(nextNode.id) && guard < validation.nodes.length) {
+    visited.add(nextNode.id);
+    const startedAt = new Date().toISOString();
+    const result = await executeWorkflowNode({ tenantId, workspaceId, userId }, nextNode, workflowContext);
+    const endedAt = new Date().toISOString();
+    steps.push({
+      id: crypto.randomUUID(),
+      workflow_run_id: run.id,
+      node_id: nextNode.id,
+      node_type: nextNode.type,
+      status: result.status,
+      input: { resumed: true, fromPreviousStep: true },
+      output: result.output ?? {},
+      started_at: startedAt,
+      ended_at: endedAt,
+      error: result.error ?? null,
+    });
+    guard += 1;
+
+    if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) {
+      finalStatus = result.status === 'waiting_approval' ? 'waiting' : result.status;
+      finalError = result.error ?? result.output?.reason ?? null;
+      break;
+    }
+
+    nextNode = pickNextNode(validation.nodes, validation.edges, nextNode, workflowContext);
+  }
+
+  if (nextNode && visited.has(nextNode.id)) {
+    finalStatus = 'failed';
+    finalError = `Cycle detected at node ${nextNode.label ?? nextNode.id}`;
+  }
+
+  const { error: stepsError } = await supabase.from('workflow_run_steps').insert(steps);
+  if (stepsError) throw stepsError;
+
+  const { error: runError } = await supabase.from('workflow_runs').update({
+    status: finalStatus,
+    current_node_id: steps.at(-1)?.node_id ?? run.current_node_id,
+    context: { ...(run.context ?? {}), workflowContext, resumedFromRunId: run.id },
+    ended_at: ['completed', 'failed', 'blocked', 'stopped', 'cancelled'].includes(finalStatus) ? new Date().toISOString() : null,
+    error: finalError,
+  }).eq('id', run.id).eq('tenant_id', tenantId);
+  if (runError) throw runError;
+
+  await auditRepository.logEvent({ tenantId, workspaceId }, {
+    actorId: userId ?? 'system',
+    action: finalStatus === 'completed' ? 'WORKFLOW_RUN_RESUMED_COMPLETED' : 'WORKFLOW_RUN_RESUMED_PAUSED',
+    entityType: 'workflow_run',
+    entityId: run.id,
+    metadata: { finalStatus, finalError, stepCount: steps.length },
+  });
+
+  return { id: run.id, status: finalStatus, error: finalError, steps };
+}
+
 router.get('/', async (req: MultiTenantRequest, res) => {
   try {
     const tenantId = req.tenantId!;
@@ -750,6 +966,93 @@ router.get('/runs/:runId', requirePermission('workflows.read'), async (req: Mult
     });
   } catch (error) {
     console.error('Error fetching workflow run:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/runs/:runId/resume', requirePermission('workflows.trigger'), async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const supabase = getSupabaseAdmin();
+    const { data: run, error: runError } = await supabase
+      .from('workflow_runs')
+      .select('*, workflow_versions!inner(id, workflow_id, status, nodes, edges, trigger)')
+      .eq('id', req.params.runId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (runError) throw runError;
+    if (!run) return res.status(404).json({ error: 'Workflow run not found' });
+    const result = await continueWorkflowRun({
+      tenantId,
+      workspaceId,
+      userId: req.userId,
+      run,
+      version: run.workflow_versions,
+      resumePayload: req.body ?? {},
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error resuming workflow run:', error);
+    const status = (error as any)?.statusCode ?? 500;
+    res.status(status).json({ error: status === 409 ? (error as Error).message : 'Internal server error', validation: (error as any)?.validation });
+  }
+});
+
+router.post('/runs/:runId/cancel', requirePermission('workflows.trigger'), async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const supabase = getSupabaseAdmin();
+    const now = new Date().toISOString();
+    const { data: run, error: fetchError } = await supabase
+      .from('workflow_runs')
+      .select('*')
+      .eq('id', req.params.runId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!run) return res.status(404).json({ error: 'Workflow run not found' });
+
+    const { error } = await supabase
+      .from('workflow_runs')
+      .update({
+        status: 'cancelled',
+        ended_at: now,
+        error: req.body?.reason ?? 'Cancelled manually',
+        context: { ...(run.context ?? {}), cancelledAt: now, cancelledBy: req.userId ?? 'system' },
+      })
+      .eq('id', req.params.runId)
+      .eq('tenant_id', tenantId);
+    if (error) throw error;
+
+    const step = {
+      id: crypto.randomUUID(),
+      workflow_run_id: req.params.runId,
+      node_id: run.current_node_id ?? 'cancel',
+      node_type: 'cancel',
+      status: 'cancelled',
+      input: req.body ?? {},
+      output: { cancelled: true },
+      started_at: now,
+      ended_at: now,
+      error: req.body?.reason ?? null,
+    };
+    await supabase.from('workflow_run_steps').insert(step);
+
+    await auditRepository.logEvent({ tenantId, workspaceId }, {
+      actorId: req.userId ?? 'system',
+      action: 'WORKFLOW_RUN_CANCELLED',
+      entityType: 'workflow_run',
+      entityId: req.params.runId,
+      metadata: { reason: req.body?.reason ?? null },
+    });
+
+    res.json({ id: req.params.runId, status: 'cancelled', steps: [step] });
+  } catch (error) {
+    console.error('Error cancelling workflow run:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -974,6 +1277,38 @@ router.post('/:id/dry-run', requirePermission('workflows.trigger'), async (req: 
   } catch (error) {
     console.error('Error running workflow dry-run:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/step-run', requirePermission('workflows.trigger'), async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
+    if (!wf) return res.status(404).json({ error: 'Not found' });
+    const version = wf.current_version_id
+      ? await workflowRepository.getVersion(wf.current_version_id)
+      : await workflowRepository.getLatestVersion(wf.id);
+    const nodeId = req.body?.nodeId ?? req.body?.node_id;
+    if (!nodeId) return res.status(400).json({ error: 'nodeId is required' });
+    const result = buildStepDryRun(
+      req.body?.nodes ?? version?.nodes ?? [],
+      req.body?.edges ?? version?.edges ?? [],
+      nodeId,
+      req.body?.triggerPayload ?? { workflowId: wf.id, manual: true, source: 'step-run' },
+    );
+    await auditRepository.logEvent({ tenantId, workspaceId }, {
+      actorId: req.userId ?? 'system',
+      action: 'WORKFLOW_STEP_DRY_RUN',
+      entityType: 'workflow',
+      entityId: wf.id,
+      metadata: { nodeId, status: result.status, ok: result.ok },
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Error running workflow step dry-run:', error);
+    const status = (error as any)?.statusCode ?? 500;
+    res.status(status).json({ error: status === 404 ? 'Workflow node not found' : 'Internal server error' });
   }
 });
 
