@@ -234,6 +234,7 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'utility', key: 'delay', label: 'Delay', category: 'Flow', icon: 'schedule', requiresConfig: true, description: 'Pause execution.' },
   { type: 'utility', key: 'retry', label: 'Retry', category: 'Flow', icon: 'refresh', requiresConfig: true, description: 'Retry after failure.' },
   { type: 'utility', key: 'stop', label: 'Stop workflow', category: 'Flow', icon: 'stop_circle', description: 'Stop the workflow.' },
+  { type: 'trigger', key: 'trigger.schedule', label: 'Schedule (cron)', category: 'Trigger', icon: 'event_repeat', requiresConfig: true, description: 'Run the workflow on a cron schedule.' },
 ];
 
 const TEMPLATES = [
@@ -407,7 +408,9 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'maxIterations', label: 'Max iterations', type: 'number', placeholder: '100' },
   ],
   'flow.subworkflow': [
-    { key: 'workflow', label: 'Workflow ID or name', type: 'text', placeholder: 'e.g. review_case_flow' },
+    { key: 'workflowId', label: 'Sub-workflow ID', type: 'text', placeholder: 'uuid of the target workflow', hint: 'Must be a published workflow in the same tenant' },
+    { key: 'outputKey', label: 'Output variable', type: 'text', placeholder: 'subworkflow', hint: 'Result stored as context.data.<variable>' },
+    { key: 'input', label: 'Input mapping (JSON, optional)', type: 'textarea', placeholder: '{"caseId":"{{case.id}}"}', hint: 'Pass specific fields to the sub-workflow. Defaults to current context.' },
   ],
   'flow.stop_error': [
     { key: 'errorMessage', label: 'Error message', type: 'text', placeholder: 'e.g. Stopped: missing required data' },
@@ -653,6 +656,12 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'path', label: 'Webhook path', type: 'text', placeholder: 'e.g. /hooks/myworkflow' },
   ],
   'case.created': [{ key: 'filter', label: 'Filter expression (optional)', type: 'text', placeholder: 'e.g. case.priority == high' }],
+  // ── Scheduled trigger ─────────────────────────────────────────────────────
+  'trigger.schedule': [
+    { key: 'cron', label: 'Cron expression', type: 'text', placeholder: '0 9 * * 1-5', hint: 'Standard cron (min hour day month weekday). E.g. "0 9 * * 1-5" = every weekday at 9 AM' },
+    { key: 'timezone', label: 'Timezone (optional)', type: 'text', placeholder: 'Europe/Madrid', hint: 'IANA timezone name. Defaults to UTC.' },
+    { key: 'description', label: 'Schedule description (optional)', type: 'text', placeholder: 'e.g. Daily business-hours sweep' },
+  ],
 };
 
 function nodeFieldsForKey(key: string): NodeFieldDef[] {
@@ -1188,6 +1197,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const [editorNodeId, setEditorNodeId] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<'parameters' | 'settings'>('parameters');
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingCardAction, setPendingCardAction] = useState<string | null>(null);
 
   const { data: apiWorkflows, loading, error } = useApi(() => workflowsApi.list(), [], []);
   const { data: catalogPayload } = useApi(() => workflowsApi.catalog(), [], null);
@@ -1343,6 +1353,35 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     if (target) void openWorkflow(target);
   }, [focusWorkflowId, workflows.length]);
 
+  // Dispatch deferred card action after the workflow is loaded into editor state
+  useEffect(() => {
+    if (!pendingCardAction || !selectedWorkflow) return;
+    const action = pendingCardAction;
+    setPendingCardAction(null);
+    switch (action) {
+      case 'edit_description': void editWorkflowDescription(); break;
+      case 'rename':           void renameCurrentWorkflow();   break;
+      case 'move':             void moveCurrentWorkflow();     break;
+      case 'duplicate':        void duplicateCurrentWorkflow(); break;
+      case 'download':         downloadCurrentWorkflow();      break;
+      case 'share':            void shareCurrentWorkflow();    break;
+      case 'push_git':         void pushWorkflowToGit();       break;
+      case 'import_url':       void importWorkflowFromUrl();   break;
+      case 'import_file':      importWorkflowFromFile();       break;
+      case 'archive':          void archiveCurrentWorkflow();  break;
+      case 'validate':         void validateCurrentWorkflow(); break;
+      case 'tidy':             tidyWorkflow();                 break;
+      case 'dry_run':          void runDryRun();               break;
+      case 'run':              void executeManualRun();        break;
+      case 'trigger':          void triggerCurrentEvent();     break;
+      case 'retry':            void retryLatestRun();          break;
+      case 'resume':           void resumeLatestRun();         break;
+      case 'cancel':           void cancelLatestRun();         break;
+      case 'rollback':         void rollback();                break;
+      default: break;
+    }
+  }, [pendingCardAction, selectedWorkflow?.id]);
+
   function syncFromFlow(nextNodes = flowNodes, nextEdges = flowEdges) {
     setWorkflowNodes(fromFlowNodes(nextNodes, workflowNodes));
     setWorkflowEdges(fromFlowEdges(nextEdges));
@@ -1369,6 +1408,12 @@ function loadBuilderState(workflow: Workflow) {
     loadBuilderState(hydrated);
     setView('builder');
     setActiveTab('builder');
+  }
+
+  async function handleCardAction(workflow: Workflow, action: string) {
+    // Open the workflow in the editor, then dispatch the deferred action via effect
+    await openWorkflow(workflow);
+    setPendingCardAction(action);
   }
 
   async function createFromTemplate(template = TEMPLATES[0]) {
@@ -1850,6 +1895,7 @@ function loadBuilderState(workflow: Workflow) {
               setQuery={setQuery}
               workflows={filtered}
               onOpen={openWorkflow}
+              onCardAction={handleCardAction}
               onTemplate={() => setTemplateOpen(true)}
               onCreate={() => createFromTemplate(TEMPLATES[0])}
             />
@@ -2002,6 +2048,86 @@ function loadBuilderState(workflow: Workflow) {
   );
 }
 
+// ── Per-card dropdown menu items ──────────────────────────────────────────
+const CARD_MANAGE_ITEMS: Array<{ action: string; label: string; icon: string; danger?: boolean }> = [
+  { action: 'edit_description', label: 'Edit description', icon: 'description' },
+  { action: 'rename',           label: 'Rename',           icon: 'drive_file_rename_outline' },
+  { action: 'move',             label: 'Move to category', icon: 'folder_open' },
+  { action: 'duplicate',        label: 'Duplicate',        icon: 'content_copy' },
+  { action: 'download',         label: 'Download JSON',    icon: 'download' },
+  { action: 'share',            label: 'Copy link',        icon: 'link' },
+  { action: 'push_git',         label: 'Push to Git',      icon: 'commit' },
+  { action: 'import_url',       label: 'Import from URL',  icon: 'cloud_download' },
+  { action: 'import_file',      label: 'Import from file', icon: 'upload_file' },
+  { action: 'archive',          label: 'Archive',          icon: 'archive', danger: true },
+];
+
+const CARD_RUN_ITEMS: Array<{ action: string; label: string; icon: string }> = [
+  { action: 'validate',   label: 'Validate',     icon: 'fact_check' },
+  { action: 'tidy',       label: 'Tidy canvas',  icon: 'auto_fix_high' },
+  { action: 'dry_run',    label: 'Dry run',      icon: 'science' },
+  { action: 'run',        label: 'Run now',      icon: 'play_arrow' },
+  { action: 'trigger',    label: 'Trigger event',icon: 'bolt' },
+  { action: 'retry',      label: 'Retry last',   icon: 'replay' },
+  { action: 'resume',     label: 'Resume',       icon: 'play_circle' },
+  { action: 'cancel',     label: 'Cancel',       icon: 'cancel' },
+  { action: 'rollback',   label: 'Rollback',     icon: 'history' },
+];
+
+function WorkflowCardDropdown(props: {
+  workflow: Workflow;
+  kind: 'manage' | 'run';
+  onAction: (workflow: Workflow, action: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const items = props.kind === 'manage' ? CARD_MANAGE_ITEMS : CARD_RUN_ITEMS;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        title={props.kind === 'manage' ? 'Manage' : 'Run & Test'}
+        className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition
+          ${props.kind === 'manage'
+            ? 'border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+            : 'border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+          }`}
+      >
+        <span className="material-symbols-outlined text-base leading-none">
+          {props.kind === 'manage' ? 'settings' : 'play_circle'}
+        </span>
+        <span>{props.kind === 'manage' ? 'Manage' : 'Run'}</span>
+        <span className="material-symbols-outlined text-xs leading-none">expand_more</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+          {items.map((item) => (
+            <button
+              key={item.action}
+              onClick={(e) => { e.stopPropagation(); setOpen(false); props.onAction(props.workflow, item.action); }}
+              className={`flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm transition hover:bg-gray-50 dark:hover:bg-gray-800
+                ${'danger' in item && item.danger ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}
+            >
+              <span className="material-symbols-outlined text-base leading-none">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkflowList(props: {
   error: string | null;
   filters: string[];
@@ -2011,6 +2137,7 @@ function WorkflowList(props: {
   setQuery: (query: string) => void;
   workflows: Workflow[];
   onOpen: (workflow: Workflow) => void;
+  onCardAction: (workflow: Workflow, action: string) => void;
   onTemplate: () => void;
   onCreate: () => void;
 }) {
@@ -2040,15 +2167,21 @@ function WorkflowList(props: {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           {props.workflows.map((workflow) => (
-            <button key={workflow.id} onClick={() => void props.onOpen(workflow)} className="text-left rounded-2xl border border-gray-200 bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-800 dark:bg-card-dark">
+            <div
+              key={workflow.id}
+              className="relative cursor-pointer rounded-2xl border border-gray-200 bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-800 dark:bg-card-dark"
+              onClick={() => void props.onOpen(workflow)}
+            >
+              {/* Card header */}
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">{workflow.category}</div>
                   <h3 className="font-bold text-gray-900 dark:text-white">{workflow.name}</h3>
                 </div>
-                <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${workflow.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{workflow.status}</span>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase ${workflow.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{workflow.status}</span>
               </div>
               <p className="mt-3 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">{workflow.description}</p>
+              {/* Metrics */}
               <div className="mt-5 grid grid-cols-3 gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
                 {workflow.metrics.map((metric) => (
                   <div key={metric.label}>
@@ -2057,7 +2190,12 @@ function WorkflowList(props: {
                   </div>
                 ))}
               </div>
-            </button>
+              {/* Per-card action dropdowns */}
+              <div className="mt-4 flex items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                <WorkflowCardDropdown workflow={workflow} kind="manage" onAction={props.onCardAction} />
+                <WorkflowCardDropdown workflow={workflow} kind="run"    onAction={props.onCardAction} />
+              </div>
+            </div>
           ))}
         </div>
       </div>

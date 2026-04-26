@@ -45,6 +45,7 @@ const NODE_CATALOG = [
   { type: 'trigger', key: 'payment.dispute.created', label: 'Payment dispute created', category: 'Trigger', icon: 'report', requiresConfig: false },
   { type: 'trigger', key: 'shipment.updated', label: 'Shipment updated', category: 'Trigger', icon: 'local_shipping', requiresConfig: false },
   { type: 'trigger', key: 'manual.run', label: 'Manual run', category: 'Trigger', icon: 'play_arrow', requiresConfig: false },
+  { type: 'trigger', key: 'trigger.schedule', label: 'Schedule (cron)', category: 'Trigger', icon: 'event_repeat', requiresConfig: true },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Condition', icon: 'attach_money', requiresConfig: true },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Condition', icon: 'rule', requiresConfig: true },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Condition', icon: 'gpp_maybe', requiresConfig: true },
@@ -972,10 +973,59 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
   }
 
   if (node.key === 'policy.evaluate') {
-    const decision = config.decision || (compareValues(readContextPath(context, config.field || 'data.risk'), config.operator || '!=', config.blockValue || 'critical') ? 'allow' : 'block');
-    const result = { decision, policy: config.policy || 'default' };
+    const policyKey = config.policy || config.policyKey || config.policy_key || 'default';
+    const proposedAction = String(config.action || config.proposedAction || config.proposed_action || context.agent?.intent || '');
+    const amount = Number(readContextPath(context, config.amountField || config.amount_field || 'payment.amount') ?? context.payment?.amount ?? 0);
+    const riskLevel = String(readContextPath(context, config.riskField || config.risk_field || 'agent.riskLevel') ?? context.agent?.riskLevel ?? context.payment?.risk_level ?? 'low');
+
+    // 1. Look up the policy in the knowledge base
+    let policyDecision: 'allow' | 'review' | 'block' = 'allow';
+    let policyReason = `Policy ${policyKey}: default allow`;
+    let policySource = 'default';
+
+    try {
+      const articles = await knowledgeRepository.listArticles(scope, { q: policyKey, status: 'published', type: 'policy' });
+      const policyArticle = articles?.[0];
+      if (policyArticle) {
+        const policyText = String(policyArticle.content ?? policyArticle.summary ?? policyArticle.title ?? '').toLowerCase();
+        policySource = policyArticle.title ?? policyKey;
+        const blockedTerms = ['forbidden', 'not allowed', 'manager required', 'escalate', 'reject'];
+        const reviewTerms = ['review required', 'approval needed', 'check with', 'verify'];
+        if (blockedTerms.some((term) => policyText.includes(term)) || riskLevel === 'high') {
+          policyDecision = 'block';
+          policyReason = `Policy ${policySource}: blocked (risk=${riskLevel})`;
+        } else if (reviewTerms.some((term) => policyText.includes(term)) || amount > Number(config.reviewThreshold || config.review_threshold || 500)) {
+          policyDecision = 'review';
+          policyReason = `Policy ${policySource}: requires review (amount=${amount}, risk=${riskLevel})`;
+        } else {
+          policyDecision = 'allow';
+          policyReason = `Policy ${policySource}: allowed`;
+        }
+      } else {
+        // No KB article — fall back to config-driven field comparison
+        const fieldValue = readContextPath(context, config.field || 'agent.riskLevel');
+        const fieldDecision = compareValues(fieldValue, config.operator || '!=', config.blockValue || 'critical') ? 'allow' : 'block';
+        policyDecision = fieldDecision as typeof policyDecision;
+        policyReason = `Policy ${policyKey}: field-based decision (${config.field}=${fieldValue})`;
+      }
+    } catch {
+      // KB lookup failed — use simple heuristic
+      policyDecision = riskLevel === 'high' ? 'block' : amount > 1000 ? 'review' : 'allow';
+      policyReason = `Policy ${policyKey}: heuristic (risk=${riskLevel}, amount=${amount})`;
+    }
+
+    // 2. Config override: explicit decision wins
+    if (config.decision) {
+      policyDecision = config.decision as typeof policyDecision;
+      policyReason = `Policy ${policyKey}: config override`;
+    }
+
+    const result = { decision: policyDecision, policy: policyKey, source: policySource, reason: policyReason, proposedAction, amount, riskLevel };
     context.policy = result;
-    return { status: result.decision === 'block' ? 'blocked' : 'completed', output: result };
+    return {
+      status: policyDecision === 'block' ? 'blocked' : policyDecision === 'review' ? 'waiting_approval' : 'completed',
+      output: result,
+    };
   }
 
   if (node.key === 'core.audit_log') {
@@ -1049,17 +1099,106 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
   }
 
   if (['agent.classify', 'agent.sentiment', 'agent.summarize', 'agent.draft_reply'].includes(node.key)) {
-    const text = String(config.text || config.content || context.case?.summary || context.case?.description || context.trigger?.message || '');
+    const text = String(
+      resolveTemplateValue(config.text || config.content || '', context) ||
+      context.case?.summary || context.case?.description || context.trigger?.message || '',
+    );
     const lower = text.toLowerCase();
+
+    // ── Gemini-powered path ────────────────────────────────────────────────
+    if (appConfig.ai.geminiApiKey && text.length > 3) {
+      const genAI = new GoogleGenerativeAI(appConfig.ai.geminiApiKey);
+      const model = genAI.getGenerativeModel({ model: appConfig.ai.geminiModel || 'gemini-2.0-flash' });
+
+      if (node.key === 'agent.classify') {
+        const prompt = `You are a CRM classification engine. Analyze the customer text and return ONLY valid JSON (no markdown fences).
+
+Text: """${text.slice(0, 1500)}"""
+
+JSON schema:
+{
+  "intent": "refund|return|cancellation|shipping|billing|fraud|general_support",
+  "riskLevel": "low|medium|high",
+  "priority": "low|normal|high|critical",
+  "confidence": <float 0-1>,
+  "tags": [<string>, ...]
+}`;
+        const result = await withGeminiRetry(
+          () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 300 } }),
+          { label: 'workflow.agent.classify' },
+        );
+        const raw = result.response.text().trim().replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
+        const parsed = JSON.parse(raw);
+        context.agent = { ...(context.agent ?? {}), ...parsed };
+        return { status: 'completed', output: context.agent };
+      }
+
+      if (node.key === 'agent.sentiment') {
+        const prompt = `You are a customer-sentiment analyzer for a CRM. Analyze the text and return ONLY valid JSON (no markdown fences).
+
+Text: """${text.slice(0, 1500)}"""
+
+JSON schema:
+{
+  "sentiment": "positive|neutral|negative",
+  "frustrationScore": <int 0-10>,
+  "urgencyScore": <int 0-10>,
+  "confidence": <float 0-1>,
+  "signals": [<string>, ...]
+}`;
+        const result = await withGeminiRetry(
+          () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 300 } }),
+          { label: 'workflow.agent.sentiment' },
+        );
+        const raw = result.response.text().trim().replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
+        const parsed = JSON.parse(raw);
+        context.agent = { ...(context.agent ?? {}), ...parsed };
+        return { status: 'completed', output: context.agent };
+      }
+
+      if (node.key === 'agent.summarize') {
+        const maxLen = Number(config.maxLength || 300);
+        const prompt = `Summarize the following customer-service text in ${maxLen} characters or fewer. Be concise and factual. Output plain text, no JSON.
+
+Text: """${text.slice(0, 2000)}"""`;
+        const result = await withGeminiRetry(
+          () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 200 } }),
+          { label: 'workflow.agent.summarize' },
+        );
+        const summary = result.response.text().trim();
+        context.agent = { ...(context.agent ?? {}), summary };
+        context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), summary };
+        return { status: 'completed', output: { summary } };
+      }
+
+      // agent.draft_reply
+      const tone = config.tone || 'professional and empathetic';
+      const instructions = config.instructions ? `\nAdditional instructions: ${config.instructions}` : '';
+      const prompt = `You are a customer-support agent. Draft a reply to the following customer message.
+Tone: ${tone}${instructions}
+
+Customer message: """${text.slice(0, 1500)}"""
+
+Write ONLY the reply text, no subject line, no JSON.`;
+      const result = await withGeminiRetry(
+        () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 512 } }),
+        { label: 'workflow.agent.draft_reply' },
+      );
+      const draftReply = result.response.text().trim();
+      context.agent = { ...(context.agent ?? {}), draftReply };
+      return { status: 'completed', output: { draftReply } };
+    }
+
+    // ── Keyword fallback (no Gemini key) ──────────────────────────────────
     if (node.key === 'agent.classify') {
       const intent = config.intent || (lower.includes('refund') ? 'refund' : lower.includes('return') ? 'return' : lower.includes('cancel') ? 'cancellation' : 'support');
       const riskLevel = config.risk_level || (lower.includes('fraud') || lower.includes('chargeback') ? 'high' : lower.includes('angry') ? 'medium' : 'low');
-      context.agent = { ...(context.agent ?? {}), intent, riskLevel, confidence: 0.82 };
+      context.agent = { ...(context.agent ?? {}), intent, riskLevel, confidence: 0.55 };
       return { status: 'completed', output: context.agent };
     }
     if (node.key === 'agent.sentiment') {
       const sentiment = lower.includes('angry') || lower.includes('bad') || lower.includes('damaged') ? 'negative' : lower.includes('thanks') || lower.includes('great') ? 'positive' : 'neutral';
-      context.agent = { ...(context.agent ?? {}), sentiment, confidence: 0.78 };
+      context.agent = { ...(context.agent ?? {}), sentiment, confidence: 0.55 };
       return { status: 'completed', output: context.agent };
     }
     if (node.key === 'agent.summarize') {
@@ -1301,7 +1440,57 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
   }
 
   if (node.key === 'flow.subworkflow') {
-    return { status: 'completed', output: { subWorkflowId: config.workflow || config.workflowId || null, invoked: true } };
+    const subWorkflowId = config.workflow || config.workflowId || config.workflow_id;
+    const depth = Number(context._subworkflowDepth ?? 0);
+    if (depth >= 3) return { status: 'failed', error: 'flow.subworkflow: max nesting depth (3) reached', output: { depth } };
+    if (!subWorkflowId) return { status: 'failed', error: 'flow.subworkflow requires workflow or workflowId config', output: {} };
+
+    const supabase = getSupabaseAdmin();
+    const { data: subDef } = await supabase
+      .from('workflow_definitions')
+      .select('id, name, status')
+      .eq('id', subWorkflowId)
+      .eq('tenant_id', scope.tenantId)
+      .single();
+
+    if (!subDef) return { status: 'failed', error: `flow.subworkflow: workflow ${subWorkflowId} not found`, output: {} };
+    if (subDef.status === 'archived') return { status: 'failed', error: `flow.subworkflow: workflow ${subDef.name} is archived`, output: {} };
+
+    const { data: subVersion } = await supabase
+      .from('workflow_versions')
+      .select('*')
+      .eq('workflow_id', subWorkflowId)
+      .eq('tenant_id', scope.tenantId)
+      .order('version', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!subVersion) return { status: 'failed', error: `flow.subworkflow: no version found for ${subDef.name}`, output: {} };
+
+    // Build sub-workflow payload from current context + explicit input mapping
+    const inputPayload = config.input && typeof config.input === 'object'
+      ? Object.fromEntries(Object.entries(config.input as Record<string, string>).map(([k, v]) => [k, resolveTemplateValue(String(v), context)]))
+      : { ...context.data, case: context.case, order: context.order, customer: context.customer };
+
+    const subResult = await executeWorkflowVersion({
+      tenantId: scope.tenantId,
+      workspaceId: scope.workspaceId,
+      userId: scope.userId,
+      workflowId: subWorkflowId,
+      version: subVersion,
+      triggerPayload: { ...inputPayload, _subworkflowDepth: depth + 1, _parentWorkflowNodeId: node.id },
+      triggerType: 'subworkflow',
+    });
+
+    // Merge sub-workflow output back into current context under config.outputKey
+    const lastStepOutput = subResult.steps?.at(-1)?.output ?? {};
+    const outputKey = config.outputKey || config.output_key || 'subworkflow';
+    context.data = { ...(typeof context.data === 'object' ? context.data : {}), [outputKey]: lastStepOutput };
+    return {
+      status: subResult.status === 'completed' ? 'completed' : subResult.status === 'failed' ? 'failed' : 'completed',
+      output: { subWorkflowId, subWorkflowName: subDef.name, runId: subResult.id, status: subResult.status, lastOutput: lastStepOutput },
+      error: subResult.status === 'failed' ? (subResult.error ?? 'Sub-workflow failed') : undefined,
+    };
   }
 
   if (node.key === 'flow.stop_error') {
