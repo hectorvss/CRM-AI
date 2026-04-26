@@ -59,19 +59,84 @@ const NODE_CATALOG = [
 const SENSITIVE_KEYS = new Set(['order.cancel', 'payment.refund', 'connector.call']);
 const PAUSED_STATUSES = new Set(['waiting', 'waiting_approval', 'paused']);
 
-function normalizeNodes(nodes: any[] = []) {
-  return nodes.map((node, index) => ({
+function parseMaybeJsonArray(value: any): any[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseMaybeJsonObject(value: any): Record<string, any> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string') return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeNodeType(type: any, key?: any) {
+  const raw = String(type ?? key ?? '').toLowerCase();
+  if (raw === 'decision') return 'condition';
+  if (raw === 'approval' || raw === 'human_review') return 'action';
+  if (raw === 'task') return String(key ?? '').includes('agent') ? 'agent' : 'action';
+  if (['trigger', 'condition', 'action', 'agent', 'policy', 'knowledge', 'integration', 'utility'].includes(raw)) return raw;
+  return 'action';
+}
+
+function normalizeNodeKey(node: any, type: string) {
+  if (node.key) return node.key;
+  if (node.action) return node.action;
+  if (node.type === 'approval') return 'approval.create';
+  if (node.type === 'decision') return 'status.matches';
+  if (type === 'trigger') return 'manual.run';
+  if (type === 'policy') return 'policy.evaluate';
+  if (type === 'knowledge') return 'knowledge.search';
+  if (type === 'integration') return 'connector.call';
+  if (type === 'agent') return 'agent.run';
+  return 'case.note';
+}
+
+function normalizeEdges(edges: any[] | string = []) {
+  return parseMaybeJsonArray(edges).map((edge, index) => {
+    const source = edge.source ?? edge.from;
+    const target = edge.target ?? edge.to;
+    const label = edge.label ?? edge.condition ?? edge.sourceHandle ?? 'next';
+    return {
+      id: edge.id ?? `edge_${source}_${target}_${index}`,
+      source,
+      target,
+      label,
+      sourceHandle: edge.sourceHandle ?? edge.source_handle ?? (label === 'true' || label === 'false' ? label : 'main'),
+      targetHandle: edge.targetHandle ?? edge.target_handle ?? null,
+    };
+  }).filter((edge) => edge.source && edge.target);
+}
+
+function normalizeNodes(nodes: any[] | string = []) {
+  return parseMaybeJsonArray(nodes).map((node, index) => {
+    const type = normalizeNodeType(node.type, node.key);
+    const key = normalizeNodeKey(node, type);
+    const config = parseMaybeJsonObject(node.config);
+    return {
     id: node.id ?? `node_${index + 1}`,
-    type: node.type ?? 'action',
-    key: node.key ?? node.action ?? node.type ?? 'action',
+    type,
+    key,
     label: node.label ?? node.name ?? node.key ?? 'Untitled node',
     position: node.position ?? { x: 160 + index * 240, y: 160 + (index % 3) * 100 },
-    config: node.config ?? {},
+    config,
     disabled: Boolean(node.disabled),
     ui: node.ui ?? {},
-    credentialsRef: node.credentialsRef ?? node.credentials_ref ?? node.config?.connector_id ?? node.config?.connectorId ?? node.config?.connector ?? null,
+    credentialsRef: node.credentialsRef ?? node.credentials_ref ?? config.connector_id ?? config.connectorId ?? config.connector ?? null,
     retryPolicy: node.retryPolicy ?? node.retry_policy ?? null,
-  }));
+  };
+  });
 }
 
 function buildDiagnostic(nodeId: string | null, severity: 'error' | 'warning' | 'info', code: string, message: string, blocking = severity === 'error') {
@@ -80,6 +145,7 @@ function buildDiagnostic(nodeId: string | null, severity: 'error' | 'warning' | 
 
 function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
   const normalized = normalizeNodes(nodes);
+  const normalizedEdges = normalizeEdges(edges);
   const errors: string[] = [];
   const warnings: string[] = [];
   const diagnostics: any[] = [];
@@ -97,7 +163,7 @@ function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
   }
 
   const nodeIds = new Set(normalized.map((node) => node.id));
-  for (const edge of edges ?? []) {
+  for (const edge of normalizedEdges) {
     if (!nodeIds.has(edge.source)) {
       const diagnostic = buildDiagnostic(edge.source ?? null, 'error', 'edge.unknown_source', `Edge ${edge.id ?? ''} has an unknown source.`);
       errors.push(diagnostic.message);
@@ -150,7 +216,7 @@ function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
     warnings,
     diagnostics,
     nodes: normalized,
-    edges: edges ?? [],
+    edges: normalizedEdges,
   };
 }
 
@@ -330,7 +396,8 @@ function normalizeTriggerName(value: string | null | undefined) {
 
 function workflowMatchesTrigger(version: any, eventType: string) {
   const normalizedEvent = normalizeTriggerName(eventType);
-  const triggerType = normalizeTriggerName(version?.trigger?.type ?? version?.trigger?.event);
+  const trigger = parseMaybeJsonObject(version?.trigger);
+  const triggerType = normalizeTriggerName(trigger?.type ?? trigger?.event);
   const startNode = getStartNode(normalizeNodes(version?.nodes ?? []));
   const nodeTrigger = normalizeTriggerName(startNode?.key);
   const aliases: Record<string, string[]> = {
@@ -876,6 +943,7 @@ router.post('/', requirePermission('workflows.write'), async (req: MultiTenantRe
       trigger = { type: 'manual' },
     } = req.body ?? {};
     const normalizedNodes = normalizeNodes(nodes);
+    const normalizedEdges = normalizeEdges(edges);
 
     await workflowRepository.createDefinition({
       id: workflowId,
@@ -893,8 +961,8 @@ router.post('/', requirePermission('workflows.write'), async (req: MultiTenantRe
       versionNumber: 1,
       status: 'draft',
       nodes: normalizedNodes,
-      edges,
-      trigger,
+      edges: normalizedEdges,
+      trigger: parseMaybeJsonObject(trigger),
       tenantId,
     });
 
@@ -1190,8 +1258,8 @@ router.put('/:id', requirePermission('workflows.write'), async (req: MultiTenant
     
     const updates = {
       nodes: normalizeNodes(req.body.nodes ?? currentVersion?.nodes ?? []),
-      edges: req.body.edges ?? currentVersion?.edges ?? [],
-      trigger: req.body.trigger ?? currentVersion?.trigger ?? {},
+      edges: normalizeEdges(req.body.edges ?? currentVersion?.edges ?? []),
+      trigger: parseMaybeJsonObject(req.body.trigger ?? currentVersion?.trigger ?? {}),
     };
 
     await workflowRepository.updateDefinition(wf.id, tenantId, workspaceId, {

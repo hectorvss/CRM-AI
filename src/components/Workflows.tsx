@@ -59,6 +59,50 @@ interface WorkflowEdge {
   targetHandle?: string | null;
 }
 
+function parseMaybeJsonArray(value: any): any[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseMaybeJsonObject(value: any): Record<string, any> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string') return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeNodeType(type: any, key?: any): NodeType {
+  const raw = String(type ?? key ?? '').toLowerCase();
+  if (raw === 'decision') return 'condition';
+  if (raw === 'approval' || raw === 'human_review') return 'action';
+  if (raw === 'task') return String(key ?? '').includes('agent') ? 'agent' : 'action';
+  if (['trigger', 'condition', 'action', 'agent', 'policy', 'knowledge', 'integration', 'utility'].includes(raw)) return raw as NodeType;
+  return 'action';
+}
+
+function normalizeNodeKey(node: any, type: NodeType) {
+  if (node.key) return node.key;
+  if (node.action) return node.action;
+  if (node.type === 'approval') return 'approval.create';
+  if (node.type === 'decision') return 'status.matches';
+  if (type === 'trigger') return 'manual.run';
+  if (type === 'policy') return 'policy.evaluate';
+  if (type === 'knowledge') return 'knowledge.search';
+  if (type === 'integration') return 'connector.call';
+  if (type === 'agent') return 'agent.run';
+  return 'case.note';
+}
+
 interface Workflow {
   id: string;
   name: string;
@@ -277,31 +321,59 @@ function makeEdges(nodes: WorkflowNode[]): WorkflowEdge[] {
   }));
 }
 
-function normalizeNodes(raw: any[] = []): WorkflowNode[] {
-  return raw.map((node, index) => ({
+function normalizeNodes(raw: any[] | string = []): WorkflowNode[] {
+  return parseMaybeJsonArray(raw).map((node, index) => {
+    const type = normalizeNodeType(node.type, node.key);
+    const key = normalizeNodeKey(node, type);
+    return {
     id: node.id ?? `node_${index + 1}`,
-    type: node.type ?? 'action',
-    key: node.key ?? node.type ?? 'action',
+    type,
+    key,
     label: node.label ?? node.name ?? node.key ?? `Step ${index + 1}`,
     position: node.position ?? { x: 120 + index * 300, y: 220 + (index % 2) * 160 },
-    config: node.config ?? {},
+    config: parseMaybeJsonObject(node.config),
     disabled: Boolean(node.disabled),
     credentialsRef: node.credentialsRef ?? node.credentials_ref ?? node.config?.connector_id ?? node.config?.connectorId ?? node.config?.connector ?? null,
     retryPolicy: node.retryPolicy ?? node.retry_policy ?? null,
     ui: node.ui ?? {},
-  }));
+  };
+  });
+}
+
+function normalizeEdges(raw: any[] | string = [], nodes: WorkflowNode[] = []): WorkflowEdge[] {
+  const edges = parseMaybeJsonArray(raw);
+  if (!edges.length) return makeEdges(nodes);
+  return edges.map((edge, index) => {
+    const source = edge.source ?? edge.from;
+    const target = edge.target ?? edge.to;
+    const label = edge.label ?? edge.condition ?? edge.sourceHandle ?? 'next';
+    return {
+      id: edge.id ?? `edge_${source}_${target}_${index}`,
+      source,
+      target,
+      label,
+      sourceHandle: edge.sourceHandle ?? edge.source_handle ?? (label === 'true' || label === 'false' ? label : 'main'),
+      targetHandle: edge.targetHandle ?? edge.target_handle ?? null,
+    };
+  }).filter((edge) => edge.source && edge.target);
 }
 
 function mapWorkflow(w: any): Workflow {
-  const currentVersion = w.current_version ?? w.workflow_versions ?? null;
+  const rawVersion = w.current_version ?? w.workflow_versions ?? null;
+  const currentVersion = rawVersion ? {
+    ...rawVersion,
+    nodes: normalizeNodes(rawVersion.nodes ?? w.nodes ?? []),
+    edges: normalizeEdges(rawVersion.edges ?? w.edges ?? []),
+    trigger: parseMaybeJsonObject(rawVersion.trigger ?? w.trigger ?? {}),
+  } : null;
   return {
     id: w.id,
     name: w.name,
     category: w.category || 'General',
     description: w.description || '',
     currentVersion,
-    versions: w.versions ?? [],
-    recentRuns: w.recent_runs ?? [],
+    versions: parseMaybeJsonArray(w.versions ?? []),
+    recentRuns: parseMaybeJsonArray(w.recent_runs ?? []),
     metrics: [
       { label: 'Executions', value: String(w.metrics?.executions ?? 0) },
       { label: 'Success rate', value: w.metrics?.success_rate !== undefined ? `${w.metrics.success_rate}%` : 'N/A' },
@@ -328,7 +400,7 @@ function nodeTone(type: NodeType) {
     integration: 'border-orange-200 bg-white text-orange-700',
     utility: 'border-gray-200 bg-white text-gray-700',
   };
-  return tones[type];
+  return tones[type] ?? tones.action;
 }
 
 function categoryForSpec(spec: NodeSpec) {
@@ -703,11 +775,11 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     setWorkflowEdges(fromFlowEdges(nextEdges));
   }
 
-  function loadBuilderState(workflow: Workflow) {
+function loadBuilderState(workflow: Workflow) {
     const version = workflow.currentVersion ?? {};
     const loadedNodes = normalizeNodes(version.nodes ?? workflow.currentVersion?.nodes ?? []);
     const nextNodes = loadedNodes.length ? loadedNodes : [makeNode({ type: 'trigger', key: 'manual.run', label: 'Manual run' }, 0)];
-    const nextEdges = version.edges ?? makeEdges(nextNodes);
+    const nextEdges = normalizeEdges(version.edges ?? workflow.currentVersion?.edges ?? [], nextNodes);
     setWorkflowNodes(nextNodes);
     setWorkflowEdges(nextEdges);
     setSelectedNodeId(nextNodes[0]?.id ?? null);
