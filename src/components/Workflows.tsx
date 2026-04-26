@@ -167,6 +167,17 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Flow', icon: 'rule', requiresConfig: true, description: 'Branch based on status.' },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Flow', icon: 'gpp_maybe', requiresConfig: true, description: 'Branch based on risk.' },
   { type: 'condition', key: 'conflict.exists', label: 'Conflict exists', category: 'Flow', icon: 'sync_problem', description: 'Branch if a conflict exists.' },
+  { type: 'condition', key: 'flow.if', label: 'If', category: 'Flow', icon: 'question_mark', requiresConfig: true, description: 'Route items to true or false branches.' },
+  { type: 'condition', key: 'flow.filter', label: 'Filter', category: 'Flow', icon: 'filter_alt', requiresConfig: true, description: 'Keep only items matching a condition.' },
+  { type: 'condition', key: 'flow.switch', label: 'Switch', category: 'Flow', icon: 'shuffle', requiresConfig: true, description: 'Route items to different branches by rules.' },
+  { type: 'condition', key: 'flow.compare', label: 'Compare datasets', category: 'Flow', icon: 'compare_arrows', requiresConfig: true, description: 'Compare two inputs and branch on the result.' },
+  { type: 'condition', key: 'flow.branch', label: 'Branch', category: 'Flow', icon: 'account_tree', requiresConfig: true, description: 'Split one flow into multiple routes.' },
+  { type: 'utility', key: 'flow.merge', label: 'Merge branches', category: 'Flow', icon: 'merge', requiresConfig: true, description: 'Join parallel branches into one stream.' },
+  { type: 'utility', key: 'flow.loop', label: 'Loop over items', category: 'Flow', icon: 'repeat', requiresConfig: true, description: 'Iterate over items in batches or one by one.' },
+  { type: 'utility', key: 'flow.wait', label: 'Wait', category: 'Flow', icon: 'hourglass_top', requiresConfig: true, description: 'Pause before continuing the flow.' },
+  { type: 'utility', key: 'flow.subworkflow', label: 'Execute sub-workflow', category: 'Flow', icon: 'subdirectory_arrow_right', requiresConfig: true, description: 'Call another workflow as a reusable step.' },
+  { type: 'utility', key: 'flow.stop_error', label: 'Stop and error', category: 'Flow', icon: 'error', requiresConfig: true, description: 'Stop execution and raise an explicit error.' },
+  { type: 'utility', key: 'flow.noop', label: 'No-op', category: 'Flow', icon: 'passkey', description: 'Pass data through without changes.' },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true, description: 'Assign a case to a user or team.' },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true, description: 'Send a customer reply.' },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true, description: 'Add a private note to the case.' },
@@ -224,6 +235,31 @@ const TEMPLATES = [
       { type: 'integration', key: 'connector.call', label: 'Check PSP event', position: { x: 420, y: 240 }, config: { capability: 'payment.lookup' } },
       { type: 'condition', key: 'risk.level', label: 'High risk?', position: { x: 760, y: 240 }, config: { field: 'payment.risk_level', value: 'high' } },
       { type: 'action', key: 'approval.create', label: 'Finance approval', position: { x: 1100, y: 240 }, config: { queue: 'finance', action_type: 'payment_dispute_review' } },
+    ],
+  },
+  {
+    id: 'flow_orchestration',
+    label: 'Flow orchestration',
+    category: 'Flow',
+    description: 'Filter, branch, wait, merge and hand off to reusable workflows.',
+    nodes: [
+      { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 100, y: 260 } },
+      { type: 'condition', key: 'flow.filter', label: 'Filter eligible cases', position: { x: 390, y: 240 }, config: { expression: 'case.priority >= 2' } },
+      { type: 'condition', key: 'flow.switch', label: 'Route by segment', position: { x: 720, y: 240 }, config: { branch: 'customer.segment', comparison: 'vip|standard|enterprise' } },
+      { type: 'utility', key: 'flow.wait', label: 'Wait for SLA window', position: { x: 1040, y: 140 }, config: { timeout: '2h' } },
+      { type: 'utility', key: 'flow.subworkflow', label: 'Call review sub-workflow', position: { x: 1040, y: 300 }, config: { workflow: 'review_case_flow' } },
+      { type: 'utility', key: 'flow.merge', label: 'Merge branches', position: { x: 1360, y: 240 }, config: { mode: 'wait-all' } },
+      { type: 'utility', key: 'flow.stop_error', label: 'Stop on error', position: { x: 1680, y: 240 }, config: { errorMessage: 'Flow stopped after failed policy check.' } },
+    ],
+    edges: [
+      { source: 0, target: 1, label: 'next' },
+      { source: 1, target: 2, label: 'next' },
+      { source: 2, target: 3, label: 'vip', sourceHandle: 'vip' },
+      { source: 2, target: 4, label: 'standard', sourceHandle: 'standard' },
+      { source: 2, target: 6, label: 'other', sourceHandle: 'other' },
+      { source: 3, target: 5, label: 'next' },
+      { source: 4, target: 5, label: 'next' },
+      { source: 5, target: 6, label: 'next' },
     ],
   },
   {
@@ -289,7 +325,7 @@ const TEMPLATES = [
   },
 ] as const;
 
-const CONFIG_FIELDS = ['field', 'operator', 'value', 'amount', 'reason', 'agent', 'policy', 'connector', 'content', 'queue', 'query'];
+const CONFIG_FIELDS = ['field', 'operator', 'value', 'amount', 'reason', 'agent', 'policy', 'connector', 'content', 'queue', 'query', 'expression', 'source', 'target', 'branch', 'mode', 'timeout', 'batchSize', 'maxIterations', 'workflow', 'comparison', 'fallback', 'errorMessage'];
 const EDITOR_TABS = [
   { id: 'builder', label: 'Editor' },
   { id: 'runs', label: 'Executions' },
@@ -581,10 +617,23 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
       </button>
       {node.type === 'condition' ? (
         <>
-          <Handle type="source" id="true" position={Position.Right} className="!top-[34%] !h-4 !w-4 !border-green-500 !bg-white" />
-          <Handle type="source" id="false" position={Position.Right} className="!top-[66%] !h-4 !w-4 !border-red-500 !bg-white" />
-          <button onClick={() => data.onAdd(node.id, 'true')} className="absolute -right-14 top-5 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
-          <button onClick={() => data.onAdd(node.id, 'false')} className="absolute -right-14 bottom-5 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+          {node.key === 'flow.switch' ? (
+            <>
+              <Handle type="source" id="vip" position={Position.Right} className="!top-[22%] !h-4 !w-4 !border-green-500 !bg-white" />
+              <Handle type="source" id="standard" position={Position.Right} className="!top-[50%] !h-4 !w-4 !border-amber-500 !bg-white" />
+              <Handle type="source" id="other" position={Position.Right} className="!top-[78%] !h-4 !w-4 !border-red-500 !bg-white" />
+              <button onClick={() => data.onAdd(node.id, 'vip')} className="absolute -right-14 top-4 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'standard')} className="absolute -right-14 top-1/2 -translate-y-1/2 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'other')} className="absolute -right-14 bottom-4 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+            </>
+          ) : (
+            <>
+              <Handle type="source" id="true" position={Position.Right} className="!top-[34%] !h-4 !w-4 !border-green-500 !bg-white" />
+              <Handle type="source" id="false" position={Position.Right} className="!top-[66%] !h-4 !w-4 !border-red-500 !bg-white" />
+              <button onClick={() => data.onAdd(node.id, 'true')} className="absolute -right-14 top-5 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+              <button onClick={() => data.onAdd(node.id, 'false')} className="absolute -right-14 bottom-5 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+            </>
+          )}
         </>
       ) : (
         <>
@@ -1609,8 +1658,8 @@ function WorkflowEditorTopbar(props: {
         </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={menuRef}>
-            <button onClick={() => setMenuOpen((value) => !value)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen}>
-              …
+            <button onClick={() => setMenuOpen((value) => !value)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="Workflow actions">
+              ...
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
@@ -1619,6 +1668,9 @@ function WorkflowEditorTopbar(props: {
                 <div className="p-2">
                   <button onClick={runAndClose(props.onEditDescription)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                     <span>Edit description</span>
+                  </button>
+                  <button onClick={runAndClose(props.onSave)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50">
+                    <span>Save</span>
                   </button>
                   <button onClick={runAndClose(props.onRename)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                     <span>Rename</span>
@@ -1644,6 +1696,7 @@ function WorkflowEditorTopbar(props: {
                   <button onClick={runAndClose(props.onPushToGit)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                     <span>Push to git</span>
                   </button>
+                  <div className="my-2 border-t border-gray-100" />
                   <button onClick={runAndClose(props.onValidate)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                     <span>Validate</span>
                   </button>
@@ -1674,6 +1727,7 @@ function WorkflowEditorTopbar(props: {
                   <button onClick={runAndClose(props.onArchive)} className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
                     <span>Archive</span>
                   </button>
+                  <div className="my-2 border-t border-gray-100" />
                   <button onClick={() => { closeMenu(); props.setActiveTab('overview'); }} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                     <span>Settings</span>
                   </button>
@@ -1681,7 +1735,6 @@ function WorkflowEditorTopbar(props: {
               </div>
             )}
           </div>
-          <button onClick={props.onSave} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold hover:bg-gray-50">Save</button>
           <button onClick={props.onPublish} className="rounded-lg bg-black px-4 py-1.5 text-xs font-bold text-white hover:opacity-90">Publish</button>
         </div>
       </div>
@@ -1761,7 +1814,7 @@ function WorkflowContextMenu(props: {
 }) {
   if (!props.node) return null;
   const items = [
-    { label: 'Open...', action: () => props.onEdit(props.node!.id), key: '↵' },
+    { label: 'Open...', action: () => props.onEdit(props.node!.id), key: 'â†µ' },
     { label: 'Execute step', action: () => props.onExecute(props.node!.id) },
     { label: 'Rename', action: () => props.onEdit(props.node!.id), key: 'Space' },
     { label: props.node.disabled ? 'Activate' : 'Deactivate', action: () => props.onToggle(props.node!.id), key: 'D' },
@@ -1870,7 +1923,7 @@ function WorkflowNodeEditorModal(props: {
                         <option value="">Select connector...</option>
                         {props.connectors.map((connector) => (
                           <option key={connector.id} value={connector.id}>
-                            {connector.name || connector.system || connector.id} · {connector.status || 'unknown'}
+                            {connector.name || connector.system || connector.id} Â· {connector.status || 'unknown'}
                           </option>
                         ))}
                       </select>
@@ -2008,7 +2061,7 @@ function WorkflowNodeEditorPanel(props: {
                       <option value="">Select connector...</option>
                       {props.connectors.map((connector) => (
                         <option key={connector.id} value={connector.id}>
-                          {connector.name || connector.system || connector.id} · {connector.status || 'unknown'}
+                          {connector.name || connector.system || connector.id} Â· {connector.status || 'unknown'}
                         </option>
                       ))}
                     </select>
