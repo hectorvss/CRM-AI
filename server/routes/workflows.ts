@@ -951,20 +951,31 @@ router.post('/', requirePermission('workflows.write'), async (req: MultiTenantRe
       workspaceId,
       name,
       description,
-      currentVersionId: versionId,
+      currentVersionId: null,
       createdBy: req.userId ?? 'system',
     });
 
-    await workflowRepository.createVersion({
-      id: versionId,
-      workflowId,
-      versionNumber: 1,
-      status: 'draft',
-      nodes: normalizedNodes,
-      edges: normalizedEdges,
-      trigger: parseMaybeJsonObject(trigger),
-      tenantId,
-    });
+    try {
+      await workflowRepository.createVersion({
+        id: versionId,
+        workflowId,
+        versionNumber: 1,
+        status: 'draft',
+        nodes: normalizedNodes,
+        edges: normalizedEdges,
+        trigger: parseMaybeJsonObject(trigger),
+        tenantId,
+      });
+
+      await workflowRepository.updateDefinition(workflowId, tenantId, workspaceId, {
+        currentVersionId: versionId,
+      });
+    } catch (versionError) {
+      const supabase = getSupabaseAdmin();
+      await supabase.from('workflow_versions').delete().eq('id', versionId).catch(() => null);
+      await supabase.from('workflow_definitions').delete().eq('id', workflowId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId).catch(() => null);
+      throw versionError;
+    }
 
     const workflow = await workflowRepository.getDefinition(workflowId, tenantId, workspaceId);
     const version = await workflowRepository.getVersion(versionId);

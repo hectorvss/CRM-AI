@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   addEdge,
@@ -731,26 +731,65 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     return matchesFilter && (!query.trim() || haystack.includes(query.trim().toLowerCase()));
   });
 
-  const nodeHandlers = useMemo(() => ({
-    onAdd: (nodeId: string, handle?: string) => {
-      setSelectedNodeId(nodeId);
-      setAddPanel({ sourceNodeId: nodeId, sourceHandle: handle ?? 'main' });
-    },
-    onEdit: (nodeId: string) => {
-      setSelectedNodeId(nodeId);
-      setEditorNodeId(nodeId);
+  const handleAddNode = useCallback((nodeId: string, handle?: string) => {
+    setSelectedNodeId(nodeId);
+    setAddPanel({ sourceNodeId: nodeId, sourceHandle: handle ?? 'main' });
+  }, []);
+
+  const handleEditNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setEditorNodeId(nodeId);
+    setContextMenu(null);
+  }, []);
+
+  const handleExecuteNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    setEditorNodeId(nodeId);
+    void executeNodeStep(nodeId);
+  }, []);
+
+  const handleToggleNode = useCallback((nodeId: string) => {
+    setWorkflowNodes((items) => items.map((node) => node.id === nodeId ? { ...node, disabled: !node.disabled } : node));
+  }, []);
+
+  const handleDuplicateNode = useCallback((nodeId: string) => {
+    setWorkflowNodes((items) => {
+      const node = items.find((item) => item.id === nodeId);
+      if (!node) return items;
+      const duplicate = {
+        ...node,
+        id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        label: `${node.label} copy`,
+        position: { x: node.position.x + 80, y: node.position.y + 80 },
+      };
+      setSelectedNodeId(duplicate.id);
+      setEditorNodeId(duplicate.id);
       setContextMenu(null);
-    },
-    onExecute: (nodeId: string) => {
-      setSelectedNodeId(nodeId);
-      setEditorNodeId(nodeId);
-      void executeNodeStep(nodeId);
-    },
-    onToggle: (nodeId: string) => toggleNode(nodeId),
-    onDuplicate: (nodeId: string) => duplicateNode(nodeId),
-    onDelete: (nodeId: string) => deleteNode(nodeId),
-    onMenu: (nodeId: string, point: { x: number; y: number }) => setContextMenu({ nodeId, ...point }),
-  }), [workflowNodes, selectedWorkflow, flowNodes, flowEdges]);
+      return [...items, duplicate];
+    });
+  }, []);
+
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    setWorkflowNodes((items) => items.filter((node) => node.id !== nodeId));
+    setWorkflowEdges((items) => items.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+    setSelectedNodeId((current) => current === nodeId ? null : current);
+    setEditorNodeId((current) => current === nodeId ? null : current);
+    setContextMenu(null);
+  }, []);
+
+  const handleOpenNodeMenu = useCallback((nodeId: string, point: { x: number; y: number }) => {
+    setContextMenu({ nodeId, ...point });
+  }, []);
+
+  const nodeHandlers = useMemo(() => ({
+    onAdd: handleAddNode,
+    onEdit: handleEditNode,
+    onExecute: handleExecuteNode,
+    onToggle: handleToggleNode,
+    onDuplicate: handleDuplicateNode,
+    onDelete: handleDeleteNode,
+    onMenu: handleOpenNodeMenu,
+  }), [handleAddNode, handleEditNode, handleExecuteNode, handleToggleNode, handleDuplicateNode, handleDeleteNode, handleOpenNodeMenu]);
 
   useEffect(() => {
     setFlowNodes(toFlowNodes(workflowNodes, catalog, selectedNodeId, latestSteps, diagnostics, nodeHandlers));
@@ -938,35 +977,6 @@ function loadBuilderState(workflow: Workflow) {
     });
     setWorkflowNodes(arranged);
     setMessage('Workflow layout tidied.');
-  }
-
-  function toggleNode(nodeId: string) {
-    const node = workflowNodes.find((item) => item.id === nodeId);
-    if (!node) return;
-    updateNode(nodeId, { disabled: !node.disabled });
-  }
-
-  function deleteNode(nodeId: string) {
-    setWorkflowNodes((items) => items.filter((node) => node.id !== nodeId));
-    setWorkflowEdges((items) => items.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-    if (selectedNodeId === nodeId) setSelectedNodeId(null);
-    if (editorNodeId === nodeId) setEditorNodeId(null);
-    setContextMenu(null);
-  }
-
-  function duplicateNode(nodeId: string) {
-    const node = workflowNodes.find((item) => item.id === nodeId);
-    if (!node) return;
-    const duplicate = {
-      ...node,
-      id: `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      label: `${node.label} copy`,
-      position: { x: node.position.x + 80, y: node.position.y + 80 },
-    };
-    setWorkflowNodes((items) => [...items, duplicate]);
-    setSelectedNodeId(duplicate.id);
-    setEditorNodeId(duplicate.id);
-    setContextMenu(null);
   }
 
   function deleteEdge(edgeId: string) {
@@ -1254,9 +1264,9 @@ function loadBuilderState(workflow: Workflow) {
                           setContextMenu(null);
                         }}
                         onExecute={(nodeId) => nodeHandlers.onExecute(nodeId)}
-                        onToggle={toggleNode}
-                        onDuplicate={duplicateNode}
-                        onDelete={deleteNode}
+                        onToggle={handleToggleNode}
+                        onDuplicate={handleDuplicateNode}
+                        onDelete={handleDeleteNode}
                       />
                     )}
 
@@ -1274,7 +1284,7 @@ function loadBuilderState(workflow: Workflow) {
                         onUi={(patch) => updateUi(editorNode.id, patch)}
                         onCredentials={(value) => updateNode(editorNode.id, { credentialsRef: value, config: { ...editorNode.config, connector: value, connector_id: value } })}
                         onRetryPolicy={(patch) => updateRetryPolicy(editorNode.id, patch)}
-                        onToggle={() => toggleNode(editorNode.id)}
+                        onToggle={() => handleToggleNode(editorNode.id)}
                       />
                     )}
                   </div>
