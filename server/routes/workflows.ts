@@ -449,7 +449,8 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
         .split('|')
         .map((value: string) => value.trim())
         .filter(Boolean);
-      const normalizedRoute = branches.find((branch: string) => branch.toLowerCase() === rawRoute.toLowerCase()) ?? (branches.at(-1) ?? rawRoute || 'other');
+      const normalizedRoute = branches.find((branch: string) => branch.toLowerCase() === rawRoute.toLowerCase())
+        ?? ((branches.at(-1) ?? rawRoute) || 'other');
       context.condition = {
         result: normalizedRoute !== (branches.at(-1) ?? 'other'),
         route: normalizedRoute,
