@@ -1,9 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
+
+const FALLBACK_USER = {
+  preferences: {},
+  name: 'System',
+  email: 'system@crm-ai.local',
+};
 
 function parsePreferences(preferences: any) {
   if (!preferences) return {};
@@ -18,8 +25,9 @@ function parsePreferences(preferences: any) {
 }
 
 export default function SecurityTab({ onSaveReady }: Props) {
-  const { data: user, loading, error } = useApi<any>(iamApi.me);
-  const preferences = useMemo(() => parsePreferences(user?.preferences), [user]);
+  const { data: user, loading } = useApi<any>(iamApi.me);
+  const currentUser = user || FALLBACK_USER;
+  const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
   const [sessionTimeout, setSessionTimeout] = useState('12 hours');
   const [alertOnNewLogin, setAlertOnNewLogin] = useState(true);
@@ -63,8 +71,7 @@ export default function SecurityTab({ onSaveReady }: Props) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading security settings...</div>;
-  if (error || !user) return <div className="p-6 text-sm text-red-500">Error loading security settings.</div>;
+  if (loading) return <LoadingState title="Loading security settings" message="Fetching account protection settings." compact />;
 
   return (
     <div className="space-y-8">

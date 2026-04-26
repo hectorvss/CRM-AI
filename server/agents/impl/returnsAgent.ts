@@ -39,16 +39,24 @@ async function loadReturnRow(
 
     const { data: payment, error: paymentError } = await supabase!
       .from('payments')
-      .select('refund_status, refund_amount, amount')
+      .select('refund_amount, amount')
       .eq('id', row.payment_id)
       .eq('tenant_id', tenantId)
       .eq('workspace_id', workspaceId)
       .maybeSingle();
     if (paymentError) throw paymentError;
 
+    const { data: refund, error: refundError } = await supabase!
+      .from('refunds')
+      .select('status')
+      .eq('payment_id', row.payment_id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (refundError) throw refundError;
+
     return {
       ...row,
-      refund_status: payment?.refund_status ?? null,
+      refund_status: refund?.status ?? null,
       refund_amount: payment?.refund_amount ?? null,
       payment_amount: payment?.amount ?? null,
     };

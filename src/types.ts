@@ -1,4 +1,30 @@
-export type Page = 'inbox' | 'home' | 'ai_studio' | 'workflows' | 'approvals' | 'knowledge' | 'customers' | 'tools_integrations' | 'reports' | 'settings' | 'orders' | 'returns' | 'payments' | 'case_graph' | 'upgrade' | 'profile';
+export type Page = 'inbox' | 'super_agent' | 'home' | 'ai_studio' | 'workflows' | 'approvals' | 'knowledge' | 'customers' | 'tools_integrations' | 'reports' | 'settings' | 'orders' | 'returns' | 'payments' | 'case_graph' | 'upgrade' | 'profile';
+
+export type NavigationEntityType =
+  | 'workspace'
+  | 'case'
+  | 'order'
+  | 'payment'
+  | 'return'
+  | 'approval'
+  | 'customer'
+  | 'workflow'
+  | 'agent'
+  | 'knowledge'
+  | 'report'
+  | 'setting';
+
+export interface NavigationTarget {
+  page: Page;
+  entityType?: NavigationEntityType | null;
+  entityId?: string | null;
+  section?: string | null;
+  sourceContext?: string | null;
+  runId?: string | null;
+}
+
+export type NavigateInput = NavigationTarget | Page;
+export type NavigateFn = (target: NavigateInput, entityId?: string | null) => void;
 
 export type Channel = 'web_chat' | 'email' | 'whatsapp';
 

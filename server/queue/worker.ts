@@ -12,7 +12,14 @@ import { getHandlers } from './handlers/index.js';
 import { createJobRepository } from '../data/index.js';
 import type { JobContext, JobType } from './types.js';
 
-const jobRepo = createJobRepository();
+let jobRepo: ReturnType<typeof createJobRepository> | null = null;
+
+function getJobRepo() {
+  if (!jobRepo) {
+    jobRepo = createJobRepository();
+  }
+  return jobRepo;
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -36,7 +43,7 @@ function backoffMs(attempt: number): number {
 async function claimJobs(limit: number): Promise<any[]> {
   const jobs: any[] = [];
   for (let i = 0; i < limit; i++) {
-    const job = await jobRepo.claimJob();
+    const job = await getJobRepo().claimJob();
     if (!job) break;
     jobs.push(job);
   }
@@ -44,7 +51,7 @@ async function claimJobs(limit: number): Promise<any[]> {
 }
 
 async function markCompleted(id: string): Promise<void> {
-  await jobRepo.finishJob(id, {
+  await getJobRepo().finishJob(id, {
     status: 'completed',
     finishedAt: new Date().toISOString()
   });
@@ -56,13 +63,12 @@ async function markFailed(id: string, err: unknown, attempts: number, maxAttempt
 
   if (canRetry) {
     const runAt = new Date(Date.now() + backoffMs(attempts)).toISOString();
-    await jobRepo.finishJob(id, {
-      status: 'pending',
+    await getJobRepo().rescheduleJob(id, {
       runAt,
       error: message,
     });
   } else {
-    await jobRepo.finishJob(id, {
+    await getJobRepo().finishJob(id, {
       status: 'dead',
       finishedAt: new Date().toISOString(),
       error: message
@@ -169,7 +175,7 @@ export function startWorker(): void {
     pollIntervalMs: config.queue.pollIntervalMs,
     provider:       config.db.provider
   });
-  void jobRepo.quarantineOrphanJobs()
+  void getJobRepo().quarantineOrphanJobs()
     .then((count) => {
       if (count > 0) {
         logger.info('Quarantined orphan jobs at startup', { count });

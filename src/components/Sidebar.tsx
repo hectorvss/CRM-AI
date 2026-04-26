@@ -1,27 +1,54 @@
 import React from 'react';
-import { Page } from '../types';
+import { NavigateInput, NavigationTarget, Page } from '../types';
 
 interface SidebarProps {
   currentPage: Page;
-  onPageChange: (page: Page) => void;
+  currentSection?: string | null;
+  onPageChange: (target: NavigateInput) => void;
   isOpen: boolean;
   onToggle: () => void;
 }
 
-export default function Sidebar({ currentPage, onPageChange, isOpen, onToggle }: SidebarProps) {
-  const navItems = [
-    { id: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
-    { id: 'case_graph', label: 'Case Graph', icon: 'hub' },
-    { id: 'customers', label: 'Customers', icon: 'people' },
-    { id: 'orders', label: 'Orders', icon: 'shopping_bag' },
-    { id: 'payments', label: 'Payments', icon: 'payments' },
-    { id: 'returns', label: 'Returns', icon: 'assignment_return' },
-    { id: 'approvals', label: 'Approvals', icon: 'check_circle' },
-    { id: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
-    { id: 'workflows', label: 'Workflows', icon: 'account_tree' },
-    { id: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
-    { id: 'reports', label: 'Reports', icon: 'bar_chart' },
-    { id: 'tools_integrations', label: 'Integrations', icon: 'extension' },
+type SidebarItem = {
+  target: NavigateInput;
+  label: string;
+  icon: string;
+  badge?: number;
+  description?: string;
+};
+
+function targetPageOf(target: NavigateInput) {
+  return typeof target === 'string' ? target : target.page;
+}
+
+function targetSectionOf(target: NavigateInput) {
+  return typeof target === 'string' ? null : target.section ?? null;
+}
+
+function isTargetActive(currentPage: Page, currentSection: string | null | undefined, target: NavigateInput) {
+  return currentPage === targetPageOf(target) && (targetSectionOf(target) ? currentSection === targetSectionOf(target) : true);
+}
+
+export default function Sidebar({ currentPage, currentSection, onPageChange, isOpen, onToggle }: SidebarProps) {
+  const superAgentItem: SidebarItem = {
+    target: { page: 'super_agent', entityType: 'workspace', section: 'command-center', sourceContext: 'sidebar' },
+    label: 'Super Agent',
+    icon: 'auto_awesome',
+  };
+
+  const navItems: SidebarItem[] = [
+    { target: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
+    { target: 'case_graph', label: 'Case Graph', icon: 'hub' },
+    { target: 'customers', label: 'Customers', icon: 'people' },
+    { target: 'orders', label: 'Orders', icon: 'shopping_bag' },
+    { target: 'payments', label: 'Payments', icon: 'payments' },
+    { target: 'returns', label: 'Returns', icon: 'assignment_return' },
+    { target: 'approvals', label: 'Approvals', icon: 'check_circle' },
+    { target: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
+    { target: 'workflows', label: 'Workflows', icon: 'account_tree' },
+    { target: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
+    { target: 'reports', label: 'Reports', icon: 'bar_chart' },
+    { target: 'tools_integrations', label: 'Integrations', icon: 'extension' },
   ];
 
   return (
@@ -49,29 +76,49 @@ export default function Sidebar({ currentPage, onPageChange, isOpen, onToggle }:
           )}
         </div>
 
-        <nav className="space-y-0.5 px-2 flex flex-col">
-          {navItems.map((item) => (
+        <nav className="space-y-3 px-2 flex flex-col">
+          {/* Super Agent — single item at the top */}
+          <div className="space-y-1">
             <button
-              key={item.id}
-              onClick={() => onPageChange(item.id as Page)}
+              onClick={() => onPageChange(superAgentItem.target)}
               className={`relative flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${
-                currentPage === item.id
+                currentPage === 'super_agent'
                   ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white'
                   : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
               }`}
-              title={!isOpen ? item.label : undefined}
+              title={!isOpen ? superAgentItem.label : undefined}
             >
               <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${
-                currentPage === item.id ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
-              }`}>{item.icon}</span>
-              {isOpen && <span className="truncate">{item.label}</span>}
-              {item.badge && (
-                <span className={`${isOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-200 py-0.5 px-2 rounded-full text-[10px] font-semibold`}>
-                  {item.badge}
-                </span>
-              )}
+                currentPage === 'super_agent' ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
+              }`}>{superAgentItem.icon}</span>
+              {isOpen && <span className="block truncate">{superAgentItem.label}</span>}
             </button>
-          ))}
+          </div>
+
+          <div className="space-y-1">
+            {navItems.map((item) => (
+              <button
+                key={typeof item.target === 'string' ? item.target : `${item.target.page}-${item.target.section || 'root'}`}
+                onClick={() => onPageChange(item.target)}
+                className={`relative flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${
+                  isTargetActive(currentPage, currentSection, item.target)
+                    ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
+                }`}
+                title={!isOpen ? item.label : undefined}
+              >
+                <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${
+                  isTargetActive(currentPage, currentSection, item.target) ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'
+                }`}>{item.icon}</span>
+                {isOpen && <span className="block truncate flex-1 text-left">{item.label}</span>}
+                {item.badge ? (
+                  <span className={`${isOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-200 py-0.5 px-2 rounded-full text-[10px] font-semibold`}>
+                    {item.badge}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
         </nav>
       </div>
       

@@ -1,9 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi, workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
+
+const fallbackWorkspace = {
+  id: 'ws_default',
+  name: 'CRM AI Workspace',
+  slug: 'crm-ai',
+  settings: {},
+};
 
 function parseSettings(settings: any) {
   if (!settings) return {};
@@ -14,10 +22,10 @@ function parseSettings(settings: any) {
 }
 
 export default function PersonalTab({ onSaveReady }: Props) {
-  const { data: user } = useApi<any>(iamApi.me);
-  const { data: workspaces } = useApi<any[]>(workspacesApi.list);
-  const workspace = workspaces?.[0] || null;
-  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace]);
+  const { data: user, loading: userLoading } = useApi<any>(iamApi.me);
+  const { data: workspace, loading: workspaceLoading } = useApi<any>(workspacesApi.currentContext);
+  const workspaceRecord = workspace || fallbackWorkspace;
+  const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
   const [fullName, setFullName] = useState('Hector Smith');
   const [emailAddress, setEmailAddress] = useState('hector.smith@enterprise.co');
   const [timezone, setTimezone] = useState('(GMT-08:00) Pacific Time (US & Canada)');
@@ -39,7 +47,10 @@ export default function PersonalTab({ onSaveReady }: Props) {
   }, [user, workspaceSettings]);
 
   const handleSave = useCallback(async () => {
-    if (!workspace?.id) throw new Error('Workspace not loaded');
+    if (!workspace?.id) {
+      setStatusMessage('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
     setIsSaving(true);
     setStatusMessage(null);
     try {
@@ -68,6 +79,10 @@ export default function PersonalTab({ onSaveReady }: Props) {
     onSaveReady?.(handleSave);
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
+
+  if (userLoading || workspaceLoading) {
+    return <LoadingState title="Loading personal settings" message="Fetching your profile and workspace preferences." compact />;
+  }
 
   return (
     <div className="space-y-8">

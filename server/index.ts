@@ -3,17 +3,9 @@ import cors from 'cors';
 import path from 'path';
 import { mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-
-// Load env before config so config can read process.env
-dotenv.config({ path: '.env.local' });
-dotenv.config();
 
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { runMigrations, getDb } from './db/client.js';
-import { seedDatabase } from './db/seed.js';
-import { seedAgents } from './agents/seed.js';
 import { startWorker, stopWorker, workerStatus } from './queue/worker.js';
 import { countJobs } from './queue/client.js';
 import { startScheduledJobs, stopScheduledJobs } from './queue/scheduledJobs.js';
@@ -42,6 +34,7 @@ import sseRouter from './routes/sse.js';
 import demoRouter from './routes/demo.js';
 import policyRouter from './routes/policy.js';
 import reconciliationRouter from './routes/reconciliation.js';
+import superAgentRouter from './routes/superAgent.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
@@ -64,16 +57,30 @@ import './pipeline/slaMonitor.js';
 // to the worker without needing a separate registration call.
 import './agents/orchestrator.js';
 
+// ── Plan Engine — initialise tool registry at startup ───────────────────────
+import { planEngine } from './agents/planEngine/index.js';
+planEngine.init();
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
 
-mkdirSync(DATA_DIR, { recursive: true });
-assertDatabaseProviderReady();
+const isServerlessRuntime = Boolean(process.env.VERCEL);
 
-// ── Database ──────────────────────────────────────────────
-runMigrations();
-seedAgents(getDb(), 'org_default');
-seedDatabase();
+if (!isServerlessRuntime) {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+  } catch (err) {
+    logger.warn('Failed to create DATA_DIR', { error: err });
+  }
+}
+
+// ── Database Readiness ────────────────────────────────────
+try {
+  assertDatabaseProviderReady();
+} catch (err: any) {
+  logger.error('Database configuration check failed', { error: err.message });
+  if (!isServerlessRuntime) process.exit(1);
+}
 
 // ── Integrations ──────────────────────────────────────────
 // Non-blocking: adapters that fail to init are logged but don't crash startup
@@ -127,6 +134,7 @@ app.use('/api/sse', sseRouter);
 app.use('/api/demo', demoRouter);
 app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
+app.use('/api/super-agent', superAgentRouter);
 
 // ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {

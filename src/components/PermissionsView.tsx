@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { connectionCategories } from '../connectionsData';
-import { agentsApi } from '../api/client';
+import { agentsApi, policyRulesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import {
   agentPermissionsConfig,
@@ -83,6 +83,32 @@ export default function PermissionsView() {
     const persisted = draftBundle?.bundle?.permission_profile ?? selectedApiAgent?.permission_profile ?? null;
     setProfile(createPermissionProfile(baseConfig, persisted));
   }, [baseConfig, draftBundle, selectedApiAgent]);
+
+  // Live policy rules from DB
+  const { data: dbRulesRaw, refetch: refetchRules } = useApi(policyRulesApi.list, [], []);
+  const dbRules: any[] = Array.isArray(dbRulesRaw) ? dbRulesRaw : [];
+  const toggleRule = useMutation((payload: { id: string; is_active: boolean }) =>
+    policyRulesApi.update(payload.id, { is_active: payload.is_active }),
+  );
+  const createRule = useMutation((payload: Record<string, any>) => policyRulesApi.create(payload));
+  const [newRuleName, setNewRuleName] = useState('');
+  const [newRuleEntity, setNewRuleEntity] = useState('payment');
+  const [showNewRuleForm, setShowNewRuleForm] = useState(false);
+
+  const handleCreateRule = async () => {
+    if (!newRuleName.trim()) return;
+    await createRule.mutate({
+      name: newRuleName.trim(),
+      entity_type: newRuleEntity,
+      is_active: true,
+      priority: 500,
+      conditions: [],
+      action_mapping: { action: 'allow', action_types: [] },
+    });
+    setNewRuleName('');
+    setShowNewRuleForm(false);
+    refetchRules();
+  };
 
   const allActionCategories = Array.from(new Set(Object.values(agentPermissionsConfig).flatMap(config => config.applicableCategories)));
   const uniqueCategories = allActionCategories.filter((cat, index, self) => index === self.findIndex(t => t.name === cat.name));
@@ -534,6 +560,128 @@ export default function PermissionsView() {
                     </div>
                   </div>
                 </div>
+              </section>
+
+              {/* ── Live DB Policy Rules ─────────────────────────────────── */}
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-indigo-500">policy</span>
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">Live Policy Rules</h3>
+                    <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-full text-[10px] font-bold border border-indigo-200 dark:border-indigo-800">
+                      {dbRules.filter((r: any) => r.is_active).length} active
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowNewRuleForm(prev => !prev)}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    New rule
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {showNewRuleForm && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mb-4 p-4 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-800/30 rounded-xl space-y-3"
+                    >
+                      <h4 className="text-xs font-bold text-indigo-800 dark:text-indigo-300 uppercase tracking-wider">New Policy Rule</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Rule name</label>
+                          <input
+                            value={newRuleName}
+                            onChange={(e) => setNewRuleName(e.target.value)}
+                            placeholder="e.g. Block high-value refunds"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Entity type</label>
+                          <select
+                            value={newRuleEntity}
+                            onChange={(e) => setNewRuleEntity(e.target.value)}
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          >
+                            {['payment', 'order', 'case', 'return', 'customer', 'approval', 'knowledge'].map(t => (
+                              <option key={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={handleCreateRule}
+                          disabled={!newRuleName.trim() || createRule.loading}
+                          className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg transition-colors"
+                        >
+                          {createRule.loading ? 'Creating…' : 'Create rule'}
+                        </button>
+                        <button
+                          onClick={() => setShowNewRuleForm(false)}
+                          className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {dbRules.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400 dark:text-gray-600 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                    <span className="material-symbols-outlined text-3xl mb-2 block opacity-40">policy</span>
+                    <p className="text-sm">No policy rules yet. Add one above to enforce live policies on agent actions.</p>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+                    <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-200 dark:border-gray-800 grid grid-cols-[1fr_120px_100px_80px] gap-4">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Rule</span>
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Entity</span>
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Action</span>
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Active</span>
+                    </div>
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {dbRules.map((rule: any) => (
+                        <div key={rule.id} className="bg-white dark:bg-card-dark px-4 py-3 grid grid-cols-[1fr_120px_100px_80px] gap-4 items-center hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-tight">{rule.name}</p>
+                            {rule.priority != null && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">Priority {rule.priority}</p>
+                            )}
+                          </div>
+                          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700">
+                            {rule.entity_type ?? '—'}
+                          </span>
+                          <span className={`px-2 py-1 rounded-md text-xs font-bold border ${
+                            rule.action_mapping?.action === 'block' || rule.action_mapping?.action === 'deny'
+                              ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
+                              : rule.action_mapping?.action === 'approval_required' || rule.action_mapping?.action === 'require_approval'
+                              ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-400'
+                              : 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400'
+                          }`}>
+                            {rule.action_mapping?.action ?? 'allow'}
+                          </span>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={async () => {
+                                await toggleRule.mutate({ id: rule.id, is_active: !rule.is_active });
+                                refetchRules();
+                              }}
+                              className={`w-10 h-5 rounded-full relative transition-colors ${rule.is_active ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${rule.is_active ? 'right-0.5' : 'left-0.5'}`}></div>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             </div>
           </div>

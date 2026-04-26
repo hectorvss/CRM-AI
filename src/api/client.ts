@@ -80,8 +80,9 @@ export const customersApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request<any>(`/customers${qs}`).then(unwrapList);
   },
-  get: (id: string) => request<any>(`/customers/${id}`),
-  state: (id: string) => request<any>(`/customers/${id}/state`),
+  get:      (id: string) => request<any>(`/customers/${id}`),
+  state:    (id: string) => request<any>(`/customers/${id}/state`),
+  activity: (id: string) => request<any>(`/customers/${id}/activity`),
   create: (payload: Record<string, any>) =>
     request<any>('/customers', {
       method: 'POST',
@@ -127,6 +128,16 @@ export const returnsApi = {
   },
   get: (id: string) => request<any>(`/returns/${id}`),
   context: (id: string) => request<any>(`/returns/${id}/context`),
+  create: (payload: Record<string, any>) =>
+    request<any>('/returns', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateStatus: (id: string, payload: Record<string, any>) =>
+    request<any>(`/returns/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
 };
 
 // ── Approvals ─────────────────────────────────────────────
@@ -189,6 +200,7 @@ export const knowledgeApi = {
 // ── Workflows ─────────────────────────────────────────────
 export const workflowsApi = {
   list: () => request<any>('/workflows').then(unwrapList),
+  catalog: () => request<any>('/workflows/catalog'),
   create: (payload: Record<string, any>) =>
     request<any>('/workflows', {
       method: 'POST',
@@ -205,6 +217,52 @@ export const workflowsApi = {
       method: 'POST',
       body: '{}',
     }),
+  validate: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/validate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  dryRun: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/dry-run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  stepRun: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/step-run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  run: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  rollback: (id: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/${id}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  retryRun: (runId: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/runs/${runId}/retry`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  resumeRun: (runId: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/runs/${runId}/resume`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  cancelRun: (runId: string, payload: Record<string, any> = {}) =>
+    request<any>(`/workflows/runs/${runId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  triggerEvent: (payload: Record<string, any>) =>
+    request<any>('/workflows/events/trigger', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getRun: (runId: string) => request<any>(`/workflows/runs/${runId}`),
   recentRuns: () => request<any>('/workflows/runs/recent').then(unwrapList),
 };
 
@@ -327,9 +385,13 @@ export const workspacesApi = {
   currentContext: () => request<any>('/workspaces/current/context'),
   get: (id: string) => request<any>(`/workspaces/${id}`),
   update: (id: string, payload: Record<string, any>) =>
-    request<any>(`/workspaces/${id}`, {
+    request<any>(`/workspaces/${id}/settings`, {
       method: 'PATCH',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        settings: (payload && typeof payload === 'object' && 'settings' in payload)
+          ? (payload as Record<string, any>).settings
+          : payload,
+      }),
     }),
   updateSettings: (id: string, settings: Record<string, any>) =>
     request<any>(`/workspaces/${id}/settings`, {
@@ -391,6 +453,114 @@ export const operationsApi = {
 export const auditApi = {
   workspaceAll: () => request<any>('/audit/workspace/all').then(unwrapList),
   entity: (entityType: string, entityId: string) => request<any>(`/audit/${entityType}/${entityId}`).then(unwrapList),
+};
+
+// ── Policy Rules (AI Studio live rules CRUD) ──────────────
+export const policyRulesApi = {
+  list: (params?: { entity_type?: string; is_active?: boolean }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params)
+              .filter(([, v]) => v !== undefined)
+              .map(([k, v]) => [k, String(v)])
+          )
+        ).toString()
+      : '';
+    return request<any>(`/policy/rules${qs}`).then(unwrapList);
+  },
+  create: (payload: Record<string, any>) =>
+    request<any>('/policy/rules', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  update: (id: string, payload: Record<string, any>) =>
+    request<any>(`/policy/rules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+};
+
+export const superAgentApi = {
+  bootstrap: () => request<any>('/super-agent/bootstrap'),
+  command: (input: string, options?: { runId?: string; mode?: string; context?: Record<string, any> }) =>
+    request<any>('/super-agent/command', {
+      method: 'POST',
+      body: JSON.stringify({ input, ...options }),
+    }),
+  execute: (payload: Record<string, any>, confirmed = true, options?: { runId?: string; sourceContext?: string }) =>
+    request<any>('/super-agent/execute', {
+      method: 'POST',
+      body: JSON.stringify({ payload, confirmed, ...options }),
+    }),
+  /**
+   * Plan Engine endpoint (LLM-driven). Sends the user message and gets back
+   * { response: LLMResponse, trace?: ExecutionTrace, sessionId: string }.
+   */
+  plan: (userMessage: string, options?: { sessionId?: string; dryRun?: boolean }) =>
+    request<any>('/super-agent/command', {
+      method: 'POST',
+      body: JSON.stringify({
+        input: userMessage,
+        mode: options?.dryRun ? 'investigate' : 'operate',
+        context: options?.sessionId ? { sessionId: options.sessionId } : undefined,
+      }),
+    }).then((result: any) => ({
+      sessionId: result.sessionId,
+      response: {
+        kind: 'plan',
+        plan: {
+          planId: result.response?.runId || result.sessionId || `plan-${Date.now()}`,
+          sessionId: result.sessionId || options?.sessionId || null,
+          createdAt: new Date().toISOString(),
+          steps: Array.isArray(result.response?.steps)
+            ? result.response.steps.map((step: any, index: number) => ({
+                id: step.id || `s${index}`,
+                tool: step.label || 'super_agent.command',
+                args: {},
+                dependsOn: [],
+                rationale: step.detail || '',
+              }))
+            : [],
+          confidence: 1,
+          rationale: result.response?.summary || '',
+          needsApproval: Array.isArray(result.response?.actions)
+            ? result.response.actions.some((action: any) => action.requiresConfirmation === true)
+            : false,
+          responseTemplate: result.response?.summary || '',
+          commandResponse: result.response,
+        },
+      },
+      trace: {
+        summary: result.response?.summary || '',
+        status: String(result.response?.statusLine || '').toLowerCase().includes('approval')
+          ? 'pending_approval'
+          : String(result.response?.statusLine || '').toLowerCase().includes('block')
+            ? 'rejected_by_policy'
+            : String(result.response?.statusLine || '').toLowerCase().includes('fail')
+              ? 'failed'
+              : 'success',
+        spans: Array.isArray(result.response?.steps)
+          ? result.response.steps.map((step: any, index: number) => ({
+              stepId: step.id || `s${index}`,
+              tool: step.label || 'super_agent.command',
+              result: { ok: step.status !== 'failed', value: step.detail || step.label || '' },
+            }))
+          : [],
+        approvalIds: Array.isArray(result.response?.actions)
+          ? result.response.actions.filter((action: any) => action.requiresConfirmation === true).map((action: any) => action.id)
+          : [],
+        commandResponse: result.response,
+      },
+    })),
+  session: (sessionId: string) => request<any>(`/super-agent/sessions/${encodeURIComponent(sessionId)}`),
+  sessionTraces: (sessionId: string, limit = 20) =>
+    request<any>(`/super-agent/sessions/${encodeURIComponent(sessionId)}/traces?limit=${limit}`),
+  trace: (planId: string) => request<any>(`/super-agent/traces/${encodeURIComponent(planId)}`),
+  replay: (sessionId: string, limit = 20) =>
+    request<any>(`/super-agent/replay/${encodeURIComponent(sessionId)}?limit=${limit}`),
+  metrics: (sessionId?: string) =>
+    request<any>(`/super-agent/metrics${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`),
 };
 
 // ── Health ────────────────────────────────────────────────

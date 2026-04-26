@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 
@@ -8,22 +9,34 @@ type ProfileTabProps = {
   onSaveReady?: (handler: SaveHandler) => void;
 };
 
+const FALLBACK_USER = {
+  id: 'system',
+  email: 'system@crm-ai.local',
+  name: 'System',
+  avatar_url: '',
+  role: 'workspace_admin',
+  created_at: new Date().toISOString(),
+  memberships: [],
+  context: { role_id: 'workspace_admin', permissions: ['*'] },
+};
+
 export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
-  const { data: user, loading, error } = useApi<any>(iamApi.me);
+  const { data: user, loading } = useApi<any>(iamApi.me);
+  const currentUser = user || FALLBACK_USER;
   const [name, setName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
-    setName(user.name || '');
-    setAvatarUrl(user.avatar_url || '');
-  }, [user]);
+    if (!currentUser) return;
+    setName(currentUser.name || '');
+    setAvatarUrl(currentUser.avatar_url || '');
+  }, [currentUser]);
 
   const workspace = useMemo(() => {
-    return user?.memberships && user.memberships.length > 0 ? user.memberships[0] : null;
-  }, [user]);
+    return currentUser?.memberships && currentUser.memberships.length > 0 ? currentUser.memberships[0] : null;
+  }, [currentUser]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -47,13 +60,7 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (loading) {
-    return <div className="p-6 text-sm text-gray-500">Loading profile data...</div>;
-  }
-
-  if (error || !user) {
-    return <div className="p-6 text-sm text-red-500">Error loading profile data.</div>;
-  }
+  if (loading) return <LoadingState title="Loading profile data" message="Fetching your account details and memberships." compact />;
 
   return (
     <div className="space-y-8">
@@ -72,7 +79,7 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
         <div className="p-6 space-y-6">
           <div className="flex items-center gap-6">
             <div className="relative">
-              <img src={avatarUrl || user.avatar_url || 'https://i.pravatar.cc/150?img=11'} alt="User" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover" />
+              <img src={avatarUrl || currentUser.avatar_url || 'https://i.pravatar.cc/150?img=11'} alt="User" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover" />
               <button type="button" className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
                 <span className="material-symbols-outlined text-[14px]">edit</span>
               </button>
@@ -98,7 +105,7 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Work Email</label>
               <input
                 type="email"
-                value={user.email}
+                value={currentUser.email}
                 readOnly
                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
               />
@@ -117,7 +124,7 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Joined At</label>
               <input
                 type="text"
-                value={new Date(user.created_at).toLocaleDateString()}
+                value={new Date(currentUser.created_at).toLocaleDateString()}
                 readOnly
                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
               />
@@ -140,7 +147,7 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Role</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{user.role}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{currentUser.role}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Status</span>
@@ -150,7 +157,7 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Member Since</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">{new Date(user.created_at).toLocaleDateString()}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">{new Date(currentUser.created_at).toLocaleDateString()}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-500 dark:text-gray-400">Login Method</span>
@@ -171,7 +178,7 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
           <div className="p-6 space-y-4">
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">User ID</span>
-              <span className="text-xs font-mono text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{user.id}</span>
+              <span className="text-xs font-mono text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{currentUser.id}</span>
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Member ID</span>

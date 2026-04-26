@@ -47,14 +47,14 @@ const SUPERVISOR_PERMS = {
 };
 
 const FAST_REASONING = {
-  model: 'gemini-2.0-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.1,
   maxOutputTokens: 1024,
   useJsonMode: true,
 };
 
 const BALANCED_REASONING = {
-  model: 'gemini-2.0-flash',
+  model: 'gemini-2.5-pro',
   temperature: 0.2,
   maxOutputTokens: 2048,
   useJsonMode: true,
@@ -68,7 +68,7 @@ const THOROUGH_REASONING = {
 };
 
 const CREATIVE_REASONING = {
-  model: 'gemini-2.0-flash',
+  model: 'gemini-3.1-pro-preview',
   temperature: 0.4,
   maxOutputTokens: 3072,
   useJsonMode: true,

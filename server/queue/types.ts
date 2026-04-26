@@ -141,7 +141,7 @@ export interface SlaCheckPayload {
 
 export interface AgentTriggerPayload {
   /** Which lifecycle event fired this trigger */
-  triggerEvent: 'case_created' | 'message_received' | 'conflicts_detected' | 'case_resolved';
+  triggerEvent: 'case_created' | 'message_received' | 'conflicts_detected' | 'approval_approved' | 'approval_rejected' | 'case_resolved';
   caseId: string;
   /** If set, run only this specific agent (skip routing table) */
   agentSlug?: string;

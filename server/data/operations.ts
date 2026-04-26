@@ -20,6 +20,7 @@ export interface OperationsRepository {
   updateWebhookStatus(scope: OperationsScope, id: string, status: string): Promise<void>;
   listCanonicalEvents(scope: OperationsScope, limit?: number): Promise<any[]>;
   listAgentRuns(scope: OperationsScope, limit?: number): Promise<any[]>;
+  logAudit(scope: OperationsScope, entry: any): Promise<void>;
 }
 
 async function getOverviewSupabase(scope: OperationsScope) {
@@ -242,6 +243,48 @@ function listAgentRunsSqlite(scope: OperationsScope, limit = 100) {
   `).all(scope.tenantId, limit).map(parseRow);
 }
 
+async function logAuditSupabase(scope: OperationsScope, entry: any) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from('audit_events').insert({
+    id: entry.id ?? crypto.randomUUID(),
+    tenant_id: scope.tenantId,
+    workspace_id: scope.workspaceId,
+    actor_type: entry.actorType ?? entry.actor_type ?? 'system',
+    actor_id: entry.actorId ?? entry.actor_id ?? 'system',
+    action: entry.action,
+    entity_type: entry.entityType ?? entry.entity_type ?? null,
+    entity_id: entry.entityId ?? entry.entity_id ?? null,
+    old_value: entry.oldValue ?? entry.old_value ?? null,
+    new_value: entry.newValue ?? entry.new_value ?? null,
+    metadata: entry.metadata ?? null,
+    occurred_at: entry.occurred_at ?? new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+function logAuditSqlite(scope: OperationsScope, entry: any) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO audit_events (
+      id, tenant_id, workspace_id, actor_type, actor_id, action,
+      entity_type, entity_id, old_value, new_value, metadata, occurred_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    entry.id ?? crypto.randomUUID(),
+    scope.tenantId,
+    scope.workspaceId,
+    entry.actorType ?? entry.actor_type ?? 'system',
+    entry.actorId ?? entry.actor_id ?? 'system',
+    entry.action,
+    entry.entityType ?? entry.entity_type ?? null,
+    entry.entityId ?? entry.entity_id ?? null,
+    JSON.stringify(entry.oldValue ?? entry.old_value ?? null),
+    JSON.stringify(entry.newValue ?? entry.new_value ?? null),
+    JSON.stringify(entry.metadata ?? null),
+    entry.occurred_at ?? new Date().toISOString(),
+  );
+}
+
 export function createOperationsRepository(): OperationsRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
@@ -254,6 +297,7 @@ export function createOperationsRepository(): OperationsRepository {
       updateWebhookStatus: updateWebhookStatusSupabase,
       listCanonicalEvents: listCanonicalEventsSupabase,
       listAgentRuns: listAgentRunsSupabase,
+      logAudit: logAuditSupabase,
     };
   }
 
@@ -267,5 +311,6 @@ export function createOperationsRepository(): OperationsRepository {
     updateWebhookStatus: async (scope, id, status) => updateWebhookStatusSqlite(scope, id, status),
     listCanonicalEvents: async (scope, limit) => listCanonicalEventsSqlite(scope, limit),
     listAgentRuns: async (scope, limit) => listAgentRunsSqlite(scope, limit),
+    logAudit: async (scope, entry) => logAuditSqlite(scope, entry),
   };
 }

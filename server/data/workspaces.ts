@@ -6,6 +6,8 @@ import { parseRow } from '../db/utils.js';
 export interface WorkspaceRepository {
   listByUser(userId: string): Promise<any[]>;
   getById(id: string, orgId?: string): Promise<any>;
+  findByOrg(orgId: string): Promise<any>;
+  getFirstWorkspace(): Promise<any>;
   updateSettings(id: string, settings: any): Promise<void>;
   listFeatureFlags(tenantId: string, workspaceId: string): Promise<any[]>;
   updateFeatureFlag(data: {
@@ -30,10 +32,30 @@ class SQLiteWorkspaceRepository implements WorkspaceRepository {
 
   async getById(id: string, orgId?: string) {
     const db = getDb();
+    if (id === 'ws_default') {
+      if (orgId) {
+        const byOrg = db.prepare('SELECT * FROM workspaces WHERE org_id = ? ORDER BY created_at ASC LIMIT 1').get(orgId);
+        if (byOrg) return byOrg;
+      }
+      const first = db.prepare('SELECT * FROM workspaces ORDER BY created_at ASC LIMIT 1').get();
+      if (first) return first;
+    }
     if (orgId) {
-      return db.prepare('SELECT * FROM workspaces WHERE id = ? AND org_id = ?').get(id, orgId);
+      const workspace = db.prepare('SELECT * FROM workspaces WHERE id = ? AND org_id = ?').get(id, orgId);
+      if (workspace) return workspace;
+      return db.prepare('SELECT * FROM workspaces WHERE org_id = ? ORDER BY created_at ASC LIMIT 1').get(orgId);
     }
     return db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id);
+  }
+
+  async findByOrg(orgId: string) {
+    const db = getDb();
+    return db.prepare('SELECT * FROM workspaces WHERE org_id = ? ORDER BY created_at ASC LIMIT 1').get(orgId);
+  }
+
+  async getFirstWorkspace() {
+    const db = getDb();
+    return db.prepare('SELECT * FROM workspaces ORDER BY created_at ASC LIMIT 1').get();
   }
 
   async updateSettings(id: string, settings: any) {
@@ -107,10 +129,59 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
   async getById(id: string, orgId?: string) {
     const supabase = getSupabaseAdmin();
+    if (id === 'ws_default') {
+      if (orgId) {
+        const { data } = await supabase
+          .from('workspaces')
+          .select('*')
+          .eq('org_id', orgId)
+          .order('created_at', { ascending: true })
+          .limit(1);
+        if (data?.[0]) return data[0];
+      }
+      const { data: first } = await supabase
+        .from('workspaces')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (first?.[0]) return first[0];
+    }
+
     let query = supabase.from('workspaces').select('*').eq('id', id);
     if (orgId) query = query.eq('org_id', orgId);
-    const { data } = await query.single();
-    return data;
+    const { data } = await query.limit(1);
+    if (data?.[0]) return data[0];
+    if (orgId) {
+      const { data: byOrg } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      return byOrg?.[0] || null;
+    }
+    return null;
+  }
+
+  async findByOrg(orgId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from('workspaces')
+      .select('*')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    return data?.[0] || null;
+  }
+
+  async getFirstWorkspace() {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from('workspaces')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .limit(1);
+    return data?.[0] || null;
   }
 
   async updateSettings(id: string, settings: any) {

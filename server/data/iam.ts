@@ -26,6 +26,11 @@ export interface IAMRepository {
     role?: string;
     isSystem?: number;
   }): Promise<void>;
+  updateUser(id: string, updates: {
+    name?: string;
+    avatarUrl?: string | null;
+    preferences?: Record<string, any>;
+  }): Promise<void>;
   listWorkspaceUsers(tenantId: string, workspaceId: string): Promise<any[]>;
 
   // Members
@@ -50,6 +55,7 @@ export interface IAMRepository {
   getRoleById(id: string, tenantId: string, workspaceId: string): Promise<any>;
   getRoleByName(name: string, tenantId: string, workspaceId: string): Promise<any>;
   listRoles(tenantId: string, workspaceId: string): Promise<any[]>;
+  getPermissionKeys(roleId: string): Promise<string[]>;
   createRole(data: {
     id: string;
     workspaceId: string;
@@ -99,9 +105,34 @@ class SQLiteIAMRepository implements IAMRepository {
   async createUser(data: any) {
     const db = getDb();
     db.prepare(`
-      INSERT INTO users (id, email, name, role, is_system)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(data.id, data.email, data.name, data.role || 'agent', data.isSystem || 0);
+      INSERT INTO users (id, email, name, role, is_system, preferences)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(data.id, data.email, data.name, data.role || 'agent', data.isSystem || 0, JSON.stringify(data.preferences || {}));
+  }
+
+  async updateUser(id: string, updates: any) {
+    const db = getDb();
+    const fields = [];
+    const params = [];
+
+    if (typeof updates.name === 'string') {
+      fields.push('name = ?');
+      params.push(updates.name);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'avatarUrl')) {
+      fields.push('avatar_url = ?');
+      params.push(updates.avatarUrl ?? null);
+    }
+
+    if (updates.preferences) {
+      fields.push('preferences = ?');
+      params.push(JSON.stringify(updates.preferences));
+    }
+
+    if (fields.length === 0) return;
+    params.push(id);
+    db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...params);
   }
 
   async listWorkspaceUsers(tenantId: string, workspaceId: string) {
@@ -215,6 +246,16 @@ class SQLiteIAMRepository implements IAMRepository {
       updates.permissions.forEach((pk: string) => insertRolePerm.run(id, pk));
     }
   }
+
+  async getPermissionKeys(roleId: string) {
+    const db = getDb();
+    const rows = db.prepare('SELECT permission_key FROM role_permissions WHERE role_id = ? ORDER BY permission_key').all(roleId) as any[];
+    if (rows.length > 0) return rows.map((row) => row.permission_key).filter(Boolean);
+
+    const role = db.prepare('SELECT permissions FROM roles WHERE id = ?').get(roleId) as any;
+    const permissions = parseRow(role)?.permissions;
+    return Array.isArray(permissions) ? permissions : [];
+  }
 }
 
 class SupabaseIAMRepository implements IAMRepository {
@@ -272,8 +313,31 @@ class SupabaseIAMRepository implements IAMRepository {
       email: data.email,
       name: data.name,
       role: data.role || 'agent',
-      is_system: data.isSystem ? 1 : 0
+      is_system: data.isSystem ? 1 : 0,
+      preferences: data.preferences || {}
     });
+    if (error) throw error;
+  }
+
+  async updateUser(id: string, updates: any) {
+    const supabase = getSupabaseAdmin();
+    const toUpdate: Record<string, any> = {};
+
+    if (typeof updates.name === 'string') {
+      toUpdate.name = updates.name;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'avatarUrl')) {
+      toUpdate.avatar_url = updates.avatarUrl ?? null;
+    }
+
+    if (updates.preferences) {
+      toUpdate.preferences = updates.preferences;
+    }
+
+    if (Object.keys(toUpdate).length === 0) return;
+
+    const { error } = await supabase.from('users').update(toUpdate).eq('id', id);
     if (error) throw error;
   }
 
@@ -321,17 +385,34 @@ class SupabaseIAMRepository implements IAMRepository {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('members')
-      .select('*, users(email, name, avatar_url), roles(name)')
+      .select('*, users(email, name, avatar_url)')
       .eq('tenant_id', tenantId)
       .eq('workspace_id', workspaceId)
       .order('joined_at', { ascending: false });
     if (error) throw error;
+
+    const roleIds = [...new Set((data || []).map((member: any) => member.role_id).filter((roleId: unknown): roleId is string => typeof roleId === 'string' && roleId.length > 0))];
+    const roleMap = new Map<string, string>();
+
+    if (roleIds.length > 0) {
+      const { data: roles, error: roleError } = await supabase
+        .from('roles')
+        .select('id, name')
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .in('id', roleIds);
+      if (roleError) throw roleError;
+      (roles || []).forEach((role: any) => {
+        roleMap.set(role.id, role.name);
+      });
+    }
+
     return (data || []).map(m => ({
       ...m,
       email: m.users?.email,
       name: m.users?.name,
       avatar_url: m.users?.avatar_url,
-      role_name: m.roles?.name
+      role_name: roleMap.get(m.role_id) || m.role_id || 'Unknown'
     }));
   }
 
@@ -448,6 +529,27 @@ class SupabaseIAMRepository implements IAMRepository {
       }));
       await supabase.from('role_permissions').insert(perms);
     }
+  }
+
+  async getPermissionKeys(roleId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('role_permissions')
+      .select('permission_key')
+      .eq('role_id', roleId)
+      .order('permission_key', { ascending: true });
+    if (error) throw error;
+    if ((data || []).length > 0) {
+      return (data || []).map((row: any) => row.permission_key).filter(Boolean);
+    }
+
+    const { data: role, error: roleError } = await supabase
+      .from('roles')
+      .select('permissions')
+      .eq('id', roleId)
+      .maybeSingle();
+    if (roleError) throw roleError;
+    return Array.isArray(role?.permissions) ? role.permissions : [];
   }
 }
 

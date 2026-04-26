@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi, workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 
@@ -29,7 +30,7 @@ function parseSettings(settings: any) {
 }
 
 export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
-  const { data: workspaces, loading, error } = useApi<any[]>(workspacesApi.list);
+  const { data: workspace, loading, error } = useApi<any>(workspacesApi.currentContext);
   const { data: me } = useApi(() => iamApi.me(), [], null as any);
   const [name, setName] = useState(fallbackWorkspace.name);
   const [domain, setDomain] = useState(`${fallbackWorkspace.slug}.helpdesk.com`);
@@ -41,31 +42,32 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const workspace = useMemo(() => (
-    workspaces?.[0]
+  const workspaceRecord = useMemo(() => (
+    workspace
       || me?.workspace
       || me?.membership?.workspace
       || me?.workspaces?.[0]
       || fallbackWorkspace
-  ), [me, workspaces]);
+  ), [me, workspace]);
 
-  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace]);
-  const showFallbackNotice = Boolean(error) || !workspaces || workspaces.length === 0;
+  const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
+  const showFallbackNotice = Boolean(error) || !workspace;
 
   useEffect(() => {
-    if (!workspace) return;
-    setName(workspace.name || fallbackWorkspace.name);
-    setDomain(`${workspace.slug || fallbackWorkspace.slug}.helpdesk.com`);
+    if (!workspaceRecord) return;
+    setName(workspaceRecord.name || fallbackWorkspace.name);
+    setDomain(`${workspaceRecord.slug || fallbackWorkspace.slug}.helpdesk.com`);
     setTimezone(workspaceSettings.timezone || '(GMT-05:00) Eastern Time');
     setBusinessHoursEnabled(workspaceSettings.businessHoursEnabled ?? true);
     setWeekdayStart(workspaceSettings.businessHours?.weekdayStart || workspaceSettings.businessHoursStart || '09:00 AM');
     setWeekdayEnd(workspaceSettings.businessHours?.weekdayEnd || workspaceSettings.businessHoursEnd || '06:00 PM');
     setLanguages(Array.isArray(workspaceSettings.languages) && workspaceSettings.languages.length > 0 ? workspaceSettings.languages : defaultLanguages);
-  }, [workspace, workspaceSettings]);
+  }, [workspaceRecord, workspaceSettings]);
 
   const handleSave = useCallback(async () => {
     if (!workspace?.id) {
-      throw new Error('Workspace not loaded');
+      setStatusMessage('Workspace is still loading. Please try again in a moment.');
+      return;
     }
 
     setIsSaving(true);
@@ -86,7 +88,7 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
 
       await workspacesApi.update(workspace.id, {
         name: name.trim(),
-        slug: normalizedSlug || workspace.slug,
+        slug: normalizedSlug || workspaceRecord.slug,
         settings: nextSettings,
       });
       setStatusMessage('Workspace changes saved.');
@@ -96,16 +98,14 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [businessHoursEnabled, domain, languages, name, timezone, weekdayEnd, weekdayStart, workspace?.id, workspace?.slug, workspaceSettings]);
+  }, [businessHoursEnabled, domain, languages, name, timezone, weekdayEnd, weekdayStart, workspace?.id, workspaceRecord?.slug, workspaceSettings]);
 
   useEffect(() => {
     onSaveReady?.(handleSave);
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (loading) {
-    return <div className="p-6 text-sm text-gray-500">Loading workspace data...</div>;
-  }
+  if (loading) return <LoadingState title="Loading workspace data" message="Fetching workspace settings and profile data." compact />;
 
   return (
     <div className="space-y-8">

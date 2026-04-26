@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Order, OrderTab } from '../types';
 import CaseHeader from './CaseHeader';
+import CaseCopilotPanel from './CaseCopilotPanel';
 import { casesApi, ordersApi, paymentsApi } from '../api/client';
 import { useApi } from '../api/hooks';
-import type { Page } from '../types';
+import LoadingState from './LoadingState';
+import type { NavigateFn } from '../types';
 
 type RightTab = 'details' | 'copilot';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
 
 interface OrdersProps {
   onNavigate?: NavigateFn;
+  focusEntityId?: string | null;
+  focusSection?: string | null;
 }
 
 const formatDate = (value?: string | null) =>
@@ -28,6 +31,7 @@ const formatRelativeLabel = (value?: string | null) => {
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ORDERS: Order[] = [
   {
     id: '1',
@@ -321,7 +325,7 @@ const ORDERS: Order[] = [
   }
 ];
 
-export default function Orders({ onNavigate }: OrdersProps) {
+export default function Orders({ onNavigate, focusEntityId, focusSection }: OrdersProps) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<OrderTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
@@ -380,9 +384,8 @@ export default function Orders({ onNavigate }: OrdersProps) {
     }))
   });
 
-  // Use API orders if available, otherwise fall back to static
-  const rawOrders = (apiOrders && apiOrders.length > 0) ? apiOrders.map(mapApiOrder) : ORDERS;
-  const orders = rawOrders;
+  const orders = Array.isArray(apiOrders) ? apiOrders.map(mapApiOrder) : [];
+  const isInitialOrdersLoading = loading && orders.length === 0;
 
   const handleCancelOrder = async (id: string) => {
     try {
@@ -432,13 +435,49 @@ export default function Orders({ onNavigate }: OrdersProps) {
     return false;
   });
 
-  const selectedOrder = filteredOrders.find(o => o.id === selectedId) || filteredOrders[0];
+  const selectedOrderBase = filteredOrders.find(o => o.id === selectedId) || filteredOrders[0] || null;
+  const { data: selectedOrderDetailRaw, loading: selectedOrderDetailLoading } = useApi(
+    () => selectedOrderBase ? ordersApi.get(selectedOrderBase.id) : Promise.resolve(null),
+    [selectedOrderBase?.id],
+    null,
+  );
+
+  const selectedOrder = useMemo(() => {
+    if (!selectedOrderBase) return null;
+    if (!selectedOrderDetailRaw) return selectedOrderBase;
+
+    const detail = mapApiOrder(selectedOrderDetailRaw);
+    return {
+      ...selectedOrderBase,
+      ...detail,
+      timeline: detail.timeline.length > 0 ? detail.timeline : selectedOrderBase.timeline,
+      relatedCases: detail.relatedCases.length > 0 ? detail.relatedCases : selectedOrderBase.relatedCases,
+      canonicalContext: detail.canonicalContext ?? selectedOrderBase.canonicalContext,
+      canonical_context: detail.canonical_context ?? selectedOrderBase.canonical_context,
+    };
+  }, [selectedOrderBase, selectedOrderDetailRaw]);
 
   useEffect(() => {
     if (filteredOrders.length > 0 && !filteredOrders.find(o => o.id === selectedId)) {
       setSelectedId(filteredOrders[0].id);
     }
   }, [activeTab, filteredOrders, selectedId]);
+
+  useEffect(() => {
+    if (focusSection && ['all', 'attention', 'refunds', 'conflicts'].includes(focusSection) && activeTab !== focusSection) {
+      setActiveTab(focusSection as OrderTab);
+    }
+  }, [activeTab, focusSection]);
+
+  useEffect(() => {
+    if (!focusEntityId) return;
+    if (activeTab !== 'all') {
+      setActiveTab('all');
+    }
+    if (selectedId !== focusEntityId) {
+      setSelectedId(focusEntityId);
+    }
+  }, [activeTab, focusEntityId, selectedId]);
 
   const selectedOrderCaseId = selectedOrder?.relatedCases?.[0]?.id || null;
   const selectedOrderPaymentId =
@@ -501,6 +540,15 @@ export default function Orders({ onNavigate }: OrdersProps) {
       setActionMessage(error instanceof Error ? error.message : 'Failed to add note.');
     }
   };
+
+  if (isInitialOrdersLoading) {
+    return (
+      <LoadingState
+        title="Loading orders"
+        message="Fetching canonical commerce data from Supabase."
+      />
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -617,7 +665,14 @@ export default function Orders({ onNavigate }: OrdersProps) {
                 </button>
               </div>
             )}
-            {selectedOrder && (
+            {selectedOrderDetailLoading ? (
+              <div className="flex-1 flex items-center justify-center px-8 py-12">
+                <div className="max-w-sm text-center">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Loading order details</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Fetching the order timeline and context together.</p>
+                </div>
+              </div>
+            ) : selectedOrder ? (
               <div className="p-8 w-full space-y-8">
                 <CaseHeader
                   caseId={selectedOrder.relatedCases[0]?.id || selectedOrder.orderId}
@@ -725,6 +780,13 @@ export default function Orders({ onNavigate }: OrdersProps) {
                   </div>
                 </div>
               </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center px-8 py-12">
+                <div className="max-w-sm text-center">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No orders found for this filter.</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Try switching tabs or loading a different case set.</p>
+                </div>
+              </div>
             )}
           </div>
 
@@ -753,9 +815,6 @@ export default function Orders({ onNavigate }: OrdersProps) {
                 Copilot
               </button>
               <div className="flex items-center gap-1 ml-auto">
-                <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                  <span className="material-symbols-outlined text-[20px]">settings</span>
-                </button>
                 <button 
                   onClick={() => setIsRightSidebarOpen(false)}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
@@ -768,67 +827,28 @@ export default function Orders({ onNavigate }: OrdersProps) {
 
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              {rightTab === 'copilot' ? (
-                <div className="p-4 flex flex-col gap-4">
-                  {/* Copilot Case Summary */}
-                  <div className="flex gap-2">
-                    <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5">
-                      <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                    </div>
-                    <div className="flex flex-col gap-2 max-w-[85%] w-full">
-                      <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-2.5 px-3.5 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Order Summary</h4>
-                        <p className="leading-relaxed mb-3">Order {selectedOrder.orderId} for {selectedOrder.customerName} is currently {selectedOrder.orderStatus}. The total amount is {selectedOrder.total}.</p>
-                        
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Conflict Detection</h4>
-                        <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-800/30 text-xs text-red-700 dark:text-red-400 mb-3">
-                          No major conflicts detected for this order.
-                        </div>
-
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
-                        <p className="text-xs bg-white/50 dark:bg-black/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic">
-                          {selectedOrder.recommendedNextAction || "Monitor fulfillment status and ensure carrier tracking is updated."}
-                        </p>
-                      </div>
-                      
-                      <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500 mb-2">Suggested Reply</h4>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed italic mb-3">
-                          "Hi {selectedOrder.customerName.split(' ')[0]}, I'm checking the status of your order {selectedOrder.orderId}. It's currently {selectedOrder.orderStatus} and we're working to get it to you as soon as possible."
-                        </p>
-                        <button onClick={handleApplyToComposer} className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
-                          Apply to Composer
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                          <span className="material-symbols-outlined text-lg text-gray-600">do_not_disturb_on</span>
-                          Order Actions
-                        </h3>
-                        <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Persistent</span>
-                      </div>
-                      <div className="space-y-2">
-                        <button
-                          onClick={() => handleCancelOrder(selectedOrder.id)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-800/30 transition-colors"
-                        >
-                          <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">cancel</span> Cancel Order</span>
-                          <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                        </button>
-                        <button
-                          onClick={handleStartRefund}
-                          className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-800/30 transition-colors hover:bg-red-100 dark:hover:bg-red-900/20"
-                        >
-                          <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">currency_exchange</span> Start Refund</span>
-                          <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+              {!selectedOrder ? (
+                <div className="p-4 text-sm text-gray-500 dark:text-gray-400">
+                  Copilot is disabled until an order is selected.
                 </div>
+              ) : rightTab === 'copilot' ? (
+                <CaseCopilotPanel
+                  caseId={selectedOrderCaseId || selectedOrder.id}
+                  entityLabel="order"
+                  subjectLabel={`Order ${selectedOrder.orderId}`}
+                  summary={`Order ${selectedOrder.orderId} for ${selectedOrder.customerName} is currently ${selectedOrder.orderStatus}. The total amount is ${selectedOrder.total}.`}
+                  conflict={selectedOrder.conflictDetected || 'No major conflicts detected for this order.'}
+                  recommendation={selectedOrder.recommendedNextAction || 'Monitor fulfillment status and ensure carrier tracking is updated.'}
+                  riskLabel={selectedOrder.riskLevel}
+                  isLoading={selectedOrderDetailLoading}
+                  suggestedQuestions={['What\'s the current status?', 'What should I do next?', 'Why is this order high risk?', 'Walk me through this order']}
+                  onOpenModule={() => selectedOrderCaseId && onNavigate?.('case_graph', selectedOrderCaseId)}
+                  moduleButtonLabel="View case"
+                  onApply={handleApplyToComposer}
+                  applyButtonLabel="Apply to Composer"
+                  emptyTitle="Ask me anything about this order"
+                  emptySubtitle="I have full context: order, payment, fulfillment and history."
+                />
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {/* Case Attributes */}
@@ -964,20 +984,10 @@ export default function Orders({ onNavigate }: OrdersProps) {
               )}
             </div>
 
-            {/* Copilot Input Area */}
-            <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
-              <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
-                <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
-                <input className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9" placeholder="Ask a question..." type="text" />
-                <div className="flex items-center gap-1">
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">arrow_upward</span></button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+

@@ -715,6 +715,276 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       db.prepare("UPDATE users SET preferences = COALESCE(preferences, '{}')").run();
     },
   },
+  // ── 2026-04-18-001: customers full profile + order line items + activity ──────
+  {
+    version: '2026-04-18-001',
+    up(db) {
+      // Customer profile fields (sourced from Shopify/Stripe sync)
+      addColumn(db, 'customers', 'role',                  'TEXT');
+      addColumn(db, 'customers', 'company',               'TEXT');
+      addColumn(db, 'customers', 'location',              'TEXT');
+      addColumn(db, 'customers', 'timezone',              'TEXT');
+      addColumn(db, 'customers', 'avatar_url',            'TEXT');
+      addColumn(db, 'customers', 'plan',                  'TEXT');
+      addColumn(db, 'customers', 'next_renewal',          'TEXT');
+      addColumn(db, 'customers', 'fraud_risk',            `TEXT NOT NULL DEFAULT 'low'`);
+      addColumn(db, 'customers', 'notes',                 'TEXT');
+      addColumn(db, 'customers', 'ai_executive_summary',  'TEXT');
+      addColumn(db, 'customers', 'ai_recommendations',    'TEXT');  // JSON array
+      addColumn(db, 'customers', 'ai_impact_resolved',    'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'customers', 'ai_impact_approvals',   'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'customers', 'ai_impact_escalated',   'INTEGER NOT NULL DEFAULT 0');
+      addColumn(db, 'customers', 'top_issue',             'TEXT');
+
+      // Order tracking fields
+      addColumn(db, 'orders', 'total_amount',        'REAL');
+      addColumn(db, 'orders', 'tracking_number',     'TEXT');
+      addColumn(db, 'orders', 'tracking_url',        'TEXT');
+      addColumn(db, 'orders', 'fulfillment_status',  'TEXT');
+      addColumn(db, 'orders', 'shipping_address',    'TEXT');  // JSON
+
+      // order_line_items: items within each order (from Shopify line_items)
+      if (!hasTable(db, 'order_line_items')) {
+        db.exec(`
+          CREATE TABLE order_line_items (
+            id               TEXT PRIMARY KEY,
+            order_id         TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+            tenant_id        TEXT NOT NULL,
+            workspace_id     TEXT NOT NULL DEFAULT 'ws_default',
+            external_item_id TEXT,
+            product_id       TEXT,
+            sku              TEXT,
+            name             TEXT NOT NULL,
+            price            REAL NOT NULL DEFAULT 0,
+            quantity         INTEGER NOT NULL DEFAULT 1,
+            currency         TEXT DEFAULT 'USD',
+            icon             TEXT,
+            image_url        TEXT,
+            created_at       TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+          )
+        `);
+        db.exec('CREATE INDEX IF NOT EXISTS idx_order_line_items_order ON order_line_items(order_id)');
+      }
+
+      // customer_activity: unified timeline (messages, orders, payments, agent notes, AI, system logs)
+      if (!hasTable(db, 'customer_activity')) {
+        db.exec(`
+          CREATE TABLE customer_activity (
+            id           TEXT PRIMARY KEY,
+            customer_id  TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+            tenant_id    TEXT NOT NULL,
+            workspace_id TEXT NOT NULL DEFAULT 'ws_default',
+            type         TEXT NOT NULL,
+            system       TEXT,
+            level        TEXT NOT NULL DEFAULT 'info',
+            title        TEXT,
+            content      TEXT,
+            metadata     TEXT,
+            source       TEXT,
+            occurred_at  TEXT NOT NULL,
+            created_at   TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+          )
+        `);
+        db.exec('CREATE INDEX IF NOT EXISTS idx_customer_activity_customer ON customer_activity(customer_id, occurred_at)');
+      }
+    },
+  },
+
+  {
+    version: '2026-04-18-002',
+    up(db) {
+      addColumn(db, 'payments', 'authorized_at', 'TEXT');
+      addColumn(db, 'payments', 'captured_at', 'TEXT');
+      addColumn(db, 'payments', 'refund_status', 'TEXT');
+      addColumn(db, 'payments', 'refund_details', `TEXT DEFAULT '[]'`);
+      addColumn(db, 'payments', 'reconciliation_details', `TEXT DEFAULT '{}'`);
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS payment_events (
+          id TEXT PRIMARY KEY,
+          payment_id TEXT NOT NULL REFERENCES payments(id),
+          type TEXT NOT NULL,
+          content TEXT NOT NULL,
+          system TEXT NOT NULL,
+          time TEXT NOT NULL,
+          tenant_id TEXT NOT NULL
+        )
+      `);
+
+      const paymentUpdates = [
+        {
+          id: 'pay_001',
+          authorized_at: '2023-10-16T10:00:20Z',
+          captured_at: '2023-10-16T10:01:00Z',
+          refund_status: 'pending_bank_clearance',
+          refund_details: JSON.stringify([
+            {
+              attempt: 1,
+              initiated_at: '2023-10-16T12:00:00Z',
+              amount: 129,
+              status: 'processing',
+              psp_ref: 're_001_a',
+            },
+          ]),
+          reconciliation_details: JSON.stringify({
+            status: 'mismatch',
+            oms_state: 'refund_pending',
+            psp_state: 'captured',
+            diff_cents: 0,
+          }),
+        },
+        {
+          id: 'pay_002',
+          authorized_at: '2023-10-16T10:00:20Z',
+          captured_at: '2023-10-16T10:01:00Z',
+          refund_status: 'N/A',
+          refund_details: JSON.stringify([]),
+          reconciliation_details: JSON.stringify({
+            status: 'pending',
+            notes: 'Cancellation approval pending — refund on hold',
+          }),
+        },
+        {
+          id: 'pay_003',
+          authorized_at: '2023-10-15T10:00:20Z',
+          captured_at: '2023-10-15T10:01:00Z',
+          refund_status: 'succeeded',
+          refund_details: JSON.stringify([
+            {
+              attempt: 1,
+              initiated_at: '2023-10-15T14:00:00Z',
+              amount: 89,
+              status: 'succeeded',
+              psp_ref: 're_003_a',
+            },
+          ]),
+          reconciliation_details: JSON.stringify({
+            status: 'matched',
+            notes: 'Refund completed and reconciled',
+          }),
+        },
+        {
+          id: 'pay_004',
+          authorized_at: '2023-10-14T10:00:20Z',
+          captured_at: '2023-10-14T10:01:00Z',
+          refund_status: 'N/A',
+          refund_details: JSON.stringify([]),
+          reconciliation_details: JSON.stringify({
+            status: 'matched',
+            notes: 'Payment captured and settled',
+          }),
+        },
+      ];
+
+      const updatePayment = db.prepare(`
+        UPDATE payments
+        SET authorized_at = ?,
+            captured_at = ?,
+            refund_status = ?,
+            refund_details = ?,
+            reconciliation_details = ?
+        WHERE id = ?
+      `);
+
+      for (const payment of paymentUpdates) {
+        updatePayment.run(
+          payment.authorized_at,
+          payment.captured_at,
+          payment.refund_status,
+          payment.refund_details,
+          payment.reconciliation_details,
+          payment.id,
+        );
+      }
+
+      const paymentEvents = [
+        ['pe_001_1', 'pay_001', 'authorized', 'Payment authorized — $129.00', 'Stripe', '2023-10-16T10:00:20Z'],
+        ['pe_001_2', 'pay_001', 'captured', 'Payment captured successfully', 'Stripe', '2023-10-16T10:01:00Z'],
+        ['pe_001_3', 'pay_001', 'refund_requested', 'Refund requested via OMS', 'OMS', '2023-10-16T12:00:00Z'],
+        ['pe_001_4', 'pay_001', 'refund_initiated', 'Refund initiated in PSP', 'Stripe', '2023-10-16T12:05:00Z'],
+        ['pe_001_5', 'pay_001', 'pending_bank', 'Awaiting bank clearance — T+3 expected', 'Bank', '2023-10-16T12:05:30Z'],
+        ['pe_002_1', 'pay_002', 'authorized', 'Payment authorized — $129.00', 'Stripe', '2023-10-16T10:00:20Z'],
+        ['pe_002_2', 'pay_002', 'captured', 'Payment captured', 'Stripe', '2023-10-16T10:01:00Z'],
+        ['pe_002_3', 'pay_002', 'cancellation_hold', 'Refund on hold pending ops cancellation approval', 'System', '2023-10-16T12:01:00Z'],
+        ['pe_003_1', 'pay_003', 'authorized', 'Payment authorized — $89.00', 'Stripe', '2023-10-15T10:00:20Z'],
+        ['pe_003_2', 'pay_003', 'captured', 'Payment captured', 'Stripe', '2023-10-15T10:01:00Z'],
+        ['pe_003_3', 'pay_003', 'settled', 'Payment settled and reconciled', 'System', '2023-10-15T20:00:00Z'],
+        ['pe_004_1', 'pay_004', 'authorized', 'Payment authorized — $249.00', 'Stripe', '2023-10-14T10:00:20Z'],
+        ['pe_004_2', 'pay_004', 'captured', 'Payment captured', 'Stripe', '2023-10-14T10:01:00Z'],
+        ['pe_004_3', 'pay_004', 'settled', 'Payment settled', 'Stripe', '2023-10-14T22:00:00Z'],
+      ] as const;
+
+      const insertPaymentEvent = db.prepare(`
+        INSERT OR IGNORE INTO payment_events
+          (id, payment_id, type, content, system, time, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const workspace = db.prepare('SELECT org_id FROM workspaces LIMIT 1').get() as { org_id?: string } | undefined;
+      const tenantId = workspace?.org_id || 'org_default';
+      for (const event of paymentEvents) {
+        insertPaymentEvent.run(event[0], event[1], event[2], event[3], event[4], event[5], tenantId);
+      }
+    },
+  },
+  // ── 2026-04-23-001: super_agent_sessions + super_agent_traces ────────────
+  {
+    version: '2026-04-23-001',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS super_agent_sessions (
+          id            TEXT PRIMARY KEY,
+          user_id       TEXT NOT NULL,
+          tenant_id     TEXT NOT NULL,
+          workspace_id  TEXT,
+          turns_json    TEXT NOT NULL DEFAULT '[]',
+          summary       TEXT NOT NULL DEFAULT '',
+          slots_json    TEXT NOT NULL DEFAULT '{}',
+          recent_targets_json TEXT NOT NULL DEFAULT '[]',
+          pending_approval_ids_json TEXT NOT NULL DEFAULT '[]',
+          active_plan_id TEXT,
+          created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+          updated_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+          ttl_at        TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sa_sessions_user  ON super_agent_sessions(user_id, tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_sa_sessions_ttl   ON super_agent_sessions(ttl_at);
+
+        CREATE TABLE IF NOT EXISTS super_agent_traces (
+          plan_id       TEXT PRIMARY KEY,
+          session_id    TEXT NOT NULL,
+          tenant_id     TEXT NOT NULL,
+          workspace_id  TEXT,
+          user_id       TEXT,
+          started_at    TEXT NOT NULL,
+          ended_at      TEXT NOT NULL,
+          status        TEXT NOT NULL,
+          spans_json    TEXT NOT NULL DEFAULT '[]',
+          summary       TEXT NOT NULL DEFAULT '',
+          approval_ids_json TEXT NOT NULL DEFAULT '[]',
+          policy_decisions_json TEXT NOT NULL DEFAULT '[]',
+          created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+        );
+        CREATE INDEX IF NOT EXISTS idx_sa_traces_session ON super_agent_traces(session_id);
+        CREATE INDEX IF NOT EXISTS idx_sa_traces_tenant  ON super_agent_traces(tenant_id, started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_sa_traces_user    ON super_agent_traces(user_id, started_at DESC);
+      `);
+    },
+  },
+  // ── 2026-04-23-002: add recent_targets_json to super_agent_sessions ───────
+  {
+    version: '2026-04-23-002',
+    up(db) {
+      const columns = db.prepare("PRAGMA table_info(super_agent_sessions)").all() as Array<{ name: string }>;
+      const hasRecentTargets = columns.some((column) => column.name === 'recent_targets_json');
+      if (!hasRecentTargets) {
+        db.exec(`
+          ALTER TABLE super_agent_sessions
+          ADD COLUMN recent_targets_json TEXT NOT NULL DEFAULT '[]';
+        `);
+      }
+    },
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────────────

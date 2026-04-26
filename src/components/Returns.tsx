@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Return, ReturnTab, OrderTimelineEvent } from '../types';
+import { Return, ReturnTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseHeader from './CaseHeader';
+import CaseCopilotPanel from './CaseCopilotPanel';
 import { returnsApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
+
+interface ReturnsProps {
+  onNavigate?: NavigateFn;
+  focusEntityId?: string | null;
+  focusSection?: string | null;
+}
 
 const formatDate = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
@@ -22,6 +30,7 @@ const formatRelativeLabel = (value?: string | null) => {
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const RETURNS: Return[] = [
   {
     id: '1',
@@ -253,7 +262,7 @@ const RETURNS: Return[] = [
   }
 ];
 
-export default function Returns() {
+export default function Returns({ onNavigate, focusEntityId, focusSection }: ReturnsProps) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<ReturnTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
@@ -261,7 +270,7 @@ export default function Returns() {
 
   // Fetch canonical return contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
-  const { data: apiReturns, error: returnsError } = useApi(() => returnsApi.list(), [], []);
+  const { data: apiReturns, loading: returnsLoading, error: returnsError } = useApi(() => returnsApi.list(), [], []);
 
   const mapApiReturn = (r: any): Return => ({
     id: r.id,
@@ -314,16 +323,35 @@ export default function Returns() {
   });
 
   const returns = useMemo(
-    () => (apiReturns && apiReturns.length > 0) ? apiReturns.map(mapApiReturn) : [],
+    () => (Array.isArray(apiReturns) ? apiReturns.map(mapApiReturn) : []),
     [apiReturns],
   );
+  const isInitialReturnsLoading = returnsLoading && returns.length === 0;
 
   const filteredReturns = useMemo(() => returns.filter(r => {
     if (activeTab === 'all') return true;
     return r.tab === activeTab;
   }), [activeTab, returns]);
 
-  const selectedReturn = filteredReturns.find(r => r.id === selectedId) || filteredReturns[0] || null;
+  const selectedReturnBase = filteredReturns.find(r => r.id === selectedId) || filteredReturns[0] || null;
+  const { data: selectedReturnDetailRaw, loading: selectedReturnDetailLoading } = useApi(
+    () => selectedReturnBase ? returnsApi.get(selectedReturnBase.id) : Promise.resolve(null),
+    [selectedReturnBase?.id],
+    null,
+  );
+
+  const selectedReturn = useMemo(() => {
+    if (!selectedReturnBase) return null;
+    if (!selectedReturnDetailRaw) return selectedReturnBase;
+
+    const detail = mapApiReturn(selectedReturnDetailRaw);
+    return {
+      ...selectedReturnBase,
+      ...detail,
+      timeline: detail.timeline.length > 0 ? detail.timeline : selectedReturnBase.timeline,
+      relatedCases: detail.relatedCases.length > 0 ? detail.relatedCases : selectedReturnBase.relatedCases,
+    };
+  }, [selectedReturnBase, selectedReturnDetailRaw]);
 
   useEffect(() => {
     if (filteredReturns.length === 0) {
@@ -334,6 +362,31 @@ export default function Returns() {
       setSelectedId(filteredReturns[0].id);
     }
   }, [activeTab, filteredReturns, selectedId]);
+
+  useEffect(() => {
+    if (focusSection && ['all', 'pending_review', 'in_transit', 'received', 'refund_pending', 'blocked'].includes(focusSection) && activeTab !== focusSection) {
+      setActiveTab(focusSection as ReturnTab);
+    }
+  }, [activeTab, focusSection]);
+
+  useEffect(() => {
+    if (!focusEntityId) return;
+    if (activeTab !== 'all') {
+      setActiveTab('all');
+    }
+    if (selectedId !== focusEntityId) {
+      setSelectedId(focusEntityId);
+    }
+  }, [activeTab, focusEntityId, selectedId]);
+
+  if (isInitialReturnsLoading) {
+    return (
+      <LoadingState
+        title="Loading returns"
+        message="Fetching canonical return data from Supabase."
+      />
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -439,7 +492,14 @@ export default function Returns() {
                 </button>
               </div>
             )}
-            {selectedReturn ? (
+            {selectedReturnDetailLoading ? (
+              <div className="flex-1 flex items-center justify-center px-8 py-12">
+                <div className="max-w-sm text-center">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Loading return details</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Fetching the return timeline and context together.</p>
+                </div>
+              </div>
+            ) : selectedReturn ? (
               <div className="p-8 w-full space-y-8">
                 <CaseHeader
                   caseId={selectedReturn.relatedCases[0]?.id || selectedReturn.returnId}
@@ -581,9 +641,6 @@ export default function Returns() {
                 Copilot
               </button>
               <div className="flex items-center gap-1 ml-auto">
-                <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                  <span className="material-symbols-outlined text-[20px]">settings</span>
-                </button>
                 <button 
                   onClick={() => setIsRightSidebarOpen(false)}
                   className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
@@ -601,40 +658,23 @@ export default function Returns() {
                   Copilot is disabled until a return is selected.
                 </div>
               ) : rightTab === 'copilot' ? (
-                <div className="p-4 flex flex-col gap-4">
-                  {/* Copilot Case Summary */}
-                  <div className="flex gap-2">
-                    <div className="w-6 h-6 rounded-md bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5">
-                      <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                    </div>
-                    <div className="flex flex-col gap-2 max-w-[85%] w-full">
-                      <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-2.5 px-3.5 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Return Summary</h4>
-                        <p className="leading-relaxed mb-3">Return {selectedReturn.returnId} for {selectedReturn.customerName} is currently {selectedReturn.returnStatus}. The refund amount is {selectedReturn.total}.</p>
-                        
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Conflict Detection</h4>
-                        <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-800/30 text-xs text-red-700 dark:text-red-400 mb-3">
-                          {selectedReturn.returnStatus === 'Delayed' ? 'Return received but refund not triggered in OMS.' : 'No major conflicts detected.'}
-                        </div>
-
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
-                        <p className="text-xs bg-white/50 dark:bg-blue-600/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic">
-                          {selectedReturn.recommendedNextAction || "Monitor return transit status."}
-                        </p>
-                      </div>
-                      
-                      <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500 mb-2">Suggested Reply</h4>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed italic mb-3">
-                          "Hi {selectedReturn.customerName.split(' ')[0]}, I'm monitoring your return {selectedReturn.returnId}. It's currently {selectedReturn.returnStatus} and I'll update you as soon as the refund is processed."
-                        </p>
-                        <button className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
-                          Apply to Composer
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <CaseCopilotPanel
+                  caseId={selectedReturn.relatedCases[0]?.id || selectedReturn.returnId}
+                  entityLabel="return"
+                  subjectLabel={`Return ${selectedReturn.returnId}`}
+                  summary={`Return ${selectedReturn.returnId} for ${selectedReturn.customerName} is currently ${selectedReturn.returnStatus}. The refund amount is ${selectedReturn.total}.`}
+                  conflict={selectedReturn.conflictDetected || (selectedReturn.returnStatus === 'Delayed' ? 'Return received but refund not triggered in OMS.' : 'No major conflicts detected.')}
+                  recommendation={selectedReturn.recommendedNextAction || 'Monitor return transit status.'}
+                  riskLabel={selectedReturn.riskLevel}
+                  isLoading={selectedReturnDetailLoading}
+                  suggestedQuestions={['What\'s the current status?', 'What should I do next?', 'Why is this return high risk?', 'Walk me through this return']}
+                  onOpenModule={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('case_graph', selectedReturn.relatedCases[0].id)}
+                  moduleButtonLabel="View case"
+                  onApply={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('inbox', selectedReturn.relatedCases[0].id)}
+                  applyButtonLabel="Open case"
+                  emptyTitle="Ask me anything about this return"
+                  emptySubtitle="I have full context: order, WMS, carrier and history."
+                />
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {/* Case Attributes */}
@@ -766,20 +806,10 @@ export default function Returns() {
               )}
             </div>
 
-            {/* Copilot Input Area */}
-            <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
-              <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
-                <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
-                <input disabled={!selectedReturn} className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:cursor-not-allowed" placeholder={selectedReturn ? 'Ask a question...' : 'Select a return first'} type="text" />
-                <div className="flex items-center gap-1">
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">arrow_upward</span></button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+

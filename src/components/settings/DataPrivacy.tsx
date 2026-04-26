@@ -1,9 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
+
+const fallbackWorkspace = {
+  id: 'ws_default',
+  name: 'CRM AI Workspace',
+  slug: 'crm-ai',
+  settings: {},
+};
 
 function parseSettings(settings: any) {
   if (!settings) return {};
@@ -19,7 +27,8 @@ function parseSettings(settings: any) {
 
 export default function DataPrivacyTab({ onSaveReady }: Props) {
   const { data: workspace, loading, error } = useApi(workspacesApi.currentContext);
-  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace]);
+  const workspaceRecord = workspace || fallbackWorkspace;
+  const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
   const [exportApprovals, setExportApprovals] = useState('Security Team only');
   const [deletionApprovals, setDeletionApprovals] = useState('Security Team only');
   const [maskSensitiveLogs, setMaskSensitiveLogs] = useState(true);
@@ -37,7 +46,10 @@ export default function DataPrivacyTab({ onSaveReady }: Props) {
   }, [workspaceSettings]);
 
   const handleSave = useCallback(async () => {
-    if (!workspace?.id) throw new Error('Workspace not loaded');
+    if (!workspace?.id) {
+      setStatusMessage('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
     setIsSaving(true);
     setStatusMessage(null);
     try {
@@ -66,11 +78,15 @@ export default function DataPrivacyTab({ onSaveReady }: Props) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading privacy settings...</div>;
-  if (error) return <div className="p-6 text-sm text-red-500">Error loading privacy settings.</div>;
+  if (loading) return <LoadingState title="Loading privacy settings" message="Fetching workspace privacy rules." compact />;
 
   return (
     <div className="space-y-8">
+      {error && (
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/30 dark:bg-amber-900/15 dark:text-amber-300">
+          Workspace context is still settling. Showing safe local defaults until Supabase responds.
+        </div>
+      )}
       {statusMessage && (
         <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
           {statusMessage}

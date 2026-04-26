@@ -2,13 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { customersApi, paymentsApi, policyApi } from '../api/client';
 import { useApi } from '../api/hooks';
-import type { Page } from '../types';
+import LoadingState from './LoadingState';
+import type { NavigateFn, Page } from '../types';
 
 type CustomerTab = 'all_activity' | 'conversations' | 'orders' | 'system_logs';
-type NavigateFn = (page: Page, focusCaseId?: string | null) => void;
 
 interface CustomersProps {
   onNavigate?: NavigateFn;
+  focusCustomerId?: string | null;
 }
 
 interface Order {
@@ -132,6 +133,7 @@ function normalizeReconciliation(raw?: any): NonNullable<Customer['reconciliatio
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mockCustomers: Customer[] = [
   {
     id: 'C-101',
@@ -249,10 +251,15 @@ function buildInitialsAvatar(name: string) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-export default function Customers({ onNavigate }: CustomersProps) {
+export default function Customers({ onNavigate, focusCustomerId }: CustomersProps) {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<CustomerTab>('all_activity');
   const [searchQuery, setSearchQuery] = useState('');
+  const [segmentFilter, setSegmentFilter] = useState<'all' | 'vip' | 'standard'>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [openTicketsFilter, setOpenTicketsFilter] = useState<'all' | 'open'>('all');
+  const [riskFilter, setRiskFilter] = useState<'all' | 'risk'>('all');
+  const [aiHandledFilter, setAiHandledFilter] = useState<'all' | 'handled'>('all');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isCreateCustomerOpen, setIsCreateCustomerOpen] = useState(false);
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
@@ -265,59 +272,60 @@ export default function Customers({ onNavigate }: CustomersProps) {
     externalId: '',
   });
 
-  // Fetch canonical customers from the backend. The visual mock list is kept
-  // only as historical reference data, never as runtime source.
-  const { data: apiCustomers, error: customersError } = useApi(() => customersApi.list(), [], []);
-  const { data: apiSelectedState, error: customerStateError } = useApi(
+  // Fetch canonical customers from the backend — no mock data used.
+  const { data: apiCustomers, loading: customersLoading, error: customersError } = useApi(() => customersApi.list(), [], []);
+  const { data: apiSelectedState, loading: customerStateLoading, error: customerStateError } = useApi(
     () => selectedCustomerId ? customersApi.state(selectedCustomerId) : Promise.resolve(null),
     [selectedCustomerId]
   );
+  const { data: apiActivity } = useApi(
+    () => selectedCustomerId ? customersApi.activity(selectedCustomerId) : Promise.resolve([]),
+    [selectedCustomerId]
+  );
+
+  React.useEffect(() => {
+    if (!focusCustomerId) return;
+    if (selectedCustomerId !== focusCustomerId) {
+      setSelectedCustomerId(focusCustomerId);
+    }
+  }, [focusCustomerId, selectedCustomerId]);
 
   const mapApiCustomer = (c: any) => {
-    const name = c.canonical_name || c.name || 'Unknown';
-    const email = c.canonical_email || c.email || '';
-    const ltv = c.lifetime_value ?? c.ltv ?? 0;
+    const name    = c.canonical_name || c.name || 'Unknown';
+    const email   = c.canonical_email || c.email || '';
+    const ltv     = c.lifetime_value ?? c.ltv ?? 0;
     const segment = c.segment || 'regular';
     const linkedIdentities = Array.isArray(c.linked_identities) ? c.linked_identities as ApiLinkedIdentity[] : [];
-    const canonicalSystems = Array.isArray(c.canonical_systems) ? c.canonical_systems : [];
     const sources = linkedIdentities.length > 0
       ? linkedIdentities.map(identity => normalizeSource(identity.system, identity.external_id))
-      : canonicalSystems.length > 0
-        ? canonicalSystems.map((system: any) => normalizeSource(system.system || system.name || system, system.external_id || system.externalId))
-        : [normalizeSource(c.company || name)];
+      : [normalizeSource(c.company || name)];
     return {
-      id: c.id,
+      id:       c.id,
       name,
       email,
-      avatar: c.avatar || buildInitialsAvatar(name),
-      role: c.role || 'Customer',
-      company: c.company || 'Personal',
+      avatar:   c.avatar_url || buildInitialsAvatar(name),
+      role:     c.role     || 'Customer',
+      company:  c.company  || 'Personal',
       location: c.location || 'N/A',
       timezone: c.timezone || 'N/A',
-      since: c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
-      segment: (segment === 'vip' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
-      ltv: `$${Number(ltv).toLocaleString()}`,
-      orders: Array.isArray(c.orders) ? c.orders : [],
+      since:    c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
+      segment:  (segment === 'vip' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
+      ltv:      `$${Number(ltv).toLocaleString()}`,
+      orders:   [],
       openTickets: Number(c.open_cases || 0),
       aiImpact: {
-        resolved: Number(c.ai_impact?.resolved ?? c.ai_resolved ?? 0),
-        approvals: Number(c.ai_impact?.approvals ?? c.ai_approvals ?? 0) || undefined,
-        escalated: Number(c.ai_impact?.escalated ?? c.ai_escalated ?? 0) || undefined,
+        resolved:  Number(c.ai_impact_resolved  ?? 0),
+        approvals: Number(c.ai_impact_approvals ?? 0) || undefined,
+        escalated: Number(c.ai_impact_escalated ?? 0) || undefined,
       },
       topIssue: c.top_issue || 'N/A',
-      risk: c.risk_level === 'high' || c.risk_level === 'critical'
+      risk: (c.risk_level === 'high' || c.risk_level === 'critical')
         ? 'Churn Risk'
-        : c.risk_level === 'medium'
-          ? 'Watchlist'
-          : 'Healthy',
-      badges: Array.isArray(c.badges) ? c.badges : [],
-      orders_list: [],
-      cases: [],
-      activity: [],
+        : c.risk_level === 'medium' ? 'Watchlist' : 'Healthy',
       sources,
-      plan: c.plan || 'Standard',
-      nextRenewal: c.next_renewal || 'N/A',
-      reconciliation: normalizeReconciliation(c.reconciliation),
+      plan:        c.plan        || 'Standard',
+      nextRenewal: c.next_renewal ? new Date(c.next_renewal).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
+      reconciliation: defaultReconciliation,
     };
   };
 
@@ -328,9 +336,21 @@ export default function Customers({ onNavigate }: CustomersProps) {
     return [];
   }, [apiCustomers]);
 
+  const isSelectedCustomerLoading = Boolean(selectedCustomerId && customerStateLoading && !apiSelectedState);
+
+  const sourceOptions = useMemo(() => {
+    const names = new Set<string>();
+    customers.forEach(customer => {
+      customer.sources.forEach(source => {
+        const value = source.name?.trim();
+        if (value) names.add(value);
+      });
+    });
+    return ['all', ...Array.from(names).sort((a, b) => a.localeCompare(b))];
+  }, [customers]);
+
   const visibleCustomers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return customers;
     return customers.filter(customer => {
       const haystack = [
         customer.name,
@@ -342,80 +362,111 @@ export default function Customers({ onNavigate }: CustomersProps) {
         customer.risk || '',
         ...customer.sources.map(source => source.name),
       ].join(' ').toLowerCase();
-      return haystack.includes(query);
+      const matchesSearch = !query || haystack.includes(query);
+      const matchesSegment =
+        segmentFilter === 'all' ||
+        (segmentFilter === 'vip' && customer.segment === 'VIP Enterprise') ||
+        (segmentFilter === 'standard' && customer.segment === 'Standard');
+      const matchesSource =
+        sourceFilter === 'all' ||
+        customer.sources.some(source => source.name === sourceFilter);
+      const matchesOpenTickets =
+        openTicketsFilter === 'all' || customer.openTickets > 0;
+      const matchesRisk =
+        riskFilter === 'all' || (customer.risk ? customer.risk !== 'Healthy' : false);
+      const matchesAiHandled =
+        aiHandledFilter === 'all' || customer.aiImpact.resolved > 0;
+      return matchesSearch && matchesSegment && matchesSource && matchesOpenTickets && matchesRisk && matchesAiHandled;
     });
-  }, [customers, searchQuery]);
-
+  }, [aiHandledFilter, customers, openTicketsFilter, riskFilter, searchQuery, segmentFilter, sourceFilter]);
   const selectedCustomer = React.useMemo(() => {
-    const fallbackCustomer = customers.find(c => c.id === selectedCustomerId) || null;
-    if (!apiSelectedState) return fallbackCustomer;
+    // Prefer full state data; fall back to list-level data while loading
+    const listCustomer = customers.find(c => c.id === selectedCustomerId) || null;
+    if (!apiSelectedState) return listCustomer;
 
-    const customer = apiSelectedState.customer || {};
-    const systems = apiSelectedState.systems || {};
-    const recentCases = apiSelectedState.recent_cases || [];
-    const linkedIdentities = apiSelectedState.linked_identities || [];
+    const customer          = apiSelectedState.customer           || {};
+    const linkedIdentities  = apiSelectedState.linked_identities  || [];
     const unresolvedConflicts = apiSelectedState.unresolved_conflicts || [];
+    const recentCases       = apiSelectedState.recent_cases        || [];
+
+    // Orders: use the orders with line_items from state_snapshot.systems
+    const orderNodes = apiSelectedState.systems?.orders?.nodes || [];
+    const orders: Order[] = orderNodes.map((node: any) => ({
+      id:       node.label || node.id,
+      date:     node.timestamp ? new Date(node.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
+      total:    node.total != null ? `$${Number(node.total).toLocaleString()}` : 'N/A',
+      status:   (['in_transit', 'packed', 'processing'].includes(node.value) ? 'Processing' : node.status === 'critical' ? 'Processing' : 'Delivered') as Order['status'],
+      tracking: node.tracking ?? undefined,
+      items:    (node.line_items || []).map((li: any) => ({
+        name:  li.name,
+        sku:   li.sku   || '',
+        price: li.price != null ? `$${Number(li.price).toFixed(2)}` : 'N/A',
+        icon:  li.icon  || 'inventory_2',
+      })),
+    }));
 
     const reconciliation = {
-      status: unresolvedConflicts.length > 0 ? 'Conflict' : 'Healthy',
+      status:     (unresolvedConflicts.length > 0 ? 'Conflict' : 'Healthy') as Customer['reconciliation'] extends infer R ? R extends { status: infer S } ? S : never : never,
       mismatches: unresolvedConflicts.length,
       lastChecked: 'just now',
-      domains: unresolvedConflicts.map((conflict: any) => ({
-        domain: conflict.conflict_type,
-        systems: [
-          { name: 'Cases', value: conflict.case_number },
-          { name: 'Recommended', value: conflict.recommended_action || 'Review required' },
-        ],
-        age: 'recent',
-        severity: conflict.severity === 'critical' ? 'High' : conflict.severity === 'warning' ? 'Medium' : 'Low',
-        sourceOfTruth: 'Case Runtime',
-        writebackStatus: 'Requires approval',
-        action: conflict.recommended_action || 'Review case',
-        actionType: 'approval',
-        context: conflict.recommended_action || 'Conflict detected in canonical state',
+      domains: unresolvedConflicts.map((c: any) => ({
+        domain:         c.conflict_type   || 'Unknown conflict',
+        systems:        [{ name: 'Case', value: c.case_number || c.case_id }, { name: 'Action', value: c.recommended_action || 'Review required' }],
+        age:            'recent',
+        severity:       (c.severity === 'critical' ? 'High' : c.severity === 'warning' ? 'Medium' : 'Low') as 'High' | 'Medium' | 'Low',
+        sourceOfTruth:  'Case Runtime',
+        writebackStatus: 'Requires approval' as const,
+        action:         c.recommended_action || 'Review case',
+        actionType:     'approval' as const,
+        context:        c.recommended_action || 'State conflict detected across systems.',
       })),
     };
 
+    // AI recommendations from DB column
+    const aiRecs: Array<{ action: string; priority: string; reason: string }> =
+      Array.isArray(customer.ai_recommendations) ? customer.ai_recommendations : [];
+
     return {
-      ...(fallbackCustomer || {}),
-      id: customer.id,
-      name: customer.canonical_name || fallbackCustomer?.name || 'Unknown',
-      email: customer.canonical_email || fallbackCustomer?.email || '',
-      avatar: fallbackCustomer?.avatar || buildInitialsAvatar(customer.canonical_name || fallbackCustomer?.name || 'Unknown'),
-      role: fallbackCustomer?.role || 'Customer',
-      company: fallbackCustomer?.company || 'Personal',
-      location: fallbackCustomer?.location || 'N/A',
-      timezone: fallbackCustomer?.timezone || 'N/A',
-      since: customer.created_at ? new Date(customer.created_at).getFullYear().toString() : (fallbackCustomer?.since || 'N/A'),
-      segment: customer.segment === 'vip' ? 'VIP Enterprise' : (fallbackCustomer?.segment || 'Standard'),
-      openTickets: apiSelectedState.metrics?.open_cases || 0,
-      aiImpact: fallbackCustomer?.aiImpact || { resolved: 0 },
-      topIssue: unresolvedConflicts[0]?.conflict_type || fallbackCustomer?.topIssue || 'N/A',
-      risk: customer.risk_level === 'high' || customer.risk_level === 'critical' ? 'Churn Risk' : (fallbackCustomer?.risk || 'Healthy'),
-      sources: linkedIdentities.length > 0
-        ? linkedIdentities.map((identity: any) => normalizeSource(identity.system, identity.external_id))
-        : (fallbackCustomer?.sources || []),
-      plan: fallbackCustomer?.plan || 'Standard',
-      ltv: `$${Number(apiSelectedState.metrics?.lifetime_value || customer.lifetime_value || 0).toLocaleString()}`,
-      nextRenewal: fallbackCustomer?.nextRenewal || 'N/A',
-      recentCases: Array.isArray(recentCases)
-        ? recentCases.map((recentCase: any) => ({
-            id: recentCase.id || recentCase.case_number,
-            caseNumber: recentCase.case_number || recentCase.id,
-            case_number: recentCase.case_number || recentCase.id,
-            type: recentCase.type || recentCase.conflict_type || 'Case',
-            status: recentCase.status || 'open',
-          }))
-        : fallbackCustomer?.recentCases || [],
-      orders: (systems.orders?.nodes || []).map((node: any) => ({
-        id: node.label,
-        date: node.timestamp ? new Date(node.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
-        total: 'N/A',
-        status: node.status === 'critical' ? 'Processing' : 'Delivered',
-        items: [],
+      id:          customer.id            || listCustomer?.id    || '',
+      name:        customer.canonical_name || listCustomer?.name  || 'Unknown',
+      email:       customer.canonical_email|| listCustomer?.email || '',
+      avatar:      customer.avatar_url     || buildInitialsAvatar(customer.canonical_name || listCustomer?.name || 'Unknown'),
+      role:        customer.role           || listCustomer?.role    || 'Customer',
+      company:     customer.company        || listCustomer?.company || 'Personal',
+      location:    customer.location       || listCustomer?.location|| 'N/A',
+      timezone:    customer.timezone       || listCustomer?.timezone|| 'N/A',
+      since:       customer.created_at ? new Date(customer.created_at).getFullYear().toString() : (listCustomer?.since || 'N/A'),
+      segment:     (customer.segment === 'vip' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
+      openTickets: apiSelectedState.metrics?.open_cases ?? 0,
+      aiImpact: {
+        resolved:  Number(customer.ai_impact_resolved  ?? 0),
+        approvals: Number(customer.ai_impact_approvals ?? 0) || undefined,
+        escalated: Number(customer.ai_impact_escalated ?? 0) || undefined,
+      },
+      topIssue:    unresolvedConflicts[0]?.conflict_type || customer.top_issue || listCustomer?.topIssue || 'N/A',
+      risk:        (customer.risk_level === 'high' || customer.risk_level === 'critical') ? 'Churn Risk'
+                 : customer.risk_level === 'medium' ? 'Watchlist' : 'Healthy',
+      fraudRisk:   customer.fraud_risk || 'low',
+      aiExecutiveSummary: customer.ai_executive_summary || null,
+      aiRecommendations:  aiRecs,
+      sources:     linkedIdentities.length > 0
+        ? linkedIdentities.map((id: any) => normalizeSource(id.system, id.external_id))
+        : (listCustomer?.sources || []),
+      plan:        customer.plan        || listCustomer?.plan        || 'Standard',
+      ltv:         `$${Number(apiSelectedState.metrics?.lifetime_value || customer.lifetime_value || 0).toLocaleString()}`,
+      nextRenewal: customer.next_renewal
+        ? new Date(customer.next_renewal).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : (listCustomer?.nextRenewal || 'N/A'),
+      recentCases: recentCases.map((rc: any) => ({
+        id:          rc.id || rc.case_number,
+        caseNumber:  rc.case_number || rc.id,
+        case_number: rc.case_number || rc.id,
+        type:        rc.type || 'Case',
+        status:      rc.status || 'open',
       })),
+      orders,
       reconciliation,
-    } as Customer;
+    } as Customer & { fraudRisk: string; aiExecutiveSummary: string | null; aiRecommendations: typeof aiRecs };
   }, [apiSelectedState, customers, selectedCustomerId]);
 
   const selectedCustomerCaseId = selectedCustomer?.recentCases?.[0]?.id
@@ -517,9 +568,9 @@ export default function Customers({ onNavigate }: CustomersProps) {
             <div className="flex items-center gap-3">
               <div className="relative w-64 mr-2">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-lg">search</span>
-                <input 
-                  type="text" 
-                  placeholder="Search customers..." 
+                <input
+                  type="text"
+                  placeholder="Search customers..."
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-all"
@@ -535,19 +586,82 @@ export default function Customers({ onNavigate }: CustomersProps) {
             </div>
           </div>
           <div className="px-6 flex items-center space-x-8 border-t border-gray-100 dark:border-gray-800 pt-3">
-            {/* Keeping these as pills since they are not mutually exclusive tabs, but placing them in the tab area */}
             <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar pb-3">
-              <button className="flex items-center px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all shadow-card">
+              <button
+                onClick={() => setSegmentFilter(prev => prev === 'all' ? 'vip' : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  segmentFilter !== 'all'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
                 <span className="material-symbols-outlined text-sm mr-1.5 text-gray-500">filter_list</span>
                 Segment
               </button>
-              <button className="flex items-center px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all shadow-card">Source</button>
-              <button className="flex items-center px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all shadow-card">Has open tickets</button>
-              <button className="flex items-center px-3 py-1.5 text-xs font-medium bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg border border-purple-100 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors shadow-card">VIP</button>
-              <button className="flex items-center px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all shadow-card">Risk flags</button>
-              <button className="flex items-center px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all shadow-card">AI handled</button>
+              <button
+                onClick={() => setSourceFilter(prev => prev === 'all' ? (sourceOptions[1] || 'all') : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  sourceFilter !== 'all'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                Source
+              </button>
+              <button
+                onClick={() => setOpenTicketsFilter(prev => prev === 'all' ? 'open' : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  openTicketsFilter === 'open'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                Has open tickets
+              </button>
+              <button
+                onClick={() => setSegmentFilter(prev => prev === 'vip' ? 'all' : 'vip')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  segmentFilter === 'vip'
+                    ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-100 dark:border-purple-800'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                VIP
+              </button>
+              <button
+                onClick={() => setRiskFilter(prev => prev === 'all' ? 'risk' : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  riskFilter === 'risk'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                Risk flags
+              </button>
+              <button
+                onClick={() => setAiHandledFilter(prev => prev === 'all' ? 'handled' : 'all')}
+                className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
+                  aiHandledFilter === 'handled'
+                    ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-900 dark:border-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                AI handled
+              </button>
               <div className="border-l border-gray-200 dark:border-gray-700 h-5 mx-2"></div>
-              <button className="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors">Clear all</button>
+              <button
+                onClick={() => {
+                  setSegmentFilter('all');
+                  setSourceFilter('all');
+                  setOpenTicketsFilter('all');
+                  setRiskFilter('all');
+                  setAiHandledFilter('all');
+                  setSearchQuery('');
+                }}
+                className="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors"
+              >
+                Clear all
+              </button>
             </div>
           </div>
         </div>
@@ -774,6 +888,14 @@ export default function Customers({ onNavigate }: CustomersProps) {
   );
 
   const renderProfileView = () => {
+    if (isSelectedCustomerLoading) {
+      return (
+        <LoadingState
+          title="Loading customer"
+          message="Fetching live customer state from Supabase."
+        />
+      );
+    }
     if (!selectedCustomer) return null;
 
     return (
@@ -1051,30 +1173,26 @@ export default function Customers({ onNavigate }: CustomersProps) {
                 <div className="flex items-center gap-2 mb-3">
                   <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-xl">auto_awesome</span>
                   <h3 className="font-bold text-gray-900 dark:text-white text-base">AI Executive Summary</h3>
-                  <span className="text-[10px] bg-white/50 dark:bg-black/20 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-200/50 dark:border-indigo-700/50 font-medium">Generated just now</span>
+                  <span className="text-[10px] bg-white/50 dark:bg-black/20 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-200/50 dark:border-indigo-700/50 font-medium">From canonical state</span>
                 </div>
-                <ul className="space-y-2">
-                  <li className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                    <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                    Customer reported a duplicate charge on Order #KD-9921 on Oct 25.
-                  </li>
-                  <li className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                    <span className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0"></span>
-                    AI detected elevated churn risk due to sentiment drop in last 2 interactions.
-                  </li>
-                  <li className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                    <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                    Historically a high-value VIP with 0 previous disputes in 3 years.
-                  </li>
-                  <li className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                    <span className="mt-1 w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></span>
-                    Stripe confirms duplicate charge; eligible for immediate automated refund.
-                  </li>
-                  <li className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                    <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                    Recommended action: Execute refund and send apology template #4.
-                  </li>
-                </ul>
+                {(selectedCustomer as any).aiExecutiveSummary ? (
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{(selectedCustomer as any).aiExecutiveSummary}</p>
+                ) : (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 italic">No AI summary available for this customer yet.</p>
+                )}
+                {((selectedCustomer as any).aiRecommendations?.length > 0) && (
+                  <div className="mt-3 space-y-1.5 pt-3 border-t border-indigo-100/60 dark:border-indigo-800/30">
+                    <p className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">Recommended Actions</p>
+                    {(selectedCustomer as any).aiRecommendations.map((rec: any, i: number) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                          rec.priority === 'high' ? 'bg-red-500' : rec.priority === 'medium' ? 'bg-amber-500' : 'bg-green-500'
+                        }`}></span>
+                        <p className="text-xs text-gray-700 dark:text-gray-300 leading-snug"><span className="font-medium">{rec.action}</span> — {rec.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1095,53 +1213,67 @@ export default function Customers({ onNavigate }: CustomersProps) {
                 ))}
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
-                {activeProfileTab === 'all_activity' && (
-                  <div className="relative border-l border-gray-200 dark:border-gray-700 ml-3 space-y-6 pb-4">
-                    <div className="relative pl-6">
-                      <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-blue-100 dark:bg-blue-900/30 border-2 border-white dark:border-card-dark flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      </div>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Today, 10:30 AM</p>
-                        <span className="text-[10px] font-medium text-gray-400">via Email</span>
-                      </div>
-                      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">Customer reported duplicate charge</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">"Hi, I noticed I was charged twice for my recent annual renewal. Order #KD-9921 shows two charges of $1,250 on my credit card statement. Can you please fix this immediately?"</p>
-                      </div>
-                    </div>
-                    <div className="relative pl-6">
-                      <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-indigo-100 dark:bg-indigo-900/30 border-2 border-white dark:border-card-dark flex items-center justify-center">
-                        <span className="material-symbols-outlined text-[10px] text-indigo-600 dark:text-indigo-400">smart_toy</span>
-                      </div>
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Today, 10:31 AM</p>
-                        <span className="text-[10px] font-medium text-indigo-500">System AI</span>
-                      </div>
-                      <p className="text-sm text-gray-800 dark:text-gray-200"><span className="font-medium text-gray-900 dark:text-white">AI identified issue</span> as 'Duplicate Charge' and drafted reply.</p>
-                    </div>
-                  </div>
-                )}
-                {activeProfileTab === 'conversations' && (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700 hover:bg-white dark:hover:bg-card-dark transition-colors group cursor-pointer shadow-card">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">#T-9921</span>
-                            <h4 className="text-sm font-bold text-gray-900 dark:text-white">Duplicate Charge on Renewal</h4>
+                {activeProfileTab === 'all_activity' && (() => {
+                  const events = Array.isArray(apiActivity) ? apiActivity.filter((e: any) => e.type !== 'system_log') : [];
+                  if (events.length === 0) return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No activity recorded yet.</p>;
+                  const dotColor = (type: string, level: string) => {
+                    if (level === 'error')   return 'bg-red-500';
+                    if (level === 'warning') return 'bg-amber-500';
+                    if (type === 'ai_summary') return 'bg-indigo-500';
+                    if (type === 'agent_note') return 'bg-purple-500';
+                    if (type === 'payment')   return 'bg-green-500';
+                    return 'bg-blue-500';
+                  };
+                  return (
+                    <div className="relative border-l border-gray-200 dark:border-gray-700 ml-3 space-y-6 pb-4">
+                      {events.map((event: any) => (
+                        <div key={event.id} className="relative pl-6">
+                          <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full ${dotColor(event.type, event.level)} bg-opacity-20 border-2 border-white dark:border-card-dark flex items-center justify-center`}>
+                            <div className={`w-2 h-2 rounded-full ${dotColor(event.type, event.level)}`}></div>
                           </div>
-                          <p className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">calendar_today</span> Oct 25, 2024 • via Email</p>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {new Date(event.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <span className="text-[10px] font-medium text-gray-400">{event.source || event.system || ''}</span>
+                          </div>
+                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">{event.title}</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{event.content}</p>
+                          </div>
                         </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-100 dark:border-amber-800/30">Open</span>
-                      </div>
-                      <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded p-2.5 border border-indigo-100/50 dark:border-indigo-800/30 mt-3 flex gap-2">
-                        <span className="material-symbols-outlined text-indigo-500 text-[16px] flex-shrink-0 mt-0.5">auto_awesome</span>
-                        <p className="text-xs text-gray-700 dark:text-gray-300"><span className="font-medium text-gray-900 dark:text-gray-100">AI Role:</span> Identified duplicate charge in Stripe, verified eligibility for refund, and prepared action plan for agent review.</p>
-                      </div>
+                      ))}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
+                {activeProfileTab === 'conversations' && (() => {
+                  const cases = selectedCustomer?.recentCases || [];
+                  if (cases.length === 0) return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No linked conversations found.</p>;
+                  return (
+                    <div className="space-y-4">
+                      {cases.map((c) => (
+                        <div key={c.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700 hover:bg-white dark:hover:bg-card-dark transition-colors group cursor-pointer shadow-card" onClick={() => onNavigate?.('inbox', c.id)}>
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{c.caseNumber || c.case_number || c.id}</span>
+                                <h4 className="text-sm font-bold text-gray-900 dark:text-white">{c.type || 'Case'}</h4>
+                              </div>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                              c.status === 'open' || c.status === 'escalated' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-100 dark:border-amber-800/30' :
+                              'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30'
+                            }`}>{c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : 'Open'}</span>
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                            <span className="material-symbols-outlined text-indigo-500 text-[16px] flex-shrink-0 mt-0.5">open_in_new</span>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Click to open in Inbox</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {activeProfileTab === 'orders' && (
                   <div className="overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-left text-sm">
@@ -1176,16 +1308,30 @@ export default function Customers({ onNavigate }: CustomersProps) {
                     </table>
                   </div>
                 )}
-                {activeProfileTab === 'system_logs' && (
-                  <div className="font-mono text-[11px] md:text-xs space-y-1">
-                    <div className="flex items-start gap-4 p-2 md:p-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <div className="w-24 flex-shrink-0 text-gray-400 dark:text-gray-500">10:31:05.122</div>
-                      <div className="w-20 flex-shrink-0"><span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-medium">INFO</span></div>
-                      <div className="w-32 flex-shrink-0 text-gray-500 dark:text-gray-400">webhook.stripe</div>
-                      <div className="flex-1 text-gray-800 dark:text-gray-300 break-all">Stripe webhook received: charge.succeeded</div>
+                {activeProfileTab === 'system_logs' && (() => {
+                  const logs = Array.isArray(apiActivity) ? apiActivity.filter((e: any) => e.type === 'system_log') : [];
+                  if (logs.length === 0) return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No system logs recorded yet.</p>;
+                  return (
+                    <div className="font-mono text-[11px] md:text-xs space-y-1">
+                      {logs.map((log: any) => (
+                        <div key={log.id} className="flex items-start gap-4 p-2 md:p-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                          <div className="w-28 flex-shrink-0 text-gray-400 dark:text-gray-500 text-[10px]">
+                            {new Date(log.occurred_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </div>
+                          <div className="w-16 flex-shrink-0">
+                            <span className={`px-1.5 py-0.5 rounded font-medium ${
+                              log.level === 'error'   ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' :
+                              log.level === 'warning' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' :
+                              'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                            }`}>{(log.level || 'info').toUpperCase()}</span>
+                          </div>
+                          <div className="w-28 flex-shrink-0 text-gray-500 dark:text-gray-400">{log.system || log.source || 'system'}</div>
+                          <div className="flex-1 text-gray-800 dark:text-gray-300 break-all">{log.content}</div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -1195,14 +1341,28 @@ export default function Customers({ onNavigate }: CustomersProps) {
             <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
               <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-3">Risk Profile</h3>
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-2 rounded bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800/30">
-                  <span className="text-xs font-medium text-red-800 dark:text-red-300 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Churn Risk</span>
-                  <span className="text-xs font-bold text-red-700 dark:text-red-400">High</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-800/30">
-                  <span className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Fraud Risk</span>
-                  <span className="text-xs font-bold text-green-700 dark:text-green-400">Low</span>
-                </div>
+                {(() => {
+                  const churn = selectedCustomer?.risk || 'Healthy';
+                  const fraud = (selectedCustomer as any)?.fraudRisk || 'low';
+                  const churnHigh = churn === 'Churn Risk';
+                  const fraudHigh = fraud === 'high' || fraud === 'critical';
+                  return (
+                    <>
+                      <div className={`flex items-center justify-between p-2 rounded border ${churnHigh ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800/30' : 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30'}`}>
+                        <span className={`text-xs font-medium flex items-center gap-1.5 ${churnHigh ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${churnHigh ? 'bg-red-500' : 'bg-green-500'}`}></span> Churn Risk
+                        </span>
+                        <span className={`text-xs font-bold ${churnHigh ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{churnHigh ? 'High' : churn === 'Watchlist' ? 'Medium' : 'Low'}</span>
+                      </div>
+                      <div className={`flex items-center justify-between p-2 rounded border ${fraudHigh ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800/30' : 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30'}`}>
+                        <span className={`text-xs font-medium flex items-center gap-1.5 ${fraudHigh ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${fraudHigh ? 'bg-red-500' : 'bg-green-500'}`}></span> Fraud Risk
+                        </span>
+                        <span className={`text-xs font-bold ${fraudHigh ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low'}</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
             <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
@@ -1210,10 +1370,15 @@ export default function Customers({ onNavigate }: CustomersProps) {
                 <span className="material-symbols-outlined text-indigo-500 text-sm">lightbulb</span> Next Actions
               </h3>
               <div className="space-y-2">
-                <button className="w-full text-left p-3 rounded-lg border border-indigo-100 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-900/10 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors">Offer Partial Refund</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Execute $1,250 refund via Stripe automatically.</p>
-                </button>
+                {((selectedCustomer as any)?.aiRecommendations?.length > 0)
+                  ? (selectedCustomer as any).aiRecommendations.map((rec: any, i: number) => (
+                    <button key={i} className="w-full text-left p-3 rounded-lg border border-indigo-100 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-900/10 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors">{rec.action}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{rec.reason}</p>
+                    </button>
+                  ))
+                  : <p className="text-xs text-gray-400 dark:text-gray-500 italic">No recommendations yet.</p>
+                }
               </div>
             </div>
           </div>
@@ -1222,32 +1387,41 @@ export default function Customers({ onNavigate }: CustomersProps) {
     );
   };
 
+  if (customersLoading && customers.length === 0) {
+    return (
+      <LoadingState
+        title="Loading customers"
+        message="Fetching canonical customer profiles from Supabase."
+      />
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
         <AnimatePresence mode="wait">
-        {selectedCustomerId ? (
-          <motion.div
-            key="profile"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
-            {renderProfileView()}
-          </motion.div>
-        ) : (
-          <motion.div
-            key="list"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
-            {renderListView()}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          {selectedCustomerId ? (
+            <motion.div
+              key="profile"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              {renderProfileView()}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="list"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              {renderListView()}
+            </motion.div>
+          )}
+        </AnimatePresence>
       <AnimatePresence>
         {isCreateCustomerOpen && (
           <motion.div

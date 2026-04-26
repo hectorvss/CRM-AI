@@ -8,3 +8,4 @@ tmp-*.err
 .vercel/
 .env*
 !.env.example
+.vercel

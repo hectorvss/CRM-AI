@@ -108,6 +108,50 @@ router.get('/me', requirePermission('settings.read'), async (req: MultiTenantReq
   }
 });
 
+// Update current user profile and preferences
+router.patch('/me', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+  const userId = req.userId || 'user_alex';
+  const { name, avatar_url, preferences } = req.body as {
+    name?: string;
+    avatar_url?: string | null;
+    preferences?: Record<string, any>;
+  };
+
+  if (typeof name !== 'string' && !Object.prototype.hasOwnProperty.call(req.body || {}, 'avatar_url') && !preferences) {
+    return sendError(res, 400, 'INVALID_PROFILE_UPDATE', 'At least one profile field is required');
+  }
+
+  try {
+    const user = await iamRepository.getUserById(userId);
+    if (!user) {
+      return sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
+    }
+
+    await iamRepository.updateUser(userId, {
+      name: typeof name === 'string' ? name : undefined,
+      avatarUrl: Object.prototype.hasOwnProperty.call(req.body || {}, 'avatar_url') ? avatar_url ?? null : undefined,
+      preferences: preferences && typeof preferences === 'object' ? preferences : undefined,
+    });
+
+    const updatedUser = await iamRepository.getUserById(userId);
+    const memberships = await iamRepository.listUserMemberships(userId);
+
+    res.json({
+      ...updatedUser,
+      memberships,
+      context: {
+        tenant_id: req.tenantId,
+        workspace_id: req.workspaceId,
+        role_id: req.roleId,
+        permissions: req.permissions || [],
+      },
+    });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
 // List users for Tenant/Workspace
 router.get('/users', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
@@ -115,7 +159,9 @@ router.get('/users', requirePermission('members.read'), async (req: MultiTenantR
   }
   
   try {
-    const users = await iamRepository.listWorkspaceUsers(req.tenantId, req.workspaceId);
+    const workspace = await workspaceRepository.getById(req.workspaceId, req.tenantId);
+    const resolvedWorkspaceId = workspace?.id || req.workspaceId;
+    const users = await iamRepository.listWorkspaceUsers(req.tenantId, resolvedWorkspaceId);
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -130,7 +176,9 @@ router.get('/roles', requirePermission('members.read'), async (req: MultiTenantR
   }
 
   try {
-    const roles = await iamRepository.listRoles(req.tenantId, req.workspaceId);
+    const workspace = await workspaceRepository.getById(req.workspaceId, req.tenantId);
+    const resolvedWorkspaceId = workspace?.id || req.workspaceId;
+    const roles = await iamRepository.listRoles(req.tenantId, resolvedWorkspaceId);
     res.json(roles);
   } catch (error) {
     console.error('Error fetching roles:', error);
@@ -220,7 +268,9 @@ router.get('/members', requirePermission('members.read'), async (req: MultiTenan
   }
 
   try {
-    const members = await iamRepository.listWorkspaceMembers(req.tenantId, req.workspaceId);
+    const workspace = await workspaceRepository.getById(req.workspaceId, req.tenantId);
+    const resolvedWorkspaceId = workspace?.id || req.workspaceId;
+    const members = await iamRepository.listWorkspaceMembers(req.tenantId, resolvedWorkspaceId);
     res.json(members);
   } catch (error) {
     console.error('Error fetching members:', error);

@@ -1,9 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { billingApi, workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
+
+const fallbackWorkspace = {
+  id: 'ws_default',
+  name: 'CRM AI Workspace',
+  slug: 'crm-ai',
+  settings: {},
+};
 
 function parseSettings(settings: any) {
   if (!settings) return {};
@@ -25,8 +33,9 @@ function money(value: unknown): string {
 
 export default function BillingUsageTab({ onSaveReady }: Props) {
   const { data: workspace, loading: workspaceLoading, error: workspaceError } = useApi(workspacesApi.currentContext);
-  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace]);
-  const orgId = workspace?.org_id;
+  const workspaceRecord = workspace || fallbackWorkspace;
+  const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
+  const orgId = workspaceRecord?.org_id;
 
   const { data: subscription } = useApi(
     () => (orgId ? billingApi.subscription(orgId) : Promise.resolve(null)),
@@ -56,7 +65,10 @@ export default function BillingUsageTab({ onSaveReady }: Props) {
   }, [workspaceSettings]);
 
   const handleSave = useCallback(async () => {
-    if (!workspace?.id) throw new Error('Workspace not loaded');
+    if (!workspace?.id) {
+      setStatusMessage('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
     setIsSaving(true);
     setStatusMessage(null);
     try {
@@ -85,18 +97,22 @@ export default function BillingUsageTab({ onSaveReady }: Props) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (workspaceLoading) return <div className="p-6 text-sm text-gray-500">Loading billing usage...</div>;
-  if (workspaceError) return <div className="p-6 text-sm text-red-500">Error loading billing usage.</div>;
+  if (workspaceLoading) return <LoadingState title="Loading billing usage" message="Fetching plan, seats and ledger data." compact />;
 
   const seatsIncluded = subscription?.seats_included ?? 3;
   const seatsUsed = subscription?.seats_used ?? 2;
   const creditsIncluded = subscription?.credits_included ?? 5000;
   const creditsUsed = subscription?.credits_used ?? 3240;
-  const currentPlan = subscription?.plan_id || workspace?.plan_id || 'starter';
+  const currentPlan = subscription?.plan_id || workspaceRecord?.plan_id || 'starter';
   const ledgerEntries = Array.isArray(ledger) ? ledger : [];
 
   return (
     <div className="space-y-8">
+      {workspaceError && (
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/30 dark:bg-amber-900/15 dark:text-amber-300">
+          Workspace context is still settling. Showing safe local defaults until Supabase responds.
+        </div>
+      )}
       {statusMessage && (
         <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
           {statusMessage}

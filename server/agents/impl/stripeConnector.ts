@@ -112,18 +112,24 @@ export const stripeConnectorImpl: AgentImplementation = {
 
       // Check refund amount consistency
       const paymentRow = useSupabase
-        ? (await supabase!.from('payments').select('refund_amount, refund_status').eq('id', payment.id).eq('tenant_id', tenantId).eq('workspace_id', workspaceId).maybeSingle()).data
+        ? (await supabase!.from('payments').select('refund_amount').eq('id', payment.id).eq('tenant_id', tenantId).eq('workspace_id', workspaceId).maybeSingle()).data
         : db!.prepare(
-            'SELECT refund_amount, refund_status FROM payments WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
+            'SELECT refund_amount FROM payments WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
           ).get(payment.id, tenantId, workspaceId) as any;
 
-      if (paymentRow && payment.refundAmount > 0) {
+      const refundRow = useSupabase
+        ? (await supabase!.from('refunds').select('status').eq('payment_id', payment.id).eq('tenant_id', tenantId).maybeSingle()).data
+        : db!.prepare(
+            'SELECT status FROM refunds WHERE payment_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1'
+          ).get(payment.id, tenantId) as any;
+
+      if (refundRow && payment.refundAmount > 0) {
         const stripeRefundState = payment.systemStates?.stripe_refund;
-        if (stripeRefundState && stripeRefundState !== paymentRow.refund_status) {
+        if (stripeRefundState && stripeRefundState !== refundRow.status) {
           discrepancies.push({
             paymentId: payment.id,
             field: 'refund_status',
-            local: paymentRow.refund_status ?? 'null',
+            local: refundRow.status ?? 'null',
             stripe: stripeRefundState,
           });
         }

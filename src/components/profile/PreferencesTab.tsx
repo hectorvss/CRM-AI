@@ -1,9 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
+
+const FALLBACK_USER = {
+  preferences: {},
+  name: 'System',
+  email: 'system@crm-ai.local',
+};
 
 function parsePreferences(preferences: any) {
   if (!preferences) return {};
@@ -18,8 +25,9 @@ function parsePreferences(preferences: any) {
 }
 
 export default function PreferencesTab({ onSaveReady }: Props) {
-  const { data: user, loading, error } = useApi<any>(iamApi.me);
-  const preferences = useMemo(() => parsePreferences(user?.preferences), [user]);
+  const { data: user, loading } = useApi<any>(iamApi.me);
+  const currentUser = user || FALLBACK_USER;
+  const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
   const [language, setLanguage] = useState('English (US)');
   const [timezone, setTimezone] = useState('(GMT-05:00) Eastern Time');
   const [dateFormat, setDateFormat] = useState('MMM DD, YYYY');
@@ -108,8 +116,7 @@ export default function PreferencesTab({ onSaveReady }: Props) {
     return () => onSaveReady?.(null);
   }, [handleSave, onSaveReady]);
 
-  if (loading) return <div className="p-6 text-sm text-gray-500">Loading preferences...</div>;
-  if (error || !user) return <div className="p-6 text-sm text-red-500">Error loading preferences.</div>;
+  if (loading) return <LoadingState title="Loading preferences" message="Fetching your profile defaults and UI preferences." compact />;
 
   return (
     <div className="space-y-8">

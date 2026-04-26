@@ -19,6 +19,10 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
   workspace_admin: ['*'],
   supervisor: [
     'cases.read', 'cases.write', 'cases.assign',
+    'customers.read', 'customers.write',
+    'orders.read', 'orders.write',
+    'payments.read', 'payments.write',
+    'returns.read', 'returns.write',
     'approvals.read', 'approvals.decide',
     'workflows.read', 'workflows.write', 'workflows.trigger',
     'knowledge.read', 'knowledge.write', 'knowledge.publish',
@@ -29,6 +33,10 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
   ],
   agent: [
     'cases.read', 'cases.write',
+    'customers.read',
+    'orders.read',
+    'payments.read',
+    'returns.read',
     'approvals.read',
     'workflows.read', 'workflows.trigger',
     'knowledge.read',
@@ -37,6 +45,10 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
   ],
   viewer: [
     'cases.read',
+    'customers.read',
+    'orders.read',
+    'payments.read',
+    'returns.read',
     'approvals.read',
     'workflows.read',
     'knowledge.read',
@@ -99,7 +111,7 @@ export async function resolveTenantWorkspaceContext(
 ): Promise<ResolvedTenantContext> {
   const workspaceRepo = createWorkspaceRepository();
 
-  if (tenantId && workspaceId) {
+  if (tenantId && workspaceId && workspaceId !== 'ws_default') {
     return {
       tenantId,
       workspaceId,
@@ -108,6 +120,17 @@ export async function resolveTenantWorkspaceContext(
   }
 
   try {
+    if (tenantId && workspaceId === 'ws_default') {
+      const workspace = await workspaceRepo.getById(workspaceId, tenantId);
+      if (workspace) {
+        return {
+          tenantId: workspace.org_id || tenantId,
+          workspaceId: workspace.id,
+          userId: userId || 'system',
+        };
+      }
+    }
+
     if (tenantId && !workspaceId) {
       const matchingWorkspace = await workspaceRepo.findByOrg(tenantId);
       if (matchingWorkspace) {

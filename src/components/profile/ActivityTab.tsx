@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useApi } from '../../api/hooks';
 import { auditApi, operationsApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
@@ -30,9 +31,7 @@ export default function ActivityTab() {
     return [...auditRows, ...runRows];
   }, [agentRuns, auditLog]);
 
-  if (loading) {
-    return <div className="p-6 text-sm text-gray-500">Loading recent activity...</div>;
-  }
+  if (loading) return <LoadingState title="Loading recent activity" message="Pulling the latest audit and agent run history." compact />;
 
   return (
     <div className="space-y-8">
