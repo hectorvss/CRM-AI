@@ -131,3 +131,62 @@ export const returnRejectTool: ToolSpec<{ returnId: string; reason: string }, un
     return { ok: true, value: { returnId: args.returnId, status: 'rejected' } };
   },
 };
+
+// ── return.update_status ──────────────────────────────────────────────────────
+
+const RETURN_STATUS_VALUES = [
+  'pending', 'approved', 'rejected', 'in_transit', 'received',
+  'inspected', 'refunded', 'cancelled',
+] as const;
+
+interface ReturnUpdateStatusArgs {
+  returnId: string;
+  status: typeof RETURN_STATUS_VALUES[number];
+  note?: string;
+}
+
+export const returnUpdateStatusTool: ToolSpec<ReturnUpdateStatusArgs, unknown> = {
+  name: 'return.update_status',
+  version: '1.0.0',
+  description:
+    'Update the status of a return request. ' +
+    'Valid statuses: pending, approved, rejected, in_transit, received, inspected, refunded, cancelled. ' +
+    'Prefer return.approve or return.reject for the initial approval decision.',
+  category: 'return',
+  sideEffect: 'write',
+  risk: 'low',
+  idempotent: false,
+  requiredPermission: 'cases.write',
+  args: s.object({
+    returnId: s.string({ description: 'UUID of the return to update' }),
+    status: s.enum(RETURN_STATUS_VALUES, { description: 'New return status' }),
+    note: s.string({ required: false, max: 500, description: 'Optional note for the status change (recorded in audit log)' }),
+  }),
+  returns: s.any('{ returnId, status }'),
+  async run({ args, context }) {
+    if (context.dryRun) {
+      return { ok: true, value: { returnId: args.returnId, status: args.status, dryRun: true } };
+    }
+
+    const scope = { tenantId: context.tenantId, workspaceId: context.workspaceId ?? '' };
+    const ret = await commerceRepo.getReturn(scope, args.returnId);
+    if (!ret) return { ok: false, error: 'Return not found', errorCode: 'NOT_FOUND' };
+
+    await commerceRepo.updateReturn(scope, args.returnId, {
+      status: args.status,
+      resolution_notes: args.note ?? null,
+      updated_at: new Date().toISOString(),
+    });
+
+    await context.audit({
+      action: 'PLAN_ENGINE_RETURN_STATUS_UPDATE',
+      entityType: 'return',
+      entityId: args.returnId,
+      oldValue: { status: (ret as any).status },
+      newValue: { status: args.status, note: args.note ?? null },
+      metadata: { source: 'plan-engine', planId: context.planId },
+    });
+
+    return { ok: true, value: { returnId: args.returnId, status: args.status } };
+  },
+};

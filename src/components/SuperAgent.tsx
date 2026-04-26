@@ -96,6 +96,7 @@ type BootstrapData = {
   quickActions: string[];
   contextPanel: ContextPanel;
   localAgents: Array<{ slug: string; name: string; runtime?: string; mode?: string }>;
+  proactiveAlerts?: string[];
 };
 
 type ConversationMessage =
@@ -690,10 +691,10 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
               </div>
             ) : null}
 
-            {/* Empty state — minimalist ChatGPT-style */}
+            {/* Empty state — minimalist */}
             {!isBootstrapping && messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center min-h-[40vh]">
-                <h1 className="text-3xl font-medium text-gray-900 dark:text-white tracking-tight">
+              <div className="flex flex-col items-center justify-center text-center min-h-[40vh] gap-3">
+                <h1 className="text-4xl font-semibold text-gray-900 dark:text-white tracking-tight">
                   What can I help with?
                 </h1>
               </div>

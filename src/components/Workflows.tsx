@@ -1599,13 +1599,13 @@ function WorkflowEditorTopbar(props: {
   };
 
   return (
-    <div className="flex-shrink-0 border-b border-gray-200 bg-white">
+    <div className="flex-shrink-0 border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
       <div className="flex h-16 items-center justify-between px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <button onClick={props.onBack} className="text-sm font-medium text-gray-500 hover:text-gray-900">Workflows</button>
-          <span className="text-gray-300">/</span>
-          <input value={props.workflow?.name ?? ''} onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, name: event.target.value } : workflow)} className="min-w-[260px] bg-transparent text-sm font-semibold text-gray-900 outline-none" />
-          <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
+          <button onClick={props.onBack} className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Workflows</button>
+          <span className="text-gray-300 dark:text-gray-600">/</span>
+          <input value={props.workflow?.name ?? ''} onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, name: event.target.value } : workflow)} className="min-w-[260px] bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white" />
+          <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={menuRef}>

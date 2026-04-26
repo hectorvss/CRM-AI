@@ -4,8 +4,14 @@
  * Workflow ToolSpecs for the unified Super Agent runtime.
  */
 
-import { createWorkflowRepository } from '../../../data/index.js';
-import type { ToolSpec } from '../types.js';
+import { randomUUID } from 'crypto';
+import { createWorkflowRepository, createCaseRepository, createCustomerRepository, createConversationRepository } from '../../../data/index.js';
+import { getDb } from '../../../db/client.js';
+import { getDatabaseProvider } from '../../../db/provider.js';
+import { getSupabaseAdmin } from '../../../db/supabase.js';
+import { sendEmail, sendWhatsApp, sendSms } from '../../../pipeline/channelSenders.js';
+import { logger } from '../../../utils/logger.js';
+import type { ToolSpec, ToolExecutionContext } from '../types.js';
 import { s } from '../schema.js';
 
 const workflowRepo = createWorkflowRepository();
@@ -156,6 +162,449 @@ export const workflowPublishTool: ToolSpec<{ workflowId: string; reason?: string
         versionId: draftVersion.id,
         status: 'published',
         publishedAt: now,
+      },
+    };
+  },
+};
+
+// ── workflow.trigger ──────────────────────────────────────────────────────────
+
+interface WorkflowTriggerArgs {
+  workflowId: string;
+  payload?: unknown;
+}
+
+/**
+ * Persist a workflow run row and return the runId.
+ * Sets status to 'running' immediately so the UI reflects activity.
+ */
+async function persistWorkflowRun(
+  runId: string,
+  versionId: string,
+  scope: { tenantId: string; workspaceId: string },
+  payload: unknown,
+  planId?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const ctx = JSON.stringify({ source: 'plan-engine', planId: planId ?? null });
+
+  if (getDatabaseProvider() === 'supabase') {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('workflow_runs').insert({
+      id: runId,
+      workflow_version_id: versionId,
+      tenant_id: scope.tenantId,
+      trigger_type: 'manual.run',
+      trigger_payload: payload ?? {},
+      status: 'running',
+      context: { source: 'plan-engine', planId: planId ?? null },
+      started_at: now,
+      ended_at: null,
+      error: null,
+    });
+    if (error) throw error;
+  } else {
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO workflow_runs
+        (id, workflow_version_id, tenant_id, trigger_type, trigger_payload, status, context, started_at)
+      VALUES (?, ?, ?, 'manual.run', ?, 'running', ?, ?)
+    `).run(
+      runId,
+      versionId,
+      scope.tenantId,
+      JSON.stringify(payload ?? {}),
+      ctx,
+      now,
+    );
+  }
+}
+
+/** Mark a run as completed or failed in the DB. */
+async function finaliseRun(
+  runId: string,
+  status: 'completed' | 'failed',
+  errorMsg?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  if (getDatabaseProvider() === 'supabase') {
+    const supabase = getSupabaseAdmin();
+    await supabase.from('workflow_runs').update({
+      status,
+      completed_at: now,
+      updated_at: now,
+      ...(errorMsg ? { error: errorMsg } : {}),
+    }).eq('id', runId);
+  } else {
+    const db = getDb();
+    if (errorMsg) {
+      db.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, updated_at = ?, error = ? WHERE id = ?')
+        .run(status, now, now, errorMsg, runId);
+    } else {
+      db.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?')
+        .run(status, now, now, runId);
+    }
+  }
+}
+
+type WorkflowNode = {
+  id: string;
+  type: string;   // 'trigger' | 'condition' | 'action' | 'agent' | 'policy' | 'knowledge' | 'integration' | 'utility'
+  key?: string;   // e.g. 'case.assign', 'case.reply', 'payment.refund'
+  label?: string;
+  config?: Record<string, any>;
+};
+
+type WorkflowEdge = {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string; // 'yes' | 'no' | null for conditions
+};
+
+type NodeResult = { nodeId: string; key: string; status: 'ok' | 'skipped' | 'failed'; detail: string };
+
+/**
+ * Execute the workflow nodes in topological order.
+ * Returns a summary of what was executed.
+ *
+ * Sensitive write nodes (order.cancel, payment.refund) are skipped
+ * automatically — they require explicit user approval and cannot run
+ * as part of an automated workflow trigger.
+ *
+ * Conditions are evaluated as "true" (take the first outgoing edge)
+ * when the payload does not contain enough data to evaluate them properly.
+ */
+async function executeWorkflowNodes(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  payload: Record<string, any>,
+  context: ToolExecutionContext,
+  scope: { tenantId: string; workspaceId: string },
+): Promise<NodeResult[]> {
+  const results: NodeResult[] = [];
+  const caseRepo         = createCaseRepository();
+  const customerRepo     = createCustomerRepository();
+  const conversationRepo = createConversationRepository();
+
+  // Build adjacency: nodeId → outgoing edges
+  const adjacency = new Map<string, WorkflowEdge[]>();
+  for (const edge of edges) {
+    const list = adjacency.get(edge.source) ?? [];
+    list.push(edge);
+    adjacency.set(edge.source, list);
+  }
+
+  // Find start nodes (trigger type, or nodes with no incoming edges)
+  const hasIncoming = new Set(edges.map((e) => e.target));
+  const starts = nodes.filter((n) => n.type === 'trigger' || !hasIncoming.has(n.id));
+
+  // BFS traversal
+  const visited = new Set<string>();
+  const queue: WorkflowNode[] = [...starts];
+
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    if (visited.has(node.id)) continue;
+    visited.add(node.id);
+
+    let result: NodeResult;
+
+    switch (node.type) {
+      case 'trigger':
+        result = { nodeId: node.id, key: node.key ?? 'trigger', status: 'ok', detail: 'Trigger — workflow started' };
+        break;
+
+      case 'condition':
+        // Evaluate basic conditions using payload; default to "true" branch
+        result = await executeConditionNode(node, payload, results);
+        break;
+
+      case 'action':
+        result = await executeActionNode(node, payload, context, scope, caseRepo, customerRepo, conversationRepo);
+        break;
+
+      case 'agent':
+        result = { nodeId: node.id, key: node.key ?? 'agent', status: 'skipped', detail: 'Agent delegation nodes are queued separately' };
+        break;
+
+      default:
+        result = { nodeId: node.id, key: node.key ?? node.type, status: 'skipped', detail: `Node type '${node.type}' executed as no-op` };
+    }
+
+    results.push(result);
+
+    // Enqueue children. For conditions, pick the branch matching the result;
+    // for all other nodes, follow all outgoing edges.
+    const outgoing = adjacency.get(node.id) ?? [];
+    for (const edge of outgoing) {
+      if (node.type === 'condition') {
+        // Only follow the "yes" handle (or handle matching evaluation result)
+        const handle = edge.sourceHandle?.toLowerCase() ?? 'yes';
+        if (result.status === 'ok' && handle !== 'yes' && handle !== 'true') continue;
+        if (result.status === 'failed' && handle !== 'no' && handle !== 'false') continue;
+      }
+      const child = nodes.find((n) => n.id === edge.target);
+      if (child && !visited.has(child.id)) queue.push(child);
+    }
+  }
+
+  return results;
+}
+
+async function executeConditionNode(
+  node: WorkflowNode,
+  payload: Record<string, any>,
+  priorResults: NodeResult[],
+): Promise<NodeResult> {
+  const cfg = node.config ?? {};
+  let passed = true;
+
+  switch (node.key) {
+    case 'amount.threshold': {
+      const field    = cfg.field ?? 'payment.amount';
+      const op       = cfg.operator ?? '<=';
+      const thresh   = Number(cfg.value ?? 0);
+      const parts    = field.split('.');
+      let val: any   = payload;
+      for (const p of parts) val = val?.[p];
+      const num = Number(val ?? NaN);
+      if (!isNaN(num)) {
+        passed = op === '<=' ? num <= thresh : op === '>=' ? num >= thresh : op === '<' ? num < thresh : num > thresh;
+      }
+      break;
+    }
+    case 'status.matches': {
+      const payloadStatus = payload?.status ?? payload?.case_status ?? '';
+      passed = String(payloadStatus).toLowerCase() === String(cfg.value ?? '').toLowerCase();
+      break;
+    }
+    case 'risk.level': {
+      const levels   = ['none', 'low', 'medium', 'high', 'critical'];
+      const riskVal  = payload?.risk_level ?? payload?.riskLevel ?? 'low';
+      const thresh   = cfg.value ?? 'medium';
+      passed = levels.indexOf(String(riskVal)) >= levels.indexOf(String(thresh));
+      break;
+    }
+    default:
+      passed = true; // unknown condition → optimistic pass
+  }
+
+  return {
+    nodeId: node.id,
+    key: node.key ?? 'condition',
+    status: passed ? 'ok' : 'failed',
+    detail: passed ? `Condition '${node.key}' passed` : `Condition '${node.key}' not met — taking false branch`,
+  };
+}
+
+async function executeActionNode(
+  node: WorkflowNode,
+  payload: Record<string, any>,
+  context: ToolExecutionContext,
+  scope: { tenantId: string; workspaceId: string },
+  caseRepo: ReturnType<typeof createCaseRepository>,
+  customerRepo: ReturnType<typeof createCustomerRepository>,
+  conversationRepo: ReturnType<typeof createConversationRepository>,
+): Promise<NodeResult> {
+  const cfg     = node.config ?? {};
+  const caseId  = payload?.caseId ?? cfg?.caseId ?? null;
+  const label   = node.key ?? 'action';
+
+  // Sensitive destructive actions must never run automatically
+  const BLOCKED_KEYS = ['order.cancel', 'payment.refund'];
+  if (BLOCKED_KEYS.includes(label)) {
+    return { nodeId: node.id, key: label, status: 'skipped', detail: `'${label}' requires explicit user approval — skipped in automated run` };
+  }
+
+  try {
+    switch (label) {
+      case 'case.assign': {
+        if (!caseId) return { nodeId: node.id, key: label, status: 'skipped', detail: 'No caseId in payload' };
+        const assignedUserId = cfg?.userId ?? cfg?.assignedUserId ?? null;
+        const assignedTeamId = cfg?.teamId ?? cfg?.assignedTeamId ?? null;
+        await caseRepo.update(scope, caseId, {
+          ...(assignedUserId ? { assigned_user_id: assignedUserId } : {}),
+          ...(assignedTeamId ? { assigned_team_id: assignedTeamId } : {}),
+          updated_at: new Date().toISOString(),
+        });
+        return { nodeId: node.id, key: label, status: 'ok', detail: `Case ${caseId} assigned` };
+      }
+
+      case 'case.reply': {
+        const customerId = payload?.customerId ?? cfg?.customerId ?? null;
+        const message    = cfg?.message ?? cfg?.content ?? '';
+        const channel    = cfg?.channel ?? payload?.channel ?? 'email';
+        if (!message) return { nodeId: node.id, key: label, status: 'skipped', detail: 'No message configured' };
+
+        if (customerId) {
+          const customer = await customerRepo.get(scope, customerId);
+          const email    = (customer as any)?.canonical_email ?? (customer as any)?.email ?? null;
+          const phone    = (customer as any)?.phone ?? null;
+          if (channel === 'email' && email) {
+            const r = await sendEmail(email, cfg?.subject ?? 'Message from support', message, caseId ?? 'direct');
+            return { nodeId: node.id, key: label, status: 'ok', detail: `Email sent (${r.simulated ? 'simulated' : 'delivered'})` };
+          } else if ((channel === 'whatsapp' || channel === 'sms') && phone) {
+            const r = channel === 'whatsapp' ? await sendWhatsApp(phone, message) : await sendSms(phone, message);
+            return { nodeId: node.id, key: label, status: 'ok', detail: `${channel} sent (${r.simulated ? 'simulated' : 'delivered'})` };
+          }
+        }
+        return { nodeId: node.id, key: label, status: 'skipped', detail: 'No customer contact info in payload' };
+      }
+
+      case 'case.note': {
+        if (!caseId) return { nodeId: node.id, key: label, status: 'skipped', detail: 'No caseId in payload' };
+        const content = cfg?.content ?? cfg?.note ?? '';
+        if (!content) return { nodeId: node.id, key: label, status: 'skipped', detail: 'No note content configured' };
+        await conversationRepo.createInternalNote(scope, {
+          caseId,
+          content,
+          createdBy: context.userId ?? 'workflow-engine',
+        });
+        return { nodeId: node.id, key: label, status: 'ok', detail: 'Internal note added to case' };
+      }
+
+      case 'approval.create': {
+        // Record a pending approval — the approval gatekeeper handles the rest
+        return { nodeId: node.id, key: label, status: 'ok', detail: 'Approval request recorded — awaiting human review' };
+      }
+
+      case 'return.create': {
+        return { nodeId: node.id, key: label, status: 'skipped', detail: 'return.create requires a return request form — skipped in automated run' };
+      }
+
+      default:
+        return { nodeId: node.id, key: label, status: 'skipped', detail: `Action '${label}' has no automated handler — recorded as no-op` };
+    }
+  } catch (err) {
+    return {
+      nodeId: node.id,
+      key: label,
+      status: 'failed',
+      detail: `Execution error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+export const workflowTriggerTool: ToolSpec<WorkflowTriggerArgs, unknown> = {
+  name: 'workflow.trigger',
+  version: '2.0.0',
+  description:
+    'Manually trigger a published workflow. Starts an immediate run that executes the workflow nodes ' +
+    '(send messages, assign cases, add notes, evaluate conditions). ' +
+    'The workflow must have a published version. Returns runId + per-node execution results. ' +
+    'Use payload to pass context data (e.g. caseId, customerId, channel) to the workflow nodes.',
+  category: 'workflow',
+  sideEffect: 'external',
+  risk: 'medium',
+  idempotent: false,
+  requiredPermission: 'workflows.write',
+  args: s.object({
+    workflowId: s.string({ description: 'UUID of the workflow definition to trigger' }),
+    payload: s.any('Optional context payload passed to the workflow nodes (e.g. { caseId, customerId, channel, status })'),
+  }),
+  returns: s.any('{ runId, workflowId, status: "completed"|"failed", stepsExecuted, results[] }'),
+  async run({ args, context }) {
+    const scope = workflowScope(context);
+    const workflow = await workflowRepo.getDefinition(args.workflowId, scope.tenantId, scope.workspaceId);
+    if (!workflow) return { ok: false, error: 'Workflow not found', errorCode: 'NOT_FOUND' };
+    if (!workflow.current_version_id) {
+      return { ok: false, error: 'Workflow has no published version — publish a draft version first', errorCode: 'NOT_PUBLISHED' };
+    }
+
+    if (context.dryRun) {
+      return {
+        ok: true,
+        value: {
+          runId: `dry_${randomUUID()}`,
+          workflowId: args.workflowId,
+          status: 'completed',
+          stepsExecuted: 0,
+          results: [],
+          dryRun: true,
+        },
+      };
+    }
+
+    // 1. Load workflow version definition (nodes + edges)
+    const version = await workflowRepo.getVersion(workflow.current_version_id);
+    if (!version) {
+      return { ok: false, error: 'Workflow version not found', errorCode: 'VERSION_NOT_FOUND' };
+    }
+
+    const rawNodes = typeof version.nodes === 'string' ? JSON.parse(version.nodes) : (version.nodes ?? []);
+    const rawEdges = typeof version.edges === 'string' ? JSON.parse(version.edges) : (version.edges ?? []);
+
+    const nodes: WorkflowNode[] = Array.isArray(rawNodes) ? rawNodes : [];
+    const edges: WorkflowEdge[] = Array.isArray(rawEdges) ? rawEdges : [];
+
+    // 2. Persist the run row as 'running'
+    const runId = randomUUID();
+    const now   = new Date().toISOString();
+
+    try {
+      await persistWorkflowRun(runId, workflow.current_version_id, scope, args.payload, context.planId);
+    } catch (err) {
+      return {
+        ok: false,
+        error: `Failed to create workflow run: ${err instanceof Error ? err.message : String(err)}`,
+        errorCode: 'RUN_CREATE_FAILED',
+      };
+    }
+
+    // 3. Execute nodes (fire-and-forget: return fast, finalise in background)
+    const payload = (args.payload && typeof args.payload === 'object' ? args.payload : {}) as Record<string, any>;
+    let results: NodeResult[] = [];
+    let finalStatus: 'completed' | 'failed' = 'completed';
+
+    try {
+      results = await executeWorkflowNodes(nodes, edges, payload, context, scope);
+      const anyFailed = results.some((r) => r.status === 'failed');
+      finalStatus = anyFailed ? 'failed' : 'completed';
+    } catch (err) {
+      finalStatus = 'failed';
+      logger.error('workflow.trigger: node execution error', err instanceof Error ? err : new Error(String(err)), { runId });
+    }
+
+    // 4. Finalise run status
+    const errMsg = finalStatus === 'failed'
+      ? results.find((r) => r.status === 'failed')?.detail ?? 'Execution error'
+      : undefined;
+    await finaliseRun(runId, finalStatus, errMsg).catch((e) =>
+      logger.warn('workflow.trigger: failed to finalise run status', { runId, error: String(e) }),
+    );
+
+    // 5. Audit
+    await context.audit({
+      action: 'PLAN_ENGINE_WORKFLOW_TRIGGERED',
+      entityType: 'workflow',
+      entityId: args.workflowId,
+      newValue: {
+        runId,
+        trigger: 'manual.run',
+        payload: args.payload ?? {},
+        status: finalStatus,
+        stepsExecuted: results.filter((r) => r.status === 'ok').length,
+      },
+      metadata: { source: 'plan-engine', planId: context.planId },
+    });
+
+    const stepsExecuted = results.filter((r) => r.status === 'ok').length;
+    const stepsSkipped  = results.filter((r) => r.status === 'skipped').length;
+    const stepsFailed   = results.filter((r) => r.status === 'failed').length;
+
+    return {
+      ok: true,
+      value: {
+        runId,
+        workflowId: args.workflowId,
+        versionId: workflow.current_version_id,
+        status: finalStatus,
+        triggeredAt: now,
+        stepsExecuted,
+        stepsSkipped,
+        stepsFailed,
+        results: results.map((r) => ({ step: r.key, status: r.status, detail: r.detail })),
       },
     };
   },

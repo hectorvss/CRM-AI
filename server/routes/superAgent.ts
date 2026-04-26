@@ -906,16 +906,24 @@ function buildCasePanel(bundle: any): ContextPanel {
     description: bundle.case.ai_diagnosis || bundle.case.ai_root_cause || 'Case context loaded from the unified data plane.',
     facts: [
       { label: 'Priority', value: titleCase(bundle.case.priority) },
+      { label: 'Severity', value: titleCase(bundle.case.severity || 'N/A') },
+      { label: 'Type', value: [bundle.case.type, bundle.case.sub_type].filter(Boolean).map(titleCase).join(' › ') || 'N/A' },
       { label: 'Execution', value: titleCase(bundle.case.execution_state) },
       { label: 'Approval', value: titleCase(bundle.case.approval_state) },
+      { label: 'Assignee', value: bundle.case.assigned_user_id || bundle.case.assigned_team_id ? (bundle.case.assigned_user_id || bundle.case.assigned_team_id) : 'Unassigned' },
+      { label: 'SLA status', value: titleCase(bundle.case.sla_status || 'N/A') },
+      { label: 'SLA deadline', value: bundle.case.sla_resolution_deadline ? formatWhen(bundle.case.sla_resolution_deadline) : 'N/A' },
       { label: 'Orders linked', value: String(orders.length) },
       { label: 'Payments linked', value: String(payments.length) },
       { label: 'Returns linked', value: String(returns.length) },
+      ...(Array.isArray(bundle.case.tags) && bundle.case.tags.length > 0 ? [{ label: 'Tags', value: bundle.case.tags.join(', ') }] : []),
     ],
     evidence: [
       { label: 'Conflict', value: describeConflict(state.conflict), tone: state.conflict ? 'warning' : 'success' },
       { label: 'Recommended action', value: bundle.case.ai_recommended_action || describeExecutionNextStep(resolve) || 'No recommendation generated yet.', tone: 'neutral' },
       { label: 'Blockers', value: (resolve.blockers || []).slice(0, 3).map((item: any) => item.summary || item.title || item.label).filter(Boolean).join(' • ') || 'No blocking constraints returned.', tone: resolve.blockers?.length ? 'warning' : 'success' },
+      ...(bundle.case.fraud_flag ? [{ label: 'Fraud flag', value: 'This case has been flagged for potential fraud.', tone: 'warning' as const }] : []),
+      ...(bundle.case.ai_confidence != null ? [{ label: 'AI confidence', value: `${Math.round(bundle.case.ai_confidence * 100)}%`, tone: 'neutral' as const }] : []),
     ],
     timeline: state.timeline.slice(-6).reverse().map((entry: any) => ({
       label: titleCase(entry.domain || entry.type || 'event'),
@@ -949,6 +957,16 @@ function buildOrderPanel(order: any, context: any): ContextPanel {
   const linkedCases = Array.isArray(order.related_cases) ? order.related_cases : [];
   const timeline = Array.isArray(order.events) ? order.events : [];
   const canonical = context?.case_state || context || {};
+  const lineItems: any[] = Array.isArray(order.line_items) ? order.line_items : [];
+
+  // Build per-item facts (up to 10) so the LLM can reason about products
+  const lineItemFacts = lineItems.slice(0, 10).map((item: any, idx: number) => {
+    const name = item.name || item.sku || `Item ${idx + 1}`;
+    const qty  = item.quantity ?? 1;
+    const price = item.price != null ? formatMoney(item.price, item.currency || order.currency || 'USD') : '';
+    const sku  = item.sku ? ` [${item.sku}]` : '';
+    return { label: `Item ${idx + 1}`, value: `${name}${sku} × ${qty}${price ? ` — ${price}` : ''}` };
+  });
 
   return {
     entityType: 'order',
@@ -959,12 +977,17 @@ function buildOrderPanel(order: any, context: any): ContextPanel {
     risk: titleCase(order.risk_level),
     description: order.summary || canonical?.conflict?.summary || 'Commerce order context loaded.',
     facts: [
+      { label: 'Order date', value: order.order_date ? formatWhen(order.order_date) : 'N/A' },
+      { label: 'Channel', value: titleCase(order.channel || order.order_type || 'N/A') },
       { label: 'Payment', value: titleCase(order.payment_status || order.system_states?.psp || 'N/A') },
       { label: 'Fulfillment', value: titleCase(order.fulfillment_status || order.system_states?.wms || 'N/A') },
       { label: 'Refund', value: titleCase(order.refund_status || order.system_states?.refund_status || 'N/A') },
       { label: 'Approval', value: titleCase(order.approval_status || 'N/A') },
       { label: 'Country', value: toText(order.country) },
       { label: 'Brand', value: toText(order.brand) },
+      ...(order.tracking_number ? [{ label: 'Tracking', value: order.tracking_number }] : []),
+      ...(lineItems.length > 0 ? [{ label: 'Products', value: `${lineItems.length} item${lineItems.length !== 1 ? 's' : ''}` }] : []),
+      ...lineItemFacts,
     ],
     evidence: [
       { label: 'Conflict', value: order.conflict_detected || canonical?.conflict?.summary || 'No active mismatch reported for this order.', tone: order.conflict_detected ? 'warning' : 'success' },
@@ -999,7 +1022,9 @@ function buildPaymentPanel(payment: any, context: any): ContextPanel {
     facts: [
       { label: 'PSP', value: toText(payment.psp) },
       { label: 'Method', value: toText(payment.payment_method) },
-      { label: 'Refund', value: titleCase(payment.refund_status || payment.system_states?.refund || 'N/A') },
+      { label: 'Refund status', value: titleCase(payment.refund_status || payment.system_states?.refund || 'N/A') },
+      ...(payment.refund_amount != null ? [{ label: 'Refund amount', value: formatMoney(payment.refund_amount, payment.currency || 'USD') }] : []),
+      ...(payment.refund_type ? [{ label: 'Refund type', value: titleCase(payment.refund_type) }] : []),
       { label: 'Dispute', value: titleCase(payment.dispute_status || payment.system_states?.dispute || 'N/A') },
       { label: 'Reconciliation', value: titleCase(payment.reconciliation_status || payment.system_states?.reconciliation || 'N/A') },
       { label: 'Approval', value: titleCase(payment.approval_status || 'N/A') },
@@ -1007,18 +1032,26 @@ function buildPaymentPanel(payment: any, context: any): ContextPanel {
     evidence: [
       { label: 'Conflict', value: payment.conflict_detected || context?.case_state?.conflict?.summary || 'No active mismatch reported for this payment.', tone: payment.conflict_detected ? 'warning' : 'success' },
       { label: 'Recommended next step', value: payment.recommended_action || 'Review PSP status and linked case state.', tone: 'neutral' },
+      ...(payment.reconciliation_details ? [{ label: 'Reconciliation details', value: typeof payment.reconciliation_details === 'string' ? payment.reconciliation_details : JSON.stringify(payment.reconciliation_details), tone: 'neutral' as const }] : []),
     ],
-    timeline: timeline.slice(-6).reverse().map((event: any) => ({
-      label: titleCase(event.system || event.source || event.type || 'event'),
-      value: event.content || 'Payment event',
-      time: event.occurred_at || event.time || null,
-    })),
-    related: linkedCases.slice(0, 3).map((item: any) => ({
-      label: 'Related case',
-      value: item.case_number || item.id,
-      targetPage: 'case_graph',
-      focusId: item.id,
-    })),
+    timeline: [
+      ...(payment.authorized_at ? [{ label: 'Authorized', value: 'Payment authorized', time: payment.authorized_at }] : []),
+      ...(payment.captured_at ? [{ label: 'Captured', value: 'Payment captured', time: payment.captured_at }] : []),
+      ...timeline.slice(-5).reverse().map((event: any) => ({
+        label: titleCase(event.system || event.source || event.type || 'event'),
+        value: event.content || 'Payment event',
+        time: event.occurred_at || event.time || null,
+      })),
+    ],
+    related: [
+      ...linkedCases.slice(0, 3).map((item: any) => ({
+        label: 'Related case',
+        value: item.case_number || item.id,
+        targetPage: 'case_graph',
+        focusId: item.id,
+      })),
+      ...(payment.order_id ? [{ label: 'Linked order', value: payment.external_order_id || payment.order_id, targetPage: 'orders', focusId: payment.order_id }] : []),
+    ],
   };
 }
 
@@ -1038,9 +1071,12 @@ function buildReturnPanel(ret: any, context: any): ContextPanel {
       { label: 'Reason', value: toText(ret.reason || ret.return_reason) },
       { label: 'Inspection', value: titleCase(ret.inspection_status || 'N/A') },
       { label: 'Refund', value: titleCase(ret.refund_status || 'N/A') },
+      ...(ret.return_value != null ? [{ label: 'Return value', value: formatMoney(ret.return_value, ret.currency || 'USD') }] : []),
       { label: 'Carrier', value: titleCase(ret.carrier_status || 'N/A') },
       { label: 'Method', value: toText(ret.method || 'N/A') },
       { label: 'Order', value: toText(ret.external_order_id || ret.order_id || 'N/A') },
+      { label: 'Risk', value: titleCase(ret.risk_level || 'N/A') },
+      ...(ret.approval_status ? [{ label: 'Approval', value: titleCase(ret.approval_status) }] : []),
     ],
     evidence: [
       { label: 'Conflict', value: ret.conflict_detected || context?.case_state?.conflict?.summary || 'No active mismatch reported for this return.', tone: ret.conflict_detected ? 'warning' : 'success' },
@@ -1074,15 +1110,21 @@ function buildCustomerPanel(customer: any): ContextPanel {
     description: 'Customer profile connected to cases, orders, payments, and identities.',
     facts: [
       { label: 'Segment', value: titleCase(customer.segment || 'N/A') },
+      { label: 'Risk level', value: titleCase(customer.risk_level || state.customer?.risk_level || 'low') },
       { label: 'LTV', value: formatMoney(state.metrics?.lifetime_value || customer.lifetime_value || customer.total_spent || 0, customer.currency || 'USD') },
       { label: 'Open cases', value: String(state.metrics?.open_cases || customer.open_cases || 0) },
       { label: 'Orders', value: String(state.metrics?.total_orders || 0) },
       { label: 'Payments', value: String(state.metrics?.total_payments || 0) },
       { label: 'Returns', value: String(state.metrics?.total_returns || 0) },
+      ...(customer.chargeback_count != null ? [{ label: 'Chargebacks', value: String(customer.chargeback_count) }] : []),
+      ...(customer.dispute_rate != null ? [{ label: 'Dispute rate', value: `${Math.round(customer.dispute_rate * 100)}%` }] : []),
+      ...(customer.refund_rate != null ? [{ label: 'Refund rate', value: `${Math.round(customer.refund_rate * 100)}%` }] : []),
+      ...(customer.preferred_channel ? [{ label: 'Preferred channel', value: titleCase(customer.preferred_channel) }] : []),
     ],
     evidence: [
       { label: 'Conflicts', value: String(state.metrics?.active_conflicts || customer.active_conflicts || 0), tone: Number(state.metrics?.active_conflicts || customer.active_conflicts || 0) > 0 ? 'warning' : 'success' },
       { label: 'Linked identities', value: String((state.linked_identities || customer.linked_identities || []).length || 0), tone: 'neutral' },
+      ...(customer.fraud_flag ? [{ label: 'Fraud flag', value: 'This customer has an active fraud flag.', tone: 'warning' as const }] : []),
     ],
     timeline: activity.slice(0, 6).map((entry: any) => ({
       label: titleCase(entry.system || entry.type || 'activity'),
@@ -1143,18 +1185,26 @@ function buildWorkflowPanel(workflow: any): ContextPanel {
     description: workflow.health_message || 'Workflow definition loaded from the runtime registry.',
     facts: [
       { label: 'Version', value: toText(workflow.version_number || 'N/A') },
-      { label: 'Trigger', value: titleCase(workflow.trigger?.type || workflow.trigger?.event || 'manual') },
+      { label: 'Trigger', value: titleCase(workflow.trigger?.type || workflow.trigger?.event || workflow.current_version?.trigger?.type || 'manual') },
       { label: 'Runs', value: String(workflow.metrics?.total || workflow.metrics?.runs || 0) },
       { label: 'Failures', value: String(workflow.metrics?.failed || 0) },
+      { label: 'Success rate', value: (() => { const total = workflow.metrics?.total || workflow.metrics?.runs || 0; const failed = workflow.metrics?.failed || 0; return total > 0 ? `${Math.round(((total - failed) / total) * 100)}%` : 'N/A'; })() },
       { label: 'Published', value: workflow.current_version_id ? 'Yes' : 'No' },
       { label: 'Last run', value: formatWhen(workflow.last_run_at || workflow.metrics?.last_run_at) },
+      ...(workflow.current_version?.nodes ? [{ label: 'Steps', value: String(Array.isArray(workflow.current_version.nodes) ? workflow.current_version.nodes.length : 0) }] : []),
     ],
     evidence: [
       { label: 'Health', value: titleCase(workflow.health_status || 'active'), tone: workflow.health_status === 'warning' ? 'warning' : 'success' },
       { label: 'Description', value: workflow.description || 'No description provided.', tone: 'neutral' },
+      ...(workflow.current_version?.nodes ? [{ label: 'Step types', value: [...new Set((workflow.current_version.nodes as any[]).map((n: any) => n.type || 'action'))].join(', '), tone: 'neutral' as const }] : []),
     ],
     timeline: [
       { label: 'Last run', value: workflow.health_message || 'Latest workflow execution metrics loaded.', time: workflow.last_run_at || workflow.metrics?.last_run_at || null },
+      ...((workflow.recent_runs || []) as any[]).slice(0, 4).map((run: any) => ({
+        label: titleCase(run.status || 'run'),
+        value: run.error || `Completed in ${run.duration_ms ? `${run.duration_ms}ms` : 'N/A'}`,
+        time: run.started_at || null,
+      })),
     ],
     related: [
       { label: 'Workflow builder', value: 'Open Workflows', targetPage: 'workflows', focusId: workflow.id },
@@ -1584,10 +1634,18 @@ function generateSuggestedReplies(input: {
       replies.add('Show recent orders');
       replies.add('Show open cases');
       replies.add('Show payment history');
+      if (isOperate) replies.add('Flag for fraud review');
+      else replies.add('Show linked identities');
       break;
     case 'workflow':
-      replies.add('Show workflow history');
-      if (isOperate) replies.add('Publish workflow');
+      replies.add('Show recent runs');
+      replies.add('Show workflow definition');
+      if (isOperate) {
+        replies.add('Trigger workflow manually');
+        replies.add('Publish workflow');
+      } else {
+        replies.add('Compare with previous version');
+      }
       break;
     default:
       // Generic suggestions when no entity is detected
@@ -1599,6 +1657,26 @@ function generateSuggestedReplies(input: {
         replies.add('Review pending approvals');
         replies.add('Show high-risk items');
       }
+  }
+
+  // Trace-driven post-action suggestions
+  if (input.trace?.spans && Array.isArray(input.trace.spans)) {
+    const toolsUsed: string[] = input.trace.spans.map((s: any) => s.tool).filter(Boolean);
+    if (toolsUsed.includes('message.send_to_customer')) {
+      replies.add('Send another message');
+    }
+    if (toolsUsed.includes('case.update_status')) {
+      replies.add('Add an internal note');
+    }
+    if (toolsUsed.some((t: string) => t.startsWith('payment.'))) {
+      replies.add('Show payment history');
+    }
+    if (toolsUsed.some((t: string) => t.startsWith('return.'))) {
+      replies.add('Open the linked order');
+    }
+    if (toolsUsed.includes('workflow.trigger')) {
+      replies.add('Show run status');
+    }
   }
 
   // Cap at 4 replies, deduped
@@ -2865,17 +2943,116 @@ async function executeAction(req: MultiTenantRequest, scope: CommandScope, paylo
   }
 }
 
+// ── GET /alerts ───────────────────────────────────────────────────────────────
+// Returns proactive workspace-level alerts: SLA brechas, churn risk, fraud flags.
+// Called from the frontend bootstrap to surface proactive suggestions.
+
+router.get('/alerts', async (req: MultiTenantRequest, res) => {
+  try {
+    const scope = getScope(req);
+    if (!hasPermission(req, 'cases.read')) {
+      res.json({ alerts: [] });
+      return;
+    }
+
+    const now = new Date();
+    const in4h = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString();
+
+    const alerts: Array<{
+      id: string;
+      type: 'sla_breach_risk' | 'churn_risk' | 'fraud_flag' | 'high_risk_customer';
+      severity: 'warning' | 'critical';
+      title: string;
+      description: string;
+      entityType: string;
+      entityId?: string;
+      suggestedQuery: string;
+    }> = [];
+
+    // SLA at-risk cases (open cases with sla_resolution_deadline in next 4h OR already breached)
+    const slaCases = await caseRepository.list(scope, { status: 'open' }) as any[];
+    const slaAtRisk = slaCases.filter((c: any) => {
+      if (!c.sla_resolution_deadline) return false;
+      const deadline = new Date(c.sla_resolution_deadline);
+      return deadline <= new Date(in4h);
+    });
+    if (slaAtRisk.length > 0) {
+      const breached = slaAtRisk.filter((c: any) => new Date(c.sla_resolution_deadline) < now).length;
+      const atRisk = slaAtRisk.length - breached;
+      if (breached > 0) {
+        alerts.push({
+          id: `sla_breached_${scope.tenantId}`,
+          type: 'sla_breach_risk',
+          severity: 'critical',
+          title: `${breached} case${breached > 1 ? 's' : ''} with breached SLA`,
+          description: `${breached} open case${breached > 1 ? 's have' : ' has'} exceeded the resolution SLA deadline.`,
+          entityType: 'case',
+          suggestedQuery: 'Show cases with breached SLA',
+        });
+      }
+      if (atRisk > 0) {
+        alerts.push({
+          id: `sla_at_risk_${scope.tenantId}`,
+          type: 'sla_breach_risk',
+          severity: 'warning',
+          title: `${atRisk} case${atRisk > 1 ? 's' : ''} approaching SLA breach`,
+          description: `${atRisk} open case${atRisk > 1 ? 's are' : ' is'} within 4 hours of the SLA resolution deadline.`,
+          entityType: 'case',
+          suggestedQuery: 'Show cases near SLA breach',
+        });
+      }
+    }
+
+    // High-risk + fraud-flagged customers
+    const allCustomers = await customerRepository.list(scope, {}) as any[];
+    const fraudCustomers = allCustomers.filter((c: any) => c.fraud_flag);
+    const highRiskCustomers = allCustomers.filter((c: any) =>
+      !c.fraud_flag && (c.risk_level === 'high' || c.risk_level === 'critical'),
+    );
+
+    if (fraudCustomers.length > 0) {
+      alerts.push({
+        id: `fraud_customers_${scope.tenantId}`,
+        type: 'fraud_flag',
+        severity: 'critical',
+        title: `${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} flagged for fraud`,
+        description: `${fraudCustomers.length} customer profile${fraudCustomers.length > 1 ? 's have' : ' has'} an active fraud flag requiring review.`,
+        entityType: 'customer',
+        suggestedQuery: 'Show customers with fraud flag',
+      });
+    }
+
+    if (highRiskCustomers.length > 0) {
+      alerts.push({
+        id: `high_risk_customers_${scope.tenantId}`,
+        type: 'high_risk_customer',
+        severity: 'warning',
+        title: `${highRiskCustomers.length} high-risk customer${highRiskCustomers.length > 1 ? 's' : ''}`,
+        description: `${highRiskCustomers.length} customer${highRiskCustomers.length > 1 ? 's have' : ' has'} a high or critical risk level.`,
+        entityType: 'customer',
+        suggestedQuery: 'Show high-risk customers',
+      });
+    }
+
+    res.json({ alerts, generatedAt: now.toISOString() });
+  } catch (error) {
+    logger.error('Super Agent alerts error', error instanceof Error ? error : new Error(String(error)));
+    res.json({ alerts: [] });
+  }
+});
+
 router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
   try {
     const scope = getScope(req);
     const permissionMatrix = buildPermissionMatrix(req);
-    const [workspace, cases, orders, payments, approvals, agents] = await Promise.all([
+    const [workspace, cases, orders, payments, approvals, agents, allCustomers] = await Promise.all([
       workspaceRepository.getById(scope.workspaceId, scope.tenantId),
       hasPermission(req, 'cases.read') ? caseRepository.list(scope, {}) : Promise.resolve([]),
       hasPermission(req, 'cases.read') ? commerceRepository.listOrders(scope, {}) : Promise.resolve([]),
       hasPermission(req, 'cases.read') ? commerceRepository.listPayments(scope, {}) : Promise.resolve([]),
       hasPermission(req, 'approvals.read') ? approvalRepository.list(scope, { status: 'pending' }) : Promise.resolve([]),
       hasPermission(req, 'agents.read') ? agentRepository.listAgents(scope) : Promise.resolve([]),
+      hasPermission(req, 'cases.read') ? customerRepository.list(scope, {}) : Promise.resolve([]),
     ]);
 
     const counts = {
@@ -2884,6 +3061,29 @@ router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
       payments: payments.length,
       approvals: approvals.length,
     };
+
+    // Compute proactive alerts for the bootstrap response
+    const now = new Date();
+    const in4h = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString();
+    const slaAtRisk = (cases as any[]).filter((c: any) => {
+      if (!c.sla_resolution_deadline || c.status === 'closed' || c.status === 'resolved') return false;
+      return new Date(c.sla_resolution_deadline) <= new Date(in4h);
+    });
+    const fraudCustomers = (allCustomers as any[]).filter((c: any) => c.fraud_flag);
+    const highRiskCustomers = (allCustomers as any[]).filter((c: any) =>
+      !c.fraud_flag && (c.risk_level === 'high' || c.risk_level === 'critical'),
+    );
+
+    const proactiveAlerts: string[] = [];
+    if (slaAtRisk.length > 0) {
+      proactiveAlerts.push(`⚠️ ${slaAtRisk.length} case${slaAtRisk.length > 1 ? 's' : ''} near SLA breach`);
+    }
+    if (fraudCustomers.length > 0) {
+      proactiveAlerts.push(`🚨 ${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} with fraud flag`);
+    }
+    if (highRiskCustomers.length > 0) {
+      proactiveAlerts.push(`⚠️ ${highRiskCustomers.length} high-risk customer${highRiskCustomers.length > 1 ? 's' : ''}`);
+    }
 
     res.json({
       welcomeTitle: 'Super Agent',
@@ -2903,6 +3103,7 @@ router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
         runtime: agent.runtime || 'system',
         mode: agent.mode || agent.version_status || 'available',
       })),
+      proactiveAlerts,
     });
   } catch (error) {
     console.error('Super Agent bootstrap error:', error);
@@ -3216,60 +3417,69 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       },
     });
 
-    // ── Routing: LLM Plan Engine vs regex fallback ──────────────────────────
-    // The LLM Plan Engine understands natural language ("Aurora Salazar",
-    // "investiga un pedido"); the regex parser only matches entity IDs.
-    // Default: enable LLM routing whenever a Gemini key is configured.
-    // Disable explicitly with SUPER_AGENT_LLM_ROUTING=false.
+    // ── Routing: LLM Plan Engine (secondary path) ───────────────────────────
+    // This secondary LLM block runs ONLY when useLlmFirst=false (i.e. when
+    // SUPER_AGENT_LEGACY_ROUTING=true forces the regex path first).
+    // When useLlmFirst=true the LLM already ran above (lines 3147-3273) and
+    // either returned early (success) or fell through here after failing.
+    // Running it a second time without a try-catch was causing the 500.
     const llmEnabled =
       process.env.SUPER_AGENT_LLM_ROUTING === 'true'
       || (process.env.SUPER_AGENT_LLM_ROUTING !== 'false'
           && Boolean(process.env.GEMINI_API_KEY)
           && process.env.GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY');
-    if (llmEnabled && input) {
-      const { response: llmResponse, trace } = await planEngine.planAndExecute(
-        {
-          userMessage: input,
-          sessionId,
-          userId: req.userId || 'system',
+    if (llmEnabled && input && !useLlmFirst) {
+      try {
+        const { response: llmResponse, trace } = await planEngine.planAndExecute(
+          {
+            userMessage: input,
+            sessionId,
+            userId: req.userId || 'system',
+            tenantId: scope.tenantId,
+            workspaceId: scope.workspaceId || null,
+            hasPermission: (perm: string) => hasPermission(req, perm),
+            mode,
+          },
+          { dryRun: mode === 'investigate' },
+        );
+
+        const llmFinalResponse = await buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
+
+        if (llmFinalResponse.navigationTarget) {
+          planEngine.rememberTarget(sessionId, llmFinalResponse.navigationTarget);
+        }
+
+        await auditRepository.log({
           tenantId: scope.tenantId,
-          workspaceId: scope.workspaceId || null,
-          hasPermission: (perm: string) => hasPermission(req, perm),
-          mode,
-        },
-        { dryRun: mode === 'investigate' },
-      );
+          workspaceId: scope.workspaceId,
+          actorId: req.userId || 'system',
+          action: 'SUPER_AGENT_COMMAND',
+          entityType: llmFinalResponse.navigationTarget?.entityType || 'workspace',
+          entityId: llmFinalResponse.navigationTarget?.entityId || scope.workspaceId,
+          metadata: {
+            source: 'super-agent',
+            input,
+            runId,
+            sessionId,
+            llmRouting: true,
+            consultedModules: llmFinalResponse.consultedModules || [],
+            navigationTarget: llmFinalResponse.navigationTarget || null,
+          },
+        });
 
-      const finalResponse = await buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
-
-      if (finalResponse.navigationTarget) {
-        planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
-      }
-
-      await auditRepository.log({
-        tenantId: scope.tenantId,
-        workspaceId: scope.workspaceId,
-        actorId: req.userId || 'system',
-        action: 'SUPER_AGENT_COMMAND',
-        entityType: finalResponse.navigationTarget?.entityType || 'workspace',
-        entityId: finalResponse.navigationTarget?.entityId || scope.workspaceId,
-        metadata: {
-          source: 'super-agent',
-          input,
-          runId,
+        return res.json({
+          ok: true,
           sessionId,
-          llmRouting: true,
-          consultedModules: finalResponse.consultedModules || [],
-          navigationTarget: finalResponse.navigationTarget || null,
-        },
-      });
-
-      return res.json({
-        ok: true,
-        sessionId,
-        permissionMatrix: buildPermissionMatrix(req),
-        response: finalResponse,
-      });
+          permissionMatrix: buildPermissionMatrix(req),
+          response: llmFinalResponse,
+        });
+      } catch (llmSecondaryError) {
+        logger.warn('LLM secondary path failed, using legacy response', {
+          runId,
+          error: llmSecondaryError instanceof Error ? llmSecondaryError.message : String(llmSecondaryError),
+        });
+        // Fall through — send the already-computed legacy finalResponse below
+      }
     }
 
     if (!llmEnabled && input) {

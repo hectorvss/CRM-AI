@@ -189,7 +189,7 @@ ${toolDocs}${knowledgeSection}${safetySection}${modeInstructions}
 - Use "{{stepId.path}}" to reference a prior step's output, e.g. "{{s0.id}}".
 - If confidence < 0.7, ask a clarifying question instead of producing a plan.
 - Steps may run in parallel if dependsOn is empty or references already-satisfied steps.
-- Keep plans minimal — prefer 1–3 steps. Reject multi-step plans that could cause irreversible harm without approval.
+- Generate as many steps as needed to fully satisfy the request. Chain reads before writes. Use dependsOn for sequential dependencies. Steps with empty dependsOn run in parallel. Reject multi-step plans that could cause irreversible harm without first setting needsApproval: true.
 - Set needsApproval: true when you believe the action is sensitive.
 - Respond ONLY with the JSON object. No prose outside the JSON.`;
 }
