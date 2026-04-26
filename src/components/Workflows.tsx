@@ -1729,18 +1729,18 @@ function WorkflowEditorTopbar(props: {
   onSave: () => void;
   onPublish: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState<'edit' | 'run' | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
+        setMenuOpen(null);
       }
     };
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpen(false);
+      if (event.key === 'Escape') setMenuOpen(null);
     };
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onEscape);
@@ -1750,11 +1750,38 @@ function WorkflowEditorTopbar(props: {
     };
   }, [menuOpen]);
 
-  const closeMenu = () => setMenuOpen(false);
+  const closeMenu = () => setMenuOpen(null);
   const runAndClose = (action: () => void) => () => {
     action();
     closeMenu();
   };
+
+  const editMenuItems = [
+    { label: 'Edit description', action: runAndClose(props.onEditDescription) },
+    { label: 'Save', action: runAndClose(props.onSave), bold: true },
+    { label: 'Rename', action: runAndClose(props.onRename) },
+    { label: 'Move', action: runAndClose(props.onMove) },
+    { label: 'Duplicate', action: runAndClose(props.onDuplicate) },
+    { label: 'Download', action: runAndClose(props.onDownload) },
+    { label: 'Share', action: runAndClose(props.onShare) },
+    { label: 'Import from URL...', action: runAndClose(props.onImportFromUrl) },
+    { label: 'Import from file...', action: runAndClose(props.onImportFromFile) },
+    { label: 'Push to git', action: runAndClose(props.onPushToGit) },
+  ];
+
+  const runMenuItems = [
+    { label: 'Validate', action: runAndClose(props.onValidate) },
+    { label: 'Tidy up', action: runAndClose(props.onTidy) },
+    { label: 'Dry-run', action: runAndClose(props.onDryRun) },
+    { label: 'Run', action: runAndClose(props.onRun) },
+    { label: 'Trigger event', action: runAndClose(props.onTrigger) },
+    { label: 'Retry', action: runAndClose(props.onRetry) },
+    { label: 'Resume', action: runAndClose(props.onResume) },
+    { label: 'Cancel', action: runAndClose(props.onCancel) },
+    { label: 'Rollback', action: runAndClose(props.onRollback) },
+    { label: 'Settings', action: () => { closeMenu(); props.setActiveTab('overview'); } },
+    { label: 'Archive', action: runAndClose(props.onArchive), danger: true },
+  ];
 
   return (
     <div className="flex-shrink-0 border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
@@ -1767,79 +1794,47 @@ function WorkflowEditorTopbar(props: {
         </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={menuRef}>
-            <button onClick={() => setMenuOpen((value) => !value)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen} aria-label="Workflow actions">
-              ...
-            </button>
-            {menuOpen && (
+            <div className="flex items-center gap-2">
+              <button onClick={() => setMenuOpen((value) => value === 'edit' ? null : 'edit')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen === 'edit'} aria-label="Edit workflow actions">
+                ...
+              </button>
+              <button onClick={() => setMenuOpen((value) => value === 'run' ? null : 'run')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen === 'run'} aria-label="Run workflow actions">
+                ...
+              </button>
+            </div>
+
+            {menuOpen === 'edit' && (
+              <div className="absolute right-20 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+                <div className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Workflow actions</div>
+                <div className="border-t border-gray-100" />
+                <div className="p-2">
+                  {editMenuItems.map((item, index) => (
+                    <button
+                      key={item.label}
+                      onClick={item.action}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-gray-50 ${item.bold ? 'font-semibold text-gray-900' : 'text-gray-700'} ${index === editMenuItems.length - 1 ? 'border-t border-gray-100 mt-2 pt-3' : ''}`}
+                    >
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {menuOpen === 'run' && (
               <div className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
                 <div className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">Workflow actions</div>
                 <div className="border-t border-gray-100" />
                 <div className="p-2">
-                  <button onClick={runAndClose(props.onEditDescription)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Edit description</span>
-                  </button>
-                  <button onClick={runAndClose(props.onSave)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50">
-                    <span>Save</span>
-                  </button>
-                  <button onClick={runAndClose(props.onRename)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Rename</span>
-                  </button>
-                  <button onClick={runAndClose(props.onMove)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Move</span>
-                  </button>
-                  <button onClick={runAndClose(props.onDuplicate)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Duplicate</span>
-                  </button>
-                  <button onClick={runAndClose(props.onDownload)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Download</span>
-                  </button>
-                  <button onClick={runAndClose(props.onShare)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Share</span>
-                  </button>
-                  <button onClick={runAndClose(props.onImportFromUrl)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Import from URL...</span>
-                  </button>
-                  <button onClick={runAndClose(props.onImportFromFile)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Import from file...</span>
-                  </button>
-                  <button onClick={runAndClose(props.onPushToGit)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Push to git</span>
-                  </button>
-                  <div className="my-2 border-t border-gray-100" />
-                  <button onClick={runAndClose(props.onValidate)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Validate</span>
-                  </button>
-                  <button onClick={runAndClose(props.onTidy)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Tidy up</span>
-                  </button>
-                  <button onClick={runAndClose(props.onDryRun)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Dry-run</span>
-                  </button>
-                  <button onClick={runAndClose(props.onRun)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Run</span>
-                  </button>
-                  <button onClick={runAndClose(props.onTrigger)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Trigger event</span>
-                  </button>
-                  <button onClick={runAndClose(props.onRetry)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Retry</span>
-                  </button>
-                  <button onClick={runAndClose(props.onResume)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Resume</span>
-                  </button>
-                  <button onClick={runAndClose(props.onCancel)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Cancel</span>
-                  </button>
-                  <button onClick={runAndClose(props.onRollback)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Rollback</span>
-                  </button>
-                  <button onClick={runAndClose(props.onArchive)} className="mt-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
-                    <span>Archive</span>
-                  </button>
-                  <div className="my-2 border-t border-gray-100" />
-                  <button onClick={() => { closeMenu(); props.setActiveTab('overview'); }} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                    <span>Settings</span>
-                  </button>
+                  {runMenuItems.map((item, index) => (
+                    <button
+                      key={item.label}
+                      onClick={item.action}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-gray-50 ${item.danger ? 'text-red-600' : 'text-gray-700'} ${index === runMenuItems.length - 1 ? 'border-t border-gray-100 mt-2 pt-3' : ''}`}
+                    >
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
