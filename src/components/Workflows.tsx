@@ -929,16 +929,16 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     setContextMenu({ nodeId, ...point });
   }, []);
 
-  const openAddPanel = useCallback((mode: AddPanelMode = {}) => {
+  function openAddPanel(mode: AddPanelMode = {}) {
     setAddPanel(mode);
     setAddPanelView('categories');
     setAddSearch('');
-  }, []);
+  }
 
-  const openAddCategory = useCallback((category: string) => {
+  function openAddCategory(category: string) {
     setAddCategory(category);
     setAddPanelView('category');
-  }, []);
+  }
 
   const nodeHandlers = useMemo(() => ({
     onSelect: handleSelectNode,
