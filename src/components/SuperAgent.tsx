@@ -117,7 +117,7 @@ interface SuperAgentProps {
   activeTarget?: NavigationTarget;
 }
 
-type SuperAgentMode = 'investigate' | 'operate' | 'plan';
+type SuperAgentMode = 'investigate' | 'operate';
 type SuperAgentAutonomy = 'supervised' | 'assisted' | 'autonomous';
 
 type ModelOption = {
@@ -438,6 +438,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [isSending, setIsSending] = useState(false);
   const [composerText, setComposerText] = useState('');
   const [mode, setMode] = useState<SuperAgentMode>('investigate');
+  const [planMode, setPlanMode] = useState(false);
   const [autonomyLevel, setAutonomyLevel] = useState<SuperAgentAutonomy>('assisted');
   const [selectedModelId, setSelectedModelId] = useState<string>(MODEL_OPTIONS[0].id);
   const [openControlMenu, setOpenControlMenu] = useState<'autonomy' | 'model' | null>(null);
@@ -601,6 +602,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       autonomyLevel,
       model: selectedModelId,
       mode,
+      planMode,
     };
   }
 
@@ -693,7 +695,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     setOpenControlMenu(null);
     setIsSending(true);
     const runId = window.crypto?.randomUUID?.() || `run-${Date.now()}`;
-    const isPlanMode = mode === 'plan';
+    const isPlanMode = planMode;
     const livePayload = normalizeAssistantPayload({
       id: `assistant-live-${runId}`,
       input: finalPrompt,
@@ -724,7 +726,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             dryRun: false,
             autonomyLevel,
             model: selectedModelId,
-            mode,
+            mode: 'plan',
           })
         : await superAgentApi.command(finalPrompt, {
             runId,
@@ -1054,7 +1056,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                 onChange={(e) => setComposerText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendPrompt(); } }}
                 placeholder={
-                  mode === 'plan'
+                  planMode
                     ? 'Plan the next steps, review branches, or outline an execution path...'
                     : mode === 'operate'
                     ? 'Ask to update, refund, cancel, or publish...'
@@ -1073,32 +1075,36 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
                         : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
                     }`}
-                    >
-                      Investigate
-                    </button>
+                  >
+                    Investigate
+                  </button>
                   <button
                     type="button"
                     onClick={() => setMode('operate')}
                     className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                       mode === 'operate'
-                        ? 'bg-secondary text-white'
+                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
                         : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
                     }`}
-                    >
-                      Operate
-                    </button>
+                  >
+                    Operate
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setMode('plan')}
+                    onClick={() => setPlanMode((current) => !current)}
                     className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                      mode === 'plan'
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'
+                      planMode
+                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
                         : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
                     }`}
                   >
                     Plan
                   </button>
-                  <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+                </div>
+                <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+                <div className="flex flex-wrap items-center gap-1.5">
                   <div className="relative">
                     <button
                       type="button"
