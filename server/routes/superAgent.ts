@@ -985,7 +985,12 @@ function buildOrderPanel(order: any, context: any): ContextPanel {
       { label: 'Approval', value: titleCase(order.approval_status || 'N/A') },
       { label: 'Country', value: toText(order.country) },
       { label: 'Brand', value: toText(order.brand) },
-      ...(order.tracking_number ? [{ label: 'Tracking', value: order.tracking_number }] : []),
+      ...(order.tracking_number ? [{
+        label: 'Tracking',
+        value: order.tracking_url
+          ? `${order.tracking_number} — ${order.tracking_url}`
+          : order.tracking_number,
+      }] : []),
       ...(lineItems.length > 0 ? [{ label: 'Products', value: `${lineItems.length} item${lineItems.length !== 1 ? 's' : ''}` }] : []),
       ...lineItemFacts,
     ],
@@ -1471,10 +1476,20 @@ function buildVerificationDisplay(
       };
     }
     case 'order.cancel': {
+      const lineItems: any[] = Array.isArray(entity.line_items) ? entity.line_items : [];
+      const lineItemSummary = lineItems.slice(0, 10).reduce((acc: Record<string, string>, item: any, idx: number) => {
+        const name = item.name || item.sku || `Item ${idx + 1}`;
+        const qty = item.quantity ?? 1;
+        const price = item.price != null ? ` — ${formatMoney(item.price, item.currency || entity.currency || 'USD')}` : '';
+        acc[`item_${idx + 1}`] = `${name} × ${qty}${price}`;
+        return acc;
+      }, {});
       return {
         beforeState: {
           status: entity.status || 'unknown',
           total: entity.total ?? null,
+          fulfillment: entity.fulfillment_status || 'unfulfilled',
+          ...(lineItems.length > 0 ? { line_items: lineItemSummary } : {}),
         },
         afterState: {
           status: 'cancelled',
@@ -1482,6 +1497,7 @@ function buildVerificationDisplay(
         },
         impacts: [
           `Order ${entity.external_order_id || entity.id} will be cancelled`,
+          lineItems.length > 0 ? `${lineItems.length} product${lineItems.length > 1 ? 's' : ''} will be removed` : null,
           'Reserved inventory will be released',
           'Customer will receive a cancellation email',
           entity.payment_status === 'paid' ? 'Refund process will be initiated automatically' : 'No refund needed (not paid)',

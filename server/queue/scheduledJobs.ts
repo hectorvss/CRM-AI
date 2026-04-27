@@ -19,20 +19,27 @@ import { JobType }        from './types.js';
 import { logger }         from '../utils/logger.js';
 import { requireScope }    from '../lib/scope.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
+import { fireWorkflowEvent, recoverPendingEvents, pruneEventLog } from '../lib/workflowEventBus.js';
+import { pruneExpiredSessions } from '../agents/planEngine/sessionRepository.js';
 
 let slaIntervalId:              ReturnType<typeof setInterval> | null = null;
 let reconcileIntervalId:        ReturnType<typeof setInterval> | null = null;
 let workflowDelayIntervalId:    ReturnType<typeof setInterval> | null = null;
 let scheduleSweeperIntervalId:  ReturnType<typeof setInterval> | null = null;
 let orphanSweeperIntervalId:    ReturnType<typeof setInterval> | null = null;
+let sessionPruneIntervalId:     ReturnType<typeof setInterval> | null = null;
+let eventBusRecoveryIntervalId: ReturnType<typeof setInterval> | null = null;
+let eventLogPruneIntervalId:    ReturnType<typeof setInterval> | null = null;
 
-const SLA_INTERVAL_MS              =  5 * 60 * 1_000;   // 5 minutes
-const RECONCILE_INTERVAL_MS        = 15 * 60 * 1_000;   // 15 minutes
-const WORKFLOW_DELAY_INTERVAL_MS   =  2 * 60 * 1_000;   // 2 minutes
-const SCHEDULE_SWEEPER_INTERVAL_MS =  1 * 60 * 1_000;   // 1 minute
-const ORPHAN_SWEEPER_INTERVAL_MS   = 10 * 60 * 1_000;   // 10 minutes
-const ORPHAN_THRESHOLD_MS          = 30 * 60 * 1_000;   // runs stuck > 30 min = orphaned
+const SLA_INTERVAL_MS                =  5 * 60 * 1_000;   // 5 minutes
+const RECONCILE_INTERVAL_MS          = 15 * 60 * 1_000;   // 15 minutes
+const WORKFLOW_DELAY_INTERVAL_MS     =  2 * 60 * 1_000;   // 2 minutes
+const SCHEDULE_SWEEPER_INTERVAL_MS   =  1 * 60 * 1_000;   // 1 minute
+const ORPHAN_SWEEPER_INTERVAL_MS     = 10 * 60 * 1_000;   // 10 minutes
+const ORPHAN_THRESHOLD_MS            = 30 * 60 * 1_000;   // runs stuck > 30 min = orphaned
+const SESSION_PRUNE_INTERVAL_MS      = 30 * 60 * 1_000;   // 30 minutes
+const EVENT_BUS_RECOVERY_INTERVAL_MS =  5 * 60 * 1_000;   // 5 minutes — retry stuck events
+const EVENT_LOG_PRUNE_INTERVAL_MS    = 60 * 60 * 1_000;   // 1 hour — remove old executed rows
 
 export function startScheduledJobs(): void {
   logger.info('Starting scheduled job intervals', {
@@ -79,6 +86,30 @@ export function startScheduledJobs(): void {
       logger.warn('Orphaned run sweep failed', { error: String(err?.message ?? err) }),
     );
   }, ORPHAN_SWEEPER_INTERVAL_MS);
+
+  // Session pruner: remove in-memory agent sessions whose TTL has expired
+  sessionPruneIntervalId = setInterval(() => {
+    try {
+      const pruned = pruneExpiredSessions();
+      if (pruned > 0) logger.info(`Session pruner: removed ${pruned} expired session(s)`);
+    } catch (err) {
+      logger.warn('Session prune failed', { error: String((err as any)?.message ?? err) });
+    }
+  }, SESSION_PRUNE_INTERVAL_MS);
+
+  // Event bus recovery: retry workflow events stuck in 'pending' (process crash recovery)
+  eventBusRecoveryIntervalId = setInterval(() => {
+    void recoverPendingEvents(scope.tenantId, scope.workspaceId).catch((err) =>
+      logger.warn('Event bus recovery sweep failed', { error: String((err as any)?.message ?? err) }),
+    );
+  }, EVENT_BUS_RECOVERY_INTERVAL_MS);
+
+  // Event log pruner: delete executed rows older than 7 days to keep table lean
+  eventLogPruneIntervalId = setInterval(() => {
+    void pruneEventLog(scope.tenantId).catch((err) =>
+      logger.warn('Event log prune failed', { error: String((err as any)?.message ?? err) }),
+    );
+  }, EVENT_LOG_PRUNE_INTERVAL_MS);
 }
 
 /**
@@ -214,16 +245,22 @@ function bootstrapScope() {
 }
 
 export function stopScheduledJobs(): void {
-  if (slaIntervalId)             clearInterval(slaIntervalId);
-  if (reconcileIntervalId)       clearInterval(reconcileIntervalId);
-  if (workflowDelayIntervalId)   clearInterval(workflowDelayIntervalId);
-  if (scheduleSweeperIntervalId) clearInterval(scheduleSweeperIntervalId);
-  if (orphanSweeperIntervalId)   clearInterval(orphanSweeperIntervalId);
-  slaIntervalId             = null;
-  reconcileIntervalId       = null;
-  workflowDelayIntervalId   = null;
-  scheduleSweeperIntervalId = null;
-  orphanSweeperIntervalId   = null;
+  if (slaIntervalId)               clearInterval(slaIntervalId);
+  if (reconcileIntervalId)         clearInterval(reconcileIntervalId);
+  if (workflowDelayIntervalId)     clearInterval(workflowDelayIntervalId);
+  if (scheduleSweeperIntervalId)   clearInterval(scheduleSweeperIntervalId);
+  if (orphanSweeperIntervalId)     clearInterval(orphanSweeperIntervalId);
+  if (sessionPruneIntervalId)      clearInterval(sessionPruneIntervalId);
+  if (eventBusRecoveryIntervalId)  clearInterval(eventBusRecoveryIntervalId);
+  if (eventLogPruneIntervalId)     clearInterval(eventLogPruneIntervalId);
+  slaIntervalId              = null;
+  reconcileIntervalId        = null;
+  workflowDelayIntervalId    = null;
+  scheduleSweeperIntervalId  = null;
+  orphanSweeperIntervalId    = null;
+  sessionPruneIntervalId     = null;
+  eventBusRecoveryIntervalId = null;
+  eventLogPruneIntervalId    = null;
   logger.info('Scheduled job intervals stopped');
 }
 

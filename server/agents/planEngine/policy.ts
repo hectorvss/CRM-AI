@@ -145,13 +145,21 @@ const baselineRules: PolicyRule[] = [
     },
   },
 
-  // 6. External side-effect tools default to high risk
+  // 6. External side-effect tools: medium risk requires approval, low risk is elevated to medium
   {
     id: 'external_elevates_risk',
-    description: 'Tools that call external systems are treated as higher risk',
+    description: 'External-side-effect tools with low risk are elevated to medium; medium risk requires approval',
     priority: 500,
     evaluate({ tool }) {
-      if (tool.sideEffect === 'external' && tool.risk === 'low') {
+      if (tool.sideEffect !== 'external') return null;
+      if (tool.risk === 'medium') {
+        return {
+          action: 'require_approval',
+          reason: 'External call with medium risk requires approval',
+          riskElevation: 'medium',
+        };
+      }
+      if (tool.risk === 'low') {
         return {
           action: 'allow',
           reason: 'External call allowed but risk elevated to medium',

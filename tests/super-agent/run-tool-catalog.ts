@@ -42,6 +42,8 @@ const expectedTools = [
   'workflow.list',
   'workflow.get',
   'workflow.publish',
+  'workflow.trigger',
+  'workflow.fire_event',
   'report.overview',
   'report.intents',
   'report.agents',
@@ -49,6 +51,15 @@ const expectedTools = [
   'report.costs',
   'report.sla',
   'agent.run',
+  'agent.list',
+  'case.list',
+  'case.update_priority',
+  'case.update_assignment',
+  'case.add_note',
+  'customer.update',
+  'return.update_status',
+  'message.send_to_customer',
+  'order.list',
 ];
 
 for (const name of expectedTools) {
@@ -62,5 +73,13 @@ assert.ok(!readCatalog.some((tool) => tool.name === 'workflow.publish'), 'workfl
 
 const writeCatalog = toolRegistry.listForCaller((permission) => ['workflows.write', 'workflows.read', 'reports.read'].includes(permission));
 assert.ok(writeCatalog.some((tool) => tool.name === 'workflow.publish'), 'workflow.publish should be visible with workflows.write');
+
+// New tools should respect permission boundaries
+const agentCatalog = toolRegistry.listForCaller((permission) => ['agents.read'].includes(permission));
+assert.ok(agentCatalog.some((tool) => tool.name === 'agent.list'), 'agent.list should be visible with agents.read');
+
+const workflowWriteCatalog = toolRegistry.listForCaller((permission) => ['workflows.write', 'workflows.read'].includes(permission));
+assert.ok(workflowWriteCatalog.some((tool) => tool.name === 'workflow.trigger'), 'workflow.trigger should be visible with workflows.write');
+assert.ok(workflowWriteCatalog.some((tool) => tool.name === 'workflow.fire_event'), 'workflow.fire_event should be visible with workflows.write');
 
 console.log(`Super Agent tool catalog: ${expectedTools.length}/${expectedTools.length} registered`);

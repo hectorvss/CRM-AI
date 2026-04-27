@@ -132,9 +132,16 @@ async function handleWebhookProcess(
   }
 
   // ── 2. Parse payload ─────────────────────────────────────────────────────
+  // raw_payload may come back as a plain object (JSONB) from Supabase or as a
+  // JSON string when the event was stored that way. Handle both cases.
   let parsedBody: Record<string, any>;
   try {
-    parsedBody = JSON.parse(webhookRow.raw_payload || payload.rawBody);
+    const rawData = webhookRow.raw_payload;
+    if (rawData && typeof rawData === 'object') {
+      parsedBody = rawData as Record<string, any>;
+    } else {
+      parsedBody = JSON.parse(rawData || payload.rawBody);
+    }
   } catch {
     log.warn('Webhook has invalid JSON body — marking as failed to avoid loop');
     await integrationRepo.updateWebhookEventStatus(scope, payload.webhookEventId, 'failed');
@@ -315,18 +322,29 @@ async function autoCreateCaseAndFireEvent(
         if (customer) customerId = (customer as any).id;
       }
 
-      // Create the case
+      // Generate next sequential case number (e.g. CS-0042)
+      const caseNumber = await caseRepo.getNextCaseNumber(scope);
+
+      // Create the case — use the actual DB column names:
+      //  source_system / source_channel  instead of source
+      //  ai_diagnosis                    instead of description
+      //  order_ids / payment_ids         (arrays) instead of order_id / payment_id
       const caseId = await caseRepo.createCase(scope, {
-        type:        caseType,
-        sub_type:    caseSubType ?? null,
-        status:      'open',
+        id:             randomUUID(),
+        case_number:    caseNumber,
+        tenant_id:      scope.tenantId,
+        workspace_id:   scope.workspaceId,
+        type:           caseType,
+        sub_type:       caseSubType ?? null,
+        status:         'open',
         priority,
-        description: summary,
-        source:      `webhook:${source}`,
-        customer_id: customerId,
-        order_id:    orderId,
-        payment_id:  paymentId,
-        tags:        [`webhook`, source, topic.replace('/', '_')],
+        source_system:  `webhook:${source}`,
+        source_channel: source,
+        ai_diagnosis:   summary,
+        customer_id:    customerId ?? null,
+        order_ids:      orderId ? [orderId] : null,
+        payment_ids:    paymentId ? [paymentId] : null,
+        tags:           [`webhook`, source, topic.replace('/', '_')],
       } as any);
 
       log.info('webhookProcess: auto-created case from webhook', {

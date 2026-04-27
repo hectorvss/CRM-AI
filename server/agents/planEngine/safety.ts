@@ -124,6 +124,7 @@ export function classifyRiskFromPlanSignal(toolName: string, args: unknown): Ris
 
   if (toolName.startsWith('return.')) {
     if (toolName === 'return.approve' || toolName === 'return.reject') return 'medium';
+    if (toolName === 'return.update_status') return 'low';
     return 'none';
   }
 

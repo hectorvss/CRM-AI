@@ -202,36 +202,52 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
   const paymentId = parseEntityId(safeInput, /\bpay(?:[_-][a-z0-9]+|\d+)\b/i);
   const returnId = parseEntityId(safeInput, /\bret(?:[_-][a-z0-9]+|\d+)\b/i);
   const workflowId = parseEntityId(safeInput, /\bwf(?:[_-][a-z0-9]+|\d+)\b/i);
+  const customerId = parseEntityId(safeInput, /\bcust(?:[_-][a-z0-9]+|\d+)\b/i);
   const recentTarget = resolveRelativeTarget(text, context);
   const orderQuery = safeInput.replace(/pedido|order|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
   const paymentQuery = safeInput.replace(/pago|payment|refund|reembolso|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
   const caseQuery = safeInput.replace(/caso|case|hilo|thread|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
   const returnQuery = safeInput.replace(/devolucion|return|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
   const customerQuery = safeInput.replace(/cliente|customer|abrir|open|revisa|review|investiga|investigate/gi, '').trim();
-  const workflowQuery = safeInput.replace(/workflow|flujo|abrir|open|publica|publish|revisa|review|investiga|investigate/gi, '').trim();
+  const workflowQuery = safeInput.replace(/workflow|flujo|abrir|open|publica|publish|revisa|review|investiga|investigate|dispara|activa|trigger|fire/gi, '').trim();
   const filters = [
     text.includes('pend') ? 'pending' : null,
     text.includes('bloque') ? 'blocked' : null,
     text.includes('alto riesgo') || text.includes('high risk') ? 'high_risk' : null,
+    (text.includes('abiert') || (text.includes('open') && !/(abrir|abre|go to|ll[eé]vame|navega)/.test(text))) ? 'open' : null,
   ].filter(Boolean) as string[];
   const intent =
     /(abrir|abre|open|go to|ll[eé]vame|navega)/.test(text) ? 'open'
       : /(por que|por qué|why|bloquead|blocked)/.test(text) ? 'explain_blocker'
         : /(compara|compare)/.test(text) ? 'compare'
-          : /(cancel|refund|reembolso|aprueba|approve|rechaza|reject|publica|publish|actualiza|update|cambia|change|cierra|close)/.test(text) ? 'operate'
+          : /(cancel|refund|reembolso|aprueba|approve|rechaza|reject|publica|publish|actualiza|update|cambia|change|cierra|close|asigna|assign|dispara|activa|trigger|fire event|notifica|notify|manda|envía|envia|send)/.test(text) ? 'operate'
             : /(busca|search)/.test(text) ? 'search'
               : 'investigate';
   const requestedAction =
     /(cancel|cancela)/.test(text) ? 'cancel'
-      : /(refund|reembolso)/.test(text) ? 'refund'
-        : /(approve|aprueba)/.test(text) ? 'approve'
-          : /(reject|rechaza)/.test(text) ? 'reject'
-            : /(publish|publica)/.test(text) ? 'publish'
-              : /(open|abrir)/.test(text) ? 'open'
-                : /(update|actualiza|change|cambia|close|cierra)/.test(text) ? 'update'
-                  : null;
+      // close_and_notify must be checked before notify
+      : /(close.*notif|notif.*close|cierra.*manda|manda.*cierra|cierra.*email|email.*cierra)/.test(text) ? 'close_and_notify'
+        : /(notifica|notify|manda\s+(email|mensaje|notif)|envía?\s+(email|mensaje)|send\s+(email|message|notification))/.test(text) ? 'notify'
+          : /(refund|reembolso)/.test(text) && !/(notifica|notify)/.test(text) ? 'refund'
+            : /(approve|aprueba)/.test(text) ? 'approve'
+              : /(reject|rechaza)/.test(text) ? 'reject'
+                : /(publish|publica)/.test(text) ? 'publish'
+                  : /(asigna|assign)/.test(text) ? 'assign'
+                    : /(prioridad|priority)/.test(text) ? 'update_priority'
+                      : /(dispara.*evento|fire.*event|evento.*dispara)/.test(text) ? 'fire_event'
+                        : /(activa|trigger).*workflow|workflow.*(activa|trigger)/.test(text) ? 'trigger'
+                          : /(open|abrir)/.test(text) ? 'open'
+                            : /(segmento|segment|riesgo|risk.level|canal|channel|vip|regular|premium)/.test(text) ? 'update'
+                              : /(update|actualiza|change|cambia|close|cierra)/.test(text) ? 'update'
+                                : null;
 
   let command: StructuredCommand | null = null;
+
+  // ── Fire-event / workflow-trigger keyword override ───────────────────────
+  // Must be tested before orderId/entityId branches because event names like
+  // "order.updated" contain the word "order" which would otherwise win.
+  const isFireEventIntent = /(dispara.*evento|fire.*event|evento.*dispara)/.test(text);
+  const isTriggerWorkflowIntent = /(activa.*workflow|trigger.*workflow|workflow.*activa|workflow.*trigger)/.test(text);
 
   if (text.includes('inconsist') || text.includes('conflict')) {
     command = {
@@ -269,18 +285,38 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       needsConfirmation: false,
       navigationTarget: buildNavigationTarget({ page: 'payments', entityType: 'payment' }),
     };
+  } else if (isFireEventIntent || isTriggerWorkflowIntent) {
+    // Explicit "fire event" / "trigger workflow" intent — routes here BEFORE orderId/order matching
+    // so event names like "order.updated" don't accidentally route to the order branch.
+    const rawResolved = resolveEntityReference(workflowId, recentTarget?.entityType === 'workflow' ? recentTarget?.entityId || null : null, workflowQuery || '');
+    const resolved = rawResolved ? rawResolved.trim() || null : null;
+    const workflowWriteActions = ['publish', 'trigger', 'fire_event'];
+    command = {
+      kind: 'workflow',
+      intent: 'operate',
+      id: resolved || undefined,
+      query: workflowQuery || undefined,
+      targetEntityType: 'workflow',
+      targetEntityRef: resolved,
+      requestedAction: isFireEventIntent ? 'fire_event' : 'trigger',
+      filters,
+      riskLevel: 'medium',
+      needsConfirmation: true,
+      navigationTarget: buildNavigationTarget({ page: 'workflows', entityType: 'workflow', entityId: resolved }),
+    };
   } else if (caseId || ((text.includes('caso') || text.includes('case')) && caseQuery) || recentTarget?.entityType === 'case') {
     const resolved = resolveEntityReference(caseId, recentTarget?.entityType === 'case' ? recentTarget?.entityId || null : null, caseQuery || safeInput.trim());
+    const caseWriteActions = new Set(['cancel', 'approve', 'reject', 'update', 'close_and_notify', 'assign', 'update_priority', 'notify']);
     command = {
       kind: 'case',
-      intent,
+      intent: intent === 'investigate' && requestedAction && caseWriteActions.has(requestedAction) ? 'operate' : intent,
       id: resolved,
       targetEntityType: 'case',
       targetEntityRef: resolved,
       requestedAction,
       filters,
       riskLevel: filters.includes('high_risk') ? 'high' : 'medium',
-      needsConfirmation: requestedAction !== null,
+      needsConfirmation: requestedAction !== null && requestedAction !== 'open',
       navigationTarget: buildNavigationTarget({ page: 'case_graph', entityType: 'case', entityId: resolved }),
     };
   } else if (orderId || ((text.includes('pedido') || text.includes('order')) && orderQuery) || recentTarget?.entityType === 'order') {
@@ -325,11 +361,12 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       needsConfirmation: false,
       navigationTarget: buildNavigationTarget({ page: 'returns', entityType: 'return', entityId: resolved }),
     };
-  } else if (text.includes('workflow') || text.includes('flujo') || workflowId || recentTarget?.entityType === 'workflow') {
+  } else if (text.includes('workflow') || text.includes('flujo') || workflowId || recentTarget?.entityType === 'workflow' || /(dispara.*evento|fire.*event|activa.*workflow)/.test(text)) {
     const resolved = resolveEntityReference(workflowId, recentTarget?.entityType === 'workflow' ? recentTarget?.entityId || null : null, workflowQuery || '').trim() || null;
+    const workflowWriteActions = ['publish', 'trigger', 'fire_event'];
     command = {
       kind: 'workflow',
-      intent,
+      intent: intent === 'investigate' && requestedAction && workflowWriteActions.includes(requestedAction) ? 'operate' : intent,
       id: resolved || undefined,
       query: workflowQuery || undefined,
       targetEntityType: 'workflow',
@@ -337,7 +374,7 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       requestedAction,
       filters,
       riskLevel: requestedAction === 'publish' ? 'high' : 'medium',
-      needsConfirmation: requestedAction === 'publish',
+      needsConfirmation: requestedAction !== null && (workflowWriteActions.includes(requestedAction) || requestedAction === 'update'),
       navigationTarget: buildNavigationTarget({ page: 'workflows', entityType: 'workflow', entityId: resolved }),
     };
   } else if (text.includes('agente') || text.includes('agent')) {
@@ -352,19 +389,21 @@ export function parseCommandIntent(input: string, context?: CommandContext | nul
       needsConfirmation: false,
       navigationTarget: buildNavigationTarget({ page: 'super_agent', entityType: 'agent' }),
     };
-  } else if (text.includes('cliente') || text.includes('customer') || recentTarget?.entityType === 'customer') {
-    const resolved = customerQuery || recentTarget?.entityId || safeInput.trim();
+  } else if (customerId || text.includes('cliente') || text.includes('customer') || recentTarget?.entityType === 'customer') {
+    // Prefer extracted cust_xxx ID; fall back to query string or recent target
+    const resolvedCustomerId = customerId || (recentTarget?.entityType === 'customer' ? recentTarget.entityId || null : null);
+    const resolvedRef = resolvedCustomerId || customerQuery || safeInput.trim();
     command = {
       kind: 'customer',
       intent,
-      query: resolved,
+      query: customerQuery || undefined,
       targetEntityType: 'customer',
-      targetEntityRef: resolved,
+      targetEntityRef: resolvedRef,
       requestedAction,
       filters,
       riskLevel: filters.includes('high_risk') ? 'high' : 'low',
-      needsConfirmation: false,
-      navigationTarget: buildNavigationTarget({ page: 'customers', entityType: 'customer', entityId: recentTarget?.entityType === 'customer' ? recentTarget.entityId : null }),
+      needsConfirmation: requestedAction !== null && requestedAction !== 'open',
+      navigationTarget: buildNavigationTarget({ page: 'customers', entityType: 'customer', entityId: resolvedCustomerId }),
     };
   }
 
