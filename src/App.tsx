@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Inbox from './components/Inbox';
 import Home from './components/Home';
@@ -18,6 +18,7 @@ import Payments from './components/Payments';
 import CaseGraph from './components/CaseGraph';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import SuperAgent from './components/SuperAgent';
+import GlobalSearch from './components/GlobalSearch';
 import { NavigateInput, NavigationTarget, Page } from './types';
 
 const DEFAULT_TARGET: NavigationTarget = {
@@ -137,12 +138,25 @@ function serializeNavigationTarget(target: NavigationTarget) {
 export default function App() {
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget>(() => parseNavigationTargetFromUrl());
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const currentPage = navigationTarget.page;
 
-  const navigate = (target: NavigateInput, entityId?: string | null) => {
+  const navigate = useCallback((target: NavigateInput, entityId?: string | null) => {
     setNavigationTarget(normalizeNavigationTarget(target, entityId));
-  };
+  }, []);
+
+  // Global Ctrl+K / Cmd+K shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -179,18 +193,19 @@ export default function App() {
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200 font-sans h-screen flex overflow-hidden selection:bg-purple-200 dark:selection:bg-purple-900">
-      <Sidebar 
-        currentPage={currentPage} 
+      <Sidebar
+        currentPage={currentPage}
         currentSection={navigationTarget.section}
         onPageChange={navigate}
         isOpen={isLeftSidebarOpen}
         onToggle={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
+        onSearchOpen={() => setSearchOpen(true)}
       />
       <main className="flex-1 flex flex-col h-full min-w-0 relative">
         <PageErrorBoundary page={currentPage}>
           {currentPage === 'inbox' && <Inbox focusCaseId={pageFocus.caseId} />}
           {currentPage === 'super_agent' && <SuperAgent onNavigate={navigate} activeTarget={navigationTarget} />}
-          {currentPage === 'home' && <Home />}
+          {currentPage === 'home' && <Home onNavigate={navigate} />}
           {currentPage === 'ai_studio' && <AIStudio />}
           {currentPage === 'workflows' && <Workflows onNavigate={navigate} focusWorkflowId={pageFocus.workflowId} />}
           {currentPage === 'approvals' && <Approvals onNavigate={navigate} focusApprovalId={pageFocus.approvalId} />}
@@ -207,6 +222,13 @@ export default function App() {
           {currentPage === 'case_graph' && <CaseGraph onPageChange={(page) => navigate(page, page === 'case_graph' ? pageFocus.caseId : null)} focusCaseId={pageFocus.caseId} />}
         </PageErrorBoundary>
       </main>
+
+      {/* Global Search modal — rendered outside main so it overlays everything */}
+      <GlobalSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onNavigate={navigate}
+      />
     </div>
   );
 }

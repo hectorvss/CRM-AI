@@ -52,12 +52,9 @@ const KPICard: React.FC<{ metric: any, index: number }> = ({ metric, index }) =>
   </div>
 );
 
-const GENERATED_REPORTS = [
-  { id: '1', title: 'Weekly Exec Brief', date: 'Oct 21, 2023', time: '09:00 AM', audience: 'Executive / C-Suite', status: 'Generated', severity: 'normal', range: 'Last 7 Days' },
-  { id: '2', title: 'Daily Ops Standup', date: 'Oct 20, 2023', time: '08:30 AM', audience: 'Support Lead', status: 'Generated', severity: 'warning', range: 'Last 24 Hours' },
-  { id: '3', title: 'Incident Post-Mortem', date: 'Oct 18, 2023', time: '14:15 PM', audience: 'Technical Team', status: 'Generated', severity: 'critical', range: 'Oct 17 - Oct 18' },
-  { id: '4', title: 'Weekly Exec Brief', date: 'Oct 14, 2023', time: '09:00 AM', audience: 'Executive / C-Suite', status: 'Archived', severity: 'normal', range: 'Oct 7 - Oct 14' },
-];
+// Generated reports come from the backend when the user triggers "Generate New".
+// Until generated, the list is empty.
+const GENERATED_REPORTS: { id: string; title: string; date: string; time: string; audience: string; status: string; severity: string; range: string }[] = [];
 
 const recommendedActions: any[] = [];
 
@@ -157,7 +154,7 @@ export default function Reports() {
   );
 
   const renderAiResume = () => {
-    const selectedReport = GENERATED_REPORTS.find(r => r.id === selectedReportId) || GENERATED_REPORTS[0];
+    const selectedReport = GENERATED_REPORTS.find(r => r.id === selectedReportId) ?? null;
 
     return (
       <div className="flex flex-col h-full gap-6">
@@ -211,7 +208,13 @@ export default function Reports() {
               <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs font-bold px-2 py-0.5 rounded-full">{GENERATED_REPORTS.length}</span>
             </div>
             <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
-              {GENERATED_REPORTS.map((report) => (
+              {GENERATED_REPORTS.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full py-12 text-center px-4">
+                  <span className="material-symbols-outlined text-4xl text-gray-300 dark:text-gray-600 mb-3">description</span>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">No reports yet</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 leading-snug">Click <strong>Generate New</strong> to create your first AI-powered executive report.</p>
+                </div>
+              ) : GENERATED_REPORTS.map((report) => (
                 <div
                   key={report.id}
                   onClick={() => setSelectedReportId(report.id)}
@@ -248,6 +251,18 @@ export default function Reports() {
 
           {/* Right: The Report itself */}
           <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-card-dark flex flex-col relative">
+            {!selectedReport && (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+                <span className="material-symbols-outlined text-6xl text-gray-200 dark:text-gray-700 mb-4">description</span>
+                <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">No report selected</h3>
+                <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs leading-relaxed">
+                  Generate your first AI executive report by clicking <strong>Generate New</strong> above.
+                  Reports are tailored to your audience and include KPIs, risk flags, and recommendations.
+                </p>
+              </div>
+            )}
+            {selectedReport && (
+            <div className="flex flex-col flex-1">
             <div className="p-8 pb-6 border-b border-gray-100 dark:border-gray-800 z-10 relative">
                 <div className="flex justify-between items-start mb-6">
                   <div>
@@ -434,12 +449,14 @@ export default function Reports() {
               
               <div className="p-4 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 flex justify-between items-center">
                 <span>Data Sources: Zendesk, Shopify, Stripe, Intercom.</span>
-                <span className="font-mono">ID: RPT-{selectedReport.id}-2023</span>
+                <span className="font-mono">ID: RPT-{selectedReport.id}</span>
               </div>
             </div>
+            )}
         </div>
       </div>
-    );
+    </div>
+  );
   };
 
   const renderBusinessAreas = () => (

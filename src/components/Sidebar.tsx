@@ -1,5 +1,7 @@
 import React from 'react';
 import { NavigateInput, NavigationTarget, Page } from '../types';
+import { useApi } from '../api/hooks';
+import { iamApi, approvalsApi } from '../api/client';
 
 interface SidebarProps {
   currentPage: Page;
@@ -7,6 +9,7 @@ interface SidebarProps {
   onPageChange: (target: NavigateInput) => void;
   isOpen: boolean;
   onToggle: () => void;
+  onSearchOpen?: () => void;
 }
 
 type SidebarItem = {
@@ -29,7 +32,21 @@ function isTargetActive(currentPage: Page, currentSection: string | null | undef
   return currentPage === targetPageOf(target) && (targetSectionOf(target) ? currentSection === targetSectionOf(target) : true);
 }
 
-export default function Sidebar({ currentPage, currentSection, onPageChange, isOpen, onToggle }: SidebarProps) {
+export default function Sidebar({ currentPage, currentSection, onPageChange, isOpen, onToggle, onSearchOpen }: SidebarProps) {
+  // Real user data
+  const { data: me } = useApi(() => iamApi.me(), [], null as any);
+  // Real pending approvals count
+  const { data: pendingApprovals } = useApi(
+    () => approvalsApi.list({ status: 'pending', limit: '99' }),
+    [],
+    [] as any[]
+  );
+  const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0;
+
+  const userName  = me?.name  || me?.email?.split('@')[0] || 'User';
+  const userRole  = me?.role  || me?.role_id || 'Agent';
+  const userAvatar = me?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&size=64`;
+
   const superAgentItem: SidebarItem = {
     target: { page: 'super_agent', entityType: 'workspace', section: 'command-center', sourceContext: 'sidebar' },
     label: 'Super Agent',
@@ -37,18 +54,18 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
   };
 
   const navItems: SidebarItem[] = [
-    { target: 'inbox', label: 'Inbox', icon: 'inbox', badge: 4 },
-    { target: 'case_graph', label: 'Case Graph', icon: 'hub' },
-    { target: 'customers', label: 'Customers', icon: 'people' },
-    { target: 'orders', label: 'Orders', icon: 'shopping_bag' },
-    { target: 'payments', label: 'Payments', icon: 'payments' },
-    { target: 'returns', label: 'Returns', icon: 'assignment_return' },
-    { target: 'approvals', label: 'Approvals', icon: 'check_circle' },
-    { target: 'ai_studio', label: 'AI Studio', icon: 'smart_toy' },
-    { target: 'workflows', label: 'Workflows', icon: 'account_tree' },
-    { target: 'knowledge', label: 'Knowledge', icon: 'menu_book' },
-    { target: 'reports', label: 'Reports', icon: 'bar_chart' },
-    { target: 'tools_integrations', label: 'Integrations', icon: 'extension' },
+    { target: 'inbox',             label: 'Inbox',        icon: 'inbox' },
+    { target: 'case_graph',        label: 'Case Graph',   icon: 'hub' },
+    { target: 'customers',         label: 'Customers',    icon: 'people' },
+    { target: 'orders',            label: 'Orders',       icon: 'shopping_bag' },
+    { target: 'payments',          label: 'Payments',     icon: 'payments' },
+    { target: 'returns',           label: 'Returns',      icon: 'assignment_return' },
+    { target: 'approvals',         label: 'Approvals',    icon: 'check_circle', badge: pendingCount > 0 ? pendingCount : undefined },
+    { target: 'ai_studio',         label: 'AI Studio',    icon: 'smart_toy' },
+    { target: 'workflows',         label: 'Workflows',    icon: 'account_tree' },
+    { target: 'knowledge',         label: 'Knowledge',    icon: 'menu_book' },
+    { target: 'reports',           label: 'Reports',      icon: 'bar_chart' },
+    { target: 'tools_integrations',label: 'Integrations', icon: 'extension' },
   ];
 
   return (
@@ -59,7 +76,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
             <span className="material-symbols-outlined text-white dark:text-black text-xl">graphic_eq</span>
           </div>
           {isOpen && (
-            <button 
+            <button
               onClick={onToggle}
               className="ml-auto w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 transition-all"
             >
@@ -67,7 +84,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
             </button>
           )}
           {!isOpen && (
-            <button 
+            <button
               onClick={onToggle}
               className="absolute inset-0 w-full h-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
             >
@@ -77,7 +94,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
         </div>
 
         <nav className="space-y-3 px-2 flex flex-col">
-          {/* Super Agent — single item at the top */}
+          {/* Super Agent — top item */}
           <div className="space-y-1">
             <button
               onClick={() => onPageChange(superAgentItem.target)}
@@ -113,7 +130,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
                 {isOpen && <span className="block truncate flex-1 text-left">{item.label}</span>}
                 {item.badge ? (
                   <span className={`${isOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-200 py-0.5 px-2 rounded-full text-[10px] font-semibold`}>
-                    {item.badge}
+                    {item.badge > 99 ? '99+' : item.badge}
                   </span>
                 ) : null}
               </button>
@@ -121,17 +138,13 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
           </div>
         </nav>
       </div>
-      
+
       <div className="px-2 pb-4 space-y-0.5 flex flex-col w-full">
-        <button 
-          onClick={() => onPageChange('upgrade')}
-          className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'upgrade' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`} 
-          title={!isOpen ? "Upgrade" : undefined}
+        <button
+          onClick={onSearchOpen}
+          className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 group transition-all`}
+          title={!isOpen ? "Search (Ctrl+K)" : undefined}
         >
-          <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${currentPage === 'upgrade' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`}>bolt</span>
-          {isOpen && <span>Upgrade</span>}
-        </button>
-        <button className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 group transition-all`} title={!isOpen ? "Search" : undefined}>
           <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200`}>search</span>
           {isOpen && (
             <>
@@ -144,25 +157,39 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
           )}
         </button>
 
-        <button 
+        <button
+          onClick={() => onPageChange('upgrade')}
+          className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'upgrade' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
+          title={!isOpen ? "Upgrade" : undefined}
+        >
+          <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${currentPage === 'upgrade' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`}>bolt</span>
+          {isOpen && <span>Upgrade</span>}
+        </button>
+
+        <button
           onClick={() => onPageChange('settings')}
-          className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'settings' ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`} 
+          className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'settings' ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
           title={!isOpen ? "Settings" : undefined}
         >
           <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${currentPage === 'settings' ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`}>settings</span>
           {isOpen && <span>Settings</span>}
         </button>
 
-        <button 
+        <button
           onClick={() => onPageChange('profile')}
           className={`w-full flex items-center ${isOpen ? 'px-3 py-2' : 'justify-center py-2'} transition-colors mt-1 rounded-md ${currentPage === 'profile' ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-200 dark:hover:bg-gray-800'}`}
-          title={!isOpen ? "Profile" : undefined}
+          title={!isOpen ? userName : undefined}
         >
-          <img src="https://i.pravatar.cc/150?img=11" alt="User" className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex-shrink-0" />
+          <img
+            src={userAvatar}
+            alt={userName}
+            className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex-shrink-0"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&size=64`; }}
+          />
           {isOpen && (
             <div className="ml-3 text-left flex-1 overflow-hidden">
-              <p className={`text-sm font-medium truncate ${currentPage === 'profile' ? 'text-blue-700 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`}>Alex Morgan</p>
-              <p className={`text-xs truncate ${currentPage === 'profile' ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-500 dark:text-gray-400'}`}>Support Lead</p>
+              <p className={`text-sm font-medium truncate ${currentPage === 'profile' ? 'text-blue-700 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`}>{userName}</p>
+              <p className={`text-xs truncate capitalize ${currentPage === 'profile' ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-500 dark:text-gray-400'}`}>{userRole.replace(/_/g, ' ')}</p>
             </div>
           )}
         </button>

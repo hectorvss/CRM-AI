@@ -899,13 +899,30 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
             ))}
             {!casesLoading && filteredConversations.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">inbox</span>
-                <p className="text-sm text-gray-500 font-medium">
-                  {activeTab === 'unassigned' && "No unassigned operational cases right now."}
-                  {activeTab === 'assigned' && "You have no assigned cases."}
-                  {activeTab === 'waiting' && "No cases are currently waiting for approval."}
-                  {activeTab === 'high_risk' && "No high-risk operational cases at the moment."}
+                <span className="material-symbols-outlined text-5xl text-gray-200 dark:text-gray-700 mb-3">
+                  {activeTab === 'high_risk' ? 'shield_check' : activeTab === 'waiting' ? 'pending_actions' : 'inbox'}
+                </span>
+                <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                  {activeTab === 'unassigned' && "No unassigned cases"}
+                  {activeTab === 'assigned' && "No assigned cases"}
+                  {activeTab === 'waiting' && "No cases waiting for approval"}
+                  {activeTab === 'high_risk' && "No high-risk cases"}
                 </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 max-w-[180px] leading-relaxed">
+                  {conversations.length === 0
+                    ? "Cases will appear here when customers contact you or when webhooks are received."
+                    : "All cases are in other tabs."}
+                </p>
+                {conversations.length === 0 && (
+                  <div className="flex flex-col gap-2 w-full max-w-[200px]">
+                    <button
+                      onClick={() => casesApi.list({ limit: '1' }).then(() => window.location.reload()).catch(() => {})}
+                      className="text-xs px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
