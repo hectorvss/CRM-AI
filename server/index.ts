@@ -170,11 +170,14 @@ const server = app.listen(config.server.port, () => {
   });
 });
 
-// Start the background job worker
-startWorker();
-
-// Start recurring maintenance jobs (SLA sweeps, reconciliation sweeps)
-startScheduledJobs();
+// Start the background job worker and scheduled jobs only in non-serverless environments.
+// Vercel functions are stateless and short-lived — persistent workers must not run there.
+if (!isServerlessRuntime) {
+  startWorker();
+  startScheduledJobs();
+} else {
+  logger.info('Serverless runtime detected (Vercel) — skipping worker and scheduled jobs');
+}
 
 // ── Graceful shutdown ─────────────────────────────────────
 async function shutdown(signal: string): Promise<void> {
@@ -193,7 +196,9 @@ async function shutdown(signal: string): Promise<void> {
   process.exit(0);
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+if (!isServerlessRuntime) {
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
 
 export default app;
