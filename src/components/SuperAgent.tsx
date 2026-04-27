@@ -146,6 +146,17 @@ const AUTONOMY_OPTIONS: Array<{
   { value: 'autonomous', label: 'Full access', description: 'Safe actions run automatically; sensitive ones still prompt.' },
 ];
 
+const MODULE_ICONS: Record<string, { icon: string; color: string }> = {
+  case: { icon: 'inbox', color: 'text-blue-500' },
+  order: { icon: 'shopping_bag', color: 'text-emerald-500' },
+  payment: { icon: 'payments', color: 'text-amber-500' },
+  customer: { icon: 'person', color: 'text-purple-500' },
+  workflow: { icon: 'account_tree', color: 'text-indigo-500' },
+  knowledge: { icon: 'menu_book', color: 'text-orange-500' },
+  system: { icon: 'settings', color: 'text-gray-500' },
+  resolution: { icon: 'auto_fix', color: 'text-rose-500' },
+};
+
 const MODEL_OPTIONS: ModelOption[] = [
   { id: 'gpt-5.4-mini', label: '5.4-Mini', description: 'Fast and lightweight' },
   { id: 'gpt-5.4', label: '5.4', description: 'Balanced general-purpose' },
@@ -193,6 +204,7 @@ function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<s
         requiresConfirmation: action.requiresConfirmation === true,
         blockedReason: action.blockedReason ?? null,
         payload: action.payload || undefined,
+        verificationDisplay: action.verificationDisplay || undefined,
       })) as SuperAgentAction[]
     : [];
 
@@ -1033,7 +1045,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
 
                       {msg.payload.suggestedReplies.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5 pt-1">
-                          {msg.payload.suggestedReplies.slice(0, 2).map((reply) => (
+                          {msg.payload.suggestedReplies.slice(0, 3).map((reply) => (
                             <button
                               key={`${msg.id}-${reply}`}
                               type="button"
@@ -1045,6 +1057,21 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                           ))}
                         </div>
                       ) : null}
+
+                      {/* Interoperability Chips */}
+                      {(msg.payload.consultedModules?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-3 opacity-60">
+                          {msg.payload.consultedModules.map((mod) => {
+                            const meta = MODULE_ICONS[mod.toLowerCase()] || MODULE_ICONS.system;
+                            return (
+                              <div key={mod} className="flex items-center gap-1 rounded-md border border-gray-100 bg-gray-50/50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:bg-gray-900/50">
+                                <span className={`material-symbols-outlined text-[10px] ${meta.color}`}>{meta.icon}</span>
+                                <span>{mod}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

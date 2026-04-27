@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { createIAMRepository } from '../data/iam.js';
 import { createWorkspaceRepository } from '../data/workspaces.js';
 import { logger } from '../utils/logger.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 
 /**
  * Custom Request type to include tenant and workspace context.
@@ -181,17 +182,41 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
     if (!resolvedUserId && typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
       const rawToken = authHeader.slice(7).trim();
       if (rawToken) {
-        const tokenHash = createHash('sha256').update(rawToken).digest('hex');
         try {
-          const session = await iamRepo.getSession(tokenHash);
+          const supabase = getSupabaseAdmin();
+          const { data: authData } = await supabase.auth.getUser(rawToken);
 
-          if (session?.user_id) {
-            resolvedUserId = session.user_id;
+          if (authData?.user) {
+            resolvedUserId = authData.user.id;
+            
+            let claimTenantId = authData.user.app_metadata?.tenant_id || authData.user.user_metadata?.tenant_id;
+            let claimWorkspaceId = authData.user.app_metadata?.workspace_id || authData.user.user_metadata?.workspace_id;
+
+            if (!claimTenantId || !claimWorkspaceId) {
+               const memberships = await iamRepo.listUserMemberships(resolvedUserId);
+               if (memberships?.length > 0) {
+                  claimTenantId = claimTenantId || memberships[0].tenant_id;
+                  claimWorkspaceId = claimWorkspaceId || memberships[0].workspace_id;
+               }
+            }
+
             resolved = await resolveTenantWorkspaceContext(
-              session.tenant_id || tenantHeader,
-              session.workspace_id || workspaceHeader,
+              claimTenantId || tenantHeader,
+              claimWorkspaceId || workspaceHeader,
               resolvedUserId,
             );
+          } else {
+            const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+            const session = await iamRepo.getSession(tokenHash);
+
+            if (session?.user_id) {
+              resolvedUserId = session.user_id;
+              resolved = await resolveTenantWorkspaceContext(
+                session.tenant_id || tenantHeader,
+                session.workspace_id || workspaceHeader,
+                resolvedUserId,
+              );
+            }
           }
         } catch {
           // Backward compatibility/safety

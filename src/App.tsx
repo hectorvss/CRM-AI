@@ -136,9 +136,11 @@ function serializeNavigationTarget(target: NavigationTarget) {
 }
 
 export default function App() {
-  const [navigationTarget, setNavigationTarget] = useState<NavigationTarget>(() => parseNavigationTargetFromUrl());
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [navigationTarget, setNavigationTarget] = useState<NavigationTarget>(
+    typeof window !== 'undefined' ? parseNavigationTargetFromUrl() : DEFAULT_TARGET,
+  );
 
   const currentPage = navigationTarget.page;
 
@@ -189,6 +191,8 @@ export default function App() {
       workflowId: navigationTarget.entityType === 'workflow' ? navigationTarget.entityId : null,
     }),
     [navigationTarget],
+  );
+
   );
 
   return (

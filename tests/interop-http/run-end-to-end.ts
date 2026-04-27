@@ -458,8 +458,8 @@ if (!SKIP_MUTATING) {
 
 console.log('\n▶ Suite 8: super-agent command smoke');
 
-await test('POST /superagent/command responds successfully', async () => {
-  const res = await api('POST', '/superagent/command', {
+await test('POST /super-agent/command responds successfully', async () => {
+  const res = await api('POST', '/super-agent/command', {
     input: 'List the 3 most recent open cases',
     mode: 'investigate',
     autonomyLevel: 'supervised',

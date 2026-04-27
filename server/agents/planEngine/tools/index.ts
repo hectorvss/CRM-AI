@@ -74,6 +74,7 @@ import {
   agentEscalateTool,
 } from './agentDelegates.js';
 import { agentRunTool } from './agentRun.js';
+import { reconListIssuesTool, reconResolveIssueTool } from './reconciliation.js';
 
 export function registerAllTools(): void {
   // Orders
@@ -161,4 +162,8 @@ export function registerAllTools(): void {
   toolRegistry.register(agentFraudCheckTool);
   toolRegistry.register(agentEscalateTool);
   toolRegistry.register(agentRunTool);
+
+  // Reconciliation
+  toolRegistry.register(reconListIssuesTool);
+  toolRegistry.register(reconResolveIssueTool);
 }

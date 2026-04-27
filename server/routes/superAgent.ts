@@ -767,7 +767,7 @@ function buildWorkspacePanel(workspace: any, permissionMatrix: ReturnType<typeof
     ],
     evidence: [
       { label: 'Guardrails', value: 'Sensitive actions require confirmation and are always audited.', tone: 'success' },
-      { label: 'Permissions', value: permissionMatrix.preview.join(' • ') || 'No explicit permissions detected.', tone: 'neutral' },
+      { label: 'Permissions', value: permissionMatrix.preview.join(' â€¢ ') || 'No explicit permissions detected.', tone: 'neutral' },
     ],
     timeline: [
       { label: 'Workspace ready', value: 'Modules, agents, and guardrails are online.', time: workspace?.updated_at || workspace?.created_at || null },
@@ -900,14 +900,14 @@ function buildCasePanel(bundle: any): ContextPanel {
     entityType: 'case',
     entityId: bundle.case.id,
     title: bundle.case.case_number || bundle.case.id,
-    subtitle: `${titleCase(bundle.case.type || 'case')} · ${customerName}`,
+    subtitle: `${titleCase(bundle.case.type || 'case')} Â· ${customerName}`,
     status: titleCase(bundle.case.status),
     risk: titleCase(bundle.case.risk_level),
     description: bundle.case.ai_diagnosis || bundle.case.ai_root_cause || 'Case context loaded from the unified data plane.',
     facts: [
       { label: 'Priority', value: titleCase(bundle.case.priority) },
       { label: 'Severity', value: titleCase(bundle.case.severity || 'N/A') },
-      { label: 'Type', value: [bundle.case.type, bundle.case.sub_type].filter(Boolean).map(titleCase).join(' › ') || 'N/A' },
+      { label: 'Type', value: [bundle.case.type, bundle.case.sub_type].filter(Boolean).map(titleCase).join(' â€º ') || 'N/A' },
       { label: 'Execution', value: titleCase(bundle.case.execution_state) },
       { label: 'Approval', value: titleCase(bundle.case.approval_state) },
       { label: 'Assignee', value: bundle.case.assigned_user_id || bundle.case.assigned_team_id ? (bundle.case.assigned_user_id || bundle.case.assigned_team_id) : 'Unassigned' },
@@ -921,7 +921,7 @@ function buildCasePanel(bundle: any): ContextPanel {
     evidence: [
       { label: 'Conflict', value: describeConflict(state.conflict), tone: state.conflict ? 'warning' : 'success' },
       { label: 'Recommended action', value: bundle.case.ai_recommended_action || describeExecutionNextStep(resolve) || 'No recommendation generated yet.', tone: 'neutral' },
-      { label: 'Blockers', value: (resolve.blockers || []).slice(0, 3).map((item: any) => item.summary || item.title || item.label).filter(Boolean).join(' • ') || 'No blocking constraints returned.', tone: resolve.blockers?.length ? 'warning' : 'success' },
+      { label: 'Blockers', value: (resolve.blockers || []).slice(0, 3).map((item: any) => item.summary || item.title || item.label).filter(Boolean).join(' â€¢ ') || 'No blocking constraints returned.', tone: resolve.blockers?.length ? 'warning' : 'success' },
       ...(bundle.case.fraud_flag ? [{ label: 'Fraud flag', value: 'This case has been flagged for potential fraud.', tone: 'warning' as const }] : []),
       ...(bundle.case.ai_confidence != null ? [{ label: 'AI confidence', value: `${Math.round(bundle.case.ai_confidence * 100)}%`, tone: 'neutral' as const }] : []),
     ],
@@ -965,14 +965,14 @@ function buildOrderPanel(order: any, context: any): ContextPanel {
     const qty  = item.quantity ?? 1;
     const price = item.price != null ? formatMoney(item.price, item.currency || order.currency || 'USD') : '';
     const sku  = item.sku ? ` [${item.sku}]` : '';
-    return { label: `Item ${idx + 1}`, value: `${name}${sku} × ${qty}${price ? ` — ${price}` : ''}` };
+    return { label: `Item ${idx + 1}`, value: `${name}${sku} Ã— ${qty}${price ? ` â€” ${price}` : ''}` };
   });
 
   return {
     entityType: 'order',
     entityId: order.id,
     title: order.external_order_id || order.id,
-    subtitle: `${order.customer_name || 'Unknown customer'} · ${formatMoney(order.total_amount, order.currency || 'USD')}`,
+    subtitle: `${order.customer_name || 'Unknown customer'} Â· ${formatMoney(order.total_amount, order.currency || 'USD')}`,
     status: titleCase(order.status),
     risk: titleCase(order.risk_level),
     description: order.summary || canonical?.conflict?.summary || 'Commerce order context loaded.',
@@ -988,7 +988,7 @@ function buildOrderPanel(order: any, context: any): ContextPanel {
       ...(order.tracking_number ? [{
         label: 'Tracking',
         value: order.tracking_url
-          ? `${order.tracking_number} — ${order.tracking_url}`
+          ? `${order.tracking_number} â€” ${order.tracking_url}`
           : order.tracking_number,
       }] : []),
       ...(lineItems.length > 0 ? [{ label: 'Products', value: `${lineItems.length} item${lineItems.length !== 1 ? 's' : ''}` }] : []),
@@ -1020,7 +1020,7 @@ function buildPaymentPanel(payment: any, context: any): ContextPanel {
     entityType: 'payment',
     entityId: payment.id,
     title: payment.external_payment_id || payment.id,
-    subtitle: `${payment.customer_name || 'Unknown customer'} · ${formatMoney(payment.amount, payment.currency || 'USD')}`,
+    subtitle: `${payment.customer_name || 'Unknown customer'} Â· ${formatMoney(payment.amount, payment.currency || 'USD')}`,
     status: titleCase(payment.status),
     risk: titleCase(payment.risk_level),
     description: payment.summary || context?.case_state?.conflict?.summary || 'Payment context loaded.',
@@ -1068,7 +1068,7 @@ function buildReturnPanel(ret: any, context: any): ContextPanel {
     entityType: 'return',
     entityId: ret.id,
     title: ret.external_return_id || ret.id,
-    subtitle: `${ret.customer_name || 'Unknown customer'} · ${ret.external_order_id || ret.order_id || 'No order linked'}`,
+    subtitle: `${ret.customer_name || 'Unknown customer'} Â· ${ret.external_order_id || ret.order_id || 'No order linked'}`,
     status: titleCase(ret.status),
     risk: titleCase(ret.risk_level),
     description: ret.summary || context?.case_state?.conflict?.summary || 'Return context loaded.',
@@ -1151,7 +1151,7 @@ function buildApprovalPanel(approval: any, context: any): ContextPanel {
     entityType: 'approval',
     entityId: approvalRow.id,
     title: approvalRow.id,
-    subtitle: `${titleCase(approvalRow.action_type || 'approval')} · ${approvalRow.customer_name || context?.customer?.canonical_name || 'Unknown customer'}`,
+    subtitle: `${titleCase(approvalRow.action_type || 'approval')} Â· ${approvalRow.customer_name || context?.customer?.canonical_name || 'Unknown customer'}`,
     status: titleCase(approvalRow.status || 'pending'),
     risk: titleCase(approvalRow.risk_level || 'medium'),
     description: approvalRow.evidence_package?.summary || approvalRow.action_payload?.summary || 'Approval request loaded with backend context.',
@@ -1257,6 +1257,24 @@ function getCaseActions(req: MultiTenantRequest, bundle: any) {
         payload,
         verificationDisplay: buildVerificationDisplay(payload, bundle.case),
       }),
+    );
+  }
+
+  // NEW: Reconciliation Actions
+  if (bundle.case.has_conflict) {
+    actions.push(
+      buildAction({
+        req,
+        label: 'Analyze system conflicts',
+        description: 'System detected contradictions across modules (Order/Payment). Run reconciliation pass?',
+        permission: 'cases.read',
+        payload: {
+          kind: 'reconciliation.list_issues',
+          entityType: 'case',
+          entityId: bundle.case.id,
+          params: { caseId: bundle.case.id, status: 'open' }
+        },
+      })
     );
   }
 
@@ -1433,7 +1451,7 @@ function getWorkflowActions(req: MultiTenantRequest, workflow: any) {
   return actions;
 }
 
-// ── Verification Display Builder ──────────────────────────────────────────────
+// â”€â”€ Verification Display Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // Populates beforeState / afterState / impacts so the UI's confirmation modal
 // can show "what will change" instead of just an action label.
@@ -1480,8 +1498,8 @@ function buildVerificationDisplay(
       const lineItemSummary = lineItems.slice(0, 10).reduce((acc: Record<string, string>, item: any, idx: number) => {
         const name = item.name || item.sku || `Item ${idx + 1}`;
         const qty = item.quantity ?? 1;
-        const price = item.price != null ? ` — ${formatMoney(item.price, item.currency || entity.currency || 'USD')}` : '';
-        acc[`item_${idx + 1}`] = `${name} × ${qty}${price}`;
+        const price = item.price != null ? ` â€” ${formatMoney(item.price, item.currency || entity.currency || 'USD')}` : '';
+        acc[`item_${idx + 1}`] = `${name} Ã— ${qty}${price}`;
         return acc;
       }, {});
       return {
@@ -1573,7 +1591,7 @@ function buildVerificationDisplay(
   }
 }
 
-// ── Suggested Replies Generator ──────────────────────────────────────────────
+// â”€â”€ Suggested Replies Generator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // Produces 2-4 contextual chips so the conversation can continue naturally,
 // based on the entity touched and the operating mode.
@@ -1743,6 +1761,7 @@ function createResponse(input: {
 }
 
 async function buildResponseFromPlanOutcome(
+  req: MultiTenantRequest,
   input: string,
   runId: string,
   mode: 'investigate' | 'operate' = 'investigate',
@@ -1763,7 +1782,7 @@ async function buildResponseFromPlanOutcome(
     || response?.error
     || 'Super Agent completed the requested operation.';
 
-  // Status line — mode-aware
+  // Status line â€” mode-aware
   const traceStatus = trace?.status;
   const statusLine =
     response?.kind === 'clarification' ? 'Clarification required'
@@ -1791,12 +1810,52 @@ async function buildResponseFromPlanOutcome(
   const evidence = derivePlanEvidenceFromTrace(trace);
   const facts = derivePlanFactsFromTrace(trace);
 
-  // ── Item 1: Conversational narrative via LLM (with deterministic fallback) ──
+  // â”€â”€ Item 3 (formerly missing): Entity-specific actions from trace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Find the primary span that matches the navigation target entity and extract
+  // the raw record so we can build action buttons with real verificationDisplay.
+  let entityActions: UiAction[] = [];
+  if (navigationTarget?.entityType && navigationTarget?.entityId) {
+    const spans: any[] = Array.isArray(trace?.spans) ? trace.spans : [];
+    const primarySpan = spans.find((s: any) => {
+      const info = entityInfoFromPlanSpan(s);
+      return info?.entityId && String(info.entityId) === String(navigationTarget.entityId);
+    }) ?? spans.find((s: any) => {
+      const info = entityInfoFromPlanSpan(s);
+      return info?.entityType === navigationTarget.entityType && !!info?.entityId;
+    });
+    const entity = primarySpan?.result?.value;
+    if (entity) {
+      const raw = Array.isArray(entity) ? entity[0] : entity;
+      if (raw && typeof raw === 'object') {
+        switch (navigationTarget.entityType) {
+          case 'case':
+            entityActions = getCaseActions(req, { case: raw, orders: raw.orders ?? [], payments: raw.payments ?? [], returns: raw.returns ?? [], approvals: raw.approvals ?? [] });
+            break;
+          case 'order':
+            entityActions = getOrderActions(req, raw);
+            break;
+          case 'payment':
+            entityActions = getPaymentActions(req, raw);
+            break;
+          case 'approval':
+            entityActions = getApprovalActions(req, raw);
+            break;
+          case 'workflow':
+            entityActions = getWorkflowActions(req, raw);
+            break;
+          default:
+            break;
+        }
+      }
+    }
+  }
+
+  // â”€â”€ Item 1: Conversational narrative via LLM (with deterministic fallback) â”€â”€
   let narrative: string;
   if (response?.kind === 'clarification') {
     narrative = response.question;
   } else if (response?.kind === 'error') {
-    narrative = `I couldn't complete that — ${response.error || 'unknown error'}.`;
+    narrative = `I couldn't complete that â€” ${response.error || 'unknown error'}.`;
   } else if (response?.kind === 'plan') {
     // Try LLM-composed narrative for successful or partial executions
     try {
@@ -1818,7 +1877,7 @@ async function buildResponseFromPlanOutcome(
         narrative = summary;
       }
     } catch (err) {
-      logger.debug('composeNarrative skipped — using summary fallback', { error: String(err) });
+      logger.debug('composeNarrative skipped â€” using summary fallback', { error: String(err) });
       // Deterministic fallback by mode
       if (mode === 'operate' && response.plan?.needsApproval) {
         narrative = `I prepared the action but it needs your confirmation. ${summary}`;
@@ -1832,10 +1891,10 @@ async function buildResponseFromPlanOutcome(
     narrative = summary;
   }
 
-  // ── Item 2: Filter actions by mode (investigate suppresses execute) ─────────
+  // â”€â”€ Item 2: Filter actions by mode (investigate suppresses execute) â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const traceApprovalActions: UiAction[] = Array.isArray(trace?.approvalIds) && trace.approvalIds.length
     ? trace.approvalIds.map((approvalId: string) => buildAction({
-        req: { permissions: [] } as MultiTenantRequest,
+        req,
         label: 'Review approval',
         description: 'Open the required approval request.',
         targetPage: 'approvals',
@@ -1843,12 +1902,33 @@ async function buildResponseFromPlanOutcome(
       }))
     : [];
 
-  // ── Item 4: Contextual suggested replies ────────────────────────────────────
+  // Combine entity actions + trace approval actions, then filter by mode.
+  // In investigate mode, suppress all execute-type (write) actions â€” the user
+  // is exploring, not acting. In operate mode, all actions are shown.
+  const allEntityActions = [...entityActions, ...traceApprovalActions];
+  const finalActions = mode === 'investigate'
+    ? allEntityActions.filter((a: UiAction) => a.type !== 'execute')
+    : allEntityActions;
+
+  // â”€â”€ Item 4: Contextual suggested replies â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Use the navigationTarget entityType (derived from trace) rather than the
+  // non-existent plan.structuredIntent field.
   const suggestedReplies = generateSuggestedReplies({
     userMessage: input,
     mode,
     trace,
-    structuredIntent: response?.kind === 'plan' ? (response.plan?.structuredIntent ?? null) : null,
+    structuredIntent: navigationTarget?.entityType
+      ? ({
+          kind: navigationTarget.entityType as StructuredCommand['kind'],
+          intent: (mode === 'operate' ? 'operate' : 'investigate') as StructuredCommand['intent'],
+          targetEntityType: navigationTarget.entityType,
+          targetEntityRef: navigationTarget.entityId ?? null,
+          requestedAction: null,
+          filters: [] as string[],
+          riskLevel: 'medium' as const,
+          needsConfirmation: false,
+        } as StructuredCommand)
+      : null,
     status: traceStatus,
   });
 
@@ -1859,13 +1939,13 @@ async function buildResponseFromPlanOutcome(
     statusLine,
     sections: response?.kind === 'plan'
       ? [
-          { title: 'Plan', items: (response.plan?.steps ?? []).map((step: any) => `${step.tool} · ${step.rationale || 'No rationale'}`) },
+          { title: 'Plan', items: (response.plan?.steps ?? []).map((step: any) => `${step.tool} Â· ${step.rationale || 'No rationale'}`) },
           { title: 'Execution', items: [trace?.summary || 'Execution completed.'] },
         ]
       : response?.kind === 'clarification'
         ? [{ title: 'Clarification', items: [response.question] }]
         : [{ title: 'Execution', items: [response?.error || 'Unknown LLM error'] }],
-    actions: traceApprovalActions,
+    actions: finalActions,
     contextPanel,
     agents: [],
     suggestedReplies,
@@ -1914,8 +1994,8 @@ function parseCommandIntent(input: string, context?: CommandContext | null): Str
     text.includes('alto riesgo') || text.includes('high risk') ? 'high_risk' : null,
   ].filter(Boolean) as string[];
   const intent =
-    /(abrir|open|go to|ll[eé]vame|navega)/.test(text) ? 'open'
-    : /(por que|por qué|why|bloquead|blocked)/.test(text) ? 'explain_blocker'
+    /(abrir|open|go to|ll[eÃ©]vame|navega)/.test(text) ? 'open'
+    : /(por que|por quÃ©|why|bloquead|blocked)/.test(text) ? 'explain_blocker'
     : /(compara|compare)/.test(text) ? 'compare'
     : /(cancel|refund|reembolso|aprueba|approve|rechaza|reject|publica|publish|actualiza|update|cambia|change|cierra|close)/.test(text) ? 'operate'
     : /(busca|search)/.test(text) ? 'search'
@@ -2109,7 +2189,7 @@ async function handleCaseIntent(req: MultiTenantRequest, scope: CommandScope, in
   return createResponse({
     input,
     summary: `${bundle.case.case_number || bundle.case.id} is ${titleCase(bundle.case.status)} for ${customerName}. ${describeConflict(state.conflict) || bundle.case.ai_root_cause || 'The case is synchronized and ready for review.'}`,
-    statusLine: `${titleCase(bundle.case.type || 'case')} · ${titleCase(bundle.case.priority || 'normal')} priority`,
+    statusLine: `${titleCase(bundle.case.type || 'case')} Â· ${titleCase(bundle.case.priority || 'normal')} priority`,
     sections: [
       {
         title: 'Summary',
@@ -2131,7 +2211,7 @@ async function handleCaseIntent(req: MultiTenantRequest, scope: CommandScope, in
         title: 'Guardrails',
         items: [
           resolve.blockers?.length
-            ? `Blocking conditions: ${resolve.blockers.slice(0, 3).map((item: any) => item.summary || item.title || item.label).join(' • ')}`
+            ? `Blocking conditions: ${resolve.blockers.slice(0, 3).map((item: any) => item.summary || item.title || item.label).join(' â€¢ ')}`
             : 'No blocking approval or execution constraints returned.',
         ],
       },
@@ -2166,7 +2246,7 @@ async function handleOrderIntent(req: MultiTenantRequest, scope: CommandScope, i
   return createResponse({
     input,
     summary: `${order.external_order_id || order.id} is ${titleCase(order.status)} for ${order.customer_name || 'Unknown customer'}. ${order.conflict_detected || order.summary || 'The order is synchronized and available for action.'}`,
-    statusLine: `${formatMoney(order.total_amount, order.currency || 'USD')} · ${titleCase(order.fulfillment_status || 'N/A')}`,
+    statusLine: `${formatMoney(order.total_amount, order.currency || 'USD')} Â· ${titleCase(order.fulfillment_status || 'N/A')}`,
     sections: [
       {
         title: 'Summary',
@@ -2213,7 +2293,7 @@ async function handlePaymentIntent(req: MultiTenantRequest, scope: CommandScope,
   return createResponse({
     input,
     summary: `${payment.external_payment_id || payment.id} is ${titleCase(payment.status)} for ${payment.customer_name || 'Unknown customer'}. ${payment.conflict_detected || payment.summary || 'The payment state is loaded and actionable.'}`,
-    statusLine: `${formatMoney(payment.amount, payment.currency || 'USD')} · ${titleCase(payment.psp || 'N/A')}`,
+    statusLine: `${formatMoney(payment.amount, payment.currency || 'USD')} Â· ${titleCase(payment.psp || 'N/A')}`,
     sections: [
       {
         title: 'Summary',
@@ -2260,7 +2340,7 @@ async function handleReturnIntent(req: MultiTenantRequest, scope: CommandScope, 
   return createResponse({
     input,
     summary: `${ret.external_return_id || ret.id} is ${titleCase(ret.status)} for ${ret.customer_name || 'Unknown customer'}. ${ret.conflict_detected || ret.summary || 'The return context is available for review.'}`,
-    statusLine: `${titleCase(ret.reason || ret.return_reason || 'return')} · ${titleCase(ret.refund_status || 'N/A')}`,
+    statusLine: `${titleCase(ret.reason || ret.return_reason || 'return')} Â· ${titleCase(ret.refund_status || 'N/A')}`,
     sections: [
       {
         title: 'Summary',
@@ -2312,7 +2392,7 @@ async function handleCustomerIntent(req: MultiTenantRequest, scope: CommandScope
   return createResponse({
     input,
     summary: `${customer.canonical_name || customer.id} has ${customer.state_snapshot?.metrics?.open_cases || customer.open_cases || 0} open cases and ${customer.state_snapshot?.metrics?.active_conflicts || customer.active_conflicts || 0} active conflicts.`,
-    statusLine: `${titleCase(customer.segment || 'customer')} · ${titleCase(customer.risk_level || 'low')} risk`,
+    statusLine: `${titleCase(customer.segment || 'customer')} Â· ${titleCase(customer.risk_level || 'low')} risk`,
     sections: [
       {
         title: 'Summary',
@@ -2363,7 +2443,7 @@ async function handleApprovalQueueIntent(req: MultiTenantRequest, scope: Command
       {
         title: 'Queue snapshot',
         items: top.length
-          ? top.map((item: any) => `${item.id} · ${titleCase(item.action_type || 'approval')} · ${item.customer_name || 'Unknown customer'} · ${titleCase(item.risk_level || 'medium')} risk`)
+          ? top.map((item: any) => `${item.id} Â· ${titleCase(item.action_type || 'approval')} Â· ${item.customer_name || 'Unknown customer'} Â· ${titleCase(item.risk_level || 'medium')} risk`)
           : ['Approval queue is clear.'],
       },
     ],
@@ -2407,7 +2487,7 @@ async function handlePaymentQueueIntent(req: MultiTenantRequest, scope: CommandS
       {
         title: 'Payments requiring attention',
         items: flagged.length
-          ? flagged.map((payment: any) => `${payment.external_payment_id || payment.id} · ${payment.customer_name || 'Unknown customer'} · ${titleCase(payment.status || 'unknown')} · ${payment.conflict_detected || payment.summary || 'Review payment state'}`)
+          ? flagged.map((payment: any) => `${payment.external_payment_id || payment.id} Â· ${payment.customer_name || 'Unknown customer'} Â· ${titleCase(payment.status || 'unknown')} Â· ${payment.conflict_detected || payment.summary || 'Review payment state'}`)
           : ['Payment queue looks healthy.'],
       },
     ],
@@ -2440,15 +2520,15 @@ async function handleConflictIntent(req: MultiTenantRequest, scope: CommandScope
     ...cases
       .filter((item: any) => item.has_reconciliation_conflicts || item.conflict_severity || item.ai_root_cause)
       .slice(0, 2)
-      .map((item: any) => ({ label: 'Case', value: `${item.case_number || item.id} · ${item.ai_root_cause || item.latest_message_preview || 'Conflict detected'}` })),
+      .map((item: any) => ({ label: 'Case', value: `${item.case_number || item.id} Â· ${item.ai_root_cause || item.latest_message_preview || 'Conflict detected'}` })),
     ...orders
       .filter((item: any) => item.conflict_detected || item.has_conflict)
       .slice(0, 2)
-      .map((item: any) => ({ label: 'Order', value: `${item.external_order_id || item.id} · ${item.conflict_detected || item.summary || 'Conflict detected'}` })),
+      .map((item: any) => ({ label: 'Order', value: `${item.external_order_id || item.id} Â· ${item.conflict_detected || item.summary || 'Conflict detected'}` })),
     ...payments
       .filter((item: any) => item.conflict_detected || item.has_conflict)
       .slice(0, 2)
-      .map((item: any) => ({ label: 'Payment', value: `${item.external_payment_id || item.id} · ${item.conflict_detected || item.summary || 'Conflict detected'}` })),
+      .map((item: any) => ({ label: 'Payment', value: `${item.external_payment_id || item.id} Â· ${item.conflict_detected || item.summary || 'Conflict detected'}` })),
   ];
 
   return createResponse({
@@ -2460,7 +2540,7 @@ async function handleConflictIntent(req: MultiTenantRequest, scope: CommandScope
     sections: [
       {
         title: 'Conflict snapshot',
-        items: conflicts.length ? conflicts.map((item) => `${item.label} · ${item.value}`) : ['No cross-system conflicts detected.'],
+        items: conflicts.length ? conflicts.map((item) => `${item.label} Â· ${item.value}`) : ['No cross-system conflicts detected.'],
       },
       {
         title: 'Recommended next step',
@@ -2508,7 +2588,7 @@ async function handleWorkflowIntent(req: MultiTenantRequest, scope: CommandScope
       {
         title: 'Workflow snapshot',
         items: top.length
-          ? top.map((workflow: any) => `${workflow.name || workflow.id} · ${titleCase(workflow.version_status || 'draft')} · trigger ${titleCase(workflow.trigger?.type || workflow.trigger?.event || 'manual')}`)
+          ? top.map((workflow: any) => `${workflow.name || workflow.id} Â· ${titleCase(workflow.version_status || 'draft')} Â· trigger ${titleCase(workflow.trigger?.type || workflow.trigger?.event || 'manual')}`)
           : ['No workflows returned by the runtime.'],
       },
     ],
@@ -2542,7 +2622,7 @@ async function handleAgentIntent(input: string, agents: any[]) {
       {
         title: 'Available specialists',
         items: top.length
-          ? top.map((agent: any) => `${agent.name || agent.slug} · ${titleCase(agent.runtime || 'system')} · ${titleCase(agent.mode || agent.version_status || 'available')}`)
+          ? top.map((agent: any) => `${agent.name || agent.slug} Â· ${titleCase(agent.runtime || 'system')} Â· ${titleCase(agent.mode || agent.version_status || 'available')}`)
           : ['No agent registry entries available.'],
       },
     ],
@@ -2556,7 +2636,7 @@ async function handleAgentIntent(input: string, agents: any[]) {
       description: 'The Super Agent remains the single conversational entrypoint and delegates to specialists when clarity or execution requires it.',
       facts: top.slice(0, 6).map((agent: any) => ({
         label: agent.name || agent.slug,
-        value: `${titleCase(agent.runtime || 'system')} · ${titleCase(agent.mode || agent.version_status || 'available')}`,
+        value: `${titleCase(agent.runtime || 'system')} Â· ${titleCase(agent.mode || agent.version_status || 'available')}`,
       })),
       evidence: [
         { label: 'Orchestration model', value: 'Supervisor-led coordination with specialist delegation.', tone: 'success' },
@@ -2627,10 +2707,10 @@ async function handleSearchIntent(req: MultiTenantRequest, scope: CommandScope, 
   ]);
 
   const hits = [
-    ...cases.slice(0, 2).map((item: any) => ({ label: 'Case', value: `${item.case_number || item.id} · ${item.latest_message_preview || item.ai_diagnosis || item.type || 'Case result'}` })),
-    ...orders.slice(0, 2).map((item: any) => ({ label: 'Order', value: `${item.external_order_id || item.id} · ${item.customer_name || 'Unknown customer'} · ${titleCase(item.status || 'unknown')}` })),
-    ...customers.slice(0, 2).map((item: any) => ({ label: 'Customer', value: `${item.canonical_name || item.id} · ${item.canonical_email || item.phone || 'Customer result'}` })),
-    ...payments.slice(0, 2).map((item: any) => ({ label: 'Payment', value: `${item.external_payment_id || item.id} · ${titleCase(item.status || 'unknown')}` })),
+    ...cases.slice(0, 2).map((item: any) => ({ label: 'Case', value: `${item.case_number || item.id} Â· ${item.latest_message_preview || item.ai_diagnosis || item.type || 'Case result'}` })),
+    ...orders.slice(0, 2).map((item: any) => ({ label: 'Order', value: `${item.external_order_id || item.id} Â· ${item.customer_name || 'Unknown customer'} Â· ${titleCase(item.status || 'unknown')}` })),
+    ...customers.slice(0, 2).map((item: any) => ({ label: 'Customer', value: `${item.canonical_name || item.id} Â· ${item.canonical_email || item.phone || 'Customer result'}` })),
+    ...payments.slice(0, 2).map((item: any) => ({ label: 'Payment', value: `${item.external_payment_id || item.id} Â· ${titleCase(item.status || 'unknown')}` })),
   ];
 
   return createResponse({
@@ -2642,7 +2722,7 @@ async function handleSearchIntent(req: MultiTenantRequest, scope: CommandScope, 
     sections: [
       {
         title: 'Search results',
-        items: hits.length ? hits.map((hit) => `${hit.label} · ${hit.value}`) : ['Try a case number, order ID, payment ID, or customer name.'],
+        items: hits.length ? hits.map((hit) => `${hit.label} Â· ${hit.value}`) : ['Try a case number, order ID, payment ID, or customer name.'],
       },
     ],
     actions: [
@@ -2959,7 +3039,7 @@ async function executeAction(req: MultiTenantRequest, scope: CommandScope, paylo
   }
 }
 
-// ── GET /alerts ───────────────────────────────────────────────────────────────
+// â”€â”€ GET /alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Returns proactive workspace-level alerts: SLA brechas, churn risk, fraud flags.
 // Called from the frontend bootstrap to surface proactive suggestions.
 
@@ -3236,7 +3316,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           { dryRun: mode !== 'operate' },
         );
 
-        const finalResponse = await buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
+        const finalResponse = await buildResponseFromPlanOutcome(req, input, runId, mode, llmResponse, trace);
 
         if (finalResponse.navigationTarget) {
           planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
@@ -3495,7 +3575,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       },
     });
 
-    // ── Routing: LLM Plan Engine (secondary path) ───────────────────────────
+    // â”€â”€ Routing: LLM Plan Engine (secondary path) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // This secondary LLM block runs ONLY when useLlmFirst=false (i.e. when
     // SUPER_AGENT_LEGACY_ROUTING=true forces the regex path first).
     // When useLlmFirst=true the LLM already ran above (lines 3147-3273) and
@@ -3521,7 +3601,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           { dryRun: mode === 'investigate' },
         );
 
-        const llmFinalResponse = await buildResponseFromPlanOutcome(input, runId, mode, llmResponse, trace);
+        const llmFinalResponse = await buildResponseFromPlanOutcome(req, input, runId, mode, llmResponse, trace);
 
         if (llmFinalResponse.navigationTarget) {
           planEngine.rememberTarget(sessionId, llmFinalResponse.navigationTarget);
@@ -3556,7 +3636,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           runId,
           error: llmSecondaryError instanceof Error ? llmSecondaryError.message : String(llmSecondaryError),
         });
-        // Fall through — send the already-computed legacy finalResponse below
+        // Fall through â€” send the already-computed legacy finalResponse below
       }
     }
 
@@ -3720,7 +3800,7 @@ router.post('/execute', async (req: MultiTenantRequest, res) => {
   }
 });
 
-// ── Plan Engine endpoints ────────────────────────────────────────────────────
+// â”€â”€ Plan Engine endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // These are the NEW LLM-driven routes. They run in parallel to the existing
 // regex-based routes. Feature flag SUPER_AGENT_LLM_ROUTING=true enables them.
@@ -3763,7 +3843,7 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
       { dryRun: dryRun === true },
     );
 
-    const plannedResponse = await buildResponseFromPlanOutcome(userMessage.trim(), effectiveSessionId, 'investigate', response, trace);
+    const plannedResponse = await buildResponseFromPlanOutcome(req, userMessage.trim(), effectiveSessionId, 'investigate', response, trace);
     if (plannedResponse.navigationTarget) {
       planEngine.rememberTarget(effectiveSessionId, plannedResponse.navigationTarget);
     }
@@ -3876,3 +3956,4 @@ router.get('/metrics', (req: MultiTenantRequest, res) => {
 });
 
 export default router;
+

@@ -1,13 +1,30 @@
-﻿/**
+/**
  * CRM AI — API Client
  * All frontend ↔ backend communication goes through this module.
  */
 
+import { supabase } from './supabase';
+
 const BASE = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-tenant-id': 'org_default',
+    'x-workspace-id': 'ws_default',
+    'x-user-id': 'system',
+    ...(options?.headers as Record<string, string> || {}),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers,
     ...options,
   });
   if (!res.ok) {

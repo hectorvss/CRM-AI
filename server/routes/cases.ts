@@ -41,6 +41,49 @@ router.get('/', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
+router.post('/', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const caseId = crypto.randomUUID();
+    const caseNumber = `TEST-${Math.floor(Math.random() * 1000000)}`;
+    const data = {
+      id: caseId,
+      case_number: caseNumber,
+      tenant_id: req.tenantId!,
+      workspace_id: req.workspaceId!,
+      type: req.body.type || 'general',
+      priority: req.body.priority || 'medium',
+      status: req.body.status || 'open',
+      customer_id: req.body.customer_id || null,
+      assigned_user_id: req.body.assigned_user_id || null,
+      source_channel: req.body.source_channel || 'web',
+      tags: req.body.tags || [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    await caseRepository.createCase(scope, data);
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CASE_CREATED',
+      entityType: 'case',
+      entityId: caseId,
+      newValue: { type: data.type, status: data.status },
+    });
+
+    res.status(201).json(data);
+  } catch (error) {
+    console.error('Error creating case:', error);
+    if (error && typeof error === 'object') {
+      console.error('Details:', JSON.stringify(error));
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.get('/:id', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };

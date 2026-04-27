@@ -1,8 +1,8 @@
 /**
  * tests/integration/webhook-to-case.test.ts
  *
- * End-to-end integration test: webhook → canonical_event → case auto-creation
- * → workflow_event_log durability.
+ * End-to-end integration test: webhook â†’ canonical_event â†’ case auto-creation
+ * â†’ workflow_event_log durability.
  *
  * Requires a live Supabase connection (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY).
  * Uses tenant_id='tenant_1' / workspace_id='ws_default' (the default seed data).
@@ -22,20 +22,20 @@ import { createCanonicalRepository } from '../../server/data/canonical.js';
 import { handleWebhookProcess } from '../../server/queue/handlers/webhookProcess.js';
 import { fireWorkflowEvent } from '../../server/lib/workflowEventBus.js';
 
-// ── Config ────────────────────────────────────────────────────────────────────
+// â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const TENANT_ID    = 'tenant_1';
 const WORKSPACE_ID = 'ws_default';
 const SCOPE        = { tenantId: TENANT_ID, workspaceId: WORKSPACE_ID };
 const RUN_ID       = randomUUID().slice(0, 8);  // unique per test run
 
-// IDs created during this run — collected for cleanup
+// IDs created during this run â€” collected for cleanup
 const createdWebhookIds:    string[] = [];
 const createdCanonicalIds:  string[] = [];
 const createdCaseIds:       string[] = [];
 const createdEventLogIds:   string[] = [];
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function makeJobCtx(extra: Record<string, any> = {}) {
   return {
@@ -44,8 +44,9 @@ function makeJobCtx(extra: Record<string, any> = {}) {
     tenantId:    TENANT_ID,
     workspaceId: WORKSPACE_ID,
     userId:      'user_test',
+    attempt:     1,
     ...extra,
-  };
+  } as any;
 }
 
 /**
@@ -79,7 +80,7 @@ function flushMicrotasks(ms = 300): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 let passed = 0;
 let failed = 0;
@@ -89,18 +90,18 @@ async function test(label: string, fn: () => Promise<void>): Promise<void> {
   try {
     await fn();
     passed++;
-    console.log(`  ✓ ${label}`);
+    console.log(`  âœ“ ${label}`);
   } catch (err: any) {
     failed++;
     const msg = err?.message ?? String(err);
-    errors.push(`  ✗ ${label}: ${msg}`);
-    console.error(`  ✗ ${label}: ${msg}`);
+    errors.push(`  âœ— ${label}: ${msg}`);
+    console.error(`  âœ— ${label}: ${msg}`);
   }
 }
 
-// ── Suite 1: Stripe dispute — full pipeline ───────────────────────────────────
+// â”€â”€ Suite 1: Stripe dispute â€” full pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-console.log('\n▶ Suite 1: Stripe dispute webhook → canonical → case');
+console.log('\nâ–¶ Suite 1: Stripe dispute webhook â†’ canonical â†’ case');
 
 await test('inserts webhook_event and handler marks it processed', async () => {
   const webhookId = await seedWebhookEvent({
@@ -114,7 +115,7 @@ await test('inserts webhook_event and handler marks it processed', async () => {
   });
 
   await handleWebhookProcess(
-    { webhookEventId: webhookId, source: 'stripe', rawBody: '' },
+    { webhookEventId: webhookId, source: 'stripe', rawBody: '', headers: {} },
     makeJobCtx(),
   );
 
@@ -143,7 +144,7 @@ await test('canonical_event created with correct fields', async () => {
   });
 
   await handleWebhookProcess(
-    { webhookEventId: webhookId, source: 'stripe', rawBody: '' },
+    { webhookEventId: webhookId, source: 'stripe', rawBody: '', headers: {} },
     makeJobCtx(),
   );
 
@@ -183,7 +184,7 @@ await test('deduplication: second run with same topic+entity reuses canonical_ev
     payload:   { id: `dedup-evt1-${RUN_ID}`, created: Math.floor(Date.now()/1000), data: { object: { id: entityId } } },
   });
   await handleWebhookProcess(
-    { webhookEventId: webhookId1, source: 'stripe', rawBody: '' },
+    { webhookEventId: webhookId1, source: 'stripe', rawBody: '', headers: {} },
     makeJobCtx(),
   );
 
@@ -192,14 +193,14 @@ await test('deduplication: second run with same topic+entity reuses canonical_ev
   assert.ok(first, 'First run should create canonical_event');
   createdCanonicalIds.push(first.id);
 
-  // Second run — same entity ID, different webhook_event
+  // Second run â€” same entity ID, different webhook_event
   const webhookId2 = await seedWebhookEvent({
     source:    'stripe',
     eventType: 'charge.dispute.created',
     payload:   { id: `dedup-evt2-${RUN_ID}`, created: Math.floor(Date.now()/1000), data: { object: { id: entityId } } },
   });
   await handleWebhookProcess(
-    { webhookEventId: webhookId2, source: 'stripe', rawBody: '' },
+    { webhookEventId: webhookId2, source: 'stripe', rawBody: '', headers: {} },
     makeJobCtx(),
   );
 
@@ -227,11 +228,11 @@ await test('auto-creates case for charge.dispute.created (CASE_AUTO_CREATE_TOPIC
   });
 
   await handleWebhookProcess(
-    { webhookEventId: webhookId, source: 'stripe', rawBody: '' },
+    { webhookEventId: webhookId, source: 'stripe', rawBody: '', headers: {} },
     makeJobCtx(),
   );
 
-  // Auto-case creation is async (setImmediate) — give it time to complete
+  // Auto-case creation is async (setImmediate) â€” give it time to complete
   await flushMicrotasks(600);
 
   const supabase = getSupabaseAdmin();
@@ -270,7 +271,7 @@ await test('no auto-case for non-triggering topic (customers/create)', async () 
     .eq('source_system', 'webhook:shopify');
 
   await handleWebhookProcess(
-    { webhookEventId: webhookId, source: 'shopify', rawBody: '' },
+    { webhookEventId: webhookId, source: 'shopify', rawBody: '', headers: {} },
     makeJobCtx(),
   );
   await flushMicrotasks(400);
@@ -284,9 +285,9 @@ await test('no auto-case for non-triggering topic (customers/create)', async () 
   assert.equal(after, before, 'customers/create should NOT auto-create a case');
 });
 
-// ── Suite 2: Shopify order/cancelled → case ───────────────────────────────────
+// â”€â”€ Suite 2: Shopify order/cancelled â†’ case â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-console.log('\n▶ Suite 2: Shopify order cancelled → case');
+console.log('\nâ–¶ Suite 2: Shopify order cancelled â†’ case');
 
 await test('shopify orders/cancelled auto-creates order_issue case', async () => {
   const orderName = `ORDER-${RUN_ID}`;
@@ -297,7 +298,7 @@ await test('shopify orders/cancelled auto-creates order_issue case', async () =>
   });
 
   await handleWebhookProcess(
-    { webhookEventId: webhookId, source: 'shopify', rawBody: '' },
+    { webhookEventId: webhookId, source: 'shopify', rawBody: '', headers: {} },
     makeJobCtx(),
   );
   await flushMicrotasks(600);
@@ -320,9 +321,9 @@ await test('shopify orders/cancelled auto-creates order_issue case', async () =>
   createdCaseIds.push(...(cases || []).map((x: any) => x.id));
 });
 
-// ── Suite 3: Durable event bus ────────────────────────────────────────────────
+// â”€â”€ Suite 3: Durable event bus â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-console.log('\n▶ Suite 3: Durable workflow_event_log');
+console.log('\nâ–¶ Suite 3: Durable workflow_event_log');
 
 await test('fireWorkflowEvent persists a row in workflow_event_log', async () => {
   const eventType = `test.integration.${RUN_ID}`;
@@ -373,9 +374,9 @@ await test('workflow_event_log row has correct tenant_id and workspace_id', asyn
   createdEventLogIds.push(...(rows || []).map((r: any) => r.id));
 });
 
-// ── Suite 4: Raw payload JSONB ────────────────────────────────────────────────
+// â”€â”€ Suite 4: Raw payload JSONB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-console.log('\n▶ Suite 4: raw_payload JSONB handling');
+console.log('\nâ–¶ Suite 4: raw_payload JSONB handling');
 
 await test('handler parses JSONB raw_payload (not a string) without throwing', async () => {
   // Supabase stores raw_payload as JSONB; on retrieval it's a JS object, NOT a string.
@@ -397,7 +398,7 @@ await test('handler parses JSONB raw_payload (not a string) without throwing', a
 
   // Should NOT throw
   await handleWebhookProcess(
-    { webhookEventId: webhookId, source: 'stripe', rawBody: '' },
+    { webhookEventId: webhookId, source: 'stripe', rawBody: '', headers: {} },
     makeJobCtx(),
   );
   await flushMicrotasks(500);
@@ -425,9 +426,9 @@ await test('handler parses JSONB raw_payload (not a string) without throwing', a
   createdCaseIds.push(...(cases || []).map((x: any) => x.id));
 });
 
-// ── Cleanup ───────────────────────────────────────────────────────────────────
+// â”€â”€ Cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-console.log('\n▶ Cleanup: removing test data...');
+console.log('\nâ–¶ Cleanup: removing test data...');
 
 const supabase = getSupabaseAdmin();
 
@@ -451,9 +452,9 @@ console.log(
   `${createdEventLogIds.length} event log rows`,
 );
 
-// ── Summary ──────────────────────────────────────────────────────────────────
+// â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-console.log(`\n${'─'.repeat(60)}`);
+console.log(`\n${'â”€'.repeat(60)}`);
 if (errors.length > 0) {
   console.error('\nFailures:');
   errors.forEach((e) => console.error(e));
@@ -461,3 +462,5 @@ if (errors.length > 0) {
 console.log(`\nIntegration suite: ${passed} passed, ${failed} failed`);
 
 if (failed > 0) process.exit(1);
+
+
