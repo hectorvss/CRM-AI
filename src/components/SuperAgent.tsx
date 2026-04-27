@@ -455,6 +455,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const streamRunIdRef = useRef<string | null>(null);
   const streamMessageIdRef = useRef<string | null>(null);
   const modeLabel = mode === 'investigate' ? 'Investigate' : 'Operate';
+  const planSuggestionVisible = !planMode && /\bplan\b/i.test(composerText.trim());
 
   useEffect(() => {
     let cancelled = false;
@@ -765,6 +766,19 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     }
   }
 
+  function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      setPlanMode(true);
+      setOpenControlMenu(null);
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void sendPrompt();
+    }
+  }
+
   async function confirmPendingAction() {
     if (!pendingAction?.payload || isExecuting) return;
     setIsExecuting(true);
@@ -1052,10 +1066,27 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             ) : null}
 
             <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+              {planSuggestionVisible ? (
+                <div className="flex justify-center px-4 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanMode(true);
+                      setOpenControlMenu(null);
+                    }}
+                    className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[11px] text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-900 dark:hover:bg-blue-950/40 dark:hover:text-blue-200"
+                  >
+                    <span className="material-symbols-outlined text-[14px] text-blue-600 dark:text-blue-300">playlist_add_check</span>
+                    <span className="font-medium text-gray-900 dark:text-white">Create a plan</span>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-300">Shift + Tab</span>
+                    <span className="text-blue-600 dark:text-blue-300">Use plan mode</span>
+                  </button>
+                </div>
+              ) : null}
               <textarea
                 value={composerText}
                 onChange={(e) => setComposerText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendPrompt(); } }}
+                onKeyDown={handleComposerKeyDown}
                 placeholder={
                   planMode
                     ? 'Plan the next steps, review branches, or outline an execution path...'
@@ -1064,7 +1095,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     : 'Ask about an order, payment, customer, case, or approval...'
                 }
                 rows={2}
-                className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
+                className={`w-full resize-none bg-transparent px-4 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500 ${planSuggestionVisible ? 'pt-2 pb-1' : 'pt-3 pb-1'}`}
               />
               <div ref={controlBarRef} className="flex items-center justify-between gap-3 px-3 pb-3 pt-1">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -1109,26 +1140,38 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                               {mode === option.value ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
                             </button>
                           ))}
+                          <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPlanMode((current) => !current);
+                              setOpenControlMenu(null);
+                            }}
+                            className={`flex w-full items-start justify-between rounded-xl px-3 py-2 text-left transition-colors ${
+                              planMode
+                                ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200'
+                                : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                            }`}
+                          >
+                            <div>
+                              <div className="text-xs font-semibold">Plan</div>
+                              <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Outline branches, compare options, and prepare an execution path.</div>
+                            </div>
+                            {planMode ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
+                          </button>
                         </div>
                       </div>
                     ) : null}
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setPlanMode((current) => !current)}
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                      planMode
-                        ? 'text-gray-900 dark:text-white'
-                        : 'text-gray-500 dark:text-gray-400'
-                    } hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-white`}
-                  >
-                    Plan
-                  </button>
-                </div>
-                <div className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
-                <div className="flex flex-wrap items-center gap-1.5">
+                  {planMode ? (
+                    <button
+                      type="button"
+                      onClick={() => setPlanMode(false)}
+                      className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-900/50"
+                    >
+                      Plan
+                    </button>
+                  ) : null}
                   <div className="relative">
                     <button
                       type="button"
@@ -1167,6 +1210,8 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                       </div>
                     ) : null}
                   </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
                   <div className="relative">
                     <button
                       type="button"
