@@ -10,8 +10,11 @@
  */
 
 import { createCommerceRepository, createAuditRepository } from '../../../data/index.js';
+import { integrationRegistry } from '../../../integrations/registry.js';
+import type { WritableOrders } from '../../../integrations/types.js';
 import type { ToolSpec } from '../types.js';
 import { s } from '../schema.js';
+import { logger } from '../../../utils/logger.js';
 
 const commerceRepo = createCommerceRepository();
 const auditRepo = createAuditRepository();
@@ -113,25 +116,53 @@ export const orderCancelTool: ToolSpec<OrderCancelArgs, unknown> = {
 
     const scope = { tenantId: context.tenantId, workspaceId: context.workspaceId ?? '' };
 
-    const order = await commerceRepo.getOrder(scope, args.orderId);
+    const order = await commerceRepo.getOrder(scope, args.orderId) as any;
     if (!order) return { ok: false, error: 'Order not found', errorCode: 'NOT_FOUND' };
 
+    const reason = args.reason ?? 'Cancelled via Super Agent';
+
+    // ── Attempt real Shopify cancellation if adapter is configured ────────────
+    let executedVia: 'shopify' | 'db-only' = 'db-only';
+    const shopifyAdapter = integrationRegistry.get('shopify') as unknown as (WritableOrders & { cancelOrder: any }) | null;
+    const externalOrderId: string | null = order.external_order_id ?? order.shopify_id ?? null;
+
+    if (shopifyAdapter && typeof shopifyAdapter.cancelOrder === 'function' && externalOrderId) {
+      try {
+        await shopifyAdapter.cancelOrder({
+          orderExternalId: externalOrderId,
+          reason,
+          email: true,
+          restock: true,
+        });
+        executedVia = 'shopify';
+        logger.info('order.cancel: Shopify order cancelled', { orderId: args.orderId, externalOrderId });
+      } catch (shopifyErr) {
+        logger.warn('order.cancel: Shopify call failed, continuing with DB-only update', {
+          orderId: args.orderId,
+          error: String(shopifyErr instanceof Error ? shopifyErr.message : shopifyErr),
+        });
+      }
+    }
+
+    // ── Always update CRM DB ──────────────────────────────────────────────────
     await commerceRepo.updateOrder(scope, args.orderId, {
       status: 'cancelled',
+      fulfillment_status: order.fulfillment_status ?? 'not_fulfilled',
       approval_status: 'not_required',
-      summary: args.reason ?? 'Cancelled via Super Agent',
-      updated_at: new Date().toISOString(),
+      recommended_action: 'No further action needed',
+      last_update: reason,
+      system_states: { ...(order.system_states ?? {}), canonical: 'cancelled', crm_ai: 'cancelled' },
     });
 
     await context.audit({
       action: 'PLAN_ENGINE_ORDER_CANCELLED',
       entityType: 'order',
       entityId: args.orderId,
-      oldValue: { status: (order as any).status },
-      newValue: { status: 'cancelled', reason: args.reason ?? null },
+      oldValue: { status: order.status },
+      newValue: { status: 'cancelled', reason, executedVia },
       metadata: { source: 'plan-engine', planId: context.planId },
     });
 
-    return { ok: true, value: { orderId: args.orderId, status: 'cancelled' } };
+    return { ok: true, value: { orderId: args.orderId, status: 'cancelled', executedVia } };
   },
 };

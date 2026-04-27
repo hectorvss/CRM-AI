@@ -1237,6 +1237,27 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     return matchesFilter && (!query.trim() || haystack.includes(query.trim().toLowerCase()));
   }), [workflows, activeFilter, query]);
 
+  // ── Live run updates via SSE ────────────────────────────────────────────────
+  // Listen for workflow:run:started / workflow:run:updated events and refresh
+  // the runResult badge in the active workflow panel without a full page reload.
+  useEffect(() => {
+    const es = new EventSource('/api/sse');
+    const onRunUpdated = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data?.runId && data?.status) {
+          setRunResult((prev: any) => {
+            if (!prev || prev.id !== data.runId) return prev;
+            return { ...prev, status: data.status, error: data.error ?? prev.error };
+          });
+        }
+      } catch { /* ignore malformed events */ }
+    };
+    es.addEventListener('workflow:run:updated', onRunUpdated);
+    es.addEventListener('workflow:run:started', onRunUpdated);
+    return () => es.close();
+  }, []);
+
   const openAddPanel = useCallback((mode: AddPanelMode = {}) => {
     setAddPanel(mode);
     setAddPanelView('categories');
@@ -2091,8 +2112,8 @@ function WorkflowCardDropdown(props: {
     if (!open) return;
     const close = (e: MouseEvent) => {
       if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
+        menuRef.current && !menuRef.current.contains(e.target as Element) &&
+        btnRef.current && !btnRef.current.contains(e.target as Element)
       ) setOpen(false);
     };
     const closeOnScroll = () => setOpen(false);
@@ -2269,7 +2290,7 @@ function WorkflowEditorTopbar(props: {
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Element)) {
         setMenuOpen(null);
       }
     };
@@ -2599,7 +2620,7 @@ function AgentPickerField({
   // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Element)) setOpen(false);
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);

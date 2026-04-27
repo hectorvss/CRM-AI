@@ -19,6 +19,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
 import { config as appConfig } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { broadcastSSE } from './sse.js';
 
 const router = Router();
 const workflowRepository = createWorkflowRepository();
@@ -1561,6 +1562,12 @@ async function executeWorkflowVersion({
   });
   if (runError) throw runError;
 
+  // Broadcast run started
+  broadcastSSE(tenantId, 'workflow:run:started', {
+    runId, workflowId: version.workflow_id ?? '', versionId: version.id,
+    triggerType: triggerType ?? 'manual', startedAt: now,
+  });
+
   const steps: any[] = [];
   // BFS queue: each entry carries the node plus the input data snapshot for that branch
   const queue: Array<{ node: any; branchInput: any; order: number }> = [
@@ -1642,6 +1649,16 @@ async function executeWorkflowVersion({
     entityType: 'workflow',
     entityId: workflowId,
     metadata: { runId, retryOfRunId, stepCount: steps.length, finalStatus, finalError },
+  });
+
+  // Broadcast run completed/failed/paused
+  broadcastSSE(tenantId, 'workflow:run:updated', {
+    runId,
+    workflowId: workflowId ?? '',
+    status: finalStatus,
+    stepCount: steps.length,
+    error: finalError,
+    endedAt: new Date().toISOString(),
   });
 
   return { id: runId, status: finalStatus, error: finalError, steps, retryOfRunId };
@@ -1849,8 +1866,9 @@ router.post('/', requirePermission('workflows.write'), async (req: MultiTenantRe
       });
     } catch (versionError) {
       const supabase = getSupabaseAdmin();
-      await supabase.from('workflow_versions').delete().eq('id', versionId).catch(() => null);
-      await supabase.from('workflow_definitions').delete().eq('id', workflowId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId).catch(() => null);
+      // Best-effort cleanup — ignore errors so the original error propagates
+      try { await supabase.from('workflow_versions').delete().eq('id', versionId); } catch { /* ignore */ }
+      try { await supabase.from('workflow_definitions').delete().eq('id', workflowId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId); } catch { /* ignore */ }
       throw versionError;
     }
 

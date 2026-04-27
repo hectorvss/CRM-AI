@@ -201,16 +201,20 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
-router.post('/:id/internal-note', async (req: MultiTenantRequest, res: Response) => {
+async function handleInternalNote(req: MultiTenantRequest, res: Response): Promise<void> {
   try {
     const { content } = req.body;
     if (!content || !String(content).trim()) {
-      return res.status(400).json({ error: 'Note content is required' });
+      res.status(400).json({ error: 'Note content is required' });
+      return;
     }
 
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
     const bundle = await caseRepository.getBundle(scope, req.params.id);
-    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+    if (!bundle) {
+      res.status(404).json({ error: 'Case not found' });
+      return;
+    }
 
     const note = await conversationRepository.createInternalNote(scope, {
       caseId: req.params.id,
@@ -265,12 +269,11 @@ router.post('/:id/internal-note', async (req: MultiTenantRequest, res: Response)
     console.error('Error creating internal note:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+}
 
-router.post('/:id/notes', async (req: MultiTenantRequest, res: Response) => {
-  req.url = `/${req.params.id}/internal-note`;
-  router.handle(req, res);
-});
+router.post('/:id/internal-note', handleInternalNote);
+// /:id/notes is an alias for /:id/internal-note
+router.post('/:id/notes', handleInternalNote);
 
 router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
   try {

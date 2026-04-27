@@ -18,11 +18,13 @@
 import { randomUUID } from 'crypto';
 import { createIntegrationRepository } from '../../data/integrations.js';
 import { createCanonicalRepository } from '../../data/canonical.js';
+import { createCaseRepository, createCommerceRepository, createCustomerRepository } from '../../data/index.js';
 import { enqueue } from '../client.js';
 import { JobType } from '../types.js';
 import { logger } from '../../utils/logger.js';
 import { registerHandler } from './index.js';
 import { requireScope } from '../../lib/scope.js';
+import { fireWorkflowEvent } from '../../lib/workflowEventBus.js';
 import type { WebhookProcessPayload, JobContext } from '../types.js';
 
 // ── Topic → canonical entity type mapping ─────────────────────────────────────
@@ -217,11 +219,206 @@ async function handleWebhookProcess(
       tenantId:    scope.tenantId,
       workspaceId: scope.workspaceId,
       traceId:     ctx.traceId,
-      priority:    5,  // canonicalization is higher priority than default
+      priority:    5,
     }
   );
 
   log.debug('CANONICALIZE job enqueued', { canonicalEventId });
+
+  // ── 8. Auto-create case + fire workflow event for high-value topics ────────
+  // Run asynchronously — never block the job completion
+  setImmediate(() => {
+    void autoCreateCaseAndFireEvent(scope, payload.source, topic, parsedBody, extraction, log)
+      .catch((err) => log.warn('webhookProcess: auto-case/event dispatch failed', { error: String(err?.message ?? err) }));
+  });
+}
+
+// ── Topics that should automatically create a CRM case ───────────────────────
+
+const CASE_AUTO_CREATE_TOPICS = new Set([
+  // Shopify
+  'orders/cancelled',
+  'refunds/create',
+  'orders/fulfilled',
+  // Stripe
+  'charge.dispute.created',
+  'charge.dispute.funds_withdrawn',
+  'payment_intent.payment_failed',
+  'charge.failed',
+  'charge.refunded',
+]);
+
+// Mapping from webhook topic → workflow event type
+function topicToWorkflowEvent(source: string, topic: string): string {
+  const map: Record<string, string> = {
+    // Shopify
+    'orders/paid':        'order.updated',
+    'orders/updated':     'order.updated',
+    'orders/cancelled':   'order.updated',
+    'orders/fulfilled':   'order.updated',
+    'refunds/create':     'payment.refunded',
+    'customers/update':   'customer.updated',
+    'customers/create':   'customer.created',
+    // Stripe
+    'charge.dispute.created':          'payment.dispute.created',
+    'charge.dispute.funds_withdrawn':   'payment.dispute.created',
+    'charge.dispute.closed':            'payment.dispute.updated',
+    'payment_intent.succeeded':         'payment.updated',
+    'payment_intent.payment_failed':    'payment.failed',
+    'charge.failed':                    'payment.failed',
+    'charge.refunded':                  'payment.refunded',
+  };
+  return map[topic] ?? `${source}.${topic.replace('/', '.')}`;
+}
+
+async function autoCreateCaseAndFireEvent(
+  scope: { tenantId: string; workspaceId: string },
+  source: string,
+  topic: string,
+  body: Record<string, any>,
+  extraction: EntityExtraction,
+  log: ReturnType<typeof logger.child>,
+): Promise<void> {
+  const caseRepo     = createCaseRepository();
+  const commerceRepo = createCommerceRepository();
+  const customerRepo = createCustomerRepository();
+
+  // ── Auto-create case for high-value events ──────────────────────────────
+  if (CASE_AUTO_CREATE_TOPICS.has(topic)) {
+    try {
+      // Determine case type + summary from the event
+      const { caseType, summary, priority, caseSubType } = classifyWebhookForCase(source, topic, body);
+
+      // Look up existing order/payment in our DB to link the case
+      let orderId: string | null = null;
+      let paymentId: string | null = null;
+      let customerId: string | null = null;
+
+      if (extraction.entityType === 'order' && extraction.entityId) {
+        const orders = await commerceRepo.listOrders(scope, { q: extraction.entityId });
+        const order = orders.find((o: any) => o.external_order_id === extraction.entityId || o.id === extraction.entityId);
+        if (order) {
+          orderId = (order as any).id;
+          customerId = (order as any).customer_id ?? null;
+        }
+      } else if ((extraction.entityType === 'payment' || extraction.entityType === 'refund' || extraction.entityType === 'dispute') && extraction.entityId) {
+        // Find by external ID
+        const allPayments = await commerceRepo.listPayments(scope, { q: extraction.entityId });
+        const payment = allPayments.find((p: any) => p.external_payment_id === extraction.entityId || p.id === extraction.entityId);
+        if (payment) {
+          paymentId = (payment as any).id;
+          customerId = (payment as any).customer_id ?? null;
+        }
+      } else if (extraction.entityType === 'customer' && extraction.entityId) {
+        const customers = await customerRepo.list(scope, { q: extraction.entityId });
+        const customer = customers.find((c: any) => c.external_id === extraction.entityId || c.id === extraction.entityId);
+        if (customer) customerId = (customer as any).id;
+      }
+
+      // Create the case
+      const caseId = await caseRepo.createCase(scope, {
+        type:        caseType,
+        sub_type:    caseSubType ?? null,
+        status:      'open',
+        priority,
+        description: summary,
+        source:      `webhook:${source}`,
+        customer_id: customerId,
+        order_id:    orderId,
+        payment_id:  paymentId,
+        tags:        [`webhook`, source, topic.replace('/', '_')],
+      } as any);
+
+      log.info('webhookProcess: auto-created case from webhook', {
+        caseId, source, topic, entityType: extraction.entityType,
+      });
+    } catch (caseErr) {
+      log.warn('webhookProcess: case auto-creation failed', { source, topic, error: String(caseErr) });
+    }
+  }
+
+  // ── Fire workflow event ────────────────────────────────────────────────────
+  const eventType = topicToWorkflowEvent(source, topic);
+  fireWorkflowEvent(
+    scope,
+    eventType,
+    {
+      source,
+      topic,
+      entityType:  extraction.entityType,
+      entityId:    extraction.entityId,
+      payload:     body,
+    },
+  );
+
+  log.debug('webhookProcess: workflow event fired', { eventType });
+}
+
+function classifyWebhookForCase(
+  source: string,
+  topic: string,
+  body: Record<string, any>,
+): { caseType: string; caseSubType?: string; summary: string; priority: string } {
+  if (source === 'shopify') {
+    if (topic === 'orders/cancelled') {
+      return {
+        caseType:    'order_issue',
+        caseSubType: 'cancellation',
+        summary:     `Order ${body.name ?? body.id ?? ''} was cancelled in Shopify`,
+        priority:    'medium',
+      };
+    }
+    if (topic === 'refunds/create') {
+      const amount = body.transactions?.[0]?.amount ?? body.refund_line_items?.[0]?.price ?? '';
+      return {
+        caseType:    'refund',
+        caseSubType: 'shopify_refund',
+        summary:     `Shopify refund created${amount ? ` for ${amount}` : ''} on order ${body.order_id ?? ''}`,
+        priority:    'medium',
+      };
+    }
+    if (topic === 'orders/fulfilled') {
+      return {
+        caseType:    'fulfillment',
+        caseSubType: 'fulfilled',
+        summary:     `Order ${body.name ?? body.id ?? ''} fulfilled — verify delivery`,
+        priority:    'low',
+      };
+    }
+  }
+
+  if (source === 'stripe') {
+    if (topic === 'charge.dispute.created' || topic === 'charge.dispute.funds_withdrawn') {
+      return {
+        caseType:    'dispute',
+        caseSubType: 'chargeback',
+        summary:     `Stripe dispute created for charge ${body.data?.object?.charge ?? body.id ?? ''}`,
+        priority:    'critical',
+      };
+    }
+    if (topic === 'payment_intent.payment_failed' || topic === 'charge.failed') {
+      return {
+        caseType:    'payment_issue',
+        caseSubType: 'payment_failed',
+        summary:     `Payment failed: ${body.data?.object?.last_payment_error?.message ?? 'Unknown reason'}`,
+        priority:    'high',
+      };
+    }
+    if (topic === 'charge.refunded') {
+      return {
+        caseType:    'refund',
+        caseSubType: 'stripe_refund',
+        summary:     `Stripe charge refunded: ${body.data?.object?.id ?? ''}`,
+        priority:    'low',
+      };
+    }
+  }
+
+  return {
+    caseType: 'general',
+    summary:  `Webhook event: ${source}/${topic}`,
+    priority: 'medium',
+  };
 }
 
 // ── Register ──────────────────────────────────────────────────────────────────

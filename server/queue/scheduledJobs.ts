@@ -21,15 +21,18 @@ import { requireScope }    from '../lib/scope.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 
-let slaIntervalId:            ReturnType<typeof setInterval> | null = null;
-let reconcileIntervalId:      ReturnType<typeof setInterval> | null = null;
-let workflowDelayIntervalId:  ReturnType<typeof setInterval> | null = null;
-let scheduleSweeperIntervalId: ReturnType<typeof setInterval> | null = null;
+let slaIntervalId:              ReturnType<typeof setInterval> | null = null;
+let reconcileIntervalId:        ReturnType<typeof setInterval> | null = null;
+let workflowDelayIntervalId:    ReturnType<typeof setInterval> | null = null;
+let scheduleSweeperIntervalId:  ReturnType<typeof setInterval> | null = null;
+let orphanSweeperIntervalId:    ReturnType<typeof setInterval> | null = null;
 
-const SLA_INTERVAL_MS              = 5  * 60 * 1_000;   // 5 minutes
+const SLA_INTERVAL_MS              =  5 * 60 * 1_000;   // 5 minutes
 const RECONCILE_INTERVAL_MS        = 15 * 60 * 1_000;   // 15 minutes
 const WORKFLOW_DELAY_INTERVAL_MS   =  2 * 60 * 1_000;   // 2 minutes
 const SCHEDULE_SWEEPER_INTERVAL_MS =  1 * 60 * 1_000;   // 1 minute
+const ORPHAN_SWEEPER_INTERVAL_MS   = 10 * 60 * 1_000;   // 10 minutes
+const ORPHAN_THRESHOLD_MS          = 30 * 60 * 1_000;   // runs stuck > 30 min = orphaned
 
 export function startScheduledJobs(): void {
   logger.info('Starting scheduled job intervals', {
@@ -69,6 +72,13 @@ export function startScheduledJobs(): void {
       logger.warn('Workflow schedule sweep failed', { error: String(err?.message ?? err) }),
     );
   }, SCHEDULE_SWEEPER_INTERVAL_MS);
+
+  // Orphaned run sweeper: mark workflow_runs stuck in 'running' > 30 min as failed
+  orphanSweeperIntervalId = setInterval(() => {
+    void sweepOrphanedWorkflowRuns(scope.tenantId).catch((err) =>
+      logger.warn('Orphaned run sweep failed', { error: String(err?.message ?? err) }),
+    );
+  }, ORPHAN_SWEEPER_INTERVAL_MS);
 }
 
 /**
@@ -208,9 +218,50 @@ export function stopScheduledJobs(): void {
   if (reconcileIntervalId)       clearInterval(reconcileIntervalId);
   if (workflowDelayIntervalId)   clearInterval(workflowDelayIntervalId);
   if (scheduleSweeperIntervalId) clearInterval(scheduleSweeperIntervalId);
+  if (orphanSweeperIntervalId)   clearInterval(orphanSweeperIntervalId);
   slaIntervalId             = null;
   reconcileIntervalId       = null;
   workflowDelayIntervalId   = null;
   scheduleSweeperIntervalId = null;
+  orphanSweeperIntervalId   = null;
   logger.info('Scheduled job intervals stopped');
+}
+
+/**
+ * Scans workflow_runs stuck in 'running' for longer than ORPHAN_THRESHOLD_MS
+ * and marks them as 'failed'. This recovers from server crashes that left runs
+ * in an intermediate state.
+ */
+async function sweepOrphanedWorkflowRuns(tenantId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const threshold = new Date(Date.now() - ORPHAN_THRESHOLD_MS).toISOString();
+
+  const { data: orphans, error } = await supabase
+    .from('workflow_runs')
+    .select('id, workflow_version_id, started_at')
+    .eq('status', 'running')
+    .eq('tenant_id', tenantId)
+    .lt('started_at', threshold)
+    .is('ended_at', null)
+    .limit(20);
+
+  if (error || !orphans?.length) return;
+
+  logger.info(`Orphaned run sweep: found ${orphans.length} stuck run(s) — marking failed`);
+
+  const now = new Date().toISOString();
+  for (const run of orphans) {
+    await supabase
+      .from('workflow_runs')
+      .update({
+        status:      'failed',
+        ended_at:    now,
+        updated_at:  now,
+        error:       'Run timed out — marked failed by orphan sweeper (server restart likely)',
+      })
+      .eq('id', run.id)
+      .eq('status', 'running');  // guard: only update if still running
+
+    logger.info(`Orphaned run ${run.id} marked as failed (started ${run.started_at})`);
+  }
 }
