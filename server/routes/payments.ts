@@ -4,6 +4,7 @@ import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenan
 import { requirePermission } from '../middleware/authorization.js';
 import { createAuditRepository } from '../data/index.js';
 import { createCommerceRepository } from '../data/commerce.js';
+import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 
 const router = Router();
 const commerceRepo = createCommerceRepository();
@@ -134,6 +135,11 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
       metadata: { reason },
     });
     const updated = await commerceRepo.getPayment(scope, req.params.id);
+    fireWorkflowEvent(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      'payment.dispute.created',
+      { paymentId: req.params.id, status: 'refunded', amount, reason, riskLevel: payment.risk_level },
+    );
     res.json({ success: true, payment: updated });
   } catch (error) {
     console.error('Error refunding payment:', error);

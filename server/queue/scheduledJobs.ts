@@ -19,14 +19,17 @@ import { JobType }        from './types.js';
 import { logger }         from '../utils/logger.js';
 import { requireScope }    from '../lib/scope.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
+import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 
 let slaIntervalId:            ReturnType<typeof setInterval> | null = null;
 let reconcileIntervalId:      ReturnType<typeof setInterval> | null = null;
 let workflowDelayIntervalId:  ReturnType<typeof setInterval> | null = null;
+let scheduleSweeperIntervalId: ReturnType<typeof setInterval> | null = null;
 
-const SLA_INTERVAL_MS             = 5  * 60 * 1_000;   // 5 minutes
-const RECONCILE_INTERVAL_MS       = 15 * 60 * 1_000;   // 15 minutes
-const WORKFLOW_DELAY_INTERVAL_MS  =  2 * 60 * 1_000;   // 2 minutes
+const SLA_INTERVAL_MS              = 5  * 60 * 1_000;   // 5 minutes
+const RECONCILE_INTERVAL_MS        = 15 * 60 * 1_000;   // 15 minutes
+const WORKFLOW_DELAY_INTERVAL_MS   =  2 * 60 * 1_000;   // 2 minutes
+const SCHEDULE_SWEEPER_INTERVAL_MS =  1 * 60 * 1_000;   // 1 minute
 
 export function startScheduledJobs(): void {
   logger.info('Starting scheduled job intervals', {
@@ -59,6 +62,13 @@ export function startScheduledJobs(): void {
       logger.warn('Workflow delay sweep failed', { error: String(err?.message ?? err) }),
     );
   }, WORKFLOW_DELAY_INTERVAL_MS);
+
+  // trigger.schedule sweeper: fire scheduled workflows when their cron is due
+  scheduleSweeperIntervalId = setInterval(() => {
+    void sweepScheduledWorkflows(scope.tenantId, scope.workspaceId).catch((err) =>
+      logger.warn('Workflow schedule sweep failed', { error: String(err?.message ?? err) }),
+    );
+  }, SCHEDULE_SWEEPER_INTERVAL_MS);
 }
 
 /**
@@ -111,6 +121,81 @@ async function resumeExpiredWorkflowDelays(tenantId: string): Promise<void> {
   }
 }
 
+/**
+ * Evaluates all published workflows with a trigger.schedule node.
+ * If their cron expression is due (based on last run timestamp), fires the event.
+ * Uses a simple "has the cron minute elapsed since last run?" heuristic.
+ */
+async function sweepScheduledWorkflows(tenantId: string, workspaceId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const now = new Date();
+
+  // Find published workflows with trigger.schedule config
+  const { data: versions } = await supabase
+    .from('workflow_versions')
+    .select('id, workflow_id, nodes, trigger')
+    .eq('status', 'published')
+    .eq('tenant_id', tenantId);
+
+  if (!versions?.length) return;
+
+  for (const version of versions) {
+    try {
+      const nodes = Array.isArray(version.nodes) ? version.nodes : [];
+      const triggerNode = nodes.find((n: any) => n.key === 'trigger.schedule' || n.type === 'trigger');
+      if (!triggerNode || triggerNode.key !== 'trigger.schedule') continue;
+
+      const cron = triggerNode.config?.cron;
+      if (!cron) continue;
+
+      // Check last run for this workflow in the last SCHEDULE_SWEEPER_INTERVAL_MS window
+      const windowStart = new Date(now.getTime() - SCHEDULE_SWEEPER_INTERVAL_MS).toISOString();
+      const { data: recentRun } = await supabase
+        .from('workflow_runs')
+        .select('id, started_at')
+        .eq('workflow_version_id', version.id)
+        .eq('trigger_type', 'schedule')
+        .gte('started_at', windowStart)
+        .limit(1)
+        .single();
+
+      if (recentRun) continue; // already ran in this window
+
+      // Simple cron evaluation: parse the 5 cron fields and check if "now" matches
+      if (cronMatchesNow(cron, now)) {
+        logger.info(`Schedule sweep: triggering workflow ${version.workflow_id} (cron: ${cron})`);
+        fireWorkflowEvent(
+          { tenantId, workspaceId },
+          'trigger.schedule',
+          { workflowId: version.workflow_id, cron, scheduledAt: now.toISOString() },
+        );
+      }
+    } catch { /* skip this workflow, try next */ }
+  }
+}
+
+/** Minimal 5-field cron matcher: "min hour dom month dow" */
+function cronMatchesNow(cron: string, now: Date): boolean {
+  try {
+    const [minF, hourF, domF, monF, dowF] = cron.trim().split(/\s+/);
+    const matchField = (field: string, value: number): boolean => {
+      if (field === '*') return true;
+      if (field.startsWith('*/')) {
+        const step = parseInt(field.slice(2), 10);
+        return !isNaN(step) && value % step === 0;
+      }
+      return field.split(',').map(Number).includes(value);
+    };
+    return (
+      matchField(minF,  now.getUTCMinutes()) &&
+      matchField(hourF, now.getUTCHours())   &&
+      matchField(domF,  now.getUTCDate())    &&
+      matchField(monF,  now.getUTCMonth() + 1) &&
+      matchField(dowF,  now.getUTCDay())
+    );
+  } catch { return false; }
+}
+
 function bootstrapScope() {
   const tenantId = process.env.DEFAULT_TENANT_ID ?? null;
   const workspaceId = process.env.DEFAULT_WORKSPACE_ID ?? null;
@@ -119,11 +204,13 @@ function bootstrapScope() {
 }
 
 export function stopScheduledJobs(): void {
-  if (slaIntervalId)           clearInterval(slaIntervalId);
-  if (reconcileIntervalId)     clearInterval(reconcileIntervalId);
-  if (workflowDelayIntervalId) clearInterval(workflowDelayIntervalId);
-  slaIntervalId           = null;
-  reconcileIntervalId     = null;
-  workflowDelayIntervalId = null;
+  if (slaIntervalId)             clearInterval(slaIntervalId);
+  if (reconcileIntervalId)       clearInterval(reconcileIntervalId);
+  if (workflowDelayIntervalId)   clearInterval(workflowDelayIntervalId);
+  if (scheduleSweeperIntervalId) clearInterval(scheduleSweeperIntervalId);
+  slaIntervalId             = null;
+  reconcileIntervalId       = null;
+  workflowDelayIntervalId   = null;
+  scheduleSweeperIntervalId = null;
   logger.info('Scheduled job intervals stopped');
 }

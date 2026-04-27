@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { createConversationRepository, createAuditRepository, createCaseRepository } from '../data/index.js';
+import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 
 const router = Router();
 const conversationRepository = createConversationRepository();
@@ -78,6 +79,14 @@ router.post('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
       metadata: { messageId: message.id, type: type || 'agent' },
     });
 
+    // Fire workflow trigger for inbound customer messages
+    if ((type === 'customer' || type === 'inbound' || !type) && conv.case_id) {
+      fireWorkflowEvent(
+        { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+        'message.received',
+        { messageId: message.id, conversationId: req.params.id, caseId: conv.case_id, customerId: conv.customer_id, channel: conv.channel, content },
+      );
+    }
     res.json({ success: true, id: message.id });
   } catch (error) {
     console.error('Error sending message:', error);

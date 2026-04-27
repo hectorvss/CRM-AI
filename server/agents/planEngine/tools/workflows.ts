@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { createWorkflowRepository, createCaseRepository, createCustomerRepository, createConversationRepository } from '../../../data/index.js';
+import { createWorkflowRepository, createCaseRepository, createCustomerRepository, createConversationRepository, createAgentRepository } from '../../../data/index.js';
 import { getDb } from '../../../db/client.js';
 import { getDatabaseProvider } from '../../../db/provider.js';
 import { getSupabaseAdmin } from '../../../db/supabase.js';
@@ -606,6 +606,171 @@ export const workflowTriggerTool: ToolSpec<WorkflowTriggerArgs, unknown> = {
         stepsFailed,
         results: results.map((r) => ({ step: r.key, status: r.status, detail: r.detail })),
       },
+    };
+  },
+};
+
+// ── workflow.fire_event ───────────────────────────────────────────────────────
+
+/**
+ * Fires a named business event into the workflow event bus.
+ * All published workflows whose trigger matches the event type will be executed.
+ * This is the "smart broadcast" alternative to workflow.trigger (which targets one workflow by ID).
+ *
+ * Example events: case.updated, message.received, sla.breached, payment.refunded, approval.decided
+ */
+export const workflowFireEventTool: ToolSpec<
+  { eventType: string; payload?: unknown },
+  unknown
+> = {
+  name: 'workflow.fire_event',
+  version: '1.0.0',
+  description:
+    'Fire a named business event that activates all matching published workflows. ' +
+    'Unlike workflow.trigger (which targets a specific workflow by ID), this broadcasts an event and ' +
+    'every workflow subscribed to that event type will run. ' +
+    'Use this to start automations: e.g. fire "case.updated" after closing a case, ' +
+    '"sla.breached" when a deadline passes, "payment.refunded" after a refund. ' +
+    'Supported event types include: case.updated, case.created, message.received, ' +
+    'approval.decided, order.updated, payment.refunded, sla.breached, customer.updated, ' +
+    'trigger.schedule, and any custom event your workflows subscribe to.',
+  category: 'workflow',
+  sideEffect: 'external',
+  risk: 'medium',
+  idempotent: false,
+  requiredPermission: 'workflows.write',
+  args: s.object({
+    eventType: s.string({
+      description: 'The event type to fire, e.g. "case.updated", "sla.breached", "message.received"',
+    }),
+    payload: s.any('Optional event payload passed to all matching workflows (e.g. { caseId, customerId, status })'),
+  }),
+  returns: s.any('{ eventType, workflowsTriggered, results[] }'),
+  async run({ args, context }) {
+    const scope = workflowScope(context);
+
+    if (context.dryRun) {
+      return {
+        ok: true,
+        value: {
+          eventType: args.eventType,
+          workflowsTriggered: 0,
+          results: [],
+          dryRun: true,
+        },
+      };
+    }
+
+    // Lazy import to avoid circular dependency at startup
+    let results: Array<{ workflowId: string; workflowName: string; status: string; error?: string }> = [];
+    try {
+      const { executeWorkflowsByEvent } = await import('../../../routes/workflows.js' as any);
+      results = await executeWorkflowsByEvent(
+        { tenantId: scope.tenantId, workspaceId: scope.workspaceId, userId: context.userId },
+        args.eventType,
+        (args.payload && typeof args.payload === 'object' ? args.payload : {}) as Record<string, any>,
+      );
+    } catch (err) {
+      logger.warn('workflow.fire_event: dispatch error', {
+        eventType: args.eventType,
+        error: String(err instanceof Error ? err.message : err),
+      });
+      return {
+        ok: false,
+        error: `Event dispatch failed: ${err instanceof Error ? err.message : String(err)}`,
+        errorCode: 'DISPATCH_FAILED',
+      };
+    }
+
+    await context.audit({
+      action: 'PLAN_ENGINE_EVENT_FIRED',
+      entityType: 'workflow',
+      entityId: args.eventType,
+      newValue: {
+        eventType: args.eventType,
+        payload: args.payload ?? {},
+        workflowsTriggered: results.length,
+      },
+      metadata: { source: 'plan-engine', planId: context.planId },
+    });
+
+    return {
+      ok: true,
+      value: {
+        eventType: args.eventType,
+        workflowsTriggered: results.length,
+        results: results.map((r) => ({
+          workflowId: r.workflowId,
+          workflowName: r.workflowName,
+          status: r.status,
+          ...(r.error ? { error: r.error } : {}),
+        })),
+      },
+    };
+  },
+};
+
+// ── agent.list ────────────────────────────────────────────────────────────────
+
+const agentRepo = createAgentRepository();
+
+/**
+ * Lists all AI Studio agents available in this workspace.
+ * Returns name, slug, description, capabilities so the LLM can pick the right agent
+ * before calling agent.run or before adding an agent node to a workflow.
+ */
+export const agentListTool: ToolSpec<
+  { status?: string; limit?: number },
+  unknown
+> = {
+  name: 'agent.list',
+  version: '1.0.0',
+  description:
+    'List all AI Studio agents available in this workspace. ' +
+    'Returns each agent\'s slug, name, description, status, and capabilities. ' +
+    'Use this before agent.run to discover which agents exist and choose the right one. ' +
+    'Also useful when a user asks "what agents do we have?" or "which agent handles fraud?".',
+  category: 'system',
+  sideEffect: 'read',
+  risk: 'none',
+  idempotent: true,
+  requiredPermission: 'agents.read',
+  args: s.object({
+    status: s.string({
+      required: false,
+      description: 'Filter by agent status: "active", "inactive", "draft". Omit to return all.',
+    }),
+    limit: s.number({
+      required: false,
+      integer: true,
+      min: 1,
+      max: 100,
+      description: 'Max results (default 50)',
+    }),
+  }),
+  returns: s.any('Array of agent summaries with slug, name, description, status, capabilities'),
+  async run({ args, context }) {
+    const scope = workflowScope(context);
+
+    const agents: any[] = await agentRepo.list(scope);
+    const filtered = args.status
+      ? agents.filter((a: any) => String(a.status ?? '').toLowerCase() === args.status!.toLowerCase())
+      : agents;
+
+    const limited = filtered.slice(0, args.limit ?? 50);
+
+    return {
+      ok: true,
+      value: limited.map((a: any) => ({
+        id: a.id,
+        slug: a.slug,
+        name: a.name,
+        description: a.description ?? null,
+        status: a.status ?? 'active',
+        capabilities: Array.isArray(a.capabilities) ? a.capabilities : [],
+        triggerEvents: Array.isArray(a.trigger_events) ? a.trigger_events : [],
+        lastUsedAt: a.last_used_at ?? null,
+      })),
     };
   },
 };

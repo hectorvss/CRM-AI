@@ -18,6 +18,7 @@ import { sendEmail, sendWhatsApp, sendSms } from '../pipeline/channelSenders.js'
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
 import { config as appConfig } from '../config.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 const workflowRepository = createWorkflowRepository();
@@ -2054,52 +2055,105 @@ router.post('/runs/:runId/retry', requirePermission('workflows.trigger'), async 
   }
 });
 
-router.post('/events/trigger', requirePermission('workflows.trigger'), async (req: MultiTenantRequest, res) => {
-  try {
-    const tenantId = req.tenantId!;
-    const workspaceId = req.workspaceId!;
-    const eventType = req.body?.eventType ?? req.body?.event_type;
-    if (!eventType) return res.status(400).json({ error: 'eventType is required' });
+/**
+ * Core event-dispatch logic — exported so workflowEventBus.ts can call it directly
+ * without going through HTTP. Used both by the route handler below and by the bus.
+ */
+export async function executeWorkflowsByEvent(
+  scope: { tenantId: string; workspaceId: string; userId?: string },
+  eventType: string,
+  payload: Record<string, any> = {},
+): Promise<Array<{ workflowId: string; workflowName: string; id: string; status: string }>> {
+  const { tenantId, workspaceId, userId } = scope;
+  const workflows = await workflowRepository.listDefinitions(tenantId, workspaceId);
+  const results: any[] = [];
 
-    const workflows = await workflowRepository.listDefinitions(tenantId, workspaceId);
-    const results: any[] = [];
+  for (const workflow of workflows) {
+    if (workflow.version_status !== 'published' || !workflow.current_version_id) continue;
+    const version = await workflowRepository.getVersion(workflow.current_version_id);
+    if (!version || !workflowMatchesTrigger(version, eventType)) continue;
 
-    for (const workflow of workflows) {
-      if (workflow.version_status !== 'published' || !workflow.current_version_id) continue;
-      const version = await workflowRepository.getVersion(workflow.current_version_id);
-      if (!version || !workflowMatchesTrigger(version, eventType)) continue;
-
+    try {
       const result = await executeWorkflowVersion({
         tenantId,
         workspaceId,
-        userId: req.userId,
+        userId,
         workflowId: workflow.id,
         version,
-        triggerPayload: {
-          ...(req.body?.payload ?? req.body?.triggerPayload ?? {}),
-          eventType,
-        },
+        triggerPayload: { ...payload, eventType },
         triggerType: normalizeTriggerName(eventType),
       });
       results.push({ workflowId: workflow.id, workflowName: workflow.name, ...result });
+    } catch (err: any) {
+      logger.warn('executeWorkflowsByEvent: workflow execution failed', {
+        workflowId: workflow.id, eventType, error: String(err?.message ?? err),
+      });
     }
+  }
 
+  if (results.length > 0) {
     await auditRepository.logEvent({ tenantId, workspaceId }, {
-      actorId: req.userId ?? 'system',
+      actorId: userId ?? 'system',
       action: 'WORKFLOW_EVENT_TRIGGERED',
       entityType: 'workflow_event',
       entityId: normalizeTriggerName(eventType),
-      metadata: { eventType, matched: results.length, runIds: results.map((run) => run.id) },
-    });
+      metadata: { eventType, matched: results.length, runIds: results.map((r) => r.id) },
+    }).catch(() => null);
+  }
 
-    res.status(202).json({
+  return results;
+}
+
+router.post('/events/trigger', requirePermission('workflows.trigger'), async (req: MultiTenantRequest, res) => {
+  try {
+    const eventType = req.body?.eventType ?? req.body?.event_type;
+    if (!eventType) return res.status(400).json({ error: 'eventType is required' });
+
+    const results = await executeWorkflowsByEvent(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
       eventType,
-      matched: results.length,
-      runs: results,
-    });
+      req.body?.payload ?? req.body?.triggerPayload ?? {},
+    );
+
+    res.status(202).json({ eventType, matched: results.length, runs: results });
   } catch (error) {
     console.error('Error triggering workflows by event:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /agent-catalog
+ * Returns all AI Studio agents as workflow NodeSpec entries so the canvas
+ * can render them as real, named nodes without hardcoding.
+ */
+router.get('/agent-catalog', async (req: MultiTenantRequest, res) => {
+  try {
+    const { createAgentRepository } = await import('../data/agents.js');
+    const agentRepo = createAgentRepository();
+    const agents: any[] = await agentRepo.listAgents({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+    });
+
+    const nodes = agents.map((agent: any) => ({
+      type: 'agent' as const,
+      key: `agent.run`,
+      agentId: agent.id,
+      agentSlug: agent.slug,
+      label: agent.name ?? agent.slug,
+      category: 'AI Agents',
+      icon: agent.icon ?? 'smart_toy',
+      description: agent.description ?? agent.purpose ?? `Run the ${agent.name ?? agent.slug} agent.`,
+      requiresConfig: false,
+      // Pre-filled config so agent.run knows which agent to invoke
+      defaultConfig: { agentId: agent.id, agentSlug: agent.slug },
+    }));
+
+    res.json({ nodes });
+  } catch (error) {
+    logger.warn('Failed to load agent catalog', { error: String(error) });
+    res.json({ nodes: [] });
   }
 });
 

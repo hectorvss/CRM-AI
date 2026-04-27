@@ -4,6 +4,7 @@ import { createApprovalRepository } from '../data/index.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { logger } from '../utils/logger.js';
+import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 
 const router = Router();
 const approvalRepository = createApprovalRepository();
@@ -94,6 +95,11 @@ router.post('/:id/decide', async (req: MultiTenantRequest, res) => {
       );
     }
 
+    fireWorkflowEvent(
+      { tenantId: scope.tenantId, workspaceId: scope.workspaceId, userId: scope.userId },
+      'approval.decided',
+      { approvalId: req.params.id, decision, caseId: result.caseId, decidedBy: decided_by || req.userId || 'system' },
+    );
     res.json({ success: true, decision, caseId: result.caseId, postApproval: result.postApproval ?? null });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';

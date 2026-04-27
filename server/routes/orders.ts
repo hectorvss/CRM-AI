@@ -3,6 +3,7 @@ import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenan
 import { requirePermission } from '../middleware/authorization.js';
 import { createAuditRepository } from '../data/index.js';
 import { createCommerceRepository } from '../data/commerce.js';
+import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 
 const router = Router();
 
@@ -121,6 +122,11 @@ router.post('/:id/cancel', requirePermission('orders.write'), async (req: MultiT
     });
 
     const updated = await commerceRepo.getOrder(scope, req.params.id);
+    fireWorkflowEvent(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      'order.updated',
+      { orderId: req.params.id, status: 'cancelled', previousStatus: order.status, reason },
+    );
     res.json({ success: true, order: updated });
   } catch (error) {
     console.error('Error cancelling order:', error);

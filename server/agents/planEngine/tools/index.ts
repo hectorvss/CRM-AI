@@ -57,7 +57,7 @@ import {
   integrationCreateCanonicalEventTool,
   integrationUpdateCanonicalEventTool,
 } from './integrations.js';
-import { workflowGetTool, workflowListTool, workflowPublishTool, workflowTriggerTool } from './workflows.js';
+import { workflowGetTool, workflowListTool, workflowPublishTool, workflowTriggerTool, workflowFireEventTool, agentListTool } from './workflows.js';
 import {
   reportAgentsTool,
   reportApprovalsTool,
@@ -142,6 +142,10 @@ export function registerAllTools(): void {
   toolRegistry.register(workflowGetTool);
   toolRegistry.register(workflowPublishTool);
   toolRegistry.register(workflowTriggerTool);
+  toolRegistry.register(workflowFireEventTool);
+
+  // Agents
+  toolRegistry.register(agentListTool);
 
   // Reports
   toolRegistry.register(reportOverviewTool);

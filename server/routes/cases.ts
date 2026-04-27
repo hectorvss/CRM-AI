@@ -13,6 +13,7 @@ import {
 } from '../data/index.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
+import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 
 const router = Router();
 const caseRepository = createCaseRepository();
@@ -156,6 +157,11 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
       metadata: { reason },
     });
 
+    fireWorkflowEvent(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      'case.updated',
+      { caseId: req.params.id, status, previousStatus: oldStatus, reason: reason ?? null, customerId: bundle.case.customer_id },
+    );
     res.json({ success: true, status });
   } catch (error) {
     console.error('Error updating status:', error);
@@ -183,6 +189,11 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
       newValue: { user_id, team_id },
     });
 
+    fireWorkflowEvent(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      'case.updated',
+      { caseId: req.params.id, assignedUserId: user_id ?? null, assignedTeamId: team_id ?? null, change: 'assignment' },
+    );
     res.json({ success: true });
   } catch (error) {
     console.error('Error assigning case:', error);

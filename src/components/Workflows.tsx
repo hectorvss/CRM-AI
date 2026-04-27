@@ -371,7 +371,7 @@ const TEMPLATES = [
 
 const CONFIG_FIELDS = ['field', 'operator', 'value', 'amount', 'reason', 'agent', 'policy', 'connector', 'content', 'queue', 'query', 'expression', 'source', 'target', 'branch', 'mode', 'timeout', 'batchSize', 'maxIterations', 'workflow', 'comparison', 'fallback', 'errorMessage', 'path', 'delimiter', 'format', 'mapping', 'operation', 'input', 'output'];
 
-type FieldType = 'text' | 'textarea' | 'number' | 'select';
+type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'agent-picker';
 interface NodeFieldDef { key: string; label: string; type: FieldType; options?: string[]; placeholder?: string; hint?: string; }
 
 const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
@@ -568,7 +568,7 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
   ],
   // ── AI ────────────────────────────────────────────────────────────────────
   'agent.run': [
-    { key: 'agent', label: 'Agent slug', type: 'text', placeholder: 'e.g. triage-agent or refund-agent' },
+    { key: 'agent', label: 'Agent', type: 'agent-picker', placeholder: 'Select an AI Studio agent…' },
     { key: 'trigger_event', label: 'Trigger event (optional)', type: 'text', placeholder: 'e.g. workflow_node' },
   ],
   'agent.classify': [
@@ -2557,6 +2557,134 @@ function WorkflowContextMenu(props: {
 }
 
 /** Renders smart per-node config fields based on NODE_FIELD_SCHEMAS. Falls back to generic CONFIG_FIELDS if no schema defined. */
+// ── AgentPickerField ──────────────────────────────────────────────────────────
+// Fetches AI Studio agents from /api/workflows/agent-catalog and renders a
+// searchable dropdown so the user can pick by name instead of typing a slug.
+
+interface AgentCatalogEntry {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  status?: string;
+}
+
+function AgentPickerField({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [agents, setAgents] = useState<AgentCatalogEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Load agents once on mount
+  useEffect(() => {
+    setLoading(true);
+    fetch('/api/workflows/agent-catalog')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: AgentCatalogEntry[]) => setAgents(Array.isArray(data) ? data : []))
+      .catch(() => setAgents([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selectedAgent = agents.find((a) => a.slug === value);
+  const filtered = agents.filter((a) =>
+    !query || a.name.toLowerCase().includes(query.toLowerCase()) || a.slug.toLowerCase().includes(query.toLowerCase()),
+  );
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`${className} flex w-full items-center justify-between text-left`}
+      >
+        <span className={selectedAgent ? 'text-gray-900' : 'text-gray-400'}>
+          {loading ? 'Loading agents…' : selectedAgent ? (
+            <span className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm text-orange-400">smart_toy</span>
+              <span>{selectedAgent.name}</span>
+              <span className="text-[10px] text-gray-400">({selectedAgent.slug})</span>
+            </span>
+          ) : value || placeholder || 'Select an AI Studio agent…'}
+        </span>
+        <span className="material-symbols-outlined text-sm text-gray-400">
+          {open ? 'expand_less' : 'expand_more'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+          <div className="sticky top-0 bg-white px-3 py-2">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search agents…"
+              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-gray-400"
+            />
+          </div>
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-center text-xs text-gray-400">
+              {loading ? 'Loading…' : agents.length === 0 ? 'No agents found. Create one in AI Studio.' : 'No match'}
+            </div>
+          ) : (
+            filtered.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => { onChange(a.slug); setOpen(false); setQuery(''); }}
+                className={`flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-orange-50 ${value === a.slug ? 'bg-orange-50' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm text-orange-400">smart_toy</span>
+                  <span className="font-medium text-gray-900">{a.name}</span>
+                  <span className="text-[10px] text-gray-400">{a.slug}</span>
+                  {a.status && a.status !== 'active' && (
+                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">{a.status}</span>
+                  )}
+                </div>
+                {a.description && (
+                  <span className="ml-6 mt-0.5 text-[11px] text-gray-400 line-clamp-1">{a.description}</span>
+                )}
+              </button>
+            ))
+          )}
+          {/* Manual entry option */}
+          <div className="border-t border-gray-100 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => { onChange(query || value); setOpen(false); setQuery(''); }}
+              className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700"
+            >
+              <span className="material-symbols-outlined text-sm">edit</span>
+              Use custom slug: <span className="font-mono font-medium">{query || value || '…'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NodeConfigFields({ node, onConfig, size = 'lg' }: {
   node: WorkflowNode;
   onConfig: (key: string, value: string) => void;
@@ -2591,7 +2719,14 @@ function NodeConfigFields({ node, onConfig, size = 'lg' }: {
         <label key={field.key} className="block">
           <span className="text-xs font-semibold text-gray-600">{field.label}</span>
           {field.hint && <span className="ml-2 text-[10px] text-gray-400">{field.hint}</span>}
-          {field.type === 'textarea' ? (
+          {field.type === 'agent-picker' ? (
+            <AgentPickerField
+              value={node.config[field.key] ?? ''}
+              onChange={(v) => onConfig(field.key, v)}
+              placeholder={field.placeholder}
+              className={inputCls}
+            />
+          ) : field.type === 'textarea' ? (
             <textarea
               value={node.config[field.key] ?? ''}
               onChange={(e) => onConfig(field.key, e.target.value)}
