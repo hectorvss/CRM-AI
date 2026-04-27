@@ -1072,11 +1072,11 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'mode' ? null : 'mode')}
-                      className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
                         mode === 'investigate'
-                          ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                          : 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                      }`}
+                          ? 'text-gray-900 dark:text-white'
+                          : 'text-gray-700 dark:text-gray-200'
+                      } hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-white`}
                     >
                       <span>{modeLabel}</span>
                       <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
@@ -1118,11 +1118,11 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   <button
                     type="button"
                     onClick={() => setPlanMode((current) => !current)}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
                       planMode
-                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
-                    }`}
+                        ? 'text-gray-900 dark:text-white'
+                        : 'text-gray-500 dark:text-gray-400'
+                    } hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-white`}
                   >
                     Plan
                   </button>
@@ -1133,7 +1133,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'autonomy' ? null : 'autonomy')}
-                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-gray-900 text-white dark:bg-white dark:text-black"
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white dark:hover:bg-gray-800 dark:hover:text-white"
                     >
                       <span>{getAutonomyMeta(autonomyLevel).label}</span>
                       <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
@@ -1171,7 +1171,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'model' ? null : 'model')}
-                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-gray-900 text-white dark:bg-white dark:text-black"
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white dark:hover:bg-gray-800 dark:hover:text-white"
                     >
                       <span>{getModelMeta(selectedModelId).label}</span>
                       <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
