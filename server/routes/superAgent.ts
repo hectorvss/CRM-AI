@@ -2960,7 +2960,7 @@ router.get('/alerts', async (req: MultiTenantRequest, res) => {
 
     const alerts: Array<{
       id: string;
-      type: 'sla_breach_risk' | 'churn_risk' | 'fraud_flag' | 'high_risk_customer';
+      type: 'sla_breach_risk' | 'churn_risk' | 'fraud_flag' | 'high_risk_customer' | 'pending_approvals';
       severity: 'warning' | 'critical';
       title: string;
       description: string;
@@ -3003,12 +3003,22 @@ router.get('/alerts', async (req: MultiTenantRequest, res) => {
       }
     }
 
-    // High-risk + fraud-flagged customers
+    // High-risk, fraud-flagged, and churn-risk customers
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const allCustomers = await customerRepository.list(scope, {}) as any[];
     const fraudCustomers = allCustomers.filter((c: any) => c.fraud_flag);
     const highRiskCustomers = allCustomers.filter((c: any) =>
       !c.fraud_flag && (c.risk_level === 'high' || c.risk_level === 'critical'),
     );
+    const churnRiskCustomers = allCustomers.filter((c: any) => {
+      if (c.fraud_flag) return false;
+      const openCases = Number(c.open_cases ?? 0);
+      const refundRate = Number(c.refund_rate ?? 0);
+      const disputeRate = Number(c.dispute_rate ?? 0);
+      const lastOrder = c.last_order_at ?? c.updated_at ?? null;
+      const dormant = lastOrder ? new Date(lastOrder) < new Date(thirtyDaysAgo) : false;
+      return (openCases >= 3) || (dormant && (refundRate > 0.3 || disputeRate > 0.2));
+    });
 
     if (fraudCustomers.length > 0) {
       alerts.push({
@@ -3019,6 +3029,18 @@ router.get('/alerts', async (req: MultiTenantRequest, res) => {
         description: `${fraudCustomers.length} customer profile${fraudCustomers.length > 1 ? 's have' : ' has'} an active fraud flag requiring review.`,
         entityType: 'customer',
         suggestedQuery: 'Show customers with fraud flag',
+      });
+    }
+
+    if (churnRiskCustomers.length > 0) {
+      alerts.push({
+        id: `churn_risk_${scope.tenantId}`,
+        type: 'churn_risk',
+        severity: 'warning',
+        title: `${churnRiskCustomers.length} customer${churnRiskCustomers.length > 1 ? 's' : ''} at churn risk`,
+        description: `${churnRiskCustomers.length} customer${churnRiskCustomers.length > 1 ? 's show' : ' shows'} churn risk signals (open cases, high refund/dispute rate, recent inactivity).`,
+        entityType: 'customer',
+        suggestedQuery: 'Show customers at risk of churning',
       });
     }
 
@@ -3065,6 +3087,8 @@ router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
     // Compute proactive alerts for the bootstrap response
     const now = new Date();
     const in4h = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
     const slaAtRisk = (cases as any[]).filter((c: any) => {
       if (!c.sla_resolution_deadline || c.status === 'closed' || c.status === 'resolved') return false;
       return new Date(c.sla_resolution_deadline) <= new Date(in4h);
@@ -3073,16 +3097,54 @@ router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
     const highRiskCustomers = (allCustomers as any[]).filter((c: any) =>
       !c.fraud_flag && (c.risk_level === 'high' || c.risk_level === 'critical'),
     );
+    // Churn risk: customers with open cases > 2 OR high refund/dispute rate with recent inactivity
+    const churnRiskCustomers = (allCustomers as any[]).filter((c: any) => {
+      if (c.fraud_flag) return false;
+      const openCases = Number(c.open_cases ?? 0);
+      const refundRate = Number(c.refund_rate ?? 0);
+      const disputeRate = Number(c.dispute_rate ?? 0);
+      const lastOrder = c.last_order_at ?? c.updated_at ?? null;
+      const dormant = lastOrder ? new Date(lastOrder) < new Date(thirtyDaysAgo) : false;
+      return (openCases >= 3) || (dormant && (refundRate > 0.3 || disputeRate > 0.2));
+    });
 
-    const proactiveAlerts: string[] = [];
+    // Structured alerts (label + query for click-to-ask)
+    const proactiveAlerts: Array<{ label: string; query: string; severity: 'critical' | 'warning' | 'info' }> = [];
     if (slaAtRisk.length > 0) {
-      proactiveAlerts.push(`⚠️ ${slaAtRisk.length} case${slaAtRisk.length > 1 ? 's' : ''} near SLA breach`);
+      proactiveAlerts.push({
+        label: `${slaAtRisk.length} case${slaAtRisk.length > 1 ? 's' : ''} near SLA breach`,
+        query: `Show me the ${slaAtRisk.length > 1 ? slaAtRisk.length + ' cases' : 'case'} closest to SLA breach`,
+        severity: 'critical',
+      });
     }
     if (fraudCustomers.length > 0) {
-      proactiveAlerts.push(`🚨 ${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} with fraud flag`);
+      proactiveAlerts.push({
+        label: `${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} flagged for fraud`,
+        query: `Show me customers with active fraud flags`,
+        severity: 'critical',
+      });
+    }
+    if (churnRiskCustomers.length > 0) {
+      proactiveAlerts.push({
+        label: `${churnRiskCustomers.length} customer${churnRiskCustomers.length > 1 ? 's' : ''} at churn risk`,
+        query: `Show me customers at risk of churning`,
+        severity: 'warning',
+      });
     }
     if (highRiskCustomers.length > 0) {
-      proactiveAlerts.push(`⚠️ ${highRiskCustomers.length} high-risk customer${highRiskCustomers.length > 1 ? 's' : ''}`);
+      proactiveAlerts.push({
+        label: `${highRiskCustomers.length} high-risk customer${highRiskCustomers.length > 1 ? 's' : ''}`,
+        query: `List high-risk customers`,
+        severity: 'warning',
+      });
+    }
+    if ((approvals as any[]).filter((a: any) => a.status === 'pending').length > 0) {
+      const pendingCount = (approvals as any[]).filter((a: any) => a.status === 'pending').length;
+      proactiveAlerts.push({
+        label: `${pendingCount} approval${pendingCount > 1 ? 's' : ''} waiting`,
+        query: `Show me pending approvals`,
+        severity: 'info',
+      });
     }
 
     res.json({
