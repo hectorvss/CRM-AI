@@ -123,6 +123,39 @@ interface SuperAgentProps {
   activeTarget?: NavigationTarget;
 }
 
+type SuperAgentMode = 'investigate' | 'operate';
+type SuperAgentAutonomy = 'supervised' | 'assisted' | 'autonomous';
+
+type ModelOption = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+type PendingAction = SuperAgentAction & {
+  confirmationReason?: string;
+};
+
+const AUTONOMY_OPTIONS: Array<{
+  value: SuperAgentAutonomy;
+  label: string;
+  description: string;
+}> = [
+  { value: 'supervised', label: 'Supervised', description: 'Every execution asks for confirmation.' },
+  { value: 'assisted', label: 'Assisted', description: 'Only sensitive actions ask for confirmation.' },
+  { value: 'autonomous', label: 'Full access', description: 'Safe actions run automatically; sensitive ones still prompt.' },
+];
+
+const MODEL_OPTIONS: ModelOption[] = [
+  { id: 'gpt-5.4-mini', label: '5.4-Mini', description: 'Fast and lightweight' },
+  { id: 'gpt-5.4', label: '5.4', description: 'Balanced general-purpose' },
+  { id: 'gpt-5.5', label: '5.5', description: 'Highest capability placeholder' },
+  { id: 'gemini-2.5-pro', label: 'Gemini Pro', description: 'Gemini family placeholder' },
+  { id: 'gemini-2.5-flash', label: 'Gemini Flash', description: 'Fast Gemini placeholder' },
+  { id: 'claude-4-sonnet', label: 'Claude Sonnet', description: 'Claude family placeholder' },
+  { id: 'claude-4-opus', label: 'Claude Opus', description: 'Higher-capacity Claude placeholder' },
+];
+
 function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<string, any>, fallbackInput: string, fallbackRunId?: string | null): AssistantPayload {
   const consultedModules = Array.isArray(payload.consultedModules)
     ? [...new Set(payload.consultedModules.map((item) => String(item)).filter(Boolean))]
@@ -241,18 +274,23 @@ function assistantFromExecution(summary: string, sectionTitle: string, items: st
 // ── Plan Engine response → AssistantPayload mapper ───────────────────────────
 
 function planResponseToPayload(planResp: any, trace: any): AssistantPayload {
-  const commandResponse = trace?.commandResponse || planResp?.plan?.commandResponse || null;
+  const commandResponse =
+    planResp?.enrichedResponse
+    || trace?.commandResponse
+    || planResp?.plan?.commandResponse
+    || planResp?.response?.enrichedResponse
+    || null;
   if (commandResponse) {
     return normalizeAssistantPayload(
       commandResponse,
-      commandResponse.input || planResp?.plan?.responseTemplate || '',
-      commandResponse.runId || trace?.runId || planResp?.plan?.planId || null,
+      commandResponse.input || planResp?.response?.plan?.responseTemplate || '',
+      commandResponse.runId || trace?.runId || planResp?.sessionId || planResp?.response?.plan?.planId || null,
     );
   }
 
   const id = `assistant-plan-${Date.now()}`;
   const status = trace?.status ?? 'success';
-  const summary = trace?.summary ?? planResp?.plan?.rationale ?? '';
+  const summary = trace?.summary ?? planResp?.response?.plan?.rationale ?? planResp?.response?.summary ?? '';
 
   const steps: StreamStep[] = (trace?.spans ?? []).map((span: any) => ({
     id: span.stepId,
@@ -292,8 +330,20 @@ function planResponseToPayload(planResp: any, trace: any): AssistantPayload {
     suggestedReplies: [],
     consultedModules: [...new Set((trace?.spans ?? []).map((s: any) => String(s.tool?.split('.')[0] ?? '')))].filter(Boolean) as string[],
     steps,
-    runId: trace?.runId || planResp?.plan?.planId || null,
-  }, '', trace?.runId || planResp?.plan?.planId || null);
+    runId: trace?.runId || planResp?.sessionId || planResp?.response?.plan?.planId || null,
+  }, '', trace?.runId || planResp?.sessionId || planResp?.response?.plan?.planId || null);
+}
+
+function getAutonomyMeta(level: SuperAgentAutonomy) {
+  return AUTONOMY_OPTIONS.find((option) => option.value === level) ?? AUTONOMY_OPTIONS[1];
+}
+
+function getModelMeta(modelId: string) {
+  return MODEL_OPTIONS.find((option) => option.id === modelId) ?? MODEL_OPTIONS[0];
+}
+
+function isSensitiveAction(action: SuperAgentAction) {
+  return action.requiresConfirmation === true || action.sensitive === true;
 }
 
 function clarificationToPayload(question: string): AssistantPayload {
@@ -397,8 +447,12 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [composerText, setComposerText] = useState('');
-  const [mode, setMode] = useState<'investigate' | 'operate'>('investigate');
-  const [pendingAction, setPendingAction] = useState<SuperAgentAction | null>(null);
+  const [mode, setMode] = useState<SuperAgentMode>('investigate');
+  const [planMode, setPlanMode] = useState(false);
+  const [autonomyLevel, setAutonomyLevel] = useState<SuperAgentAutonomy>('assisted');
+  const [selectedModelId, setSelectedModelId] = useState<string>(MODEL_OPTIONS[0].id);
+  const [openControlMenu, setOpenControlMenu] = useState<'mode' | 'autonomy' | 'model' | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [streamActivity, setStreamActivity] = useState<StreamActivity | null>(null);
@@ -407,8 +461,11 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [recentTraces, setRecentTraces] = useState<Array<{ planId: string; status: string; summary: string; startedAt: string; endedAt: string }>>([]);
   const [traceMetrics, setTraceMetrics] = useState<{ total: number; success: number; partial: number; failed: number; pendingApproval: number; rejectedByPolicy: number; averageLatencyMs: number; averageSpanCount: number } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const controlBarRef = useRef<HTMLDivElement>(null);
   const streamRunIdRef = useRef<string | null>(null);
   const streamMessageIdRef = useRef<string | null>(null);
+  const modeLabel = mode === 'investigate' ? 'Investigate' : 'Operate';
+  const planSuggestionVisible = !planMode && /\bplan\b/i.test(composerText.trim());
 
   useEffect(() => {
     let cancelled = false;
@@ -530,6 +587,17 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     }));
   }, [streamActivity]);
 
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (controlBarRef.current && !controlBarRef.current.contains(event.target as Node)) {
+        setOpenControlMenu(null);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, []);
+
   function buildCommandContext() {
     const latest = [...messages].reverse().find((m) => m.role === 'assistant') as Extract<ConversationMessage, { role: 'assistant' }> | undefined;
     const recentTargets = dedupeTargets([
@@ -538,7 +606,95 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       latest?.payload.navigationTarget || null,
       ...(latest?.payload.actions || []).map((a) => a.navigationTarget || fallbackNavigationTarget(a.targetPage, a.focusId ?? null)),
     ]);
-    return { sessionId: planSessionId, activeTarget: activeTarget || null, recentTargets, lastStructuredIntent: latest?.payload.structuredIntent || null };
+    return {
+      sessionId: planSessionId,
+      activeTarget: activeTarget || null,
+      recentTargets,
+      lastStructuredIntent: latest?.payload.structuredIntent || null,
+      autonomyLevel,
+      model: selectedModelId,
+      mode,
+      planMode,
+    };
+  }
+
+  function confirmationReasonForAction(action: SuperAgentAction) {
+    if (autonomyLevel === 'supervised') {
+      return 'Supervised mode requires confirmation before any execution.';
+    }
+    if (action.requiresConfirmation) {
+      return 'The backend marked this action as requiring approval.';
+    }
+    if (action.sensitive) {
+      return autonomyLevel === 'assisted'
+        ? 'Assisted mode keeps sensitive actions behind confirmation.'
+        : 'Sensitive action selected for review.';
+    }
+    return 'This action is queued for confirmation.';
+  }
+
+  function shouldRequireConfirmation(action: SuperAgentAction) {
+    if (action.type !== 'execute') return false;
+    if (autonomyLevel === 'supervised') return true;
+    if (autonomyLevel === 'assisted') return action.requiresConfirmation === true || action.sensitive === true;
+    return action.requiresConfirmation === true;
+  }
+
+  async function runAction(action: PendingAction, sourceContext: string, confirmed: boolean) {
+    const runId = window.crypto?.randomUUID?.() || `run-${Date.now()}`;
+    setIsExecuting(true);
+    setOpenControlMenu(null);
+    streamRunIdRef.current = runId;
+    setStreamActivity({ runId, statusLine: 'Executing...', text: '', steps: [], agents: [], error: null });
+    try {
+      const result = await superAgentApi.execute(action.payload || {}, confirmed, {
+        runId,
+        sourceContext,
+        autonomyLevel,
+        model: selectedModelId,
+      });
+      if (result.ok) {
+        const update = assistantFromExecution(`${action.label} completed.`, 'Result', [action.description, 'Change recorded in the audit trail.']);
+        setMessages((c) => [...c, { id: update.id, role: 'assistant', payload: update }]);
+        setStreamActivity(null);
+        const refreshPrompt = action.payload?.kind === 'approval.decide'
+          ? 'Pending approvals'
+          : [action.payload?.entityType, action.payload?.entityId].filter(Boolean).join(' ') || action.label;
+        const refreshed = await superAgentApi.command(refreshPrompt, {
+          runId: window.crypto?.randomUUID?.() || `run-${Date.now()}`,
+          mode: 'investigate',
+          autonomyLevel,
+          model: selectedModelId,
+          context: buildCommandContext(),
+        });
+        const rp = normalizeAssistantPayload(refreshed.response as Partial<AssistantPayload>, refreshPrompt, refreshed.response?.runId || null);
+        setMessages((c) => [...c, { id: rp.id, role: 'assistant', payload: rp, muted: true }]);
+        if (refreshed.permissionMatrix) setPermissionMatrix(refreshed.permissionMatrix);
+        if (rp.contextPanel) setContextPanel(rp.contextPanel);
+      } else if (result.approvalRequired) {
+        const approvalId = result.approval?.id || 'pending';
+        const msg = assistantFromExecution('Action routed to approval.', 'Guardrail applied', ['Action crossed a sensitive threshold.', `Approval created: ${approvalId}.`], [{
+          id: `nav-approval-${approvalId}`, type: 'navigate', label: 'Open approvals', description: 'Review the approval request.',
+          targetPage: 'approvals', focusId: approvalId,
+          navigationTarget: { page: 'approvals', entityType: 'approval', entityId: approvalId, section: null, sourceContext: 'super_agent_approval', runId },
+        }]);
+        setMessages((c) => [...c, { id: msg.id, role: 'assistant', payload: msg }]);
+        setFlashMessage('Approval created.');
+        setStreamActivity(null);
+      } else {
+        const failure = assistantFromExecution('Action blocked.', 'Blocked', [result.error || action.blockedReason || 'Action could not be executed.']);
+        setMessages((c) => [...c, { id: failure.id, role: 'assistant', payload: failure }]);
+        setStreamActivity((c) => c ? { ...c, error: failure.summary, statusLine: 'Blocked' } : null);
+      }
+    } catch (error) {
+      const failure = assistantFromExecution('Action failed.', 'Error', [error instanceof Error ? error.message : 'Unexpected failure.']);
+      setMessages((c) => [...c, { id: failure.id, role: 'assistant', payload: failure }]);
+      setStreamActivity((c) => c ? { ...c, error: failure.summary, statusLine: 'Failed' } : null);
+    } finally {
+      setPendingAction(null);
+      setIsExecuting(false);
+      streamRunIdRef.current = null;
+    }
   }
 
   async function sendPrompt(promptOverride?: string) {
@@ -548,13 +704,15 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     setComposerText('');
     setPendingAction(null);
     setFlashMessage(null);
+    setOpenControlMenu(null);
     setIsSending(true);
     const runId = window.crypto?.randomUUID?.() || `run-${Date.now()}`;
+    const isPlanMode = planMode;
     const livePayload = normalizeAssistantPayload({
       id: `assistant-live-${runId}`,
       input: finalPrompt,
-      summary: 'Thinking through your request...',
-      statusLine: isStreamConnected ? 'Thinking' : 'Connecting',
+      summary: isPlanMode ? 'Planning your request...' : 'Thinking through your request...',
+      statusLine: isStreamConnected ? (isPlanMode ? 'Planning' : 'Thinking') : 'Connecting',
       sections: [],
       actions: [],
       contextPanel: null,
@@ -574,16 +732,32 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     setStreamActivity({ runId, statusLine: isStreamConnected ? 'Connecting...' : 'Waiting...', text: '', steps: [], agents: [], error: null });
 
     try {
-      const result = await superAgentApi.command(finalPrompt, { runId, mode, context: buildCommandContext() });
+      const result = isPlanMode
+        ? await superAgentApi.plan(finalPrompt, {
+            sessionId: planSessionId ?? undefined,
+            dryRun: false,
+            autonomyLevel,
+            model: selectedModelId,
+            mode: 'plan',
+          })
+        : await superAgentApi.command(finalPrompt, {
+            runId,
+            mode,
+            autonomyLevel,
+            model: selectedModelId,
+            context: buildCommandContext(),
+          });
       if (result.sessionId) setPlanSessionId(result.sessionId);
-      const payload = normalizeAssistantPayload(result.response as Partial<AssistantPayload>, finalPrompt, result.response?.runId || runId);
+      const payload = isPlanMode
+        ? planResponseToPayload(result, result.trace || null)
+        : normalizeAssistantPayload(result.response as Partial<AssistantPayload>, finalPrompt, result.response?.runId || runId);
       const liveMessageId = streamMessageIdRef.current;
       setMessages((c) => c.map((message) => (
         message.role === 'assistant' && message.payload.id === liveMessageId
           ? { id: payload.id, role: 'assistant', payload }
           : message
       )));
-      setPermissionMatrix(result.permissionMatrix || null);
+      if (result.permissionMatrix) setPermissionMatrix(result.permissionMatrix);
       if (payload.contextPanel) setContextPanel(payload.contextPanel);
       setStreamActivity(null);
     } catch (error) {
@@ -602,49 +776,24 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     }
   }
 
+  function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      setPlanMode(true);
+      setOpenControlMenu(null);
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void sendPrompt();
+    }
+  }
+
   async function confirmPendingAction() {
     if (!pendingAction?.payload || isExecuting) return;
     setIsExecuting(true);
     setFlashMessage(null);
-    const runId = window.crypto?.randomUUID?.() || `run-${Date.now()}`;
-    streamRunIdRef.current = runId;
-    setStreamActivity({ runId, statusLine: 'Executing...', text: '', steps: [], agents: [], error: null });
-    try {
-      const result = await superAgentApi.execute(pendingAction.payload, true, { runId, sourceContext: 'super_agent_confirmation' });
-      if (result.ok) {
-        const update = assistantFromExecution(`${pendingAction.label} completed.`, 'Result', [pendingAction.description, 'Change recorded in the audit trail.']);
-        setMessages((c) => [...c, { id: update.id, role: 'assistant', payload: update }]);
-        setStreamActivity(null);
-        const refreshPrompt = pendingAction.payload.kind === 'approval.decide' ? 'Pending approvals' : `${pendingAction.payload.entityType} ${pendingAction.payload.entityId}`;
-        const refreshed = await superAgentApi.command(refreshPrompt, { runId: window.crypto?.randomUUID?.() || `run-${Date.now()}`, mode: 'investigate', context: buildCommandContext() });
-        const rp = normalizeAssistantPayload(refreshed.response as Partial<AssistantPayload>, refreshPrompt, refreshed.response?.runId || null);
-        setMessages((c) => [...c, { id: rp.id, role: 'assistant', payload: rp, muted: true }]);
-        setPermissionMatrix(refreshed.permissionMatrix || null);
-        if (rp.contextPanel) setContextPanel(rp.contextPanel);
-      } else if (result.approvalRequired) {
-        const approvalId = result.approval?.id || 'pending';
-        const msg = assistantFromExecution('Action routed to approval.', 'Guardrail applied', ['Action crossed a sensitive threshold.', `Approval created: ${approvalId}.`], [{
-          id: `nav-approval-${approvalId}`, type: 'navigate', label: 'Open approvals', description: 'Review the approval request.',
-          targetPage: 'approvals', focusId: approvalId,
-          navigationTarget: { page: 'approvals', entityType: 'approval', entityId: approvalId, section: null, sourceContext: 'super_agent_approval', runId },
-        }]);
-        setMessages((c) => [...c, { id: msg.id, role: 'assistant', payload: msg }]);
-        setFlashMessage('Approval created.');
-        setStreamActivity(null);
-      } else {
-        const failure = assistantFromExecution('Action blocked.', 'Blocked', [result.error || pendingAction.blockedReason || 'Action could not be executed.']);
-        setMessages((c) => [...c, { id: failure.id, role: 'assistant', payload: failure }]);
-        setStreamActivity((c) => c ? { ...c, error: failure.summary, statusLine: 'Blocked' } : null);
-      }
-    } catch (error) {
-      const failure = assistantFromExecution('Action failed.', 'Error', [error instanceof Error ? error.message : 'Unexpected failure.']);
-      setMessages((c) => [...c, { id: failure.id, role: 'assistant', payload: failure }]);
-      setStreamActivity((c) => c ? { ...c, error: failure.summary, statusLine: 'Failed' } : null);
-    } finally {
-      setPendingAction(null);
-      setIsExecuting(false);
-      streamRunIdRef.current = null;
-    }
+    await runAction(pendingAction, 'super_agent_confirmation', true);
   }
 
   function navigateToTarget(target?: NavigationTarget | null, fallbackPage?: string, fallbackId?: string | null) {
@@ -655,7 +804,14 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   function handleAction(action: SuperAgentAction) {
     if (action.type === 'navigate') { navigateToTarget(action.navigationTarget, action.targetPage, action.focusId ?? null); return; }
     if (!action.allowed) { setFlashMessage(action.blockedReason || 'Permission denied.'); return; }
-    setPendingAction(action);
+    setOpenControlMenu(null);
+    const requiresConfirmation = shouldRequireConfirmation(action);
+    if (!requiresConfirmation) {
+      setFlashMessage(null);
+      void runAction({ ...action, confirmationReason: confirmationReasonForAction(action) }, 'super_agent_autonomy', false);
+      return;
+    }
+    setPendingAction({ ...action, confirmationReason: confirmationReasonForAction(action) });
     setFlashMessage(null);
   }
 
@@ -910,8 +1066,16 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             {pendingAction ? (
               <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
                 <div className="mb-3">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Confirm Operation</p>
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{pendingAction.description}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">Confirm Operation</p>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-gray-900 dark:text-amber-300">
+                      {getAutonomyMeta(autonomyLevel).label}
+                    </span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-900 dark:text-gray-300">
+                      {getModelMeta(selectedModelId).label}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{pendingAction.confirmationReason || pendingAction.description}</p>
                 </div>
 
                 {pendingAction.verificationDisplay && (
@@ -960,53 +1124,203 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
               </div>
             ) : null}
 
+            <div className="space-y-2">
+              {planSuggestionVisible ? (
+                <div className="flex justify-center px-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanMode(true);
+                      setOpenControlMenu(null);
+                    }}
+                    className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[11px] text-gray-600 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-blue-900 dark:hover:bg-blue-950/40 dark:hover:text-blue-200"
+                  >
+                    <span className="material-symbols-outlined text-[14px] text-blue-600 dark:text-blue-300">playlist_add_check</span>
+                    <span className="font-medium text-gray-900 dark:text-white">Create a plan</span>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500 dark:bg-gray-800 dark:text-gray-300">Shift + Tab</span>
+                    <span className="text-blue-600 dark:text-blue-300">Use plan mode</span>
+                  </button>
+                </div>
+              ) : null}
             <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
               <textarea
                 value={composerText}
                 onChange={(e) => setComposerText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendPrompt(); } }}
+                onKeyDown={handleComposerKeyDown}
                 placeholder={
-                  mode === 'operate'
+                  planMode
+                    ? 'Plan the next steps, review branches, or outline an execution path...'
+                    : mode === 'operate'
                     ? 'Ask to update, refund, cancel, or publish...'
                     : 'Ask about an order, payment, customer, case, or approval...'
                 }
                 rows={2}
-                className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
+                className={`w-full resize-none bg-transparent px-4 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500 ${planSuggestionVisible ? 'pt-2 pb-1' : 'pt-3 pb-1'}`}
               />
-              <div className="flex items-center justify-between px-3 pb-3 pt-1">
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setMode('investigate')}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                      mode === 'investigate'
-                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    Investigate
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('operate')}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                      mode === 'operate'
-                        ? 'bg-secondary text-white'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    Operate
-                  </button>
+              <div ref={controlBarRef} className="flex items-center justify-between gap-3 px-3 pb-3 pt-1">
+                <div className="flex flex-wrap items-center gap-1">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenControlMenu(openControlMenu === 'mode' ? null : 'mode')}
+                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                        mode === 'investigate'
+                          ? 'text-gray-900 dark:text-white'
+                          : 'text-gray-700 dark:text-gray-200'
+                      } hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-white`}
+                    >
+                      <span>{modeLabel}</span>
+                      <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
+                    </button>
+                    {openControlMenu === 'mode' ? (
+                      <div className="absolute left-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+                        <div className="border-b border-gray-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:border-gray-800">Mode</div>
+                        <div className="p-1">
+                          {[
+                            { value: 'investigate' as const, label: 'Investigate', description: 'Ask questions, inspect context, and explore safely.' },
+                            { value: 'operate' as const, label: 'Operate', description: 'Take action with the current workflow context.' },
+                          ].map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setMode(option.value);
+                                setOpenControlMenu(null);
+                              }}
+                              className={`flex w-full items-start justify-between rounded-xl px-3 py-2 text-left transition-colors ${
+                                mode === option.value
+                                  ? 'bg-gray-50 text-gray-900 dark:bg-gray-800 dark:text-white'
+                                  : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                              }`}
+                            >
+                              <div>
+                                <div className="text-xs font-semibold">{option.label}</div>
+                                <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{option.description}</div>
+                              </div>
+                              {mode === option.value ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
+                            </button>
+                          ))}
+                          <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPlanMode((current) => !current);
+                              setOpenControlMenu(null);
+                            }}
+                            className={`flex w-full items-start justify-between rounded-xl px-3 py-2 text-left transition-colors ${
+                              planMode
+                                ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200'
+                                : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                            }`}
+                          >
+                            <div>
+                              <div className="text-xs font-semibold">Plan</div>
+                              <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Outline branches, compare options, and prepare an execution path.</div>
+                            </div>
+                            {planMode ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                  {planMode ? (
+                    <button
+                      type="button"
+                      onClick={() => setPlanMode(false)}
+                      className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-900/50"
+                    >
+                      Plan
+                    </button>
+                  ) : null}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenControlMenu(openControlMenu === 'autonomy' ? null : 'autonomy')}
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                    >
+                      <span>{getAutonomyMeta(autonomyLevel).label}</span>
+                      <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
+                    </button>
+                    {openControlMenu === 'autonomy' ? (
+                      <div className="absolute left-0 bottom-full z-30 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+                        <div className="border-b border-gray-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:border-gray-800">Autonomy</div>
+                        <div className="p-1">
+                          {AUTONOMY_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setAutonomyLevel(option.value);
+                                setOpenControlMenu(null);
+                              }}
+                              className={`flex w-full items-start justify-between rounded-xl px-3 py-2 text-left transition-colors ${
+                                autonomyLevel === option.value
+                                  ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                                  : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                              }`}
+                            >
+                              <div>
+                                <div className="text-xs font-semibold">{option.label}</div>
+                                <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{option.description}</div>
+                              </div>
+                              {autonomyLevel === option.value ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="ml-auto flex flex-wrap items-center gap-1">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenControlMenu(openControlMenu === 'model' ? null : 'model')}
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                    >
+                      <span>{getModelMeta(selectedModelId).label}</span>
+                      <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
+                    </button>
+                    {openControlMenu === 'model' ? (
+                      <div className="absolute left-0 bottom-full z-30 mb-2 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+                        <div className="border-b border-gray-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:border-gray-800">Model</div>
+                        <div className="p-1">
+                          {MODEL_OPTIONS.map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedModelId(option.id);
+                                setOpenControlMenu(null);
+                              }}
+                              className={`flex w-full items-start justify-between rounded-xl px-3 py-2 text-left transition-colors ${
+                                selectedModelId === option.id
+                                  ? 'bg-gray-50 text-gray-900 dark:bg-gray-800 dark:text-white'
+                                  : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                              }`}
+                            >
+                              <div>
+                                <div className="text-xs font-semibold">{option.label}</div>
+                                <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{option.description}</div>
+                              </div>
+                              {selectedModelId === option.id ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => void sendPrompt()}
                   disabled={!composerText.trim() || isSending || isExecuting}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-white transition-opacity hover:opacity-80 disabled:opacity-30 dark:bg-white dark:text-black"
+                  className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-black text-white transition-opacity hover:opacity-80 disabled:opacity-30 dark:bg-white dark:text-black"
                 >
                   <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
                 </button>
               </div>
+            </div>
             </div>
           </div>
         </div>

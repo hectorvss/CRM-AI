@@ -488,12 +488,30 @@ export const policyRulesApi = {
 
 export const superAgentApi = {
   bootstrap: () => request<any>('/super-agent/bootstrap'),
-  command: (input: string, options?: { runId?: string; mode?: string; context?: Record<string, any> }) =>
+  command: (
+    input: string,
+    options?: {
+      runId?: string;
+      mode?: string;
+      autonomyLevel?: 'supervised' | 'assisted' | 'autonomous';
+      model?: string;
+      context?: Record<string, any>;
+    },
+  ) =>
     request<any>('/super-agent/command', {
       method: 'POST',
       body: JSON.stringify({ input, ...options }),
     }),
-  execute: (payload: Record<string, any>, confirmed = true, options?: { runId?: string; sourceContext?: string }) =>
+  execute: (
+    payload: Record<string, any>,
+    confirmed = true,
+    options?: {
+      runId?: string;
+      sourceContext?: string;
+      autonomyLevel?: 'supervised' | 'assisted' | 'autonomous';
+      model?: string;
+    },
+  ) =>
     request<any>('/super-agent/execute', {
       method: 'POST',
       body: JSON.stringify({ payload, confirmed, ...options }),
@@ -502,62 +520,28 @@ export const superAgentApi = {
    * Plan Engine endpoint (LLM-driven). Sends the user message and gets back
    * { response: LLMResponse, trace?: ExecutionTrace, sessionId: string }.
    */
-  plan: (userMessage: string, options?: { sessionId?: string; dryRun?: boolean }) =>
-    request<any>('/super-agent/command', {
+  plan: (
+    userMessage: string,
+    options?: {
+      sessionId?: string;
+      dryRun?: boolean;
+      autonomyLevel?: 'supervised' | 'assisted' | 'autonomous';
+      model?: string;
+      mode?: 'investigate' | 'operate' | 'plan';
+    },
+  ) =>
+    request<any>('/super-agent/plan', {
       method: 'POST',
       body: JSON.stringify({
         input: userMessage,
-        mode: options?.dryRun ? 'investigate' : 'operate',
-        context: options?.sessionId ? { sessionId: options.sessionId } : undefined,
+        userMessage,
+        sessionId: options?.sessionId,
+        dryRun: options?.dryRun,
+        autonomyLevel: options?.autonomyLevel,
+        model: options?.model,
+        mode: options?.mode || 'plan',
       }),
-    }).then((result: any) => ({
-      sessionId: result.sessionId,
-      response: {
-        kind: 'plan',
-        plan: {
-          planId: result.response?.runId || result.sessionId || `plan-${Date.now()}`,
-          sessionId: result.sessionId || options?.sessionId || null,
-          createdAt: new Date().toISOString(),
-          steps: Array.isArray(result.response?.steps)
-            ? result.response.steps.map((step: any, index: number) => ({
-                id: step.id || `s${index}`,
-                tool: step.label || 'super_agent.command',
-                args: {},
-                dependsOn: [],
-                rationale: step.detail || '',
-              }))
-            : [],
-          confidence: 1,
-          rationale: result.response?.summary || '',
-          needsApproval: Array.isArray(result.response?.actions)
-            ? result.response.actions.some((action: any) => action.requiresConfirmation === true)
-            : false,
-          responseTemplate: result.response?.summary || '',
-          commandResponse: result.response,
-        },
-      },
-      trace: {
-        summary: result.response?.summary || '',
-        status: String(result.response?.statusLine || '').toLowerCase().includes('approval')
-          ? 'pending_approval'
-          : String(result.response?.statusLine || '').toLowerCase().includes('block')
-            ? 'rejected_by_policy'
-            : String(result.response?.statusLine || '').toLowerCase().includes('fail')
-              ? 'failed'
-              : 'success',
-        spans: Array.isArray(result.response?.steps)
-          ? result.response.steps.map((step: any, index: number) => ({
-              stepId: step.id || `s${index}`,
-              tool: step.label || 'super_agent.command',
-              result: { ok: step.status !== 'failed', value: step.detail || step.label || '' },
-            }))
-          : [],
-        approvalIds: Array.isArray(result.response?.actions)
-          ? result.response.actions.filter((action: any) => action.requiresConfirmation === true).map((action: any) => action.id)
-          : [],
-        commandResponse: result.response,
-      },
-    })),
+    }),
   session: (sessionId: string) => request<any>(`/super-agent/sessions/${encodeURIComponent(sessionId)}`),
   sessionTraces: (sessionId: string, limit = 20) =>
     request<any>(`/super-agent/sessions/${encodeURIComponent(sessionId)}/traces?limit=${limit}`),
