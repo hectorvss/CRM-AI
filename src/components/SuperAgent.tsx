@@ -144,6 +144,10 @@ const MODEL_OPTIONS: ModelOption[] = [
   { id: 'gpt-5.4-mini', label: '5.4-Mini', description: 'Fast and lightweight' },
   { id: 'gpt-5.4', label: '5.4', description: 'Balanced general-purpose' },
   { id: 'gpt-5.5', label: '5.5', description: 'Highest capability placeholder' },
+  { id: 'gemini-2.5-pro', label: 'Gemini Pro', description: 'Gemini family placeholder' },
+  { id: 'gemini-2.5-flash', label: 'Gemini Flash', description: 'Fast Gemini placeholder' },
+  { id: 'claude-4-sonnet', label: 'Claude Sonnet', description: 'Claude family placeholder' },
+  { id: 'claude-4-opus', label: 'Claude Opus', description: 'Higher-capacity Claude placeholder' },
 ];
 
 function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<string, any>, fallbackInput: string, fallbackRunId?: string | null): AssistantPayload {
@@ -1098,7 +1102,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                 className={`w-full resize-none bg-transparent px-4 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500 ${planSuggestionVisible ? 'pt-2 pb-1' : 'pt-3 pb-1'}`}
               />
               <div ref={controlBarRef} className="flex items-center justify-between gap-3 px-3 pb-3 pt-1">
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1">
                   <div className="relative">
                     <button
                       type="button"
@@ -1211,7 +1215,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     ) : null}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="ml-auto flex flex-wrap items-center gap-1">
                   <div className="relative">
                     <button
                       type="button"
@@ -1255,7 +1259,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   type="button"
                   onClick={() => void sendPrompt()}
                   disabled={!composerText.trim() || isSending || isExecuting}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-white transition-opacity hover:opacity-80 disabled:opacity-30 dark:bg-white dark:text-black"
+                  className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-black text-white transition-opacity hover:opacity-80 disabled:opacity-30 dark:bg-white dark:text-black"
                 >
                   <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
                 </button>
