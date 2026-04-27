@@ -11,5 +11,23 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin",      "value": "https://crm-ai-rose.vercel.app" },
+        { "key": "Access-Control-Allow-Credentials", "value": "true" },
+        { "key": "Access-Control-Allow-Methods",     "value": "GET,POST,PUT,PATCH,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers",     "value": "Content-Type,Authorization,x-tenant-id,x-workspace-id,x-user-id" }
+      ]
+    }
+  ],
+  "env": {
+    "NODE_ENV":                "production",
+    "SUPABASE_URL":            "https://erzfvnpzbmwnpchhemjt.supabase.co",
+    "GEMINI_MODEL":            "gemini-1.5-flash",
+    "SUPER_AGENT_LLM_ROUTING": "true",
+    "CORS_ORIGINS":            "https://crm-ai-rose.vercel.app,http://localhost:3005,http://localhost:5173"
+  }
 }
