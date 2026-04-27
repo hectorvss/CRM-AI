@@ -11,11 +11,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 
+  const userId = data.session?.user?.id || 'system';
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-tenant-id': 'org_default',
     'x-workspace-id': 'ws_default',
-    'x-user-id': 'system',
+    'x-user-id': userId,
     ...(options?.headers as Record<string, string> || {}),
   };
 

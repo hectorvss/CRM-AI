@@ -26,8 +26,14 @@
   "env": {
     "NODE_ENV":                "production",
     "SUPABASE_URL":            "https://erzfvnpzbmwnpchhemjt.supabase.co",
-    "GEMINI_MODEL":            "gemini-1.5-flash",
+    "GEMINI_MODEL":            "gemini-2.0-flash",
     "SUPER_AGENT_LLM_ROUTING": "true",
     "CORS_ORIGINS":            "https://crm-ai-rose.vercel.app,http://localhost:3005,http://localhost:5173"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/superagent/cron/check",
+      "schedule": "0 * * * *"
+    }
+  ]
 }

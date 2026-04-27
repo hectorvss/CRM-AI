@@ -469,6 +469,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [streamActivity, setStreamActivity] = useState<StreamActivity | null>(null);
   const [isStreamConnected, setIsStreamConnected] = useState(false);
+  const [liveAlerts, setLiveAlerts] = useState<ProactiveAlert[]>([]);
   const [planSessionId, setPlanSessionId] = useState<string | null>(null);
   const [recentTraces, setRecentTraces] = useState<Array<{ planId: string; status: string; summary: string; startedAt: string; endedAt: string }>>([]);
   const [traceMetrics, setTraceMetrics] = useState<{ total: number; success: number; partial: number; failed: number; pendingApproval: number; rejectedByPolicy: number; averageLatencyMs: number; averageSpanCount: number } | null>(null);
@@ -577,6 +578,18 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     }) as EventListener);
     source.addEventListener('super-agent:run_failed', ((e: MessageEvent) => {
       updateIfCurrent(e, (d, c) => ({ ...c, error: d.error || 'Run failed.', statusLine: 'Failed' }));
+    }) as EventListener);
+    source.addEventListener('super-agent:workspace_alert', ((e: MessageEvent) => {
+      const data = parseData(e);
+      if (data.alerts && Array.isArray(data.alerts)) {
+        setLiveAlerts((prev) => {
+          const merged = [...prev];
+          for (const a of data.alerts as ProactiveAlert[]) {
+            if (!merged.some((x) => x.label === a.label)) merged.push(a);
+          }
+          return merged;
+        });
+      }
     }) as EventListener);
     source.onerror = () => setIsStreamConnected(false);
     return () => { source.close(); };
@@ -850,6 +863,44 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="relative flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
 
+        {/* Live workspace-alert toast — shown when conversation is active */}
+        {messages.length > 0 && liveAlerts.length > 0 ? (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex flex-col gap-1.5 w-full max-w-md px-4 pointer-events-none">
+            {liveAlerts.map((alert, idx) => (
+              <div
+                key={idx}
+                className={[
+                  'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-md pointer-events-auto',
+                  'animate-in slide-in-from-top-2 duration-300',
+                  alert.severity === 'critical'
+                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/80 dark:text-red-300'
+                    : alert.severity === 'warning'
+                    ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/80 dark:text-amber-300'
+                    : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/80 dark:text-blue-300',
+                ].join(' ')}
+              >
+                <span className="text-base leading-none shrink-0">
+                  {alert.severity === 'critical' ? '🚨' : alert.severity === 'warning' ? '⚠️' : 'ℹ️'}
+                </span>
+                <span className="flex-1 truncate">{alert.label}</span>
+                <button
+                  className="ml-2 opacity-60 hover:opacity-100 text-xs shrink-0"
+                  onClick={() => void sendPrompt(alert.query)}
+                >
+                  Review →
+                </button>
+                <button
+                  className="ml-1 opacity-40 hover:opacity-80 text-base leading-none shrink-0"
+                  onClick={() => setLiveAlerts((prev) => prev.filter((_, i) => i !== idx))}
+                  aria-label="Dismiss"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         {/* Scroll area */}
         <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-52 pt-10">
           <div className="mx-auto flex max-w-2xl flex-col gap-4">
@@ -872,12 +923,12 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   What can I help with?
                 </h1>
 
-                {/* Proactive alert chips */}
-                {bootstrap?.proactiveAlerts && bootstrap.proactiveAlerts.length > 0 ? (
+                {/* Proactive alert chips (bootstrap + live SSE) */}
+                {(bootstrap?.proactiveAlerts && bootstrap.proactiveAlerts.length > 0) || liveAlerts.length > 0 ? (
                   <div className="flex flex-col items-center gap-2 w-full max-w-lg">
                     <p className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-1">Workspace alerts</p>
                     <div className="flex flex-wrap justify-center gap-2">
-                      {bootstrap.proactiveAlerts.map((alert, idx) => (
+                      {[...(bootstrap?.proactiveAlerts ?? []), ...liveAlerts.filter((la) => !(bootstrap?.proactiveAlerts ?? []).some((ba) => ba.label === la.label))].map((alert, idx) => (
                         <button
                           key={idx}
                           onClick={() => void sendPrompt(alert.query)}

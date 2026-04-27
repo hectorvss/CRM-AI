@@ -19,6 +19,8 @@ import CaseGraph from './components/CaseGraph';
 import PageErrorBoundary from './components/PageErrorBoundary';
 import SuperAgent from './components/SuperAgent';
 import GlobalSearch from './components/GlobalSearch';
+import Login from './components/auth/Login';
+import { supabase } from './api/supabase';
 import { NavigateInput, NavigationTarget, Page } from './types';
 
 const DEFAULT_TARGET: NavigationTarget = {
@@ -141,11 +143,24 @@ export default function App() {
   const [navigationTarget, setNavigationTarget] = useState<NavigationTarget>(
     typeof window !== 'undefined' ? parseNavigationTargetFromUrl() : DEFAULT_TARGET,
   );
+  // Auth state — null = loading, false = unauthenticated, true = authenticated
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
 
   const currentPage = navigationTarget.page;
 
   const navigate = useCallback((target: NavigateInput, entityId?: string | null) => {
     setNavigationTarget(normalizeNavigationTarget(target, entityId));
+  }, []);
+
+  // Auth: check current session on mount + subscribe to auth state changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthenticated(!!data.session);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthenticated(!!session);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   // Global Ctrl+K / Cmd+K shortcut
@@ -192,6 +207,22 @@ export default function App() {
     }),
     [navigationTarget],
   );
+
+  // Loading auth state
+  if (authenticated === null) {
+    return (
+      <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Unauthenticated — only show login if Supabase auth is actually configured
+  // (i.e. a real VITE_SUPABASE_ANON_KEY is set). In demo mode we skip the gate.
+  const hasSupabaseAuth = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (hasSupabaseAuth && !authenticated) {
+    return <Login onLogin={() => setAuthenticated(true)} />;
+  }
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200 font-sans h-screen flex overflow-hidden selection:bg-purple-200 dark:selection:bg-purple-900">

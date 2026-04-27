@@ -900,7 +900,7 @@ function buildCasePanel(bundle: any): ContextPanel {
     entityType: 'case',
     entityId: bundle.case.id,
     title: bundle.case.case_number || bundle.case.id,
-    subtitle: `${titleCase(bundle.case.type || 'case')} Â· ${customerName}`,
+    subtitle: `${titleCase(bundle.case.type || 'case')} · ${customerName}`,
     status: titleCase(bundle.case.status),
     risk: titleCase(bundle.case.risk_level),
     description: bundle.case.ai_diagnosis || bundle.case.ai_root_cause || 'Case context loaded from the unified data plane.',
@@ -972,7 +972,7 @@ function buildOrderPanel(order: any, context: any): ContextPanel {
     entityType: 'order',
     entityId: order.id,
     title: order.external_order_id || order.id,
-    subtitle: `${order.customer_name || 'Unknown customer'} Â· ${formatMoney(order.total_amount, order.currency || 'USD')}`,
+    subtitle: `${order.customer_name || 'Unknown customer'} · ${formatMoney(order.total_amount, order.currency || 'USD')}`,
     status: titleCase(order.status),
     risk: titleCase(order.risk_level),
     description: order.summary || canonical?.conflict?.summary || 'Commerce order context loaded.',
@@ -1020,7 +1020,7 @@ function buildPaymentPanel(payment: any, context: any): ContextPanel {
     entityType: 'payment',
     entityId: payment.id,
     title: payment.external_payment_id || payment.id,
-    subtitle: `${payment.customer_name || 'Unknown customer'} Â· ${formatMoney(payment.amount, payment.currency || 'USD')}`,
+    subtitle: `${payment.customer_name || 'Unknown customer'} · ${formatMoney(payment.amount, payment.currency || 'USD')}`,
     status: titleCase(payment.status),
     risk: titleCase(payment.risk_level),
     description: payment.summary || context?.case_state?.conflict?.summary || 'Payment context loaded.',
@@ -1068,7 +1068,7 @@ function buildReturnPanel(ret: any, context: any): ContextPanel {
     entityType: 'return',
     entityId: ret.id,
     title: ret.external_return_id || ret.id,
-    subtitle: `${ret.customer_name || 'Unknown customer'} Â· ${ret.external_order_id || ret.order_id || 'No order linked'}`,
+    subtitle: `${ret.customer_name || 'Unknown customer'} · ${ret.external_order_id || ret.order_id || 'No order linked'}`,
     status: titleCase(ret.status),
     risk: titleCase(ret.risk_level),
     description: ret.summary || context?.case_state?.conflict?.summary || 'Return context loaded.',
@@ -1151,7 +1151,7 @@ function buildApprovalPanel(approval: any, context: any): ContextPanel {
     entityType: 'approval',
     entityId: approvalRow.id,
     title: approvalRow.id,
-    subtitle: `${titleCase(approvalRow.action_type || 'approval')} Â· ${approvalRow.customer_name || context?.customer?.canonical_name || 'Unknown customer'}`,
+    subtitle: `${titleCase(approvalRow.action_type || 'approval')} · ${approvalRow.customer_name || context?.customer?.canonical_name || 'Unknown customer'}`,
     status: titleCase(approvalRow.status || 'pending'),
     risk: titleCase(approvalRow.risk_level || 'medium'),
     description: approvalRow.evidence_package?.summary || approvalRow.action_payload?.summary || 'Approval request loaded with backend context.',
@@ -1939,7 +1939,7 @@ async function buildResponseFromPlanOutcome(
     statusLine,
     sections: response?.kind === 'plan'
       ? [
-          { title: 'Plan', items: (response.plan?.steps ?? []).map((step: any) => `${step.tool} Â· ${step.rationale || 'No rationale'}`) },
+          { title: 'Plan', items: (response.plan?.steps ?? []).map((step: any) => `${step.tool} · ${step.rationale || 'No rationale'}`) },
           { title: 'Execution', items: [trace?.summary || 'Execution completed.'] },
         ]
       : response?.kind === 'clarification'
@@ -1994,8 +1994,8 @@ function parseCommandIntent(input: string, context?: CommandContext | null): Str
     text.includes('alto riesgo') || text.includes('high risk') ? 'high_risk' : null,
   ].filter(Boolean) as string[];
   const intent =
-    /(abrir|open|go to|ll[eÃ©]vame|navega)/.test(text) ? 'open'
-    : /(por que|por quÃ©|why|bloquead|blocked)/.test(text) ? 'explain_blocker'
+    /(abrir|open|go to|ll[eé]vame|navega)/.test(text) ? 'open'
+    : /(por que|por qué|why|bloquead|blocked)/.test(text) ? 'explain_blocker'
     : /(compara|compare)/.test(text) ? 'compare'
     : /(cancel|refund|reembolso|aprueba|approve|rechaza|reject|publica|publish|actualiza|update|cambia|change|cierra|close)/.test(text) ? 'operate'
     : /(busca|search)/.test(text) ? 'search'
@@ -2189,7 +2189,7 @@ async function handleCaseIntent(req: MultiTenantRequest, scope: CommandScope, in
   return createResponse({
     input,
     summary: `${bundle.case.case_number || bundle.case.id} is ${titleCase(bundle.case.status)} for ${customerName}. ${describeConflict(state.conflict) || bundle.case.ai_root_cause || 'The case is synchronized and ready for review.'}`,
-    statusLine: `${titleCase(bundle.case.type || 'case')} Â· ${titleCase(bundle.case.priority || 'normal')} priority`,
+    statusLine: `${titleCase(bundle.case.type || 'case')} · ${titleCase(bundle.case.priority || 'normal')} priority`,
     sections: [
       {
         title: 'Summary',
@@ -2246,7 +2246,7 @@ async function handleOrderIntent(req: MultiTenantRequest, scope: CommandScope, i
   return createResponse({
     input,
     summary: `${order.external_order_id || order.id} is ${titleCase(order.status)} for ${order.customer_name || 'Unknown customer'}. ${order.conflict_detected || order.summary || 'The order is synchronized and available for action.'}`,
-    statusLine: `${formatMoney(order.total_amount, order.currency || 'USD')} Â· ${titleCase(order.fulfillment_status || 'N/A')}`,
+    statusLine: `${formatMoney(order.total_amount, order.currency || 'USD')} · ${titleCase(order.fulfillment_status || 'N/A')}`,
     sections: [
       {
         title: 'Summary',
@@ -2293,7 +2293,7 @@ async function handlePaymentIntent(req: MultiTenantRequest, scope: CommandScope,
   return createResponse({
     input,
     summary: `${payment.external_payment_id || payment.id} is ${titleCase(payment.status)} for ${payment.customer_name || 'Unknown customer'}. ${payment.conflict_detected || payment.summary || 'The payment state is loaded and actionable.'}`,
-    statusLine: `${formatMoney(payment.amount, payment.currency || 'USD')} Â· ${titleCase(payment.psp || 'N/A')}`,
+    statusLine: `${formatMoney(payment.amount, payment.currency || 'USD')} · ${titleCase(payment.psp || 'N/A')}`,
     sections: [
       {
         title: 'Summary',
@@ -2340,7 +2340,7 @@ async function handleReturnIntent(req: MultiTenantRequest, scope: CommandScope, 
   return createResponse({
     input,
     summary: `${ret.external_return_id || ret.id} is ${titleCase(ret.status)} for ${ret.customer_name || 'Unknown customer'}. ${ret.conflict_detected || ret.summary || 'The return context is available for review.'}`,
-    statusLine: `${titleCase(ret.reason || ret.return_reason || 'return')} Â· ${titleCase(ret.refund_status || 'N/A')}`,
+    statusLine: `${titleCase(ret.reason || ret.return_reason || 'return')} · ${titleCase(ret.refund_status || 'N/A')}`,
     sections: [
       {
         title: 'Summary',
@@ -2392,7 +2392,7 @@ async function handleCustomerIntent(req: MultiTenantRequest, scope: CommandScope
   return createResponse({
     input,
     summary: `${customer.canonical_name || customer.id} has ${customer.state_snapshot?.metrics?.open_cases || customer.open_cases || 0} open cases and ${customer.state_snapshot?.metrics?.active_conflicts || customer.active_conflicts || 0} active conflicts.`,
-    statusLine: `${titleCase(customer.segment || 'customer')} Â· ${titleCase(customer.risk_level || 'low')} risk`,
+    statusLine: `${titleCase(customer.segment || 'customer')} · ${titleCase(customer.risk_level || 'low')} risk`,
     sections: [
       {
         title: 'Summary',
@@ -2443,7 +2443,7 @@ async function handleApprovalQueueIntent(req: MultiTenantRequest, scope: Command
       {
         title: 'Queue snapshot',
         items: top.length
-          ? top.map((item: any) => `${item.id} Â· ${titleCase(item.action_type || 'approval')} Â· ${item.customer_name || 'Unknown customer'} Â· ${titleCase(item.risk_level || 'medium')} risk`)
+          ? top.map((item: any) => `${item.id} · ${titleCase(item.action_type || 'approval')} · ${item.customer_name || 'Unknown customer'} · ${titleCase(item.risk_level || 'medium')} risk`)
           : ['Approval queue is clear.'],
       },
     ],
@@ -2487,7 +2487,7 @@ async function handlePaymentQueueIntent(req: MultiTenantRequest, scope: CommandS
       {
         title: 'Payments requiring attention',
         items: flagged.length
-          ? flagged.map((payment: any) => `${payment.external_payment_id || payment.id} Â· ${payment.customer_name || 'Unknown customer'} Â· ${titleCase(payment.status || 'unknown')} Â· ${payment.conflict_detected || payment.summary || 'Review payment state'}`)
+          ? flagged.map((payment: any) => `${payment.external_payment_id || payment.id} · ${payment.customer_name || 'Unknown customer'} · ${titleCase(payment.status || 'unknown')} · ${payment.conflict_detected || payment.summary || 'Review payment state'}`)
           : ['Payment queue looks healthy.'],
       },
     ],
@@ -2520,15 +2520,15 @@ async function handleConflictIntent(req: MultiTenantRequest, scope: CommandScope
     ...cases
       .filter((item: any) => item.has_reconciliation_conflicts || item.conflict_severity || item.ai_root_cause)
       .slice(0, 2)
-      .map((item: any) => ({ label: 'Case', value: `${item.case_number || item.id} Â· ${item.ai_root_cause || item.latest_message_preview || 'Conflict detected'}` })),
+      .map((item: any) => ({ label: 'Case', value: `${item.case_number || item.id} · ${item.ai_root_cause || item.latest_message_preview || 'Conflict detected'}` })),
     ...orders
       .filter((item: any) => item.conflict_detected || item.has_conflict)
       .slice(0, 2)
-      .map((item: any) => ({ label: 'Order', value: `${item.external_order_id || item.id} Â· ${item.conflict_detected || item.summary || 'Conflict detected'}` })),
+      .map((item: any) => ({ label: 'Order', value: `${item.external_order_id || item.id} · ${item.conflict_detected || item.summary || 'Conflict detected'}` })),
     ...payments
       .filter((item: any) => item.conflict_detected || item.has_conflict)
       .slice(0, 2)
-      .map((item: any) => ({ label: 'Payment', value: `${item.external_payment_id || item.id} Â· ${item.conflict_detected || item.summary || 'Conflict detected'}` })),
+      .map((item: any) => ({ label: 'Payment', value: `${item.external_payment_id || item.id} · ${item.conflict_detected || item.summary || 'Conflict detected'}` })),
   ];
 
   return createResponse({
@@ -2540,7 +2540,7 @@ async function handleConflictIntent(req: MultiTenantRequest, scope: CommandScope
     sections: [
       {
         title: 'Conflict snapshot',
-        items: conflicts.length ? conflicts.map((item) => `${item.label} Â· ${item.value}`) : ['No cross-system conflicts detected.'],
+        items: conflicts.length ? conflicts.map((item) => `${item.label} · ${item.value}`) : ['No cross-system conflicts detected.'],
       },
       {
         title: 'Recommended next step',
@@ -2588,7 +2588,7 @@ async function handleWorkflowIntent(req: MultiTenantRequest, scope: CommandScope
       {
         title: 'Workflow snapshot',
         items: top.length
-          ? top.map((workflow: any) => `${workflow.name || workflow.id} Â· ${titleCase(workflow.version_status || 'draft')} Â· trigger ${titleCase(workflow.trigger?.type || workflow.trigger?.event || 'manual')}`)
+          ? top.map((workflow: any) => `${workflow.name || workflow.id} · ${titleCase(workflow.version_status || 'draft')} · trigger ${titleCase(workflow.trigger?.type || workflow.trigger?.event || 'manual')}`)
           : ['No workflows returned by the runtime.'],
       },
     ],
@@ -2622,7 +2622,7 @@ async function handleAgentIntent(input: string, agents: any[]) {
       {
         title: 'Available specialists',
         items: top.length
-          ? top.map((agent: any) => `${agent.name || agent.slug} Â· ${titleCase(agent.runtime || 'system')} Â· ${titleCase(agent.mode || agent.version_status || 'available')}`)
+          ? top.map((agent: any) => `${agent.name || agent.slug} · ${titleCase(agent.runtime || 'system')} · ${titleCase(agent.mode || agent.version_status || 'available')}`)
           : ['No agent registry entries available.'],
       },
     ],
@@ -2636,7 +2636,7 @@ async function handleAgentIntent(input: string, agents: any[]) {
       description: 'The Super Agent remains the single conversational entrypoint and delegates to specialists when clarity or execution requires it.',
       facts: top.slice(0, 6).map((agent: any) => ({
         label: agent.name || agent.slug,
-        value: `${titleCase(agent.runtime || 'system')} Â· ${titleCase(agent.mode || agent.version_status || 'available')}`,
+        value: `${titleCase(agent.runtime || 'system')} · ${titleCase(agent.mode || agent.version_status || 'available')}`,
       })),
       evidence: [
         { label: 'Orchestration model', value: 'Supervisor-led coordination with specialist delegation.', tone: 'success' },
@@ -2707,10 +2707,10 @@ async function handleSearchIntent(req: MultiTenantRequest, scope: CommandScope, 
   ]);
 
   const hits = [
-    ...cases.slice(0, 2).map((item: any) => ({ label: 'Case', value: `${item.case_number || item.id} Â· ${item.latest_message_preview || item.ai_diagnosis || item.type || 'Case result'}` })),
-    ...orders.slice(0, 2).map((item: any) => ({ label: 'Order', value: `${item.external_order_id || item.id} Â· ${item.customer_name || 'Unknown customer'} Â· ${titleCase(item.status || 'unknown')}` })),
-    ...customers.slice(0, 2).map((item: any) => ({ label: 'Customer', value: `${item.canonical_name || item.id} Â· ${item.canonical_email || item.phone || 'Customer result'}` })),
-    ...payments.slice(0, 2).map((item: any) => ({ label: 'Payment', value: `${item.external_payment_id || item.id} Â· ${titleCase(item.status || 'unknown')}` })),
+    ...cases.slice(0, 2).map((item: any) => ({ label: 'Case', value: `${item.case_number || item.id} · ${item.latest_message_preview || item.ai_diagnosis || item.type || 'Case result'}` })),
+    ...orders.slice(0, 2).map((item: any) => ({ label: 'Order', value: `${item.external_order_id || item.id} · ${item.customer_name || 'Unknown customer'} · ${titleCase(item.status || 'unknown')}` })),
+    ...customers.slice(0, 2).map((item: any) => ({ label: 'Customer', value: `${item.canonical_name || item.id} · ${item.canonical_email || item.phone || 'Customer result'}` })),
+    ...payments.slice(0, 2).map((item: any) => ({ label: 'Payment', value: `${item.external_payment_id || item.id} · ${titleCase(item.status || 'unknown')}` })),
   ];
 
   return createResponse({
@@ -2722,7 +2722,7 @@ async function handleSearchIntent(req: MultiTenantRequest, scope: CommandScope, 
     sections: [
       {
         title: 'Search results',
-        items: hits.length ? hits.map((hit) => `${hit.label} Â· ${hit.value}`) : ['Try a case number, order ID, payment ID, or customer name.'],
+        items: hits.length ? hits.map((hit) => `${hit.label} · ${hit.value}`) : ['Try a case number, order ID, payment ID, or customer name.'],
       },
     ],
     actions: [
@@ -3952,6 +3952,106 @@ router.get('/metrics', (req: MultiTenantRequest, res) => {
     return res.json({ metrics: planEngine.getMetrics(sessionId), sessionId: sessionId || null });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to load Super Agent metrics' });
+  }
+});
+
+// ── GET /cron/check ───────────────────────────────────────────────────────────
+// Vercel cron endpoint — called on schedule to proactively scan for SLA breaches,
+// churn risk, and fraud flags. Broadcasts SSE alerts to connected clients.
+// Protected by CRON_SECRET (set in Vercel env, automatically sent by Vercel crons).
+router.get('/cron/check', async (req: MultiTenantRequest, res) => {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.headers.authorization ?? '';
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const in4h = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const scope = { tenantId: 'org_default', workspaceId: '' };
+
+    const [allCases, allCustomers] = await Promise.all([
+      caseRepository.list(scope, {}) as Promise<any[]>,
+      customerRepository.list(scope, {}) as Promise<any[]>,
+    ]);
+
+    const alerts: Array<{ type: string; severity: string; title: string }> = [];
+
+    // SLA breach scan
+    const slaBreached = (allCases as any[]).filter((c: any) =>
+      c.sla_resolution_deadline
+      && c.status !== 'closed' && c.status !== 'resolved'
+      && new Date(c.sla_resolution_deadline) < now,
+    );
+    const slaAtRisk = (allCases as any[]).filter((c: any) =>
+      c.sla_resolution_deadline
+      && c.status !== 'closed' && c.status !== 'resolved'
+      && new Date(c.sla_resolution_deadline) <= new Date(in4h)
+      && new Date(c.sla_resolution_deadline) >= now,
+    );
+    if (slaBreached.length > 0) {
+      broadcastSSE('org_default', 'super-agent:workspace_alert', {
+        type: 'sla_breach_risk', severity: 'critical',
+        title: `${slaBreached.length} case${slaBreached.length > 1 ? 's' : ''} with breached SLA`,
+        description: `${slaBreached.length} open case${slaBreached.length > 1 ? 's have' : ' has'} exceeded the SLA resolution deadline.`,
+        suggestedQuery: 'Show cases with breached SLA', scannedAt: now.toISOString(),
+      });
+      alerts.push({ type: 'sla_breach_risk', severity: 'critical', title: `${slaBreached.length} SLA breaches` });
+    }
+    if (slaAtRisk.length > 0) {
+      broadcastSSE('org_default', 'super-agent:workspace_alert', {
+        type: 'sla_breach_risk', severity: 'warning',
+        title: `${slaAtRisk.length} case${slaAtRisk.length > 1 ? 's' : ''} approaching SLA breach`,
+        description: `${slaAtRisk.length} open case${slaAtRisk.length > 1 ? 's are' : ' is'} within 4 hours of the SLA deadline.`,
+        suggestedQuery: 'Show cases near SLA breach', scannedAt: now.toISOString(),
+      });
+      alerts.push({ type: 'sla_at_risk', severity: 'warning', title: `${slaAtRisk.length} near SLA breach` });
+    }
+
+    // Churn risk scan
+    const churnRisk = (allCustomers as any[]).filter((c: any) => {
+      if (c.fraud_flag) return false;
+      const dormant = c.last_order_at ? new Date(c.last_order_at) < new Date(thirtyDaysAgo) : false;
+      return Number(c.open_cases ?? 0) >= 3
+        || (dormant && (Number(c.refund_rate ?? 0) > 0.3 || Number(c.dispute_rate ?? 0) > 0.2));
+    });
+    if (churnRisk.length > 0) {
+      broadcastSSE('org_default', 'super-agent:workspace_alert', {
+        type: 'churn_risk', severity: 'warning',
+        title: `${churnRisk.length} customer${churnRisk.length > 1 ? 's' : ''} at churn risk`,
+        description: 'Customers showing churn signals: multiple open cases, high refund/dispute rate, or prolonged inactivity.',
+        suggestedQuery: 'Show customers at risk of churning', scannedAt: now.toISOString(),
+      });
+      alerts.push({ type: 'churn_risk', severity: 'warning', title: `${churnRisk.length} churn risks` });
+    }
+
+    // Fraud flag scan
+    const fraudCustomers = (allCustomers as any[]).filter((c: any) => c.fraud_flag);
+    if (fraudCustomers.length > 0) {
+      broadcastSSE('org_default', 'super-agent:workspace_alert', {
+        type: 'fraud_flag', severity: 'critical',
+        title: `${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} flagged for fraud`,
+        description: 'Customer profiles with active fraud flags requiring review.',
+        suggestedQuery: 'Show customers with fraud flag', scannedAt: now.toISOString(),
+      });
+      alerts.push({ type: 'fraud_flag', severity: 'critical', title: `${fraudCustomers.length} fraud flags` });
+    }
+
+    logger.info('Super Agent cron check completed', {
+      slaBreached: slaBreached.length,
+      slaAtRisk: slaAtRisk.length,
+      churnRisk: churnRisk.length,
+      fraudCustomers: fraudCustomers.length,
+      alertsBroadcast: alerts.length,
+    });
+
+    res.json({ ok: true, scannedAt: now.toISOString(), alertsBroadcast: alerts.length, summary: alerts });
+  } catch (error) {
+    logger.error('Super Agent cron check error', error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Cron check failed' });
   }
 });
 
