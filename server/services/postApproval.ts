@@ -545,13 +545,22 @@ async function applyPostApprovalDecisionSupabase(
   if (workflowsError) throw workflowsError;
 
   for (const workflow of workflows ?? []) {
+    // If this workflow is suspended at a human_review node waiting to be resumed
+    // (workflow.node.resume pattern), do NOT mark it as completed here.
+    // The /runs/:runId/resume endpoint owns that transition — completing it here
+    // would close the run prematurely before the downstream nodes execute.
+    const isWaitingForResume = workflow.status === 'waiting' &&
+      parseMaybeJson<Record<string, any>>(workflow.context, {})?.waiting_for === 'human_review';
+
     const nextNode = approved ? (executablePlan ? 'execution_queued' : 'external_writeback_pending') : 'approval_rejected';
-    const workflowStatus = executablePlan && approved ? 'running' : 'completed';
+    const workflowStatus = isWaitingForResume
+      ? 'waiting'   // resume endpoint will advance it
+      : (executablePlan && approved ? 'running' : 'completed');
     await supabase
       .from('workflow_runs')
       .update({
         status: workflowStatus,
-        current_node_id: nextNode,
+        current_node_id: isWaitingForResume ? workflow.current_node_id : nextNode,
         context: {
           ...parseMaybeJson<Record<string, any>>(workflow.context, {}),
           approval_request_id: approval.id,
@@ -565,21 +574,25 @@ async function applyPostApprovalDecisionSupabase(
       .eq('id', workflow.id)
       .eq('tenant_id', scope.tenantId);
 
-    await supabase
-      .from('workflow_run_steps')
-      .update({
-        status: 'completed',
-        output: {
-          decision,
-          approval_request_id: approval.id,
-          decided_by: decidedBy,
-          note: note ?? null,
-        },
-        ended_at: now,
-        error: null,
-      })
-      .eq('workflow_run_id', workflow.id)
-      .eq('node_id', 'human_review');
+    // Only mark the human_review step completed if this isn't a resume-type workflow.
+    // For resume workflows the step completion happens inside the resume endpoint.
+    if (!isWaitingForResume) {
+      await supabase
+        .from('workflow_run_steps')
+        .update({
+          status: 'completed',
+          output: {
+            decision,
+            approval_request_id: approval.id,
+            decided_by: decidedBy,
+            note: note ?? null,
+          },
+          ended_at: now,
+          error: null,
+        })
+        .eq('workflow_run_id', workflow.id)
+        .eq('node_id', 'human_review');
+    }
 
     await supabase.from('workflow_run_steps').upsert({
       id: `wfrs_${approval.id}_post_${decision}`,

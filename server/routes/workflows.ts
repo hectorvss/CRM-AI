@@ -2115,7 +2115,7 @@ router.get('/runs/:runId', requirePermission('workflows.read'), async (req: Mult
     const supabase = getSupabaseAdmin();
     const { data: run, error: runError } = await supabase
       .from('workflow_runs')
-      .select('*, workflow_versions!inner(workflow_id, workflow_definitions!inner(name)), cases(case_number)')
+      .select('*, workflow_versions!inner(workflow_id, workflow_definitions!workflow_versions_workflow_id_fkey(name)), cases(case_number)')
       .eq('id', req.params.runId)
       .eq('tenant_id', tenantId)
       .maybeSingle();

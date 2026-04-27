@@ -333,7 +333,7 @@ class SupabaseWorkflowRepository implements WorkflowRepository {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('workflow_runs')
-      .select('*, workflow_versions!inner(workflow_id, workflow_definitions!inner(name)), cases(case_number)')
+      .select('*, workflow_versions!inner(workflow_id, workflow_definitions!workflow_versions_workflow_id_fkey(name)), cases(case_number)')
       .eq('tenant_id', tenantId)
       .order('started_at', { ascending: false })
       .limit(limit);
