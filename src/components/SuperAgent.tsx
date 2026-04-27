@@ -1069,9 +1069,9 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
               </div>
             ) : null}
 
-            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div className="space-y-2">
               {planSuggestionVisible ? (
-                <div className="flex justify-center px-4 pt-3">
+                <div className="flex justify-center px-4">
                   <button
                     type="button"
                     onClick={() => {
@@ -1087,6 +1087,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   </button>
                 </div>
               ) : null}
+            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
               <textarea
                 value={composerText}
                 onChange={(e) => setComposerText(e.target.value)}
@@ -1264,6 +1265,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   <span className="material-symbols-outlined text-[14px]">arrow_upward</span>
                 </button>
               </div>
+            </div>
             </div>
           </div>
         </div>
