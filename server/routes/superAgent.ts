@@ -3690,7 +3690,12 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
       planEngine.rememberTarget(effectiveSessionId, plannedResponse.navigationTarget);
     }
 
-    return res.json({ response, trace: trace ?? null, sessionId: effectiveSessionId });
+    return res.json({
+      response,
+      enrichedResponse: plannedResponse,
+      trace: trace ?? null,
+      sessionId: effectiveSessionId,
+    });
   } catch (error) {
     console.error('Plan Engine error:', error);
     return res.status(500).json({

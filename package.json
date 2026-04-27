@@ -15,6 +15,7 @@
     "eval:super-agent-policy": "tsx tests/super-agent/run-policy.ts",
     "eval:super-agent-catalog": "tsx tests/super-agent/run-tool-catalog.ts",
     "eval:super-agent-search": "tsx tests/super-agent/run-search-smoke.ts",
+    "eval:super-agent-safety": "tsx tests/super-agent/run-safety.ts",
     "worker": "tsx server/worker-standalone.ts",
     "seed:supabase-demo": "tsx seed_sample_data.ts"
   },

@@ -117,6 +117,95 @@ const NODE_CATALOG = [
 const SENSITIVE_KEYS = new Set(['order.cancel', 'order.hold', 'payment.refund', 'payment.mark_dispute', 'connector.call', 'connector.emit_event']);
 const PAUSED_STATUSES = new Set(['waiting', 'waiting_approval', 'paused']);
 
+type WorkflowNodeContract = {
+  required?: string[];
+  optional?: string[];
+  branchLabels?: string[];
+  sideEffects?: 'none' | 'read' | 'write' | 'external';
+  risk?: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  resumable?: boolean;
+};
+
+const NODE_CONTRACTS: Record<string, WorkflowNodeContract> = {
+  'webhook.received': { required: ['event'], optional: ['secret', 'source'], sideEffects: 'none' },
+  'amount.threshold': { required: ['field', 'operator', 'amount'], branchLabels: ['true', 'false'], sideEffects: 'none' },
+  'status.matches': { required: ['field', 'value'], optional: ['operator'], branchLabels: ['true', 'false'], sideEffects: 'none' },
+  'risk.level': { required: ['field', 'value'], optional: ['operator'], branchLabels: ['true', 'false'], sideEffects: 'none' },
+  'flow.if': { required: ['field', 'operator', 'value'], branchLabels: ['true', 'false'], sideEffects: 'none' },
+  'flow.filter': { required: ['source', 'field', 'operator', 'value'], branchLabels: ['true', 'false'], sideEffects: 'none' },
+  'flow.switch': { required: ['field', 'branches'], optional: ['fallback'], branchLabels: ['branches'], sideEffects: 'none' },
+  'flow.compare': { required: ['left', 'operator', 'right'], branchLabels: ['true', 'false'], sideEffects: 'none' },
+  'flow.branch': { required: ['branches'], branchLabels: ['branches'], sideEffects: 'none' },
+  'flow.merge': { required: ['mode'], sideEffects: 'none' },
+  'flow.loop': { required: ['source'], optional: ['batchSize', 'maxIterations'], sideEffects: 'none' },
+  'flow.wait': { required: ['mode'], optional: ['duration', 'until', 'timeout'], sideEffects: 'none', resumable: true },
+  'flow.subworkflow': { required: ['workflow'], optional: ['input'], sideEffects: 'external', risk: 'medium' },
+  'flow.stop_error': { required: ['errorMessage'], sideEffects: 'none' },
+  'data.set_fields': { required: ['field', 'value'], optional: ['source', 'target'], sideEffects: 'none' },
+  'data.rename_fields': { required: ['mapping'], sideEffects: 'none' },
+  'data.extract_json': { required: ['source'], optional: ['path'], sideEffects: 'none' },
+  'data.normalize_text': { required: ['source'], optional: ['target'], sideEffects: 'none' },
+  'data.format_date': { required: ['source', 'format'], optional: ['target'], sideEffects: 'none' },
+  'data.split_items': { required: ['source'], optional: ['delimiter'], sideEffects: 'none' },
+  'data.dedupe': { required: ['source'], sideEffects: 'none' },
+  'data.map_fields': { required: ['mapping'], sideEffects: 'none' },
+  'data.pick_fields': { required: ['fields'], sideEffects: 'none' },
+  'data.merge_objects': { required: ['left', 'right'], sideEffects: 'none' },
+  'data.validate_required': { required: ['fields'], sideEffects: 'none' },
+  'data.calculate': { required: ['left', 'operation', 'right', 'target'], sideEffects: 'none' },
+  'case.assign': { required: ['user_id'], optional: ['team_id'], sideEffects: 'write', risk: 'medium' },
+  'case.reply': { required: ['content'], sideEffects: 'write', risk: 'medium' },
+  'case.note': { required: ['content'], sideEffects: 'write', risk: 'low' },
+  'case.update_status': { required: ['status'], optional: ['reason'], sideEffects: 'write', risk: 'medium' },
+  'case.set_priority': { required: ['priority'], sideEffects: 'write', risk: 'low' },
+  'case.add_tag': { required: ['tag'], sideEffects: 'write', risk: 'low' },
+  'order.cancel': { required: ['reason'], optional: ['order_id'], sideEffects: 'write', risk: 'high' },
+  'order.hold': { required: ['reason'], optional: ['order_id'], sideEffects: 'write', risk: 'high' },
+  'order.release': { required: ['reason'], optional: ['order_id'], sideEffects: 'write', risk: 'medium' },
+  'payment.refund': { required: ['amount', 'reason'], optional: ['payment_id'], sideEffects: 'write', risk: 'critical' },
+  'payment.mark_dispute': { required: ['reason'], optional: ['payment_id', 'dispute_id'], sideEffects: 'write', risk: 'high' },
+  'return.create': { required: ['reason'], optional: ['order_id', 'amount', 'method'], sideEffects: 'write', risk: 'medium' },
+  'return.approve': { required: ['reason'], optional: ['return_id'], sideEffects: 'write', risk: 'medium' },
+  'return.reject': { required: ['reason'], optional: ['return_id'], sideEffects: 'write', risk: 'medium' },
+  'approval.create': { required: ['action_type', 'risk_level'], optional: ['queue', 'reason'], sideEffects: 'write', risk: 'medium', resumable: true },
+  'approval.escalate': { required: ['reason'], optional: ['queue', 'risk_level'], sideEffects: 'write', risk: 'high', resumable: true },
+  'agent.run': { required: ['agent'], optional: ['case_id', 'input'], sideEffects: 'external', risk: 'medium' },
+  'agent.classify': { required: ['text'], optional: ['intent'], sideEffects: 'none' },
+  'agent.sentiment': { required: ['text'], sideEffects: 'none' },
+  'agent.summarize': { required: ['text'], sideEffects: 'none' },
+  'agent.draft_reply': { required: ['content'], sideEffects: 'none' },
+  'policy.evaluate': { required: ['policy', 'field', 'operator', 'value'], branchLabels: ['allow', 'block'], sideEffects: 'none' },
+  'core.audit_log': { required: ['action', 'entity_type', 'entity_id'], sideEffects: 'write', risk: 'low' },
+  'core.idempotency_check': { required: ['key'], sideEffects: 'read' },
+  'core.rate_limit': { required: ['bucket', 'limit'], sideEffects: 'read' },
+  'knowledge.search': { required: ['query'], optional: ['limit', 'status'], sideEffects: 'read' },
+  'knowledge.validate_policy': { required: ['policy', 'action'], branchLabels: ['allow', 'approval'], sideEffects: 'none' },
+  'knowledge.attach_evidence': { required: ['title'], optional: ['source', 'note'], sideEffects: 'write', risk: 'low' },
+  'connector.call': { required: ['connector', 'capability'], optional: ['payload'], sideEffects: 'external', risk: 'high' },
+  'connector.emit_event': { required: ['event_type'], optional: ['connector', 'payload'], sideEffects: 'external', risk: 'high' },
+  'connector.check_health': { required: ['connector'], sideEffects: 'read' },
+  delay: { required: ['mode'], optional: ['duration', 'until'], sideEffects: 'none', resumable: true },
+  retry: { required: ['retries', 'backoffMs'], sideEffects: 'none' },
+};
+
+function getNodeContract(key: string): WorkflowNodeContract {
+  return NODE_CONTRACTS[key] ?? { required: [], optional: [], sideEffects: 'none', risk: SENSITIVE_KEYS.has(key) ? 'high' : 'low' };
+}
+
+function getConfigFieldsForNode(key: string) {
+  const contract = getNodeContract(key);
+  return Array.from(new Set([...(contract.required ?? []), ...(contract.optional ?? [])]));
+}
+
+function hasConfigValue(config: Record<string, any>, field: string) {
+  const value = config?.[field];
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value).length > 0;
+  return true;
+}
+
 function parseMaybeJsonArray(value: any): any[] {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string') return [];
@@ -236,6 +325,7 @@ function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
 
   for (const node of normalized) {
     const spec = catalogByKey.get(node.key);
+    const contract = getNodeContract(node.key);
     if (node.disabled) {
       diagnostics.push(buildDiagnostic(node.id, 'info', 'node.disabled', `${node.label} is disabled and will be skipped.`, false));
       continue;
@@ -248,6 +338,12 @@ function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
     if (spec?.requiresConfig && Object.keys(node.config ?? {}).length === 0) {
       const diagnostic = buildDiagnostic(node.id, 'error', 'node.missing_config', `${node.label} needs configuration before publishing.`);
       errors.push(diagnostic.message);
+      diagnostics.push(diagnostic);
+    }
+    const missingFields = (contract.required ?? []).filter((field) => !hasConfigValue(node.config ?? {}, field));
+    for (const field of missingFields) {
+      const diagnostic = buildDiagnostic(node.id, 'warning', 'node.missing_required_field', `${node.label} should configure "${field}" for reliable execution.`, false);
+      warnings.push(diagnostic.message);
       diagnostics.push(diagnostic);
     }
     if (node.key === 'connector.call' && !(node.credentialsRef || node.config?.connector_id || node.config?.connectorId || node.config?.connector)) {
@@ -266,6 +362,17 @@ function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
       errors.push(diagnostic.message);
       diagnostics.push(diagnostic);
     }
+    if (node.type === 'condition') {
+      const outgoingLabels = normalizedEdges.filter((edge) => edge.source === node.id).map((edge) => String(edge.label ?? '').toLowerCase());
+      const requiredLabels = node.key === 'flow.switch' || node.key === 'flow.branch'
+        ? asArray(node.config?.branches || node.config?.routes || node.config?.options).map((label) => String(label).toLowerCase())
+        : (contract.branchLabels ?? []).filter((label) => label !== 'branches').map((label) => label.toLowerCase());
+      for (const label of requiredLabels) {
+        if (label && !outgoingLabels.includes(label)) {
+          diagnostics.push(buildDiagnostic(node.id, 'warning', 'branch.missing_edge', `${node.label} has no "${label}" branch connection.`, false));
+        }
+      }
+    }
   }
 
   return {
@@ -278,30 +385,74 @@ function validateWorkflowDefinition(nodes: any[] = [], edges: any[] = []) {
   };
 }
 
-function buildDryRun(nodes: any[] = [], edges: any[] = [], triggerPayload: any = {}) {
+async function buildDryRun(
+  nodes: any[] = [],
+  edges: any[] = [],
+  triggerPayload: any = {},
+  scope: { tenantId?: string; workspaceId?: string; userId?: string } = {},
+) {
   const validation = validateWorkflowDefinition(nodes, edges);
   const startedAt = new Date().toISOString();
-  const executionOrder = resolveExecutionOrder(validation.nodes, validation.edges);
-  const steps = executionOrder.map((node, index) => {
-    const spec = NODE_CATALOG.find((item) => item.key === node.key);
-    const blocked = validation.errors.some((error) => error.includes(node.label));
-    return {
-      nodeId: node.id,
-      label: node.label,
-      type: node.type,
-      key: node.key,
-      status: node.disabled ? 'skipped' : blocked ? 'blocked' : 'would_run',
-      order: index + 1,
-      input: index === 0 ? triggerPayload : { fromPreviousStep: true },
-      output: node.disabled
-        ? { reason: 'Node is disabled' }
-        : blocked ? { reason: 'Validation error' } : { simulated: true, sideEffects: 'none' },
-      durationMs: node.disabled ? 0 : 20 + index * 7,
-      evidence: [{ type: 'workflow_node', id: node.id, label: node.label }],
-      navigationTarget: { page: 'workflows', entityType: 'workflow_node', entityId: node.id },
-      sensitive: Boolean(spec?.sensitive),
-    };
-  });
+  const steps: any[] = [];
+
+  if (validation.nodes.length > 0) {
+    const workflowContext = await buildWorkflowContext(
+      { tenantId: scope.tenantId ?? 'dry-run', workspaceId: scope.workspaceId ?? 'dry-run', userId: scope.userId },
+      triggerPayload ?? {},
+    ).catch(() => ({
+      trigger: triggerPayload ?? {},
+      data: triggerPayload && typeof triggerPayload === 'object' ? { ...triggerPayload } : triggerPayload ?? {},
+      case: null,
+      order: null,
+      payment: null,
+      return: null,
+      agent: {},
+      policy: {},
+    }));
+    workflowContext.__simulation = true;
+
+    const visited = new Set<string>();
+    let currentNode = getStartNode(validation.nodes);
+    let order = 0;
+    while (currentNode && !visited.has(currentNode.id) && order < validation.nodes.length) {
+      visited.add(currentNode.id);
+      const spec = NODE_CATALOG.find((item) => item.key === currentNode.key);
+      const blocked = validation.errors.some((error) => error.includes(currentNode.label));
+      const startedStepAt = Date.now();
+      const result = blocked
+        ? { status: 'blocked', output: { reason: 'Validation error' }, error: 'Validation error' }
+        : await executeWorkflowNode(
+          { tenantId: scope.tenantId ?? 'dry-run', workspaceId: scope.workspaceId ?? 'dry-run', userId: scope.userId },
+          currentNode,
+          workflowContext,
+        );
+      const durationMs = Math.max(1, Date.now() - startedStepAt);
+      steps.push({
+        nodeId: currentNode.id,
+        label: currentNode.label,
+        type: currentNode.type,
+        key: currentNode.key,
+        status: result.status === 'completed' ? 'would_run' : result.status,
+        order: order + 1,
+        input: order === 0 ? triggerPayload : { fromPreviousStep: true, lastOutput: workflowContext.lastOutput ?? null },
+        output: result.output ?? {},
+        error: result.error ?? null,
+        durationMs,
+        evidence: [{ type: 'workflow_node', id: currentNode.id, label: currentNode.label }],
+        navigationTarget: { page: 'workflows', entityType: 'workflow_node', entityId: currentNode.id },
+        sensitive: Boolean(spec?.sensitive),
+      });
+      workflowContext.lastOutput = result.output ?? null;
+      workflowContext.lastNode = { id: currentNode.id, key: currentNode.key, label: currentNode.label, status: result.status };
+      if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
+        workflowContext.data = result.output.data ?? result.output;
+      }
+      order += 1;
+      if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) break;
+      currentNode = pickNextNode(validation.nodes, validation.edges, currentNode, workflowContext);
+    }
+  }
+
   return {
     ok: validation.ok,
     dryRun: true,
@@ -390,6 +541,7 @@ async function buildWorkflowContext(scope: { tenantId: string; workspaceId: stri
     return: null,
     agent: {},
     policy: {},
+    __subworkflowDepth: Number(payload?.__subworkflowDepth || 0),
   };
 
   const caseId = payload?.caseId ?? payload?.case_id;
@@ -475,8 +627,14 @@ function pickNextNodes(nodes: any[] = [], edges: any[] = [], currentNode: any, c
   return target ? [target] : [];
 }
 
-function buildStepDryRun(nodes: any[] = [], edges: any[] = [], nodeId: string, triggerPayload: any = {}) {
-  const dryRun = buildDryRun(nodes, edges, triggerPayload);
+async function buildStepDryRun(
+  nodes: any[] = [],
+  edges: any[] = [],
+  nodeId: string,
+  triggerPayload: any = {},
+  scope: { tenantId?: string; workspaceId?: string; userId?: string } = {},
+) {
+  const dryRun = await buildDryRun(nodes, edges, triggerPayload, scope);
   const executionOrder = dryRun.steps ?? [];
   const index = executionOrder.findIndex((step: any) => step.nodeId === nodeId || step.node_id === nodeId);
   if (index === -1) {
@@ -550,6 +708,34 @@ function workflowMatchesTrigger(version: any, eventType: string) {
   };
   const accepted = new Set([normalizedEvent, ...(aliases[normalizedEvent] ?? []).map(normalizeTriggerName)]);
   return accepted.has(triggerType) || accepted.has(nodeTrigger);
+}
+
+function buildSimulatedNodeResult(node: any, config: Record<string, any>, context: any) {
+  const contract = getNodeContract(node.key);
+  const risk = contract.risk ?? (SENSITIVE_KEYS.has(node.key) ? 'high' : 'low');
+  const sideEffects = contract.sideEffects ?? (['action', 'integration'].includes(node.type) ? 'write' : 'none');
+  const configPreview = Object.fromEntries(
+    Object.entries(config ?? {}).filter(([key]) => !/secret|token|password|api[_-]?key/i.test(key)),
+  );
+  const output = {
+    simulated: true,
+    key: node.key,
+    label: node.label,
+    sideEffects,
+    risk,
+    configPreview,
+  };
+  if (node.key === 'approval.create' || node.key === 'approval.escalate') {
+    context.approval = { simulated: true, riskLevel: config.risk_level ?? risk, actionType: config.action_type ?? node.key };
+    return { status: 'waiting_approval', output: { ...output, approvalRequired: true } };
+  }
+  if (node.key === 'flow.wait' || node.key === 'delay') {
+    return { status: 'waiting', output: { ...output, delay: config.duration || config.until || config.mode || 'manual_resume' } };
+  }
+  if (['high', 'critical'].includes(risk) && !context.policy?.decision && node.key !== 'policy.evaluate') {
+    return { status: 'waiting_approval', output: { ...output, approvalRecommended: true } };
+  }
+  return { status: 'completed', output };
 }
 
 async function executeWorkflowNode(scope: { tenantId: string; workspaceId: string; userId?: string }, node: any, context: any) {
@@ -769,6 +955,10 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
 
     context.data = base;
     return { status: 'completed', output: { data: base, transformed: true } };
+  }
+
+  if (context.__simulation && getNodeContract(node.key).sideEffects !== 'none') {
+    return buildSimulatedNodeResult(node, config, context);
   }
 
   if (node.key === 'case.assign') {
@@ -1426,71 +1616,50 @@ Write ONLY the reply text, no subject line, no JSON.`;
   }
 
   if (node.key === 'flow.loop') {
-    // Expand iteration: collect items and set loop context for downstream nodes
-    const sourcePath = config.source || config.field || 'data.items';
-    const rawItems = asArray(readContextPath(context, sourcePath) ?? context.data);
-    const maxIter = Math.min(Number(config.maxIterations || config.max_iterations || 50), 200);
-    const batchSize = Number(config.batchSize || config.batch_size || 1);
-    const items = rawItems.slice(0, maxIter);
-    context.loopItems = items;
-    context.loopIndex = 0;
-    context.loopItem = items[0] ?? null;
-    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), items };
-    return { status: 'completed', output: { items, count: items.length, batchSize, currentItem: items[0] ?? null } };
+    const items = asArray(readContextPath(context, config.source || 'data.items'));
+    const maxIterations = Math.max(1, Number(config.maxIterations || config.max_iterations || 100));
+    const batchSize = Math.max(1, Number(config.batchSize || config.batch_size || 1));
+    const batches = [];
+    for (let index = 0; index < Math.min(items.length, maxIterations); index += batchSize) {
+      batches.push(items.slice(index, index + batchSize));
+    }
+    context.loop = { items, batches, index: 0, count: items.length, batchSize, maxIterations };
+    return { status: 'completed', output: { looped: true, count: items.length, batches: batches.length, batchSize, maxIterations } };
   }
 
   if (node.key === 'flow.subworkflow') {
-    const subWorkflowId = config.workflow || config.workflowId || config.workflow_id;
-    const depth = Number(context._subworkflowDepth ?? 0);
-    if (depth >= 3) return { status: 'failed', error: 'flow.subworkflow: max nesting depth (3) reached', output: { depth } };
-    if (!subWorkflowId) return { status: 'failed', error: 'flow.subworkflow requires workflow or workflowId config', output: {} };
-
-    const supabase = getSupabaseAdmin();
-    const { data: subDef } = await supabase
-      .from('workflow_definitions')
-      .select('id, name, status')
-      .eq('id', subWorkflowId)
-      .eq('tenant_id', scope.tenantId)
-      .single();
-
-    if (!subDef) return { status: 'failed', error: `flow.subworkflow: workflow ${subWorkflowId} not found`, output: {} };
-    if (subDef.status === 'archived') return { status: 'failed', error: `flow.subworkflow: workflow ${subDef.name} is archived`, output: {} };
-
-    const { data: subVersion } = await supabase
-      .from('workflow_versions')
-      .select('*')
-      .eq('workflow_id', subWorkflowId)
-      .eq('tenant_id', scope.tenantId)
-      .order('version', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (!subVersion) return { status: 'failed', error: `flow.subworkflow: no version found for ${subDef.name}`, output: {} };
-
-    // Build sub-workflow payload from current context + explicit input mapping
-    const inputPayload = config.input && typeof config.input === 'object'
-      ? Object.fromEntries(Object.entries(config.input as Record<string, string>).map(([k, v]) => [k, resolveTemplateValue(String(v), context)]))
-      : { ...context.data, case: context.case, order: context.order, customer: context.customer };
-
-    const subResult = await executeWorkflowVersion({
+    const subWorkflowId = config.workflow || config.workflowId || null;
+    if (!subWorkflowId) return { status: 'failed', error: 'flow.subworkflow requires workflow id' };
+    const definition = await workflowRepository.getDefinition(subWorkflowId, scope.tenantId, scope.workspaceId);
+    if (!definition) return { status: 'failed', error: 'Sub-workflow not found' };
+    const version = definition.current_version_id
+      ? await workflowRepository.getVersion(definition.current_version_id)
+      : await workflowRepository.getLatestVersion(definition.id);
+    if (!version) return { status: 'failed', error: 'Sub-workflow has no version' };
+    const nestedDepth = Number(context.__subworkflowDepth || 0);
+    if (nestedDepth >= 3) return { status: 'blocked', output: { reason: 'Sub-workflow nesting limit reached', subWorkflowId } };
+    const result = await executeWorkflowVersion({
       tenantId: scope.tenantId,
       workspaceId: scope.workspaceId,
       userId: scope.userId,
-      workflowId: subWorkflowId,
-      version: subVersion,
-      triggerPayload: { ...inputPayload, _subworkflowDepth: depth + 1, _parentWorkflowNodeId: node.id },
+      workflowId: definition.id,
+      version,
+      triggerPayload: {
+        ...(parseMaybeJsonObject(config.input) || {}),
+        parentWorkflowNodeId: node.id,
+        parentContext: {
+          caseId: context.case?.id,
+          orderId: context.order?.id,
+          paymentId: context.payment?.id,
+          returnId: context.return?.id,
+          data: context.data,
+        },
+        __subworkflowDepth: nestedDepth + 1,
+      },
       triggerType: 'subworkflow',
     });
-
-    // Merge sub-workflow output back into current context under config.outputKey
-    const lastStepOutput = subResult.steps?.at(-1)?.output ?? {};
-    const outputKey = config.outputKey || config.output_key || 'subworkflow';
-    context.data = { ...(typeof context.data === 'object' ? context.data : {}), [outputKey]: lastStepOutput };
-    return {
-      status: subResult.status === 'completed' ? 'completed' : subResult.status === 'failed' ? 'failed' : 'completed',
-      output: { subWorkflowId, subWorkflowName: subDef.name, runId: subResult.id, status: subResult.status, lastOutput: lastStepOutput },
-      error: subResult.status === 'failed' ? (subResult.error ?? 'Sub-workflow failed') : undefined,
-    };
+    context.subworkflow = { subWorkflowId, runId: result.id, status: result.status };
+    return { status: result.status === 'completed' ? 'completed' : 'waiting', output: context.subworkflow, error: result.error ?? null };
   }
 
   if (node.key === 'flow.stop_error') {
@@ -1506,6 +1675,24 @@ Write ONLY the reply text, no subject line, no JSON.`;
   }
 
   return { status: 'completed', output: { simulated: true, key: node.key } };
+}
+
+async function executeWorkflowNodeWithRetry(scope: { tenantId: string; workspaceId: string; userId?: string }, node: any, context: any) {
+  const retries = Math.max(0, Number(node.retryPolicy?.retries ?? node.retry_policy?.retries ?? 0));
+  const backoffMs = Math.max(0, Number(node.retryPolicy?.backoffMs ?? node.retry_policy?.backoffMs ?? 0));
+  let attempt = 0;
+  let lastResult: any = null;
+  while (attempt <= retries) {
+    const result = await executeWorkflowNode(scope, node, context);
+    lastResult = { ...result, attempt, maxRetries: retries };
+    if (!['failed'].includes(String(result.status))) return lastResult;
+    if (attempt >= retries) return lastResult;
+    if (backoffMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(backoffMs, 1_500)));
+    }
+    attempt += 1;
+  }
+  return lastResult ?? { status: 'failed', error: 'Node execution failed before producing a result', attempt, maxRetries: retries };
 }
 
 async function executeWorkflowVersion({
@@ -1576,7 +1763,7 @@ async function executeWorkflowVersion({
     visited.add(currentNode.id);
 
     const startedAt = new Date().toISOString();
-    const result = await executeWorkflowNode({ tenantId, workspaceId, userId }, currentNode, workflowContext);
+    const result = await executeWorkflowNodeWithRetry({ tenantId, workspaceId, userId }, currentNode, workflowContext);
     const endedAt = new Date().toISOString();
 
     const step = {
@@ -1718,7 +1905,7 @@ async function continueWorkflowRun({
   while (nextNode && !visited.has(nextNode.id) && guard < validation.nodes.length) {
     visited.add(nextNode.id);
     const startedAt = new Date().toISOString();
-    const result = await executeWorkflowNode({ tenantId, workspaceId, userId }, nextNode, workflowContext);
+    const result = await executeWorkflowNodeWithRetry({ tenantId, workspaceId, userId }, nextNode, workflowContext);
     const endedAt = new Date().toISOString();
     steps.push({
       id: crypto.randomUUID(),
@@ -1878,7 +2065,18 @@ router.post('/', requirePermission('workflows.write'), async (req: MultiTenantRe
 router.get('/catalog', requirePermission('workflows.read'), async (_req: MultiTenantRequest, res) => {
   res.json({
     categories: Array.from(new Set(NODE_CATALOG.map((node) => node.category))),
-    nodes: NODE_CATALOG,
+    nodes: NODE_CATALOG.map((node) => {
+      const contract = getNodeContract(node.key);
+      return {
+        ...node,
+        configFields: getConfigFieldsForNode(node.key),
+        requiredFields: contract.required ?? [],
+        branchLabels: contract.branchLabels ?? [],
+        sideEffects: contract.sideEffects ?? 'none',
+        risk: contract.risk ?? (node.sensitive ? 'high' : 'low'),
+        resumable: Boolean(contract.resumable),
+      };
+    }),
   });
 });
 
@@ -2216,10 +2414,11 @@ router.post('/:id/dry-run', requirePermission('workflows.trigger'), async (req: 
     const version = wf.current_version_id
       ? await workflowRepository.getVersion(wf.current_version_id)
       : await workflowRepository.getLatestVersion(wf.id);
-    const dryRun = buildDryRun(
+    const dryRun = await buildDryRun(
       req.body?.nodes ?? version?.nodes ?? [],
       req.body?.edges ?? version?.edges ?? [],
       req.body?.triggerPayload ?? { workflowId: wf.id, manual: true },
+      { tenantId, workspaceId, userId: req.userId },
     );
     await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',
@@ -2246,11 +2445,12 @@ router.post('/:id/step-run', requirePermission('workflows.trigger'), async (req:
       : await workflowRepository.getLatestVersion(wf.id);
     const nodeId = req.body?.nodeId ?? req.body?.node_id;
     if (!nodeId) return res.status(400).json({ error: 'nodeId is required' });
-    const result = buildStepDryRun(
+    const result = await buildStepDryRun(
       req.body?.nodes ?? version?.nodes ?? [],
       req.body?.edges ?? version?.edges ?? [],
       nodeId,
       req.body?.triggerPayload ?? { workflowId: wf.id, manual: true, source: 'step-run' },
+      { tenantId, workspaceId, userId: req.userId },
     );
     await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',
@@ -2434,3 +2634,4 @@ router.post('/:id/archive', requirePermission('workflows.write'), async (req: Mu
 });
 
 export default router;
+

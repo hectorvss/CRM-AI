@@ -39,6 +39,12 @@ function maxRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
   return riskRank[b] > riskRank[a] ? b : a;
 }
 
+const sensitiveKeyPattern = /(secret|token|password|passwd|api[_-]?key|apikey|private[_-]?key|client[_-]?secret|refresh[_-]?token|access[_-]?token|session[_-]?token|jwt|bearer|ssn|social[_-]?security|passport|driver[_-]?license|license[_-]?number|id[_-]?number)/i;
+const jwtPattern = /\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
+const apiKeyPattern = /\b(?:sk|rk|pk|ak|ghp|gho|ghu|ghs|ghr|xox[pbar]-)[A-Za-z0-9._-]{8,}\b/gi;
+const ssnPattern = /\b\d{3}-\d{2}-\d{4}\b/g;
+const driverLicensePattern = /\b(?:DL|DNI|ID|LIC|LICENSE)[-_ ]?[A-Z0-9]{5,}\b/gi;
+
 export function isToolBlocked(toolName: string): boolean {
   return toolBlocklist.has(toolName);
 }
@@ -52,9 +58,14 @@ export function redactSensitiveText(input: string): string {
 
   return input
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[REDACTED_EMAIL]')
-    .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, '[REDACTED_PHONE]')
     .replace(/\b(?:\d[ -]*?){13,19}\b/g, '[REDACTED_CARD]')
-    .replace(/\b(?:iban|account|acct|bank)\s*[:#]?\s*[A-Z0-9-]{6,}\b/gi, '[REDACTED_BANK]');
+    .replace(ssnPattern, '[REDACTED_SSN]')
+    .replace(jwtPattern, '[REDACTED_JWT]')
+    .replace(apiKeyPattern, '[REDACTED_API_KEY]')
+    .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, '[REDACTED_PHONE]')
+    .replace(/\b(?:iban|account|acct|bank)\s*[:#]?\s*[A-Z0-9-]{6,}\b/gi, '[REDACTED_BANK]')
+    .replace(/\b(?:passport|pass(?:port)?\s*no\.?|document(?:o)?\s*no\.?|doc(?:ument)?\s*no\.?)\s*[:#]?\s*[A-Z0-9-]{5,}\b/gi, '[REDACTED_ID]')
+    .replace(driverLicensePattern, '[REDACTED_LICENSE]');
 }
 
 export function redactStructuredValue<T>(value: T): T {
@@ -65,6 +76,10 @@ export function redactStructuredValue<T>(value: T): T {
 
   const out: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (sensitiveKeyPattern.test(key)) {
+      out[key] = '[REDACTED_SECRET]';
+      continue;
+    }
     out[key] = redactStructuredValue(nested);
   }
   return out as T;
