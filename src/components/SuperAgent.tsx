@@ -441,7 +441,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [planMode, setPlanMode] = useState(false);
   const [autonomyLevel, setAutonomyLevel] = useState<SuperAgentAutonomy>('assisted');
   const [selectedModelId, setSelectedModelId] = useState<string>(MODEL_OPTIONS[0].id);
-  const [openControlMenu, setOpenControlMenu] = useState<'autonomy' | 'model' | null>(null);
+  const [openControlMenu, setOpenControlMenu] = useState<'mode' | 'autonomy' | 'model' | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
@@ -454,6 +454,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const controlBarRef = useRef<HTMLDivElement>(null);
   const streamRunIdRef = useRef<string | null>(null);
   const streamMessageIdRef = useRef<string | null>(null);
+  const modeLabel = mode === 'investigate' ? 'Investigate' : 'Operate';
 
   useEffect(() => {
     let cancelled = false;
@@ -1067,28 +1068,51 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
               />
               <div ref={controlBarRef} className="flex items-center justify-between gap-3 px-3 pb-3 pt-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setMode('investigate')}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                      mode === 'investigate'
-                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    Investigate
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('operate')}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                      mode === 'operate'
-                        ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    Operate
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenControlMenu(openControlMenu === 'mode' ? null : 'mode')}
+                      className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                        mode === 'investigate'
+                          ? 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                          : 'bg-gray-900 text-white dark:bg-white dark:text-black'
+                      }`}
+                    >
+                      <span>{modeLabel}</span>
+                      <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
+                    </button>
+                    {openControlMenu === 'mode' ? (
+                      <div className="absolute left-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+                        <div className="border-b border-gray-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400 dark:border-gray-800">Mode</div>
+                        <div className="p-1">
+                          {[
+                            { value: 'investigate' as const, label: 'Investigate', description: 'Ask questions, inspect context, and explore safely.' },
+                            { value: 'operate' as const, label: 'Operate', description: 'Take action with the current workflow context.' },
+                          ].map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setMode(option.value);
+                                setOpenControlMenu(null);
+                              }}
+                              className={`flex w-full items-start justify-between rounded-xl px-3 py-2 text-left transition-colors ${
+                                mode === option.value
+                                  ? 'bg-gray-50 text-gray-900 dark:bg-gray-800 dark:text-white'
+                                  : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                              }`}
+                            >
+                              <div>
+                                <div className="text-xs font-semibold">{option.label}</div>
+                                <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{option.description}</div>
+                              </div>
+                              {mode === option.value ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <button
@@ -1109,7 +1133,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'autonomy' ? null : 'autonomy')}
-                      className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-gray-900 text-white dark:bg-white dark:text-black"
                     >
                       <span>{getAutonomyMeta(autonomyLevel).label}</span>
                       <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
@@ -1147,7 +1171,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'model' ? null : 'model')}
-                      className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-gray-900 text-white dark:bg-white dark:text-black"
                     >
                       <span>{getModelMeta(selectedModelId).label}</span>
                       <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
