@@ -3278,8 +3278,8 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
     const commandContext = (req.body?.context || {}) as CommandContext;
     const sessionId = commandContext.sessionId || runId;
     const agents = hasPermission(req, 'agents.read') ? await agentRepository.listAgents(scope) : [];
-    planEngine.ensureSession(sessionId, req.userId || 'system', scope.tenantId, scope.workspaceId || null);
-    const sessionMemory = planEngine.getCommandContext(sessionId);
+    await planEngine.ensureSession(sessionId, req.userId || 'system', scope.tenantId, scope.workspaceId || null);
+    const sessionMemory = await planEngine.getCommandContext(sessionId);
     const enrichedCommandContext: CommandContext = {
       ...commandContext,
       recentTargets: [
@@ -3319,7 +3319,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
         const finalResponse = await buildResponseFromPlanOutcome(req, input, runId, mode, llmResponse, trace);
 
         if (finalResponse.navigationTarget) {
-          planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
+          void planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
         }
 
         emitSuperAgentEvent(scope, 'step_completed', {
@@ -3526,7 +3526,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
     };
 
     if (finalResponse.navigationTarget) {
-      planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
+      void planEngine.rememberTarget(sessionId, finalResponse.navigationTarget);
     }
 
     const chunks = splitIntoChunks([
@@ -3604,7 +3604,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
         const llmFinalResponse = await buildResponseFromPlanOutcome(req, input, runId, mode, llmResponse, trace);
 
         if (llmFinalResponse.navigationTarget) {
-          planEngine.rememberTarget(sessionId, llmFinalResponse.navigationTarget);
+          void planEngine.rememberTarget(sessionId, llmFinalResponse.navigationTarget);
         }
 
         await auditRepository.log({
@@ -3845,7 +3845,7 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
 
     const plannedResponse = await buildResponseFromPlanOutcome(req, userMessage.trim(), effectiveSessionId, 'investigate', response, trace);
     if (plannedResponse.navigationTarget) {
-      planEngine.rememberTarget(effectiveSessionId, plannedResponse.navigationTarget);
+      void planEngine.rememberTarget(effectiveSessionId, plannedResponse.navigationTarget);
     }
 
     return res.json({
@@ -3873,12 +3873,12 @@ router.get('/catalog', (req: MultiTenantRequest, res) => {
   }
 });
 
-router.get('/sessions/:sessionId', (req: MultiTenantRequest, res) => {
+router.get('/sessions/:sessionId', async (req: MultiTenantRequest, res) => {
   try {
     if (!canInspectSuperAgent(req)) {
       return res.status(403).json({ error: 'Missing permission to inspect Super Agent sessions' });
     }
-    const session = planEngine.getSession(req.params.sessionId);
+    const session = await planEngine.getSession(req.params.sessionId);
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
@@ -3888,24 +3888,24 @@ router.get('/sessions/:sessionId', (req: MultiTenantRequest, res) => {
   }
 });
 
-router.get('/sessions/:sessionId/traces', (req: MultiTenantRequest, res) => {
+router.get('/sessions/:sessionId/traces', async (req: MultiTenantRequest, res) => {
   try {
     if (!canInspectSuperAgent(req)) {
       return res.status(403).json({ error: 'Missing permission to inspect Super Agent traces' });
     }
-    const traces = planEngine.listTraces(req.params.sessionId, Number(req.query.limit ?? 20) || 20);
+    const traces = await planEngine.listTraces(req.params.sessionId, Number(req.query.limit ?? 20) || 20);
     return res.json({ sessionId: req.params.sessionId, traces, count: traces.length });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to load Super Agent traces' });
   }
 });
 
-router.get('/traces/:planId', (req: MultiTenantRequest, res) => {
+router.get('/traces/:planId', async (req: MultiTenantRequest, res) => {
   try {
     if (!canInspectSuperAgent(req)) {
       return res.status(403).json({ error: 'Missing permission to inspect Super Agent traces' });
     }
-    const trace = planEngine.getTrace(req.params.planId);
+    const trace = await planEngine.getTrace(req.params.planId);
     if (!trace) {
       return res.status(404).json({ error: 'Trace not found' });
     }
@@ -3915,13 +3915,15 @@ router.get('/traces/:planId', (req: MultiTenantRequest, res) => {
   }
 });
 
-router.get('/replay/:sessionId', (req: MultiTenantRequest, res) => {
+router.get('/replay/:sessionId', async (req: MultiTenantRequest, res) => {
   try {
     if (!canInspectSuperAgent(req)) {
       return res.status(403).json({ error: 'Missing permission to inspect Super Agent replay' });
     }
-    const session = planEngine.getSession(req.params.sessionId);
-    const traces = planEngine.listTraces(req.params.sessionId, Number(req.query.limit ?? 20) || 20);
+    const [session, traces] = await Promise.all([
+      planEngine.getSession(req.params.sessionId),
+      planEngine.listTraces(req.params.sessionId, Number(req.query.limit ?? 20) || 20),
+    ]);
     if (!session && traces.length === 0) {
       return res.status(404).json({ error: 'Replay not found' });
     }

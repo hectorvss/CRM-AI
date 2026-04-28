@@ -241,69 +241,6 @@ const parseMarkdownTitle = (content: string) => {
   return heading ? heading.replace(/^#{1,3}\s+/, '').trim() : '';
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const mockLibrary: KnowledgeItem[] = [
-  {
-    id: 'KB-1024',
-    type: 'POLICY',
-    title: 'Refund Policy - Annual Plans',
-    category: 'Billing',
-    visibility: 'Public',
-    status: 'Published',
-    owner: 'John Doe',
-    ownerInitials: 'JD',
-    lastUpdated: '2h ago',
-    health: 'OK'
-  },
-  {
-    id: 'KB-1025',
-    type: 'ARTICLE',
-    title: 'GDPR Data Export',
-    category: 'Legal',
-    visibility: 'Internal',
-    status: 'Published',
-    owner: 'Sarah Lee',
-    ownerInitials: 'SL',
-    lastUpdated: '1d ago',
-    health: 'OK'
-  },
-  {
-    id: 'KB-1026',
-    type: 'SNIPPET',
-    title: 'Password Reset Instructions',
-    category: 'Account',
-    visibility: 'Public',
-    status: 'Published',
-    owner: 'Mike K.',
-    ownerInitials: 'MK',
-    lastUpdated: '3d ago',
-    health: 'Stale'
-  },
-  {
-    id: 'KB-1027',
-    type: 'PLAYBOOK',
-    title: 'Churn Prevention Script',
-    category: 'Sales',
-    visibility: 'Internal',
-    status: 'Draft',
-    owner: 'John Doe',
-    ownerInitials: 'JD',
-    lastUpdated: '5d ago',
-    health: 'OK'
-  },
-  {
-    id: 'KB-1028',
-    type: 'ARTICLE',
-    title: 'API Rate Limits',
-    category: 'Technical',
-    visibility: 'Public',
-    status: 'Published',
-    owner: 'Alex B.',
-    ownerInitials: 'AB',
-    lastUpdated: '1w ago',
-    health: 'OK'
-  }
-];
 
 export default function Knowledge() {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>('library');

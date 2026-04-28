@@ -88,7 +88,7 @@ function buildExecutorDeps(): ExecutorDeps {
     },
 
     async persistTrace(trace) {
-      traceRepo.persistTrace(trace);
+      await traceRepo.persistTrace(trace);
     },
   };
 }
@@ -196,9 +196,9 @@ async function llmSummarize(prompt: string): Promise<string> {
   });
 }
 
-function rememberTarget(sessionId: string, target: ConversationTarget | null | undefined): SessionState | null {
+async function rememberTarget(sessionId: string, target: ConversationTarget | null | undefined): Promise<SessionState | null> {
   if (!target) return null;
-  const session = sessionRepo.getSession(sessionId);
+  const session = await sessionRepo.getSession(sessionId);
   if (!session) return null;
 
   const nextTargets = [
@@ -211,12 +211,12 @@ function rememberTarget(sessionId: string, target: ConversationTarget | null | u
   ].slice(0, 5);
 
   session.recentTargets = nextTargets;
-  sessionRepo.saveSession(session);
+  await sessionRepo.saveSession(session);
   return session;
 }
 
-function getCommandContext(sessionId: string): { recentTargets: ConversationTarget[]; activeTarget: ConversationTarget | null } {
-  const session = sessionRepo.getSession(sessionId);
+async function getCommandContext(sessionId: string): Promise<{ recentTargets: ConversationTarget[]; activeTarget: ConversationTarget | null }> {
+  const session = await sessionRepo.getSession(sessionId);
   const recentTargets = session?.recentTargets ?? [];
   return {
     recentTargets,
@@ -224,12 +224,12 @@ function getCommandContext(sessionId: string): { recentTargets: ConversationTarg
   };
 }
 
-function ensureSession(
+async function ensureSession(
   sessionId: string,
   userId: string,
   tenantId: string,
   workspaceId: string | null,
-): SessionState {
+): Promise<SessionState> {
   return sessionRepo.getOrCreateSession(sessionId, userId, tenantId, workspaceId);
 }
 
@@ -277,7 +277,7 @@ export const planEngine = {
   async generate(input: PlanEngineGenerateInput): Promise<LLMResponse> {
     ensureInitialised();
 
-    const session = sessionRepo.getOrCreateSession(
+    const session = await sessionRepo.getOrCreateSession(
       input.sessionId,
       input.userId,
       input.tenantId,
@@ -321,7 +321,7 @@ export const planEngine = {
     // Maybe compress L1 → L2
     await maybeCompressTurns(session, llmSummarize);
 
-    sessionRepo.saveSession(session);
+    await sessionRepo.saveSession(session);
     return response;
   },
 
@@ -360,14 +360,14 @@ export const planEngine = {
 
     if (response.kind !== 'plan') {
       // Append assistant clarification/error to session
-      const session = sessionRepo.getSession(input.sessionId);
+      const session = await sessionRepo.getSession(input.sessionId);
       if (session) {
         session.turns.push({
           role: 'assistant',
           content: response.kind === 'clarification' ? response.question : response.error,
           createdAt: new Date().toISOString(),
         });
-        sessionRepo.saveSession(session);
+        await sessionRepo.saveSession(session);
       }
       return { response };
     }
@@ -382,7 +382,7 @@ export const planEngine = {
     });
 
     // Append assistant response + extract slots
-    const session = sessionRepo.getSession(input.sessionId);
+    const session = await sessionRepo.getSession(input.sessionId);
     if (session) {
       session.turns.push({
         role: 'assistant',
@@ -403,14 +403,14 @@ export const planEngine = {
         ];
       }
 
-      sessionRepo.saveSession(session);
+      await sessionRepo.saveSession(session);
     }
 
     return { response, trace };
   },
 
   /** Retrieve a session by id (for debug / history routes). */
-  getSession(sessionId: string): SessionState | null {
+  async getSession(sessionId: string): Promise<SessionState | null> {
     return sessionRepo.getSession(sessionId);
   },
 
@@ -431,11 +431,11 @@ export const planEngine = {
 
   ensureSession,
 
-  rememberTarget(sessionId: string, target: ConversationTarget | null | undefined) {
+  async rememberTarget(sessionId: string, target: ConversationTarget | null | undefined) {
     return rememberTarget(sessionId, target);
   },
 
-  getCommandContext(sessionId: string) {
+  async getCommandContext(sessionId: string) {
     return getCommandContext(sessionId);
   },
 

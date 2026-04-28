@@ -1,38 +1,33 @@
 /**
  * server/agents/planEngine/traceRepository.ts
  *
- * Persists ExecutionTraces to the super_agent_traces table.
+ * Persists ExecutionTraces to the super_agent_traces table (Supabase).
  * Traces are immutable once written (append-only, no updates).
  */
 
-import { getDb } from '../../db/client.js';
+import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { ExecutionTrace } from './types.js';
 
-export function persistTrace(trace: ExecutionTrace): void {
+export async function persistTrace(trace: ExecutionTrace): Promise<void> {
   try {
-    const db = getDb();
-    db.prepare(`
-      INSERT OR IGNORE INTO super_agent_traces
-        (plan_id, session_id, tenant_id, workspace_id, user_id,
-         started_at, ended_at, status, spans_json, summary,
-         approval_ids_json, policy_decisions_json, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      trace.planId,
-      trace.sessionId,
-      trace.tenantId,
-      trace.workspaceId ?? null,
-      trace.userId ?? null,
-      trace.startedAt,
-      trace.endedAt,
-      trace.status,
-      JSON.stringify(trace.spans),
-      trace.summary,
-      JSON.stringify(trace.approvalIds ?? []),
-      JSON.stringify(trace.policyDecisions ?? []),
-      new Date().toISOString(),
-    );
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('super_agent_traces').upsert({
+      plan_id: trace.planId,
+      session_id: trace.sessionId,
+      tenant_id: trace.tenantId,
+      workspace_id: trace.workspaceId ?? null,
+      user_id: trace.userId ?? null,
+      started_at: trace.startedAt,
+      ended_at: trace.endedAt,
+      status: trace.status,
+      spans_json: JSON.stringify(trace.spans),
+      summary: trace.summary,
+      approval_ids_json: JSON.stringify(trace.approvalIds ?? []),
+      policy_decisions_json: JSON.stringify(trace.policyDecisions ?? []),
+      created_at: new Date().toISOString(),
+    });
+    if (error) throw error;
   } catch (err) {
     logger.warn('TraceRepository.persist failed', {
       planId: trace.planId,
@@ -41,59 +36,41 @@ export function persistTrace(trace: ExecutionTrace): void {
   }
 }
 
-export function getTrace(planId: string): ExecutionTrace | null {
+export async function getTrace(planId: string): Promise<ExecutionTrace | null> {
   try {
-    const db = getDb();
-    const row = db
-      .prepare('SELECT * FROM super_agent_traces WHERE plan_id = ?')
-      .get(planId) as any;
-    if (!row) return null;
-    return {
-      planId: row.plan_id,
-      sessionId: row.session_id,
-      tenantId: row.tenant_id,
-      workspaceId: row.workspace_id ?? null,
-      userId: row.user_id ?? null,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      status: row.status,
-      spans: JSON.parse(row.spans_json || '[]'),
-      summary: row.summary,
-      approvalIds: JSON.parse(row.approval_ids_json || '[]'),
-      policyDecisions: JSON.parse(row.policy_decisions_json || '[]'),
-    };
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('super_agent_traces')
+      .select('*')
+      .eq('plan_id', planId)
+      .single();
+
+    if (error || !data) return null;
+    return rowToTrace(data);
   } catch (err) {
     logger.warn('TraceRepository.get failed', { planId, error: String(err) });
     return null;
   }
 }
 
-export function listTracesForSession(sessionId: string, limit = 20): ExecutionTrace[] {
+export async function listTracesForSession(sessionId: string, limit = 20): Promise<ExecutionTrace[]> {
   try {
-    const db = getDb();
-    const rows = db
-      .prepare('SELECT * FROM super_agent_traces WHERE session_id = ? ORDER BY started_at DESC LIMIT ?')
-      .all(sessionId, limit) as any[];
-    return rows.map((row) => ({
-      planId: row.plan_id,
-      sessionId: row.session_id,
-      tenantId: row.tenant_id,
-      workspaceId: row.workspace_id ?? null,
-      userId: row.user_id ?? null,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      status: row.status,
-      spans: JSON.parse(row.spans_json || '[]'),
-      summary: row.summary,
-      approvalIds: JSON.parse(row.approval_ids_json || '[]'),
-      policyDecisions: JSON.parse(row.policy_decisions_json || '[]'),
-    }));
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('super_agent_traces')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('started_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return (data ?? []).map(rowToTrace);
   } catch {
     return [];
   }
 }
 
-export function getTraceMetrics(sessionId?: string): {
+export async function getTraceMetrics(sessionId?: string): Promise<{
   total: number;
   success: number;
   partial: number;
@@ -102,18 +79,33 @@ export function getTraceMetrics(sessionId?: string): {
   rejectedByPolicy: number;
   averageLatencyMs: number;
   averageSpanCount: number;
-} {
+}> {
+  const empty = {
+    total: 0,
+    success: 0,
+    partial: 0,
+    failed: 0,
+    pendingApproval: 0,
+    rejectedByPolicy: 0,
+    averageLatencyMs: 0,
+    averageSpanCount: 0,
+  };
   try {
-    const db = getDb();
-    const params: any[] = [];
-    let query = 'SELECT * FROM super_agent_traces';
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from('super_agent_traces')
+      .select('status, spans_json, started_at, ended_at')
+      .order('started_at', { ascending: false })
+      .limit(200);
+
     if (sessionId) {
-      query += ' WHERE session_id = ?';
-      params.push(sessionId);
+      query = query.eq('session_id', sessionId);
     }
-    query += ' ORDER BY started_at DESC LIMIT 200';
-    const rows = db.prepare(query).all(...params) as any[];
-    const traces = rows.map((row) => ({
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const traces = (data ?? []).map((row: any) => ({
       status: row.status,
       spans: JSON.parse(row.spans_json || '[]') as any[],
       startedAt: row.started_at,
@@ -121,44 +113,45 @@ export function getTraceMetrics(sessionId?: string): {
     }));
 
     const total = traces.length;
-    const success = traces.filter((trace) => trace.status === 'success').length;
-    const partial = traces.filter((trace) => trace.status === 'partial').length;
-    const failed = traces.filter((trace) => trace.status === 'failed').length;
-    const pendingApproval = traces.filter((trace) => trace.status === 'pending_approval').length;
-    const rejectedByPolicy = traces.filter((trace) => trace.status === 'rejected_by_policy').length;
-    const averageLatencyMs = total
-      ? Math.round(
-        traces.reduce((sum, trace) => {
-          const started = new Date(trace.startedAt).getTime();
-          const ended = new Date(trace.endedAt).getTime();
-          return sum + Math.max(0, ended - started);
-        }, 0) / total,
-      )
-      : 0;
-    const averageSpanCount = total
-      ? Number((traces.reduce((sum, trace) => sum + trace.spans.length, 0) / total).toFixed(2))
-      : 0;
+    if (total === 0) return empty;
 
-    return {
-      total,
-      success,
-      partial,
-      failed,
-      pendingApproval,
-      rejectedByPolicy,
-      averageLatencyMs,
-      averageSpanCount,
-    };
+    const success = traces.filter((t) => t.status === 'success').length;
+    const partial = traces.filter((t) => t.status === 'partial').length;
+    const failed = traces.filter((t) => t.status === 'failed').length;
+    const pendingApproval = traces.filter((t) => t.status === 'pending_approval').length;
+    const rejectedByPolicy = traces.filter((t) => t.status === 'rejected_by_policy').length;
+    const averageLatencyMs = Math.round(
+      traces.reduce((sum, t) => {
+        const started = new Date(t.startedAt).getTime();
+        const ended = new Date(t.endedAt).getTime();
+        return sum + Math.max(0, ended - started);
+      }, 0) / total,
+    );
+    const averageSpanCount = Number(
+      (traces.reduce((sum, t) => sum + t.spans.length, 0) / total).toFixed(2),
+    );
+
+    return { total, success, partial, failed, pendingApproval, rejectedByPolicy, averageLatencyMs, averageSpanCount };
   } catch {
-    return {
-      total: 0,
-      success: 0,
-      partial: 0,
-      failed: 0,
-      pendingApproval: 0,
-      rejectedByPolicy: 0,
-      averageLatencyMs: 0,
-      averageSpanCount: 0,
-    };
+    return empty;
   }
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+function rowToTrace(row: any): ExecutionTrace {
+  return {
+    planId: row.plan_id,
+    sessionId: row.session_id,
+    tenantId: row.tenant_id,
+    workspaceId: row.workspace_id ?? null,
+    userId: row.user_id ?? null,
+    startedAt: typeof row.started_at === 'string' ? row.started_at : new Date(row.started_at).toISOString(),
+    endedAt: typeof row.ended_at === 'string' ? row.ended_at : new Date(row.ended_at).toISOString(),
+    status: row.status,
+    spans: JSON.parse(row.spans_json || '[]'),
+    summary: row.summary,
+    approvalIds: JSON.parse(row.approval_ids_json || '[]'),
+    policyDecisions: JSON.parse(row.policy_decisions_json || '[]'),
+  };
 }
