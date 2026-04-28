@@ -57,7 +57,7 @@ type GeneratedReport = { id: string; title: string; date: string; time: string; 
 const recommendedActions: any[] = [];
 
 export default function Reports() {
-  const [reportsList, setReportsList] = useState(GENERATED_REPORTS);
+  const [reportsList, setReportsList] = useState<GeneratedReport[]>([]);
   const [activeTab, setActiveTab] = useState<ReportsTab>('overview');
   const [selectedReportId, setSelectedReportId] = useState('1');
   const [period, setPeriod] = useState('7d');

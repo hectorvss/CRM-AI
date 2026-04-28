@@ -247,9 +247,6 @@ export default function Knowledge() {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string | null>(null);
-  const [testQuery, setTestQuery] = useState('refund annual plan');
-  const [isTesting, setIsTesting] = useState(false);
-  const [testResults, setTestResults] = useState<any[] | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
   const [draft, setDraft] = useState<KnowledgeDraftState>(emptyDraft);
@@ -267,7 +264,7 @@ export default function Knowledge() {
   // Knowledge test
   const [testQuery, setTestQuery] = useState('refund annual plan');
   const [isTestRunning, setIsTestRunning] = useState(false);
-  const [testResults, setTestResults] = useState<typeof library>([]);
+  const [testResults, setTestResults] = useState<KnowledgeItem[]>([]);
   const [testRan, setTestRan] = useState(false);
 
   const { data: apiArticles, loading: articlesLoading, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
@@ -1202,47 +1199,51 @@ export default function Knowledge() {
                 Retrieved Context
               </h2>
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">
-                {isTesting ? 'Searching...' : `${testResults?.length || 0} sources found`}
+                {isTestRunning ? 'Searching...' : `${testResults.length} sources found`}
               </span>
             </div>
             <div className="p-6 space-y-6">
-              {isTesting && (
+              {isTestRunning && (
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
                   <p className="text-sm text-gray-500">Searching knowledge base...</p>
                 </div>
               )}
-              {!isTesting && !testResults && (
+              {!isTestRunning && !testRan && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">search_off</span>
                   <p className="text-sm text-gray-500">No results yet. Run a test to see retrieved context.</p>
                 </div>
               )}
-              {!isTesting && testResults?.map((source, i) => (
+              {!isTestRunning && testRan && testResults.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">search_off</span>
+                  <p className="text-sm text-gray-500">No matching articles found for this query.</p>
+                </div>
+              )}
+              {!isTestRunning && testResults.map((source, i) => (
                 <div key={i} className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:border-indigo-500/30 transition-all cursor-pointer group relative">
                   <div className="absolute top-4 right-4">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400 border border-green-100 dark:border-green-500/20">
-                      {source.match} Match
+                      High Match
                     </span>
                   </div>
                   <div className="flex items-start gap-4 mb-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                      source.color === 'blue' ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400' :
-                      source.color === 'purple' ? 'bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400' :
-                      'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400'
-                    }`}>
-                      <span className="material-symbols-outlined">{source.type}</span>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
+                      <span className="material-symbols-outlined">
+                        {source.type === 'POLICY' ? 'policy' : source.type === 'SNIPPET' ? 'code_blocks' : source.type === 'PLAYBOOK' ? 'menu_book' : 'article'}
+                      </span>
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900 dark:text-white text-sm">{source.title}</h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{source.sub}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{source.category} · {source.owner}</p>
                     </div>
                   </div>
                   <div className="pl-14">
-                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                      {source.content}
-                    </p>
-                    <button className="mt-4 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors flex items-center gap-1.5">
+                    <button
+                      onClick={() => { setSelectedArticleId(source.id); setActiveTab('library'); }}
+                      className="mt-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors flex items-center gap-1.5"
+                    >
                       Open in Library <span className="material-symbols-outlined text-[14px]">open_in_new</span>
                     </button>
                   </div>
