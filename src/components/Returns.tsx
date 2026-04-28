@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Return, ReturnTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseHeader from './CaseHeader';
+import type { CaseHeaderMenuItem } from './CaseHeader';
 import CaseCopilotPanel from './CaseCopilotPanel';
-import { returnsApi } from '../api/client';
+import { casesApi, returnsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
@@ -45,10 +46,32 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
       returnsApi.updateStatus(id, payload)
   );
 
+  const [caseActionMsg, setCaseActionMsg] = useState<string | null>(null);
+
   const showFeedback = (msg: string, isError = false) => {
     if (isError) { setActionError(msg); setActionSuccess(null); }
     else { setActionSuccess(msg); setActionError(null); }
     setTimeout(() => { setActionSuccess(null); setActionError(null); }, 4000);
+  };
+
+  const showCaseMsg = (msg: string) => {
+    setCaseActionMsg(msg);
+    setTimeout(() => setCaseActionMsg(null), 3500);
+  };
+
+  const handleResolveCase = async (caseId: string) => {
+    try { await casesApi.resolve(caseId); showCaseMsg('Case marked as resolved'); }
+    catch { showCaseMsg('Failed to resolve case'); }
+  };
+
+  const handleSnoozeCase = async (caseId: string) => {
+    try { await casesApi.updateStatus(caseId, 'snoozed'); showCaseMsg('Case snoozed'); }
+    catch { showCaseMsg('Failed to snooze case'); }
+  };
+
+  const handleCloseCase = async (caseId: string) => {
+    try { await casesApi.updateStatus(caseId, 'closed'); showCaseMsg('Case closed'); }
+    catch { showCaseMsg('Failed to close case'); }
   };
 
   const handleStatusUpdate = async (status: string, label: string) => {
@@ -213,11 +236,12 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
               <span className="w-2 h-2 rounded-md bg-green-500 mr-2"></span>
               Sync Active
             </div>
-            <button 
-              onClick={() => alert('Filtering returns... (Mock)')}
-              className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            <button
+              onClick={() => setActiveTab('all')}
+              title="Clear filters"
+              className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
-              <span className="material-symbols-outlined">filter_list</span>
+              <span className="material-symbols-outlined">filter_list_off</span>
             </button>
           </div>
         </div>
@@ -309,9 +333,12 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                   approvalStatus={selectedReturn.approvalStatus}
                   recommendedAction={selectedReturn.recommendedNextAction || 'No action needed'}
                   conflictDetected={selectedReturn.conflictDetected}
-                  onResolve={() => alert('Marking return case as resolved... (Mock)')}
-                  onSnooze={() => alert('Snoozing return case... (Mock)')}
-                  onMoreActions={() => alert('Opening additional actions... (Mock)')}
+                  onResolve={selectedReturn.relatedCases[0]?.id ? () => handleResolveCase(selectedReturn.relatedCases[0].id) : undefined}
+                  onSnooze={selectedReturn.relatedCases[0]?.id ? () => handleSnoozeCase(selectedReturn.relatedCases[0].id) : undefined}
+                  moreMenuItems={selectedReturn.relatedCases[0]?.id ? ([
+                    { label: 'Open in Inbox', icon: 'inbox', onClick: () => onNavigate?.('inbox', selectedReturn.relatedCases[0].id) },
+                    { label: 'Close case', icon: 'cancel', onClick: () => handleCloseCase(selectedReturn.relatedCases[0].id), danger: true },
+                  ] satisfies CaseHeaderMenuItem[]) : []}
                 />
 
                 {/* Action Bar */}
@@ -358,6 +385,12 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                   </button>
                 </div>
 
+                {caseActionMsg && (
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-sm font-medium">
+                    <span className="material-symbols-outlined text-base">check_circle</span>
+                    {caseActionMsg}
+                  </div>
+                )}
                 {/* Feedback toast */}
                 {(actionSuccess || actionError) && (
                   <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${

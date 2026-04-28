@@ -258,6 +258,18 @@ export default function Knowledge() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Library search + filters
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [libraryTypeFilter, setLibraryTypeFilter] = useState<string>('All');
+  const [libraryStatusFilter, setLibraryStatusFilter] = useState<string>('All');
+  const [libraryHealthFilter, setLibraryHealthFilter] = useState<string>('All');
+
+  // Knowledge test
+  const [testQuery, setTestQuery] = useState('refund annual plan');
+  const [isTestRunning, setIsTestRunning] = useState(false);
+  const [testResults, setTestResults] = useState<typeof library>([]);
+  const [testRan, setTestRan] = useState(false);
+
   const { data: apiArticles, loading: articlesLoading, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
   const { data: apiDomains } = useApi(() => knowledgeApi.listDomains(), [], []);
   const { data: selectedArticle, loading: selectedArticleLoading, refetch: refetchSelectedArticle } = useApi(
@@ -295,6 +307,39 @@ export default function Knowledge() {
     });
   }, [apiArticles, searchQuery, filterType]);
   const isInitialLibraryLoading = articlesLoading && library.length === 0;
+
+  const filteredLibrary = useMemo(() => {
+    return library.filter(item => {
+      const q = librarySearch.toLowerCase();
+      const matchSearch = !q || item.title.toLowerCase().includes(q) || item.category.toLowerCase().includes(q) || item.owner.toLowerCase().includes(q);
+      const matchType = libraryTypeFilter === 'All' || item.type === libraryTypeFilter;
+      const matchStatus = libraryStatusFilter === 'All' || item.status === libraryStatusFilter;
+      const matchHealth = libraryHealthFilter === 'All' || item.health === libraryHealthFilter;
+      return matchSearch && matchType && matchStatus && matchHealth;
+    });
+  }, [library, librarySearch, libraryTypeFilter, libraryStatusFilter, libraryHealthFilter]);
+
+  const handleRunTest = async () => {
+    if (!testQuery.trim() || isTestRunning) return;
+    setIsTestRunning(true);
+    await new Promise(r => setTimeout(r, 800));
+    const q = testQuery.toLowerCase();
+    const results = library.filter(item =>
+      item.title.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q)
+    ).slice(0, 4);
+    setTestResults(results);
+    setTestRan(true);
+    setIsTestRunning(false);
+  };
+
+  const openCreateEditorWithTopic = (topic: string) => {
+    setEditorMode('create');
+    setDraft({ ...emptyDraft, title: topic });
+    setImportedFile(null);
+    setImportError(null);
+    setEditorOpen(true);
+  };
   const isSelectedArticleLoading = Boolean(selectedArticleId && selectedArticleLoading && !selectedArticle);
 
   useEffect(() => {
@@ -500,37 +545,46 @@ export default function Knowledge() {
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <span className="material-symbols-outlined text-gray-400 text-lg">search</span>
             </span>
-            <input 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
-              placeholder="Search knowledge..." 
+            <input
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+              placeholder="Search knowledge..."
               type="text"
+              value={librarySearch}
+              onChange={e => setLibrarySearch(e.target.value)}
             />
           </div>
           <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
-          {['Type', 'Category', 'Status', 'Visibility', 'Owner'].map(filter => (
-            <button 
-              key={filter} 
-              onClick={() => {
-                if (filter === 'Type') {
-                  setFilterType(filterType ? null : 'ARTICLE'); // Toggle basic filter
-                }
-              }}
-              className={`flex items-center px-3 py-2 text-xs font-semibold rounded-xl border transition-all shadow-sm ${
-                filter === 'Type' && filterType ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
-            >
-              {filter}{filter === 'Type' && filterType ? `: ${filterType}` : ''}
+          {[
+            { label: 'Type', options: ['All', 'ARTICLE', 'POLICY', 'SNIPPET', 'PLAYBOOK'], value: libraryTypeFilter, set: setLibraryTypeFilter },
+            { label: 'Status', options: ['All', 'Published', 'Draft'], value: libraryStatusFilter, set: setLibraryStatusFilter },
+            { label: 'Health', options: ['All', 'OK', 'Stale'], value: libraryHealthFilter, set: setLibraryHealthFilter },
+          ].map(({ label, options, value, set }) => (
+            <div key={label} className="relative group">
+              <button className={`flex items-center px-3 py-2 text-xs font-semibold rounded-xl border hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm ${value !== 'All' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-700' : 'text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
+                {label}{value !== 'All' ? `: ${value}` : ''}
+                <span className="material-symbols-outlined text-gray-400 text-sm ml-1">arrow_drop_down</span>
+              </button>
+              <div className="absolute left-0 top-full mt-1 z-30 hidden group-hover:flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 min-w-[120px]">
+                {options.map(opt => (
+                  <button key={opt} onClick={() => set(opt)} className={`px-4 py-2 text-xs text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${value === opt ? 'font-bold text-indigo-600 dark:text-indigo-400' : 'text-gray-700 dark:text-gray-200'}`}>{opt}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {/* Legacy filter buttons replaced — keeping map so old 'Category','Visibility','Owner' appear as stubs */}
+          {['Category', 'Visibility', 'Owner'].map(filter => (
+            <button key={filter} className="flex items-center px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">
+              {filter}
               <span className="material-symbols-outlined text-gray-400 text-sm ml-1">arrow_drop_down</span>
             </button>
           ))}
           <div className="flex-1"></div>
-          <button 
-            onClick={() => { setSearchQuery(''); setFilterType(null); }}
+          <button
+            onClick={() => { setLibrarySearch(''); setLibraryTypeFilter('All'); setLibraryStatusFilter('All'); setLibraryHealthFilter('All'); }}
+            title="Clear all filters"
             className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
           >
-            <span className="material-symbols-outlined text-lg">filter_list</span>
+            <span className="material-symbols-outlined text-lg">filter_list_off</span>
           </button>
         </div>
         <div className="flex-1 overflow-auto min-h-[420px]">
@@ -549,7 +603,7 @@ export default function Knowledge() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
-              {library.map((item) => (
+              {filteredLibrary.map((item) => (
                 <tr 
                   key={item.id} 
                   className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors cursor-pointer"
@@ -608,7 +662,7 @@ export default function Knowledge() {
                   </td>
                 </tr>
               ))}
-              {!isInitialLibraryLoading && library.length === 0 && (
+              {!isInitialLibraryLoading && filteredLibrary.length === 0 && (
                 <tr>
                   <td className="px-6 py-10 text-sm text-gray-500 dark:text-gray-400" colSpan={7}>
                     No knowledge articles found.
@@ -967,23 +1021,16 @@ export default function Knowledge() {
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <button 
-                      onClick={() => {
-                        setDraft({
-                          ...emptyDraft,
-                          title: topic.title,
-                          content: `Topic: ${topic.title}\nImpact: ${topic.impact}\nCategory: ${topic.cat}\n\n[Write content here...]`,
-                        });
-                        setEditorMode('create');
-                        setEditorOpen(true);
-                      }}
+                    <button
+                      onClick={() => openCreateEditorWithTopic(topic.title)}
                       className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-sm flex items-center gap-2"
                     >
                       <span className="material-symbols-outlined text-[16px]">edit_note</span>
                       Create Draft
                     </button>
-                    <button 
-                      onClick={() => alert(`Assigning owner for: ${topic.title}`)}
+                    <button
+                      onClick={() => { setActiveTab('library'); setLibrarySearch(topic.title.split(' ').slice(0, 3).join(' ')); }}
+                      title="Find related articles to assign"
                       className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm flex items-center gap-2"
                     >
                       <span className="material-symbols-outlined text-[16px]">person_add</span>
@@ -994,11 +1041,12 @@ export default function Knowledge() {
               ))}
             </div>
             <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <button 
-                onClick={() => alert('Loading more gaps... (Mock)')}
-                className="w-full text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              <button
+                title="All gaps shown — connect more data sources for live gap detection"
+                className="w-full text-xs font-semibold text-gray-400 dark:text-gray-500 cursor-default"
+                disabled
               >
-                Load more gaps
+                All gaps shown
               </button>
             </div>
           </section>
@@ -1015,12 +1063,8 @@ export default function Knowledge() {
                 <p className="text-xs text-gray-600 dark:text-gray-300 mt-1.5 leading-relaxed">3 articles contain conflicting information about "Return Windows".</p>
               </div>
             </div>
-            <button 
-              onClick={() => {
-                setActiveTab('library');
-                setFilterType(null); // Reset filters
-                setSearchQuery('Return Windows'); // Search for conflicting term
-              }}
+            <button
+              onClick={() => { setActiveTab('library'); setLibraryHealthFilter('Stale'); setLibrarySearch('Return Windows'); }}
               className="w-full py-2.5 bg-white dark:bg-gray-800 text-amber-700 dark:text-amber-400 text-xs font-semibold rounded-xl border border-amber-200 dark:border-amber-700 shadow-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all"
             >
               Review Conflicts
@@ -1057,11 +1101,8 @@ export default function Knowledge() {
               ))}
             </div>
             <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <button 
-                onClick={() => {
-                  setActiveTab('library');
-                  setFilterType('ARTICLE');
-                }}
+              <button
+                onClick={() => { setActiveTab('library'); setLibraryHealthFilter('Stale'); }}
                 className="w-full text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               >
                 View all problem articles
@@ -1080,49 +1121,77 @@ export default function Knowledge() {
           <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3">Simulate a user query</label>
           <div className="relative flex items-center">
             <span className="absolute left-5 text-gray-400 material-symbols-outlined text-2xl">search</span>
-            <input 
+            <input
+              className="w-full pl-14 pr-32 py-4 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-lg font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all dark:text-white shadow-sm"
+              placeholder="Ask a question..."
+              type="text"
               value={testQuery}
-              onChange={(e) => setTestQuery(e.target.value)}
-              className="w-full pl-14 pr-32 py-4 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-lg font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all dark:text-white shadow-sm" 
-              placeholder="Ask a question..." 
-              type="text" 
+              onChange={e => setTestQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') void handleRunTest(); }}
             />
-            <button 
-              onClick={() => {
-                setIsTesting(true);
-                setTestResults(null);
-                setTimeout(() => {
-                  setIsTesting(false);
-                  setTestResults([
-                    { title: 'Refund Policy - Annual Subscriptions', match: '98%', type: 'description', color: 'blue', sub: 'Updated 2 days ago • Public Library', content: '...customers on an annual plan are eligible for a full refund if the request is made within 30 days of the renewal date. Pro-rated refunds are available after this period...' },
-                    { title: 'Billing FAQ Snippet', match: '85%', type: 'segment', color: 'purple', sub: 'Snippet • Internal Only', content: "To process a refund for annual plans, use the Stripe dashboard. Ensure the 'prorate' option is unchecked if it's within the 30-day window." },
-                    { title: 'Ticket #9021 Guidance', match: '62%', type: 'confirmation_number', color: 'orange', sub: 'Past Ticket Resolution', content: 'User asked about cancelling annual plan. Agent explained that refunds are not automatic and require manual approval from finance.' },
-                  ]);
-                }, 1500);
-              }}
-              disabled={isTesting}
-              className="absolute right-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold text-sm hover:bg-indigo-700 transition-all shadow-sm disabled:opacity-50"
+            <button
+              onClick={handleRunTest}
+              disabled={isTestRunning || !testQuery.trim()}
+              className="absolute right-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold text-sm hover:bg-indigo-700 transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
-              {isTesting ? 'Running...' : 'Run Test'}
+              {isTestRunning && <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>}
+              {isTestRunning ? 'Running...' : 'Run Test'}
             </button>
           </div>
           <div className="flex items-center mt-4 gap-3">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Popular tests:</span>
-            <button 
-              onClick={() => setTestQuery('How to reset password?')}
-              className="text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-            >
-              How to reset password?
-            </button>
-            <button 
-              onClick={() => setTestQuery('Shipping policy')}
-              className="text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-            >
-              Shipping policy
-            </button>
+            {['How to reset password?', 'Shipping policy', 'Cancel subscription', 'Request refund'].map(q => (
+              <button
+                key={q}
+                onClick={() => { setTestQuery(q); setTestRan(false); }}
+                className="text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-700 dark:hover:text-indigo-300 hover:border-indigo-200 dark:hover:border-indigo-700 transition-all"
+              >
+                {q}
+              </button>
+            ))}
           </div>
         </div>
       </section>
+
+      {/* Dynamic test results */}
+      {testRan && (
+        <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/20">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <span className="material-symbols-outlined text-indigo-500 text-lg">manage_search</span>
+              Retrieved Context — "{testQuery}"
+            </h2>
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">{testResults.length} sources found</span>
+          </div>
+          {testResults.length === 0 ? (
+            <div className="p-8 text-center">
+              <span className="material-symbols-outlined text-3xl text-gray-300 dark:text-gray-600 mb-2">search_off</span>
+              <p className="text-sm text-gray-500 dark:text-gray-400">No matching articles found for this query.</p>
+              <button onClick={() => openCreateEditorWithTopic(testQuery)} className="mt-3 px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition-all">
+                Create article for this topic
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {testResults.map((item, i) => (
+                <div key={item.id} className="p-6 flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 flex-shrink-0">
+                    <span className="material-symbols-outlined text-lg">article</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${item.type === 'POLICY' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>{item.type}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{item.category} • {item.status} • {item.owner}</p>
+                  </div>
+                  <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex-shrink-0">{Math.max(70, 98 - i * 13)}% match</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid grid-cols-12 gap-8">
         <div className="col-span-8 space-y-8">

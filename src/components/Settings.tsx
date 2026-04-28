@@ -19,10 +19,16 @@ function TabErrorBoundary({ children }: TabErrorBoundaryProps) {
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('workspace');
   const [saveHandler, setSaveHandler] = useState<null | (() => Promise<void> | void)>(null);
+  const [resetKey, setResetKey] = useState(0);
 
   useEffect(() => {
     setSaveHandler(null);
   }, [activeTab]);
+
+  const handleDiscard = useCallback(() => {
+    setSaveHandler(null);
+    setResetKey(k => k + 1);
+  }, []);
 
   const handleSave = useCallback(async () => {
     if (saveHandler) {
@@ -52,7 +58,13 @@ export default function Settings() {
               <p className="text-xs text-gray-500 mt-0.5">Manage your workspace profile, business hours, and branding</p>
             </div>
             <div className="flex items-center gap-3">
-              <button className="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors">Discard Changes</button>
+              <button
+                onClick={handleDiscard}
+                disabled={!saveHandler}
+                className="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Discard Changes
+              </button>
               <button
                 type="button"
                 onClick={() => { void handleSave().catch(() => undefined); }}
@@ -86,7 +98,7 @@ export default function Settings() {
         <div className="w-full h-full">
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab}
+              key={`${activeTab}-${resetKey}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}

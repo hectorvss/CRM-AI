@@ -1,4 +1,11 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+
+export interface CaseHeaderMenuItem {
+  label: string;
+  icon: string;
+  onClick: () => void;
+  danger?: boolean;
+}
 
 interface CaseHeaderProps {
   caseId: string;
@@ -19,7 +26,7 @@ interface CaseHeaderProps {
   actions?: React.ReactNode;
   onResolve?: () => void;
   onSnooze?: () => void;
-  onMoreActions?: () => void;
+  moreMenuItems?: CaseHeaderMenuItem[];
 }
 
 export default function CaseHeader({
@@ -41,8 +48,20 @@ export default function CaseHeader({
   actions,
   onResolve,
   onSnooze,
-  onMoreActions
+  moreMenuItems = [],
 }: CaseHeaderProps) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [moreOpen]);
+
   return (
     <div className="w-full">
       <div className="flex justify-between items-start mb-6 gap-4">
@@ -62,24 +81,46 @@ export default function CaseHeader({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {actions}
-          <button 
+          <button
             onClick={onResolve}
-            className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            disabled={!onResolve}
+            title={onResolve ? 'Mark case as resolved' : 'Resolve'}
+            className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 dark:hover:text-green-400 hover:border-green-200 dark:hover:border-green-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined">check_circle</span>
           </button>
-          <button 
+          <button
             onClick={onSnooze}
-            className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            disabled={!onSnooze}
+            title={onSnooze ? 'Snooze case' : 'Snooze'}
+            className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined">snooze</span>
           </button>
-          <button 
-            onClick={onMoreActions}
-            className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            <span className="material-symbols-outlined">more_horiz</span>
-          </button>
+          <div className="relative" ref={moreRef}>
+            <button
+              onClick={() => moreMenuItems.length > 0 && setMoreOpen(p => !p)}
+              disabled={moreMenuItems.length === 0}
+              title="More actions"
+              className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined">more_horiz</span>
+            </button>
+            {moreOpen && moreMenuItems.length > 0 && (
+              <div className="absolute right-0 top-12 z-50 w-48 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl py-1">
+                {moreMenuItems.map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => { setMoreOpen(false); item.onClick(); }}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 ${item.danger ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'}`}
+                  >
+                    <span className="material-symbols-outlined text-[17px]">{item.icon}</span>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

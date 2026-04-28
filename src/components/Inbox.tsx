@@ -404,6 +404,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   const [copilotInput, setCopilotInput] = useState('');
   const [isCopilotSending, setIsCopilotSending] = useState(false);
   const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
+  const [copilotSortOrder, setCopilotSortOrder] = useState<'asc' | 'desc'>('asc');
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [showCaseSummary, setShowCaseSummary] = useState(false);
@@ -561,7 +562,8 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
     return links.filter(link => link.visible);
   })();
 
-  const copilotMessages = selectedConv ? (copilotMessagesByCase[selectedConv.id] || []) : [];
+  const copilotMessagesRaw = selectedConv ? (copilotMessagesByCase[selectedConv.id] || []) : [];
+  const copilotMessages = copilotSortOrder === 'desc' ? [...copilotMessagesRaw].reverse() : copilotMessagesRaw;
 
   useEffect(() => {
     if (filteredConversations.length > 0 && !filteredConversations.find(c => c.id === selectedId)) {
@@ -1658,11 +1660,12 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                     type="text"
                   />
                   <div className="flex items-center gap-1">
-                    <button 
-                      onClick={() => alert('Sorting Copilot messages by relevance... (Mock)')}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"
+                    <button
+                      onClick={() => setCopilotSortOrder(o => o === 'asc' ? 'desc' : 'asc')}
+                      title={`Sort: ${copilotSortOrder === 'asc' ? 'oldest first' : 'newest first'}`}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg transition-colors"
                     >
-                      <span className="material-symbols-outlined text-[20px]">sort</span>
+                      <span className="material-symbols-outlined text-[20px]">{copilotSortOrder === 'asc' ? 'sort' : 'sort'}</span>
                     </button>
                     <button
                       onClick={handleCopilotSubmit}

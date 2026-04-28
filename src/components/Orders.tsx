@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Order, OrderTab } from '../types';
 import CaseHeader from './CaseHeader';
+import type { CaseHeaderMenuItem } from './CaseHeader';
 import CaseCopilotPanel from './CaseCopilotPanel';
 import { casesApi, ordersApi, paymentsApi } from '../api/client';
 import { useApi } from '../api/hooks';
@@ -39,6 +40,33 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [caseActionMsg, setCaseActionMsg] = useState<string | null>(null);
+
+  const showCaseMsg = (msg: string) => {
+    setCaseActionMsg(msg);
+    setTimeout(() => setCaseActionMsg(null), 3500);
+  };
+
+  const handleResolveCase = async (caseId: string) => {
+    try {
+      await casesApi.resolve(caseId);
+      showCaseMsg('Case marked as resolved');
+    } catch { showCaseMsg('Failed to resolve case'); }
+  };
+
+  const handleSnoozeCase = async (caseId: string) => {
+    try {
+      await casesApi.updateStatus(caseId, 'snoozed');
+      showCaseMsg('Case snoozed');
+    } catch { showCaseMsg('Failed to snooze case'); }
+  };
+
+  const handleCloseCase = async (caseId: string) => {
+    try {
+      await casesApi.updateStatus(caseId, 'closed');
+      showCaseMsg('Case closed');
+    } catch { showCaseMsg('Failed to close case'); }
+  };
 
   // Load orders from API, fall back to static data on error
   const { data: apiOrders, loading, error: ordersError } = useApi(
@@ -297,11 +325,12 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
               <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
               Sync Active
             </div>
-            <button 
-              onClick={() => alert('Filtering orders... (Mock)')}
-              className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            <button
+              onClick={() => setActiveTab('all')}
+              title="Clear filters"
+              className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
-              <span className="material-symbols-outlined">filter_list</span>
+              <span className="material-symbols-outlined">filter_list_off</span>
             </button>
           </div>
         </div>
@@ -385,6 +414,12 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
               </div>
             ) : selectedOrder ? (
               <div className="p-8 w-full space-y-8">
+                {caseActionMsg && (
+                  <div className="mb-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-sm font-medium">
+                    <span className="material-symbols-outlined text-base">check_circle</span>
+                    {caseActionMsg}
+                  </div>
+                )}
                 <CaseHeader
                   caseId={selectedOrder.relatedCases[0]?.id || selectedOrder.orderId}
                   title={selectedOrder.summary}
@@ -400,9 +435,12 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
                   approvalStatus={selectedOrder.approvalStatus}
                   recommendedAction={selectedOrder.recommendedNextAction || 'No action needed'}
                   conflictDetected={selectedOrder.conflictDetected}
-                  onResolve={() => alert('Marking case as resolved... (Mock)')}
-                  onSnooze={() => alert('Snoozing case... (Mock)')}
-                  onMoreActions={() => alert('Opening additional actions... (Mock)')}
+                  onResolve={selectedOrder.relatedCases[0]?.id ? () => handleResolveCase(selectedOrder.relatedCases[0].id) : undefined}
+                  onSnooze={selectedOrder.relatedCases[0]?.id ? () => handleSnoozeCase(selectedOrder.relatedCases[0].id) : undefined}
+                  moreMenuItems={selectedOrder.relatedCases[0]?.id ? ([
+                    { label: 'Open in Inbox', icon: 'inbox', onClick: () => onNavigate?.('inbox', selectedOrder.relatedCases[0].id) },
+                    { label: 'Close case', icon: 'cancel', onClick: () => handleCloseCase(selectedOrder.relatedCases[0].id), danger: true },
+                  ] satisfies CaseHeaderMenuItem[]) : []}
                 />
 
                 {/* Grid Info */}
