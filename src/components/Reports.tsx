@@ -84,7 +84,17 @@ export default function Reports() {
 
   const overviewKpis = overviewData?.kpis?.length ? overviewData.kpis : fallbackOverviewKpis;
 
-  const renderOverview = () => (
+  const renderOverview = () => {
+    // Derive dynamic performance shifts from real KPI data
+    const kpis: any[] = overviewData?.kpis ?? [];
+    const improved = kpis.filter((k) => k.trend === 'up').slice(0, 3);
+    const worsened = kpis.filter((k) => k.trend === 'down').slice(0, 3);
+
+    // SLA distribution for side panel
+    const slaDistrib: any[] = slaData?.distribution ?? [];
+    const slaTotal = slaDistrib.reduce((s: number, d: any) => s + (d.count ?? 0), 0);
+
+    return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {overviewKpis.map((metric: any, i: number) => (
@@ -93,6 +103,7 @@ export default function Reports() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Performance Shifts — derived from real KPI trend data */}
         <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-5">Performance Shifts</h2>
           <div className="space-y-6">
@@ -100,58 +111,76 @@ export default function Reports() {
               <h3 className="flex items-center text-xs font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">
                 <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span> What Improved
               </h3>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
-                  <span className="material-symbols-outlined text-green-600 text-[18px] mt-0.5">trending_up</span>
-                  <span>CSAT up to 4.8/5</span>
-                </li>
-                <li className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
-                  <span className="material-symbols-outlined text-green-600 text-[18px] mt-0.5">schedule</span>
-                  <span>FRT down 15% across all segments</span>
-                </li>
-              </ul>
+              {improved.length > 0 ? (
+                <ul className="space-y-3">
+                  {improved.map((k: any, i: number) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
+                      <span className="material-symbols-outlined text-green-600 text-[18px] mt-0.5">trending_up</span>
+                      <span><strong className="text-gray-900 dark:text-white">{k.label}</strong>: {k.value}{k.change ? ` (${k.change})` : ''}{k.sub ? ` — ${k.sub}` : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-400 dark:text-gray-500">No improving KPIs this period.</p>
+              )}
             </div>
             <div className="border-t border-gray-100 dark:border-gray-800 pt-6">
               <h3 className="flex items-center text-xs font-bold text-gray-900 dark:text-white mb-4 uppercase tracking-wider">
                 <span className="w-2 h-2 rounded-full bg-red-500 mr-2"></span> What Worsened
               </h3>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
-                  <span className="material-symbols-outlined text-red-500 text-[18px] mt-0.5">error</span>
-                  <span>Shopify lookup error rate increased to 15%</span>
-                </li>
-                <li className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
-                  <span className="material-symbols-outlined text-red-500 text-[18px] mt-0.5">menu_book</span>
-                  <span>Knowledge gap identified: annual plan refunds</span>
-                </li>
-              </ul>
+              {worsened.length > 0 ? (
+                <ul className="space-y-3">
+                  {worsened.map((k: any, i: number) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
+                      <span className="material-symbols-outlined text-red-500 text-[18px] mt-0.5">trending_down</span>
+                      <span><strong className="text-gray-900 dark:text-white">{k.label}</strong>: {k.value}{k.change ? ` (${k.change})` : ''}{k.sub ? ` — ${k.sub}` : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-400 dark:text-gray-500">No declining KPIs this period.</p>
+              )}
             </div>
           </div>
         </div>
+
+        {/* SLA distribution panel */}
         <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <span className="material-symbols-outlined text-[18px] mr-1.5 text-indigo-500">task_alt</span>
-            Recommended Actions
+            <span className="material-symbols-outlined text-[18px] mr-1.5 text-indigo-500">timer</span>
+            SLA Distribution
           </h2>
-          <div className="space-y-3">
-            {recommendedActions.map((action, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
-                <input className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4" type="checkbox" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-800 dark:text-gray-200 font-medium mb-1 line-clamp-2">{action.label}</p>
-                  <div className="flex gap-2">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${action.impactColor}`}>{action.impact}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">Effort: {action.effort}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">Owner: {action.owner}</span>
+          {slaDistrib.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <span className="material-symbols-outlined text-3xl text-gray-300 dark:text-gray-600 mb-2">timer</span>
+              <p className="text-sm text-gray-400">No SLA data for this period.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {slaDistrib.map((item: any, i: number) => {
+                const pct = slaTotal > 0 ? Math.round((item.count / slaTotal) * 100) : 0;
+                const color = item.status === 'breached' ? 'bg-red-500' : item.status === 'at_risk' ? 'bg-orange-400' : 'bg-green-500';
+                const label = item.status === 'breached' ? 'Breached' : item.status === 'at_risk' ? 'At Risk' : item.status === 'on_track' ? 'On Track' : String(item.status ?? '').replace(/_/g, ' ');
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between items-center text-sm mb-1.5">
+                      <span className="text-gray-700 dark:text-gray-300 font-medium capitalize">{label}</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{item.count} <span className="font-normal text-gray-400">({pct}%)</span></span>
+                    </div>
+                    <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                      <div className={`${color} h-2 rounded-full transition-all`} style={{ width: `${pct}%` }}></div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+              <p className="text-xs text-gray-400 dark:text-gray-500 pt-1">{slaTotal} total cases with SLA data this period.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderAiResume = () => {
     const selectedReport = GENERATED_REPORTS.find(r => r.id === selectedReportId) ?? null;
@@ -459,17 +488,57 @@ export default function Reports() {
   );
   };
 
-  const renderBusinessAreas = () => (
+  const renderBusinessAreas = () => {
+    const kpiMap = Object.fromEntries((overviewData?.kpis ?? []).map((k: any) => [k.key, k]));
+    const bizKpis = [
+      {
+        label: 'AI Resolution Rate',
+        value: kpiMap['auto_resolution']?.value ?? kpiMap['resolution_rate']?.value ?? '—',
+        change: kpiMap['auto_resolution']?.change ?? '',
+        trend: kpiMap['auto_resolution']?.trend ?? 'neutral',
+        sub: kpiMap['auto_resolution']?.sub ?? 'AI automated resolutions',
+      },
+      {
+        label: 'Approval Rate',
+        value: approvalsData?.rates?.approvalRate ?? '—',
+        change: '',
+        trend: 'neutral',
+        sub: 'Approved / total requests',
+      },
+      {
+        label: 'Avg Decision Time',
+        value: approvalsData?.rates?.avgDecisionHours != null ? `${approvalsData.rates.avgDecisionHours}h` : '—',
+        change: '',
+        trend: 'neutral',
+        sub: 'Approvals median',
+      },
+      {
+        label: 'SLA Compliance',
+        value: kpiMap['sla_compliance']?.value ?? '—',
+        change: kpiMap['sla_compliance']?.change ?? '',
+        trend: kpiMap['sla_compliance']?.trend ?? 'neutral',
+        sub: kpiMap['sla_compliance']?.sub ?? 'Within SLA deadline',
+      },
+      {
+        label: 'High Risk Cases',
+        value: kpiMap['high_risk']?.value ?? '—',
+        change: '',
+        trend: 'neutral',
+        sub: kpiMap['high_risk']?.sub ?? 'Flagged as high/critical',
+      },
+      {
+        label: 'Total Cases',
+        value: kpiMap['total_cases']?.value ?? '—',
+        change: kpiMap['total_cases']?.change ?? '',
+        trend: kpiMap['total_cases']?.trend ?? 'neutral',
+        sub: kpiMap['total_cases']?.sub ?? 'Period total',
+      },
+    ];
+
+    return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[
-          { label: 'AI Resolution Rate', value: '68%', change: '+2.4%', trend: 'up', sub: 'Billing & Refunds' },
-          { label: 'Approval Rate', value: '14%', change: '-1.2%', trend: 'down', sub: 'Order Tracking' },
-          { label: 'Median Decision Time', value: '4m', change: '-30s', trend: 'up', sub: 'Technical Issues' },
-          { label: 'Escalation %', value: '12%', change: '+1.5%', trend: 'down', sub: 'Across all areas' },
-          { label: 'Refund Volume', value: '$42k', change: '+$5k', trend: 'up', sub: 'Post-holiday sale' },
-          { label: 'Policy Blocks', value: '12', change: '-3', trend: 'up', sub: 'Fraud prevention' },
-        ].map((metric, i) => (
+        {bizKpis.map((metric, i) => (
           <KPICard key={i} metric={metric} index={i} />
         ))}
       </div>
@@ -559,7 +628,8 @@ export default function Reports() {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const fallbackAgentCards = [
     { name: 'Supervisor', rate: '98.2%', change: '+1.2%', trend: 'up', icon: 'supervisor_account', sub: 'Routing accuracy' },
@@ -633,115 +703,95 @@ export default function Reports() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-card">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center text-white shadow-sm">
-                <span className="material-symbols-outlined text-[20px]">search</span>
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Knowledge Retriever</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Agent Performance Details</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-100 dark:border-gray-700/50">
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Escalation Tendency</div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white">High</div>
-              </div>
-              <div className="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-100 dark:border-gray-700/50">
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Quality Trend</div>
-                <div className="text-lg font-bold text-red-600 dark:text-red-400 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px]">trending_down</span> Declining
-                </div>
-              </div>
-              <div className="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-100 dark:border-gray-700/50">
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Avg Execution Time</div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white">1.2s</div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-2">Recent Issues</h3>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30">
-                  <span className="material-symbols-outlined text-red-500 text-[18px] mt-0.5">error</span>
+      {/* Agent detail — shows the lowest-performing agent from real data */}
+      {agentCards.length > 0 && (() => {
+        // Pick the agent with the lowest success rate for spotlight
+        const spotlight = [...agentCards].sort((a: any, b: any) => parseFloat(a.rate) - parseFloat(b.rate))[0] as any;
+        const agentIcon = AGENT_ICON_MAP[spotlight.slug?.split('_')[0]] || spotlight.icon || 'smart_toy';
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-card">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center text-white shadow-sm">
+                    <span className="material-symbols-outlined text-[20px]">{agentIcon}</span>
+                  </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">Missing Context: "Q4 Return Window"</p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Agent failed to retrieve the updated policy document in 45 cases.</p>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">{spotlight.name}</h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Lowest success rate this period — needs attention</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/30">
-                  <span className="material-symbols-outlined text-orange-500 text-[18px] mt-0.5">warning</span>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">Low Confidence Scores</p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Average retrieval confidence dropped below 0.85 for "International Shipping" queries.</p>
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Success Rate</div>
+                    <div className={`text-lg font-bold ${parseFloat(spotlight.rate) < 80 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>{spotlight.rate}</div>
                   </div>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Runs</div>
+                    <div className="text-lg font-bold text-gray-900 dark:text-white">{spotlight.sub?.split(' runs')[0] ?? '—'}</div>
+                  </div>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-800/40 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Category</div>
+                    <div className="text-lg font-bold text-gray-900 dark:text-white capitalize">{(spotlight.slug ?? '—').replace(/_/g, ' ')}</div>
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg bg-amber-50/60 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                    <strong className="text-gray-900 dark:text-white">Spotlight:</strong> {spotlight.name} has a {spotlight.rate} success rate over this period with {spotlight.sub?.split(' runs')[0] ?? '—'} runs. {parseFloat(spotlight.rate) < 80 ? 'Performance is below the 80% threshold — investigate failed runs.' : 'Performance is acceptable.'}
+                  </p>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-gray-800 dark:to-card-dark rounded-xl border border-indigo-100 dark:border-gray-700 p-6 shadow-card relative overflow-hidden">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-xl">auto_awesome</span>
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">AI Micro-Summary</h2>
-            </div>
-            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-              <strong className="text-gray-900 dark:text-white">Current Situation:</strong> The Knowledge Retriever is experiencing elevated escalation rates (142 cases, +45% WoW).
-              <br/><br/>
-              <strong className="text-gray-900 dark:text-white">Probable Cause:</strong> Outdated policy documents regarding the new Q4 return window are conflicting with recent announcements.
-              <br/><br/>
-              <strong className="text-gray-900 dark:text-white">Impact:</strong> Increased human handle time and lower CSAT for return-related inquiries.
-            </p>
-          </div>
-          
-          <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-gray-500 text-[18px]">fact_check</span> Recommended Actions
-              </h2>
-            </div>
-            <div className="p-5 space-y-3">
-              {[
-                { label: 'Update Q4 Return Policy KB', impact: 'High Impact', effort: 'S', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
-                { label: 'Review International Shipping tags', impact: 'Medium Impact', effort: 'M', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' },
-              ].map((fix, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
-                  <input className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" type="checkbox" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{fix.label}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${fix.color}`}>{fix.impact}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">Effort: {fix.effort}</span>
-                    </div>
-                  </div>
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-gray-800 dark:to-card-dark rounded-xl border border-indigo-100 dark:border-gray-700 p-6 shadow-card relative overflow-hidden">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-xl">auto_awesome</span>
+                  <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Agent Summary</h2>
                 </div>
-              ))}
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  {agentCards.length} agents active. Average success rate:{' '}
+                  <strong className="text-gray-900 dark:text-white">
+                    {agentCards.length > 0
+                      ? `${Math.round(agentCards.reduce((s: number, a: any) => s + parseFloat(a.rate || '0'), 0) / agentCards.length)}%`
+                      : '—'}
+                  </strong>.
+                  {agentCards.filter((a: any) => parseFloat(a.rate) < 80).length > 0
+                    ? ` ${agentCards.filter((a: any) => parseFloat(a.rate) < 80).length} agent(s) below 80% threshold.`
+                    : ' All agents above 80% threshold.'}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
     </div>
   );
 
-  const renderApprovalsRisk = () => (
+  const renderApprovalsRisk = () => {
+    const funnel = approvalsData?.funnel ?? [];
+    const triggered = funnel.find((f: any) => f.label === 'Triggered')?.val ?? funnel[0]?.val ?? '—';
+    const pending   = funnel.find((f: any) => f.label === 'Pending')?.val   ?? funnel[3]?.val ?? '—';
+    const approved  = funnel.find((f: any) => f.label === 'Approved')?.val  ?? funnel[1]?.val;
+    const rejected  = funnel.find((f: any) => f.label === 'Rejected')?.val  ?? funnel[2]?.val;
+    const rates = approvalsData?.rates ?? {};
+    const highRisk = approvalsData?.byRisk?.find((r: any) => r.riskLevel === 'high')?.count ?? null;
+    const slaBreached = slaData?.distribution?.find((d: any) => d.status === 'breached')?.count ?? null;
+
+    const approvalKpis = [
+      { label: 'Approval Requests', value: triggered, change: '', trend: 'neutral', sub: `Period total` },
+      { label: 'Pending Backlog', value: pending, change: '', trend: 'neutral', sub: 'Awaiting review' },
+      { label: 'Approval Rate', value: rates.approvalRate ?? (approved ? formatRatio(Number(approved), Number(triggered.replace(/,/g, '')) || 1) : '—'), change: '', trend: 'neutral', sub: 'Of all requests' },
+      { label: 'Rejection Rate', value: rates.rejectionRate ?? (rejected ? formatRatio(Number(rejected), Number(triggered.replace(/,/g, '')) || 1) : '—'), change: '', trend: 'neutral', sub: 'Of all requests' },
+      { label: 'Avg Decision Time', value: rates.avgDecisionHours != null ? `${rates.avgDecisionHours}h` : '—', change: '', trend: 'neutral', sub: 'From request to decision' },
+      { label: 'SLA Breaches', value: slaBreached != null ? String(slaBreached) : '—', change: '', trend: slaBreached ? 'down' : 'neutral', sub: 'Cases past SLA deadline' },
+      { label: 'High-Risk Items', value: highRisk != null ? String(highRisk) : '—', change: '', trend: 'neutral', sub: 'Requires manager review' },
+      { label: 'Executed After Approval', value: rates.approvalRate ?? '—', change: '', trend: 'neutral', sub: 'Execution rate' },
+    ];
+
+    return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[
-          { label: 'Approval Requests', value: '1,420', change: '+12%', trend: 'up', sub: 'Total requests this week' },
-          { label: 'Approval Backlog', value: '84', change: '+5%', trend: 'up', sub: 'Pending review' },
-          { label: 'Median Time to Decision', value: '12m', change: '-2m', trend: 'down', sub: 'Faster decisions' },
-          { label: '90th Percentile Time', value: '2.5h', change: '+30m', trend: 'up', sub: 'Long tail delays' },
-          { label: 'SLA Breaches', value: '12', change: '+4', trend: 'up', sub: 'Over 24h wait' },
-          { label: 'Executed After Approval %', value: '98%', change: 'Stable', trend: 'neutral', sub: 'High execution rate' },
-          { label: 'High-Risk Pending', value: '6', change: '+2', trend: 'up', sub: 'Requires manager review' },
-          { label: 'Policy Blocks Rate', value: '4.2%', change: '-0.5%', trend: 'down', sub: 'Fewer blocks' },
-        ].map((metric, i) => (
+        {approvalKpis.map((metric, i) => (
           <KPICard key={i} metric={metric} index={i} />
         ))}
       </div>
@@ -771,62 +821,76 @@ export default function Reports() {
           <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">AI Risk Brief</h2>
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-              Overall approval backlog remains manageable, but 90th percentile time to decision is creeping up, indicating complex edge cases. Billing wait times are the primary contributor.
+              {approvalsData?.rates?.avgDecisionHours != null
+                ? `Average decision time is ${approvalsData.rates.avgDecisionHours}h. Approval rate: ${approvalsData.rates.approvalRate ?? '—'}, rejection rate: ${approvalsData.rates.rejectionRate ?? '—'}.`
+                : 'No approval data available for this period.'}
+              {slaBreached != null && slaBreached > 0 ? ` ${slaBreached} cases have breached SLA.` : ''}
             </p>
           </div>
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
-  const renderCostRoi = () => (
+  const renderCostRoi = () => {
+    const summary = costsData?.summary ?? {};
+    const byAgent: any[] = costsData?.byAgent ?? [];
+    const creditsUsed  = summary.creditsUsed  != null ? String(summary.creditsUsed) : '—';
+    const totalTokens  = summary.totalTokens  != null ? Number(summary.totalTokens).toLocaleString() : '—';
+    const autoResolved = summary.autoResolvedCases != null ? String(summary.autoResolvedCases) : '—';
+    const creditsAdded = summary.creditsAdded != null ? String(summary.creditsAdded) : '—';
+
+    // compute per-case cost if we have both sides
+    const totalCasesKpi = overviewData?.kpis?.find((k: any) => k.key === 'total_cases');
+    const nCases = totalCasesKpi ? Number(totalCasesKpi.value) : 0;
+    const costPerCase = nCases > 0 && summary.creditsUsed != null
+      ? (summary.creditsUsed / nCases).toFixed(4)
+      : null;
+
+    const costKpis = [
+      { label: 'Credits Used', value: creditsUsed, change: '', trend: 'neutral', sub: 'AI processing cost' },
+      { label: 'Credits Added', value: creditsAdded, change: '', trend: 'neutral', sub: 'Top-ups this period' },
+      { label: 'Total Tokens', value: totalTokens, change: '', trend: 'neutral', sub: 'LLM tokens consumed' },
+      { label: 'AI Auto-Resolved', value: autoResolved, change: '', trend: 'up', sub: 'Cases closed by AI' },
+      { label: 'Cost per Case', value: costPerCase ? `${costPerCase} cr` : '—', change: '', trend: 'neutral', sub: 'Average AI cost/case' },
+      { label: 'Total Cases', value: totalCasesKpi?.value ?? '—', change: totalCasesKpi?.change ?? '', trend: totalCasesKpi?.trend ?? 'neutral', sub: totalCasesKpi?.sub ?? '' },
+      { label: 'Resolution Rate', value: overviewData?.kpis?.find((k: any) => k.key === 'resolution_rate')?.value ?? '—', change: '', trend: 'neutral', sub: 'Cases resolved' },
+      { label: 'SLA Compliance', value: overviewData?.kpis?.find((k: any) => k.key === 'sla_compliance')?.value ?? '—', change: '', trend: 'neutral', sub: 'Within SLA deadline' },
+    ];
+
+    return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[
-          { label: 'Gross Savings', value: '$142k', change: '+$12k', trend: 'up', sub: 'Human cost avoided' },
-          { label: 'Net Savings', value: '$118k', change: '+$9k', trend: 'up', sub: 'After AI costs' },
-          { label: 'ROI', value: '491%', change: '+24%', trend: 'up', sub: 'Return on investment' },
-          { label: 'AI Infra Cost', value: '$24k', change: '+$3k', trend: 'down', sub: 'LLM API & Compute' },
-          { label: 'Cost per Case (AI)', value: '$0.12', change: '-$0.02', trend: 'up', sub: 'Highly efficient' },
-          { label: 'Cost per Case (Human)', value: '$8.40', change: 'Stable', trend: 'neutral', sub: 'Baseline cost' },
-          { label: 'Human Hours Saved', value: '4,250h', change: '+320h', trend: 'up', sub: 'Equivalent to 26 FTEs' },
-          { label: 'Cost Avoidance', value: '$85k', change: '+$15k', trend: 'up', sub: 'Prevented escalations' },
-        ].map((metric, i) => (
+        {costKpis.map((metric, i) => (
           <KPICard key={i} metric={metric} index={i} />
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {/* Cost by Agent table — from real agent_runs data */}
           <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/20">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">ROI by Business Area</h2>
-              <button className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300">Download CSV</button>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Cost by Agent</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-gray-50/50 dark:bg-gray-800/20 border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">
-                    <th className="px-5 py-3">Business Area</th>
-                    <th className="px-5 py-3 text-right">Gross Savings</th>
-                    <th className="px-5 py-3 text-right">AI Cost</th>
-                    <th className="px-5 py-3 text-right">Net Savings</th>
-                    <th className="px-5 py-3 text-right">ROI</th>
+                    <th className="px-5 py-3">Agent</th>
+                    <th className="px-5 py-3 text-right">Tokens</th>
+                    <th className="px-5 py-3 text-right">Credits</th>
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-100 dark:divide-gray-800">
-                  {[
-                    { name: 'Order Tracking', gross: '$65,000', cost: '$8,000', net: '$57,000', roi: '712%' },
-                    { name: 'Billing & Refunds', gross: '$42,000', cost: '$12,000', net: '$30,000', roi: '250%' },
-                    { name: 'Technical Support', gross: '$25,000', cost: '$3,000', net: '$22,000', roi: '733%' },
-                    { name: 'Account Management', gross: '$10,000', cost: '$1,000', net: '$9,000', roi: '900%' },
-                  ].map((area, i) => (
+                  {byAgent.length === 0 ? (
+                    <tr><td colSpan={3} className="px-5 py-8 text-center text-gray-400 dark:text-gray-500">No agent run data for this period.</td></tr>
+                  ) : byAgent.map((agent: any, i: number) => (
                     <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-200">{area.name}</td>
-                      <td className="px-5 py-3 text-right text-gray-600 dark:text-gray-400">{area.gross}</td>
-                      <td className="px-5 py-3 text-right text-gray-600 dark:text-gray-400">{area.cost}</td>
-                      <td className="px-5 py-3 text-right font-medium text-green-600 dark:text-green-400">{area.net}</td>
-                      <td className="px-5 py-3 text-right font-bold text-gray-900 dark:text-white">{area.roi}</td>
+                      <td className="px-5 py-3 font-medium text-gray-900 dark:text-gray-200">{agent.name}</td>
+                      <td className="px-5 py-3 text-right text-gray-600 dark:text-gray-400">{Number(agent.tokens).toLocaleString()}</td>
+                      <td className="px-5 py-3 text-right font-medium text-indigo-600 dark:text-indigo-400">{agent.cost}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -834,92 +898,69 @@ export default function Reports() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          {/* SLA Distribution */}
+          {slaData?.distribution && slaData.distribution.length > 0 && (
             <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Cost Breakdown</h2>
-              <div className="space-y-4">
-                {[
-                  { label: 'LLM API Usage (GPT-4o)', value: '$18,500', percent: '77%' },
-                  { label: 'Vector Database', value: '$3,200', percent: '13%' },
-                  { label: 'Compute & Hosting', value: '$1,800', percent: '8%' },
-                  { label: 'Third-party Tools', value: '$500', percent: '2%' },
-                ].map((item, i) => (
-                  <div key={i}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600 dark:text-gray-400">{item.label}</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{item.value}</span>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">SLA Distribution</h2>
+              <div className="space-y-3">
+                {slaData.distribution.map((item: any, i: number) => {
+                  const total = slaData.distribution.reduce((s: number, d: any) => s + d.count, 0);
+                  const pct = total > 0 ? Math.round((item.count / total) * 100) : 0;
+                  const color = item.status === 'breached' ? 'bg-red-500' : item.status === 'at_risk' ? 'bg-orange-400' : 'bg-green-500';
+                  return (
+                    <div key={i}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600 dark:text-gray-400 capitalize">{item.status?.replace(/_/g, ' ')}</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{item.count} ({pct}%)</span>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
+                        <div className={`${color} h-1.5 rounded-full`} style={{ width: `${pct}%` }}></div>
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
-                      <div className="bg-indigo-500 h-1.5 rounded-full" style={{ width: item.percent }}></div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
-            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Savings Breakdown</h2>
-              <div className="space-y-4">
-                {[
-                  { label: 'Tier 1 Support Deflection', value: '$95,000', percent: '67%' },
-                  { label: 'Tier 2 Escalation Avoidance', value: '$32,000', percent: '22%' },
-                  { label: 'After-hours Coverage', value: '$15,000', percent: '11%' },
-                ].map((item, i) => (
-                  <div key={i}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600 dark:text-gray-400">{item.label}</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{item.value}</span>
-                    </div>
-                    <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
-                      <div className="bg-green-500 h-1.5 rounded-full" style={{ width: item.percent }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="space-y-6">
           <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-gray-800 dark:to-card-dark rounded-xl border border-indigo-100 dark:border-gray-700 p-6 shadow-card relative overflow-hidden">
             <div className="flex items-center gap-2 mb-4">
               <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-xl">auto_awesome</span>
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Business Impact</h2>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Cost Summary</h2>
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-              The AI system generated <strong className="text-green-600 dark:text-green-400">$118k in net savings</strong> this period, representing a 491% ROI. 
-              <br/><br/>
-              <strong className="text-gray-900 dark:text-white">Key Insight:</strong> While "Billing & Refunds" has the highest AI cost ($12k) due to complex multi-step tool usage, it still yields a healthy 250% ROI. "Order Tracking" remains the most cost-efficient area.
+              {summary.creditsUsed != null
+                ? <>Used <strong className="text-gray-900 dark:text-white">{creditsUsed} credits</strong> ({totalTokens} tokens) across {autoResolved} auto-resolved cases this period.</>
+                : 'No cost data available for this period.'}
+              {costPerCase && <><br/><br/><strong className="text-gray-900 dark:text-white">Avg cost per case:</strong> {costPerCase} credits.</>}
             </p>
           </div>
-          
-          <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-gray-500 text-[18px]">trending_up</span> Optimization Opportunities
-              </h2>
-            </div>
-            <div className="p-5 space-y-3">
-              {[
-                { label: 'Switch to GPT-4o-mini for Order Tracking', impact: 'High Savings', effort: 'S', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
-                { label: 'Cache frequent vector DB queries', impact: 'Medium Savings', effort: 'M', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
-              ].map((fix, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
-                  <input className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" type="checkbox" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{fix.label}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${fix.color}`}>{fix.impact}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">Effort: {fix.effort}</span>
-                    </div>
+
+          {/* Top SLA breaches by type */}
+          {slaData?.breachedByType && slaData.breachedByType.length > 0 && (
+            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+              <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-red-500 text-[18px]">timer_off</span> Top SLA Breaches
+                </h2>
+              </div>
+              <div className="p-5 space-y-3">
+                {slaData.breachedByType.slice(0, 5).map((item: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-700 dark:text-gray-300 capitalize">{String(item.type).replace(/_/g, ' ')}</span>
+                    <span className="font-semibold text-red-600 dark:text-red-400">{item.count}</span>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
