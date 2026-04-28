@@ -918,59 +918,10 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
 
             {/* Empty state — minimalist */}
             {!isBootstrapping && messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center min-h-[40vh] gap-5">
-                <h1 className="text-4xl font-semibold text-gray-900 dark:text-white tracking-tight">
+              <div className="flex flex-col items-center justify-center text-center min-h-[60vh] gap-8">
+                <h1 className="text-7xl font-bold text-gray-900 dark:text-white tracking-tight">
                   What can I help with?
                 </h1>
-
-                {/* Proactive alert chips (bootstrap + live SSE) */}
-                {(bootstrap?.proactiveAlerts && bootstrap.proactiveAlerts.length > 0) || liveAlerts.length > 0 ? (
-                  <div className="flex flex-col items-center gap-2 w-full max-w-lg">
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-gray-400 mb-1">Workspace alerts</p>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      {[...(bootstrap?.proactiveAlerts ?? []), ...liveAlerts.filter((la) => !(bootstrap?.proactiveAlerts ?? []).some((ba) => ba.label === la.label))].map((alert, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => void sendPrompt(alert.query)}
-                          className={[
-                            'flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-all',
-                            'hover:shadow-sm active:scale-[0.97]',
-                            alert.severity === 'critical'
-                              ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
-                              : alert.severity === 'warning'
-                              ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-                              : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300',
-                          ].join(' ')}
-                        >
-                          <span className="text-base leading-none">
-                            {alert.severity === 'critical' ? '🚨' : alert.severity === 'warning' ? '⚠️' : 'ℹ️'}
-                          </span>
-                          <span>{alert.label}</span>
-                          <span className={[
-                            'ml-1 text-[10px] font-semibold uppercase tracking-wide opacity-60',
-                          ].join(' ')}>
-                            Review →
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Quick action hints */}
-                {emptyHints.length > 0 ? (
-                  <div className="flex flex-wrap justify-center gap-2 max-w-lg">
-                    {emptyHints.map((hint) => (
-                      <button
-                        key={hint}
-                        onClick={() => void sendPrompt(hint)}
-                        className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:shadow-sm active:scale-[0.97] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 transition-all"
-                      >
-                        {hint}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             ) : null}
 
