@@ -919,7 +919,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             {/* Empty state — minimalist */}
             {!isBootstrapping && messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center min-h-[60vh] gap-8">
-                <h1 className="text-7xl font-bold text-gray-900 dark:text-white tracking-tight">
+                <h1 className="text-4xl font-semibold text-gray-900 dark:text-white tracking-tight">
                   What can I help with?
                 </h1>
               </div>
