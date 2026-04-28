@@ -17,7 +17,7 @@ import { logger } from '../utils/logger.js';
 import { getOrCreateCase, linkEntityToCase } from './caseFactory.js';
 import { triggerAgents } from '../agents/orchestrator.js';
 import type { IntentRoutePayload, JobContext } from '../queue/types.js';
-import { getDb } from '../db/client.js'; // Fallback for raw fetch of event
+import { getSupabaseAdmin } from '../db/supabase.js';
 
 const commerceRepo = createCommerceRepository();
 const customerRepo = createCustomerRepository();
@@ -181,15 +181,17 @@ async function handleIntentRoute(
     traceId:         ctx.traceId,
   });
 
-  const db          = getDb(); // Fallback for raw fetch
+  const supabase    = getSupabaseAdmin();
   const tenantId    = ctx.tenantId    ?? 'org_default';
   const workspaceId = ctx.workspaceId ?? 'ws_default';
   const scope = { tenantId, workspaceId };
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
-  const event = db.prepare(
-    'SELECT * FROM canonical_events WHERE id = ?'
-  ).get(payload.canonicalEventId) as any;
+  const { data: event } = await supabase
+    .from('canonical_events')
+    .select('*')
+    .eq('id', payload.canonicalEventId)
+    .single();
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -275,25 +277,31 @@ async function handleIntentRoute(
 
   if (normalizedPayload.conversationId) {
     // Update conversation and messages to link to the case
-    // TODO: Add these to CaseRepository or a new ConversationRepository
-    // For now, use db.prepare as a placeholder or move to caseRepo if appropriate
-    db.prepare(`
-      UPDATE conversations
-      SET case_id = COALESCE(case_id, ?), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(caseResult.id, normalizedPayload.conversationId, tenantId, workspaceId);
+    const now = new Date().toISOString();
+    await Promise.all([
+      supabase
+        .from('conversations')
+        .update({ case_id: caseResult.id, updated_at: now })
+        .eq('id', normalizedPayload.conversationId)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .is('case_id', null),
 
-    db.prepare(`
-      UPDATE cases
-      SET conversation_id = COALESCE(conversation_id, ?), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(normalizedPayload.conversationId, caseResult.id, tenantId, workspaceId);
+      supabase
+        .from('cases')
+        .update({ conversation_id: normalizedPayload.conversationId, updated_at: now })
+        .eq('id', caseResult.id)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .is('conversation_id', null),
 
-    db.prepare(`
-      UPDATE messages
-      SET case_id = COALESCE(case_id, ?)
-      WHERE conversation_id = ? AND tenant_id = ?
-    `).run(caseResult.id, normalizedPayload.conversationId, tenantId);
+      supabase
+        .from('messages')
+        .update({ case_id: caseResult.id })
+        .eq('conversation_id', normalizedPayload.conversationId)
+        .eq('tenant_id', tenantId)
+        .is('case_id', null),
+    ]);
   }
 
   // ── 8. Update case with AI classification fields ─────────────────────────
@@ -313,25 +321,30 @@ async function handleIntentRoute(
 
   // ── 10. Store suggested reply draft if we have one ───────────────────────
   if (classification.suggestedReply && caseResult.isNew) {
-    const convRow = normalizedPayload.conversationId
-      ? { id: normalizedPayload.conversationId }
-      : db.prepare(
-          'SELECT id FROM conversations WHERE case_id = ? LIMIT 1'
-        ).get(caseResult.id) as any;
+    const { randomUUID } = await import('crypto');
 
-    if (convRow) {
-      const { randomUUID } = await import('crypto');
-      db.prepare(`
-        INSERT INTO draft_replies
-          (id, case_id, conversation_id, content, generated_by, status, tenant_id)
-        VALUES (?, ?, ?, ?, 'intent_router', 'pending_review', ?)
-      `).run(
-        randomUUID(),
-        caseResult.id,
-        convRow.id,
-        classification.suggestedReply,
-        tenantId,
-      );
+    let convId: string | null = normalizedPayload.conversationId ?? null;
+
+    if (!convId) {
+      const { data: convRow } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('case_id', caseResult.id)
+        .limit(1)
+        .single();
+      convId = convRow?.id ?? null;
+    }
+
+    if (convId) {
+      await supabase.from('draft_replies').insert({
+        id:              randomUUID(),
+        case_id:         caseResult.id,
+        conversation_id: convId,
+        content:         classification.suggestedReply,
+        generated_by:    'intent_router',
+        status:          'pending_review',
+        tenant_id:       tenantId,
+      });
     }
   }
 

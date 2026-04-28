@@ -11,7 +11,7 @@ import { JobType } from '../queue/types.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { logger } from '../utils/logger.js';
 import type { CanonicalizePayload, JobContext } from '../queue/types.js';
-import { getDb } from '../db/client.js'; // Still needed for raw fetch if repo doesn't have listEvents
+import { getSupabaseAdmin } from '../db/supabase.js';
 
 const commerceRepo = createCommerceRepository();
 const customerRepo = createCustomerRepository();
@@ -27,16 +27,15 @@ async function handleCanonicalize(
     traceId:         ctx.traceId,
   });
 
-  const db = getDb(); // Fallback for listEvents if not in repo
+  const supabase = getSupabaseAdmin();
   const scope = { tenantId: ctx.tenantId ?? 'org_default', workspaceId: ctx.workspaceId ?? 'ws_default' };
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
-  // TODO: Add getEvent to CanonicalRepository. For now, we use raw fetch or assume we need it.
-  // Actually, I should add getEvent to CanonicalRepository.
-  
-  const event = db.prepare(
-    'SELECT * FROM canonical_events WHERE id = ?'
-  ).get(payload.canonicalEventId) as any;
+  const { data: event } = await supabase
+    .from('canonical_events')
+    .select('*')
+    .eq('id', payload.canonicalEventId)
+    .single();
 
   if (!event) {
     log.warn('Canonical event not found');

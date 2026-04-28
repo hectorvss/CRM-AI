@@ -3,7 +3,7 @@ import { Return, ReturnTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseHeader from './CaseHeader';
 import CaseCopilotPanel from './CaseCopilotPanel';
 import { returnsApi } from '../api/client';
-import { useApi } from '../api/hooks';
+import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
@@ -37,6 +37,26 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
   const [activeTab, setActiveTab] = useState<ReturnTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const { mutate: updateStatus, loading: statusLoading } = useMutation(
+    ({ id, payload }: { id: string; payload: Record<string, any> }) =>
+      returnsApi.updateStatus(id, payload)
+  );
+
+  const showFeedback = (msg: string, isError = false) => {
+    if (isError) { setActionError(msg); setActionSuccess(null); }
+    else { setActionSuccess(msg); setActionError(null); }
+    setTimeout(() => { setActionSuccess(null); setActionError(null); }, 4000);
+  };
+
+  const handleStatusUpdate = async (status: string, label: string) => {
+    if (!selectedReturn) return;
+    const result = await updateStatus({ id: selectedReturn.id, payload: { status } });
+    if (result) showFeedback(`Return ${label} successfully`);
+    else showFeedback(`Failed to ${label.toLowerCase()} return`, true);
+  };
 
   // Fetch canonical return contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
@@ -293,6 +313,64 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                   onSnooze={() => alert('Snoozing return case... (Mock)')}
                   onMoreActions={() => alert('Opening additional actions... (Mock)')}
                 />
+
+                {/* Action Bar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleStatusUpdate('approved', 'Approved')}
+                    disabled={statusLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleStatusUpdate('rejected', 'Rejected')}
+                    disabled={statusLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">cancel</span>
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => handleStatusUpdate('received', 'Marked Received')}
+                    disabled={statusLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">warehouse</span>
+                    Mark Received
+                  </button>
+                  <button
+                    onClick={() => handleStatusUpdate('refund_pending', 'Refund Initiated')}
+                    disabled={statusLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">payments</span>
+                    Process Refund
+                  </button>
+                  <button
+                    onClick={() => handleStatusUpdate('blocked', 'Blocked')}
+                    disabled={statusLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">block</span>
+                    Block
+                  </button>
+                </div>
+
+                {/* Feedback toast */}
+                {(actionSuccess || actionError) && (
+                  <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                    actionError
+                      ? 'bg-red-50 text-red-700 border border-red-200'
+                      : 'bg-green-50 text-green-700 border border-green-200'
+                  }`}>
+                    <span className="material-symbols-outlined text-base">
+                      {actionError ? 'error' : 'check_circle'}
+                    </span>
+                    {actionError || actionSuccess}
+                  </div>
+                )}
 
                 {/* Grid Info */}
                 <div className="grid grid-cols-3 gap-6">
