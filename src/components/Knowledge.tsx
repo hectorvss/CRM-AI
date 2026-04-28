@@ -245,6 +245,11 @@ const parseMarkdownTitle = (content: string) => {
 export default function Knowledge() {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>('library');
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<string | null>(null);
+  const [testQuery, setTestQuery] = useState('refund annual plan');
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResults, setTestResults] = useState<any[] | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
   const [draft, setDraft] = useState<KnowledgeDraftState>(emptyDraft);
@@ -281,7 +286,14 @@ export default function Knowledge() {
     health: a.health === 'stale' ? 'Stale' : 'OK',
   });
 
-  const library = Array.isArray(apiArticles) ? apiArticles.map(mapApiArticle) : [];
+  const library = useMemo(() => {
+    const base = Array.isArray(apiArticles) ? apiArticles.map(mapApiArticle) : [];
+    return base.filter(item => {
+      const matchesSearch = !searchQuery || item.title.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = !filterType || item.type === filterType.toUpperCase();
+      return matchesSearch && matchesType;
+    });
+  }, [apiArticles, searchQuery, filterType]);
   const isInitialLibraryLoading = articlesLoading && library.length === 0;
   const isSelectedArticleLoading = Boolean(selectedArticleId && selectedArticleLoading && !selectedArticle);
 
@@ -489,6 +501,8 @@ export default function Knowledge() {
               <span className="material-symbols-outlined text-gray-400 text-lg">search</span>
             </span>
             <input 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all" 
               placeholder="Search knowledge..." 
               type="text"
@@ -496,13 +510,26 @@ export default function Knowledge() {
           </div>
           <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
           {['Type', 'Category', 'Status', 'Visibility', 'Owner'].map(filter => (
-            <button key={filter} className="flex items-center px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">
-              {filter}
+            <button 
+              key={filter} 
+              onClick={() => {
+                if (filter === 'Type') {
+                  setFilterType(filterType ? null : 'ARTICLE'); // Toggle basic filter
+                }
+              }}
+              className={`flex items-center px-3 py-2 text-xs font-semibold rounded-xl border transition-all shadow-sm ${
+                filter === 'Type' && filterType ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+              }`}
+            >
+              {filter}{filter === 'Type' && filterType ? `: ${filterType}` : ''}
               <span className="material-symbols-outlined text-gray-400 text-sm ml-1">arrow_drop_down</span>
             </button>
           ))}
           <div className="flex-1"></div>
-          <button className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+          <button 
+            onClick={() => { setSearchQuery(''); setFilterType(null); }}
+            className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+          >
             <span className="material-symbols-outlined text-lg">filter_list</span>
           </button>
         </div>
@@ -940,11 +967,25 @@ export default function Knowledge() {
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <button className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-sm flex items-center gap-2">
+                    <button 
+                      onClick={() => {
+                        setDraft({
+                          ...emptyDraft,
+                          title: topic.title,
+                          content: `Topic: ${topic.title}\nImpact: ${topic.impact}\nCategory: ${topic.cat}\n\n[Write content here...]`,
+                        });
+                        setEditorMode('create');
+                        setEditorOpen(true);
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-sm flex items-center gap-2"
+                    >
                       <span className="material-symbols-outlined text-[16px]">edit_note</span>
                       Create Draft
                     </button>
-                    <button className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm flex items-center gap-2">
+                    <button 
+                      onClick={() => alert(`Assigning owner for: ${topic.title}`)}
+                      className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm flex items-center gap-2"
+                    >
                       <span className="material-symbols-outlined text-[16px]">person_add</span>
                       Assign Owner
                     </button>
@@ -953,7 +994,12 @@ export default function Knowledge() {
               ))}
             </div>
             <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <button className="w-full text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">Load more gaps</button>
+              <button 
+                onClick={() => alert('Loading more gaps... (Mock)')}
+                className="w-full text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                Load more gaps
+              </button>
             </div>
           </section>
         </div>
@@ -969,7 +1015,16 @@ export default function Knowledge() {
                 <p className="text-xs text-gray-600 dark:text-gray-300 mt-1.5 leading-relaxed">3 articles contain conflicting information about "Return Windows".</p>
               </div>
             </div>
-            <button className="w-full py-2.5 bg-white dark:bg-gray-800 text-amber-700 dark:text-amber-400 text-xs font-semibold rounded-xl border border-amber-200 dark:border-amber-700 shadow-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all">Review Conflicts</button>
+            <button 
+              onClick={() => {
+                setActiveTab('library');
+                setFilterType(null); // Reset filters
+                setSearchQuery('Return Windows'); // Search for conflicting term
+              }}
+              className="w-full py-2.5 bg-white dark:bg-gray-800 text-amber-700 dark:text-amber-400 text-xs font-semibold rounded-xl border border-amber-200 dark:border-amber-700 shadow-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all"
+            >
+              Review Conflicts
+            </button>
           </section>
 
           <section className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-700 rounded-2xl shadow-card overflow-hidden">
@@ -1002,7 +1057,15 @@ export default function Knowledge() {
               ))}
             </div>
             <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <button className="w-full text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">View all problem articles</button>
+              <button 
+                onClick={() => {
+                  setActiveTab('library');
+                  setFilterType('ARTICLE');
+                }}
+                className="w-full text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                View all problem articles
+              </button>
             </div>
           </section>
         </div>
@@ -1018,17 +1081,45 @@ export default function Knowledge() {
           <div className="relative flex items-center">
             <span className="absolute left-5 text-gray-400 material-symbols-outlined text-2xl">search</span>
             <input 
+              value={testQuery}
+              onChange={(e) => setTestQuery(e.target.value)}
               className="w-full pl-14 pr-32 py-4 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-lg font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all dark:text-white shadow-sm" 
               placeholder="Ask a question..." 
               type="text" 
-              defaultValue="refund annual plan"
             />
-            <button className="absolute right-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold text-sm hover:bg-indigo-700 transition-all shadow-sm">Run Test</button>
+            <button 
+              onClick={() => {
+                setIsTesting(true);
+                setTestResults(null);
+                setTimeout(() => {
+                  setIsTesting(false);
+                  setTestResults([
+                    { title: 'Refund Policy - Annual Subscriptions', match: '98%', type: 'description', color: 'blue', sub: 'Updated 2 days ago • Public Library', content: '...customers on an annual plan are eligible for a full refund if the request is made within 30 days of the renewal date. Pro-rated refunds are available after this period...' },
+                    { title: 'Billing FAQ Snippet', match: '85%', type: 'segment', color: 'purple', sub: 'Snippet • Internal Only', content: "To process a refund for annual plans, use the Stripe dashboard. Ensure the 'prorate' option is unchecked if it's within the 30-day window." },
+                    { title: 'Ticket #9021 Guidance', match: '62%', type: 'confirmation_number', color: 'orange', sub: 'Past Ticket Resolution', content: 'User asked about cancelling annual plan. Agent explained that refunds are not automatic and require manual approval from finance.' },
+                  ]);
+                }, 1500);
+              }}
+              disabled={isTesting}
+              className="absolute right-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-semibold text-sm hover:bg-indigo-700 transition-all shadow-sm disabled:opacity-50"
+            >
+              {isTesting ? 'Running...' : 'Run Test'}
+            </button>
           </div>
           <div className="flex items-center mt-4 gap-3">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Popular tests:</span>
-            <button className="text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">How to reset password?</button>
-            <button className="text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">Shipping policy</button>
+            <button 
+              onClick={() => setTestQuery('How to reset password?')}
+              className="text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+            >
+              How to reset password?
+            </button>
+            <button 
+              onClick={() => setTestQuery('Shipping policy')}
+              className="text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+            >
+              Shipping policy
+            </button>
           </div>
         </div>
       </section>
@@ -1041,14 +1132,24 @@ export default function Knowledge() {
                 <span className="material-symbols-outlined text-indigo-500 text-lg">manage_search</span>
                 Retrieved Context
               </h2>
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">3 sources found</span>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">
+                {isTesting ? 'Searching...' : `${testResults?.length || 0} sources found`}
+              </span>
             </div>
             <div className="p-6 space-y-6">
-              {[
-                { title: 'Refund Policy - Annual Subscriptions', match: '98%', type: 'description', color: 'blue', sub: 'Updated 2 days ago • Public Library', content: '...customers on an annual plan are eligible for a full refund if the request is made within 30 days of the renewal date. Pro-rated refunds are available after this period...' },
-                { title: 'Billing FAQ Snippet', match: '85%', type: 'segment', color: 'purple', sub: 'Snippet • Internal Only', content: "To process a refund for annual plans, use the Stripe dashboard. Ensure the 'prorate' option is unchecked if it's within the 30-day window." },
-                { title: 'Ticket #9021 Guidance', match: '62%', type: 'confirmation_number', color: 'orange', sub: 'Past Ticket Resolution', content: 'User asked about cancelling annual plan. Agent explained that refunds are not automatic and require manual approval from finance.' },
-              ].map((source, i) => (
+              {isTesting && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-sm text-gray-500">Searching knowledge base...</p>
+                </div>
+              )}
+              {!isTesting && !testResults && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">search_off</span>
+                  <p className="text-sm text-gray-500">No results yet. Run a test to see retrieved context.</p>
+                </div>
+              )}
+              {!isTesting && testResults?.map((source, i) => (
                 <div key={i} className="bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:border-indigo-500/30 transition-all cursor-pointer group relative">
                   <div className="absolute top-4 right-4">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400 border border-green-100 dark:border-green-500/20">

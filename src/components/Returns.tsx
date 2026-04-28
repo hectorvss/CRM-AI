@@ -193,7 +193,10 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
               <span className="w-2 h-2 rounded-md bg-green-500 mr-2"></span>
               Sync Active
             </div>
-            <button className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            <button 
+              onClick={() => alert('Filtering returns... (Mock)')}
+              className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            >
               <span className="material-symbols-outlined">filter_list</span>
             </button>
           </div>
@@ -286,6 +289,9 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                   approvalStatus={selectedReturn.approvalStatus}
                   recommendedAction={selectedReturn.recommendedNextAction || 'No action needed'}
                   conflictDetected={selectedReturn.conflictDetected}
+                  onResolve={() => alert('Marking return case as resolved... (Mock)')}
+                  onSnooze={() => alert('Snoozing return case... (Mock)')}
+                  onMoreActions={() => alert('Opening additional actions... (Mock)')}
                 />
 
                 {/* Grid Info */}

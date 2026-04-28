@@ -59,6 +59,7 @@ const GENERATED_REPORTS: { id: string; title: string; date: string; time: string
 const recommendedActions: any[] = [];
 
 export default function Reports() {
+  const [reportsList, setReportsList] = useState(GENERATED_REPORTS);
   const [activeTab, setActiveTab] = useState<ReportsTab>('overview');
   const [selectedReportId, setSelectedReportId] = useState('1');
   const [period, setPeriod] = useState('7d');
@@ -183,7 +184,7 @@ export default function Reports() {
   };
 
   const renderAiResume = () => {
-    const selectedReport = GENERATED_REPORTS.find(r => r.id === selectedReportId) ?? null;
+    const selectedReport = reportsList.find(r => r.id === selectedReportId) ?? null;
 
     return (
       <div className="flex flex-col h-full gap-6">
@@ -221,7 +222,22 @@ export default function Reports() {
 
             <div className="h-10 w-px bg-gray-200 dark:bg-gray-700 hidden md:block"></div>
 
-            <button className="py-2.5 px-5 bg-gradient-to-r from-gray-900 to-black dark:from-white dark:to-gray-200 text-white dark:text-black font-semibold rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 group whitespace-nowrap">
+            <button 
+              onClick={() => {
+                const newReport = {
+                  id: Date.now().toString(),
+                  title: `Executive Summary - Q${Math.ceil((new Date().getMonth() + 1)/3)}`,
+                  date: new Date().toLocaleDateString(),
+                  time: new Date().toLocaleTimeString(),
+                  audience: 'Executive / C-Suite',
+                  status: 'Generated',
+                  severity: 'warning',
+                  range: 'Last 7 Days'
+                };
+                setReportsList([newReport, ...reportsList]);
+                setSelectedReportId(newReport.id);
+              }}
+              className="py-2.5 px-5 bg-gradient-to-r from-gray-900 to-black dark:from-white dark:to-gray-200 text-white dark:text-black font-semibold rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 group whitespace-nowrap">
               <span className="material-symbols-outlined text-lg group-hover:animate-pulse">temp_preferences_custom</span>
               Generate New
             </button>
@@ -234,16 +250,16 @@ export default function Reports() {
           <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
             <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark flex items-center justify-between">
               <h2 className="text-sm font-bold text-gray-900 dark:text-white">Generated Reports</h2>
-              <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs font-bold px-2 py-0.5 rounded-full">{GENERATED_REPORTS.length}</span>
+              <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs font-bold px-2 py-0.5 rounded-full">{reportsList.length}</span>
             </div>
             <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
-              {GENERATED_REPORTS.length === 0 ? (
+              {reportsList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full py-12 text-center px-4">
                   <span className="material-symbols-outlined text-4xl text-gray-300 dark:text-gray-600 mb-3">description</span>
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">No reports yet</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 leading-snug">Click <strong>Generate New</strong> to create your first AI-powered executive report.</p>
                 </div>
-              ) : GENERATED_REPORTS.map((report) => (
+              ) : reportsList.map((report) => (
                 <div
                   key={report.id}
                   onClick={() => setSelectedReportId(report.id)}
@@ -303,8 +319,11 @@ export default function Reports() {
                     <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-white tracking-tight">{selectedReport.title}</h1>
                   </div>
                   <div className="flex gap-2">
-                    <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"><span className="material-symbols-outlined">share</span></button>
-                    <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"><span className="material-symbols-outlined">print</span></button>
+                    <button onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      alert('Link copied to clipboard!');
+                    }} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"><span className="material-symbols-outlined">share</span></button>
+                    <button onClick={() => window.print()} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"><span className="material-symbols-outlined">print</span></button>
                   </div>
                 </div>
                 
@@ -991,11 +1010,18 @@ export default function Reports() {
                   </button>
                 ))}
               </div>
-              <button className="flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm">
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  alert('Link copied to clipboard!');
+                }}
+                className="flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm">
                 <span className="material-symbols-outlined text-sm mr-1.5">share</span>
                 Share
               </button>
-              <button className="flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm">
+              <button 
+                onClick={() => window.print()}
+                className="flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm">
                 <span className="material-symbols-outlined text-sm mr-1.5">download</span>
                 Export PDF
               </button>

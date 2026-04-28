@@ -860,7 +860,10 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
             <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
             Online
           </div>
-          <button className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+          <button 
+            onClick={() => alert('Filtering cases... (Mock)')}
+            className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
             <span className="material-symbols-outlined">filter_list</span>
           </button>
         </div>
@@ -1655,7 +1658,12 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                     type="text"
                   />
                   <div className="flex items-center gap-1">
-                    <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
+                    <button 
+                      onClick={() => alert('Sorting Copilot messages by relevance... (Mock)')}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">sort</span>
+                    </button>
                     <button
                       onClick={handleCopilotSubmit}
                       disabled={!copilotInput.trim() || isCopilotSending}

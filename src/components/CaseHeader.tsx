@@ -17,6 +17,9 @@ interface CaseHeaderProps {
   recommendedAction: string;
   conflictDetected?: string | null;
   actions?: React.ReactNode;
+  onResolve?: () => void;
+  onSnooze?: () => void;
+  onMoreActions?: () => void;
 }
 
 export default function CaseHeader({
@@ -35,7 +38,10 @@ export default function CaseHeader({
   approvalStatus,
   recommendedAction,
   conflictDetected,
-  actions
+  actions,
+  onResolve,
+  onSnooze,
+  onMoreActions
 }: CaseHeaderProps) {
   return (
     <div className="w-full">
@@ -56,13 +62,22 @@ export default function CaseHeader({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {actions}
-          <button className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          <button 
+            onClick={onResolve}
+            className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
             <span className="material-symbols-outlined">check_circle</span>
           </button>
-          <button className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          <button 
+            onClick={onSnooze}
+            className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
             <span className="material-symbols-outlined">snooze</span>
           </button>
-          <button className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+          <button 
+            onClick={onMoreActions}
+            className="w-10 h-10 rounded-full border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
             <span className="material-symbols-outlined">more_horiz</span>
           </button>
         </div>

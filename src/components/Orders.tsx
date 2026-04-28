@@ -297,7 +297,10 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
               <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
               Sync Active
             </div>
-            <button className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            <button 
+              onClick={() => alert('Filtering orders... (Mock)')}
+              className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            >
               <span className="material-symbols-outlined">filter_list</span>
             </button>
           </div>
@@ -397,6 +400,9 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
                   approvalStatus={selectedOrder.approvalStatus}
                   recommendedAction={selectedOrder.recommendedNextAction || 'No action needed'}
                   conflictDetected={selectedOrder.conflictDetected}
+                  onResolve={() => alert('Marking case as resolved... (Mock)')}
+                  onSnooze={() => alert('Snoozing case... (Mock)')}
+                  onMoreActions={() => alert('Opening additional actions... (Mock)')}
                 />
 
                 {/* Grid Info */}
