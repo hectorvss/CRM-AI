@@ -346,41 +346,41 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                   <button
                     onClick={() => handleStatusUpdate('approved', 'Approved')}
                     disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-md hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
                     Approve
                   </button>
                   <button
                     onClick={() => handleStatusUpdate('rejected', 'Rejected')}
                     disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 rounded-xl text-sm font-bold shadow-card hover:bg-red-50 dark:hover:bg-red-900/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <span className="material-symbols-outlined text-[15px]">cancel</span>
+                    <span className="material-symbols-outlined text-[16px]">cancel</span>
                     Reject
                   </button>
                   <button
                     onClick={() => handleStatusUpdate('received', 'Marked Received')}
                     disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-xl text-sm font-bold shadow-card hover:bg-gray-50 dark:hover:bg-gray-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <span className="material-symbols-outlined text-[15px]">warehouse</span>
+                    <span className="material-symbols-outlined text-[16px]">warehouse</span>
                     Mark Received
                   </button>
                   <button
                     onClick={() => handleStatusUpdate('refund_pending', 'Refund Initiated')}
                     disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-xl text-sm font-bold shadow-card hover:bg-gray-50 dark:hover:bg-gray-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <span className="material-symbols-outlined text-[15px]">payments</span>
+                    <span className="material-symbols-outlined text-[16px]">payments</span>
                     Process Refund
                   </button>
                   <button
                     onClick={() => handleStatusUpdate('blocked', 'Blocked')}
                     disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 rounded-xl text-sm font-bold shadow-card hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <span className="material-symbols-outlined text-[15px]">block</span>
+                    <span className="material-symbols-outlined text-[16px]">block</span>
                     Block
                   </button>
                 </div>
