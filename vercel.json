@@ -33,7 +33,7 @@
   "crons": [
     {
       "path": "/api/superagent/cron/check",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
