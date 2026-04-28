@@ -571,6 +571,31 @@ export const superAgentApi = {
     request<any>(`/super-agent/metrics${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`),
 };
 
+// ── Reconciliation ────────────────────────────────────────
+export const reconciliationApi = {
+  issues: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<any>(`/reconciliation/issues${qs}`).then(unwrapList);
+  },
+  issue: (id: string) => request<any>(`/reconciliation/issues/${id}`),
+  metrics: () => request<any>('/reconciliation/metrics'),
+  updateStatus: (id: string, status: string, note?: string) =>
+    request<any>(`/reconciliation/issues/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, note }),
+    }),
+  resolveApply: (id: string, payload: Record<string, any>) =>
+    request<any>(`/reconciliation/issues/${id}/resolve-apply`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  processOpen: (caseId?: string) =>
+    request<any>('/reconciliation/process-open', {
+      method: 'POST',
+      body: JSON.stringify(caseId ? { case_id: caseId } : {}),
+    }),
+};
+
 // ── Health ────────────────────────────────────────────────
 export const healthApi = {
   check: () => request<any>('/health'),

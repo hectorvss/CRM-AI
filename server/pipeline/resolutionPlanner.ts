@@ -17,24 +17,12 @@
  *  - Any refund > $50 requires approval
  *  - Fraud-domain conflicts always require approval
  *  - Critical-severity issues require approval
- *
- * Step shape (stored as JSON in execution_plans.steps):
- * {
- *   id: string,
- *   order: number,
- *   tool: 'stripe' | 'shopify' | 'internal',
- *   action: 'issue_refund' | 'cancel_order' | 'update_status' | 'send_notification' | ...,
- *   params: Record<string, unknown>,
- *   rationale: string,
- *   rollbackable: boolean,
- *   status: 'pending' | 'running' | 'done' | 'failed' | 'skipped',
- * }
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID }         from 'crypto';
 import { withGeminiRetry }    from '../ai/geminiRetry.js';
-import { getDb }              from '../db/client.js';
+import { getSupabaseAdmin }   from '../db/supabase.js';
 import { config }             from '../config.js';
 import { enqueue }            from '../queue/client.js';
 import { JobType }            from '../queue/types.js';
@@ -60,7 +48,7 @@ interface ExecutionStep {
 }
 
 interface PlanResult {
-  steps:           ExecutionStep[];
+  steps:            ExecutionStep[];
   requiresApproval: boolean;
   approvalReason?:  string;
   planSummary:      string;
@@ -149,7 +137,6 @@ RESPONSE SCHEMA:
       error: err instanceof Error ? err.message : String(err),
     });
 
-    // Fallback: flag case for manual review
     return {
       steps: [{
         id:           randomUUID(),
@@ -176,29 +163,24 @@ function needsApproval(
   caseRow: any,
   issues: any[]
 ): { required: boolean; reason: string } {
-  // AI explicitly requested approval
   if (plan.requiresApproval) {
     return { required: true, reason: plan.approvalReason ?? 'AI flagged for approval' };
   }
 
-  // Critical severity issues always require approval
   const hasCritical = issues.some(i => i.severity === 'critical');
   if (hasCritical) {
     return { required: true, reason: 'Critical-severity conflict requires human approval' };
   }
 
-  // Fraud domain always requires approval
   const hasFraud = issues.some(i => i.conflict_domain === 'payment' && i.detected_by === 'dispute_detector');
   if (hasFraud) {
     return { required: true, reason: 'Payment dispute (chargeback) requires approval before any action' };
   }
 
-  // High-risk case
   if (caseRow.risk_level === 'high') {
     return { required: true, reason: 'High-risk case requires approval before automated resolution' };
   }
 
-  // Refund amount threshold
   const refundSteps = plan.steps.filter(s => s.action === 'issue_refund');
   for (const step of refundSteps) {
     const amount = parseFloat(String(step.params.amount ?? '0'));
@@ -225,12 +207,20 @@ async function handleResolutionPlan(
     traceId: ctx.traceId,
   });
 
-  const db          = getDb();
+  const supabase = getSupabaseAdmin();
   const { tenantId, workspaceId } = requireScope(ctx, 'resolutionPlanner');
+  const now = new Date().toISOString();
 
   // ── 1. Load case ──────────────────────────────────────────────────────────
-  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(payload.caseId, tenantId, workspaceId) as any;
-  if (!caseRow) {
+  const { data: caseRow, error: caseErr } = await supabase
+    .from('cases')
+    .select('*')
+    .eq('id', payload.caseId)
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId)
+    .single();
+
+  if (caseErr || !caseRow) {
     log.warn('Case not found for resolution planning');
     return;
   }
@@ -242,18 +232,23 @@ async function handleResolutionPlan(
 
   // ── 2. Load reconciliation issues ─────────────────────────────────────────
   const issueIds = payload.reconciliationIssueIds;
-  const issues = issueIds.length > 0
-    ? db.prepare(`
-        SELECT * FROM reconciliation_issues
-        WHERE tenant_id = ? AND workspace_id = ? AND id IN (${issueIds.map(() => '?').join(',')}) AND status = 'open'
-      `).all(tenantId, workspaceId, ...issueIds) as any[]
-    : db.prepare(`
-        SELECT * FROM reconciliation_issues
-        WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? AND status = 'open'
-        ORDER BY severity DESC
-      `).all(payload.caseId, tenantId, workspaceId) as any[];
 
-  if (issues.length === 0) {
+  let issueQuery = supabase
+    .from('reconciliation_issues')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId)
+    .eq('status', 'open');
+
+  if (issueIds && issueIds.length > 0) {
+    issueQuery = issueQuery.in('id', issueIds);
+  } else {
+    issueQuery = issueQuery.eq('case_id', payload.caseId).order('severity', { ascending: false });
+  }
+
+  const { data: issues = [] } = await issueQuery;
+
+  if (!issues || issues.length === 0) {
     log.info('No open reconciliation issues, nothing to plan');
     return;
   }
@@ -266,18 +261,18 @@ async function handleResolutionPlan(
     log.warn('No context window available for resolution planning');
     return;
   }
-  const contextStr    = contextWindow.toPromptString();
+  const contextStr = contextWindow.toPromptString();
 
-  const issuesSummary = issues.map(i =>
-    `[${i.severity.toUpperCase()}] ${i.conflict_domain}: ${i.expected_state}\n  Actual: ${i.actual_states}`
+  const issuesSummary = issues.map((i: any) =>
+    `[${String(i.severity).toUpperCase()}] ${i.conflict_domain}: ${i.expected_state}\n  Actual: ${i.actual_states}`
   ).join('\n\n');
 
   // ── 4. Generate plan with Gemini ──────────────────────────────────────────
   const plan = await generatePlan(contextStr, issuesSummary);
 
   log.info('Plan generated', {
-    steps:      plan.steps.length,
-    confidence: plan.confidence,
+    steps:            plan.steps.length,
+    confidence:       plan.confidence,
     requiresApproval: plan.requiresApproval,
   });
 
@@ -287,95 +282,79 @@ async function handleResolutionPlan(
 
   // ── 6. Persist execution plan ─────────────────────────────────────────────
   const planId = randomUUID();
-  const now    = new Date().toISOString();
 
-  db.prepare(`
-    INSERT INTO execution_plans (
-      id, case_id, tenant_id, generated_by,
-      generated_at, status, steps
-    ) VALUES (?, ?, ?, 'resolution_planner', ?, 'draft', ?)
-  `).run(
-    planId,
-    payload.caseId,
-    tenantId,
-    now,
-    JSON.stringify(plan.steps),
-  );
+  await supabase.from('execution_plans').insert({
+    id:           planId,
+    case_id:      payload.caseId,
+    tenant_id:    tenantId,
+    generated_by: 'resolution_planner',
+    generated_at: now,
+    status:       'draft',
+    steps:        plan.steps,
+  });
 
   // ── 7. Update case with plan summary ─────────────────────────────────────
-  db.prepare(`
-    UPDATE cases SET
-      resolution_state = 'planned',
-      updated_at       = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(payload.caseId, tenantId, workspaceId);
+  await supabase
+    .from('cases')
+    .update({ resolution_state: 'planned', updated_at: now })
+    .eq('id', payload.caseId)
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId);
 
   log.info('Execution plan created', { planId, steps: plan.steps.length });
 
   // ── 8. Approval gate or direct execution ─────────────────────────────────
   if (approvalRequired) {
     const approvalId = randomUUID();
+    const expiresAt  = new Date(Date.now() + 24 * 3_600_000).toISOString();
 
-    // Wrap in transaction so approval_request, plan status, and case state
-    // are either ALL committed or ALL rolled back.
-    const createApproval = db.transaction(() => {
-      db.prepare(`
-        INSERT INTO approval_requests (
-          id, case_id, tenant_id, workspace_id,
-          requested_by, requested_by_type,
-          action_type, action_payload,
-          risk_level, evidence_package,
-          status, execution_plan_id,
-          expires_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'resolution_planner', 'agent', 'execute_resolution_plan', ?, ?, ?, 'pending', ?, ?, ?, ?)
-      `).run(
-        approvalId,
-        payload.caseId,
-        tenantId,
-        workspaceId,
-        JSON.stringify({ planId, reason: approvalReason }),
-        caseRow.risk_level ?? 'medium',
-        JSON.stringify({
-          planSummary:  plan.planSummary,
-          issueCount:   issues.length,
-          stepCount:    plan.steps.length,
-          approvalReason,
-        }),
-        planId,
-        new Date(Date.now() + 24 * 3_600_000).toISOString(),
-        now,
-        now,
-      );
-
-      // Update plan to awaiting_approval
-      db.prepare(`
-        UPDATE execution_plans SET
-          status              = 'awaiting_approval',
-          approval_request_id = ?
-        WHERE id = ?
-      `).run(approvalId, planId);
-
-      db.prepare(`
-        UPDATE cases SET
-          approval_state            = 'pending',
-          active_approval_request_id = ?,
-          updated_at                = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(approvalId, payload.caseId);
+    // Insert approval request + update plan + update case atomically
+    const { error: approvalErr } = await supabase.from('approval_requests').insert({
+      id:                approvalId,
+      case_id:           payload.caseId,
+      tenant_id:         tenantId,
+      workspace_id:      workspaceId,
+      requested_by:      'resolution_planner',
+      requested_by_type: 'agent',
+      action_type:       'execute_resolution_plan',
+      action_payload:    { planId, reason: approvalReason },
+      risk_level:        caseRow.risk_level ?? 'medium',
+      evidence_package:  {
+        planSummary:    plan.planSummary,
+        issueCount:     issues.length,
+        stepCount:      plan.steps.length,
+        approvalReason,
+      },
+      status:             'pending',
+      execution_plan_id:  planId,
+      expires_at:         expiresAt,
+      created_at:         now,
+      updated_at:         now,
     });
 
-    createApproval();
+    if (approvalErr) {
+      log.warn('Failed to insert approval request', { error: String(approvalErr) });
+    }
 
-    log.info('Approval request created', {
-      approvalId,
-      reason: approvalReason,
-    });
+    await Promise.all([
+      supabase
+        .from('execution_plans')
+        .update({ status: 'awaiting_approval', approval_request_id: approvalId })
+        .eq('id', planId),
+      supabase
+        .from('cases')
+        .update({ approval_state: 'pending', active_approval_request_id: approvalId, updated_at: now })
+        .eq('id', payload.caseId),
+    ]);
+
+    log.info('Approval request created', { approvalId, reason: approvalReason });
 
   } else {
     // No approval needed — go straight to execution
-    db.prepare(`
-      UPDATE execution_plans SET status = 'approved' WHERE id = ?
-    `).run(planId);
+    await supabase
+      .from('execution_plans')
+      .update({ status: 'approved' })
+      .eq('id', planId);
 
     await enqueue(
       JobType.RESOLUTION_EXECUTE,

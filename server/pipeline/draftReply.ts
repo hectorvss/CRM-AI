@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID } from 'crypto';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
-import { getDb } from '../db/client.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 import { config } from '../config.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { JobType } from '../queue/types.js';
@@ -73,12 +73,20 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
     traceId: ctx.traceId,
   });
 
-  const db = getDb();
+  const supabase = getSupabaseAdmin();
   const { tenantId, workspaceId } = requireScope(ctx, 'draftReply');
   const tone = payload.tone ?? 'professional';
 
-  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(payload.caseId, tenantId, workspaceId) as any;
-  if (!caseRow) {
+  // 1. Load case
+  const { data: caseRow, error: caseErr } = await supabase
+    .from('cases')
+    .select('*')
+    .eq('id', payload.caseId)
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId)
+    .single();
+
+  if (caseErr || !caseRow) {
     log.warn('Case not found for draft reply');
     return;
   }
@@ -88,7 +96,16 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
     return;
   }
 
-  const conversation = db.prepare('SELECT id FROM conversations WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? LIMIT 1').get(payload.caseId, tenantId, workspaceId) as any;
+  // 2. Get linked conversation
+  const { data: conversation } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('case_id', payload.caseId)
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId)
+    .limit(1)
+    .single();
+
   if (!conversation) {
     log.debug('No conversation linked to case, skipping draft');
     return;
@@ -101,16 +118,21 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
     log.warn('No context window available for draft reply');
     return;
   }
-  const composerAgent = db.prepare(`
-    SELECT av.knowledge_profile
-    FROM agents a
-    LEFT JOIN agent_versions av ON a.current_version_id = av.id
-    WHERE a.slug = 'composer-translator' AND a.tenant_id = ? AND a.is_active = 1
-    LIMIT 1
-  `).get(tenantId) as any;
 
-  const knowledgeProfile = composerAgent?.knowledge_profile
-    ? JSON.parse(composerAgent.knowledge_profile)
+  // 3. Load composer agent knowledge profile
+  const { data: composerAgent } = await supabase
+    .from('agents')
+    .select('agent_versions!agents_current_version_id_fkey(knowledge_profile)')
+    .eq('slug', 'composer-translator')
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .limit(1)
+    .single();
+
+  const knowledgeProfile = (composerAgent as any)?.agent_versions?.knowledge_profile
+    ? (typeof (composerAgent as any).agent_versions.knowledge_profile === 'string'
+      ? JSON.parse((composerAgent as any).agent_versions.knowledge_profile)
+      : (composerAgent as any).agent_versions.knowledge_profile)
     : {};
 
   const knowledgeBundle = await resolveAgentKnowledgeBundle({
@@ -131,65 +153,63 @@ async function handleDraftReply(payload: DraftReplyPayload, ctx: JobContext): Pr
     contextWindow.toPromptString(),
     knowledgeBundle.promptContext,
     tone,
-    caseRow.has_reconciliation_conflicts === 1,
+    caseRow.has_reconciliation_conflicts === true || caseRow.has_reconciliation_conflicts === 1,
   );
 
   const citations = JSON.stringify(knowledgeBundle.citations);
-  const hasPolicies = knowledgeBundle.citations.length > 0 ? 1 : 0;
-  const existingDraft = db.prepare(`
-    SELECT id FROM draft_replies
-    WHERE case_id = ? AND tenant_id = ? AND workspace_id = ? AND status = 'pending_review'
-    LIMIT 1
-  `).get(payload.caseId, tenantId, workspaceId) as any;
+  const hasPolicies = knowledgeBundle.citations.length > 0;
+  const now = new Date().toISOString();
+
+  // 4. Upsert draft reply
+  const { data: existingDraft } = await supabase
+    .from('draft_replies')
+    .select('id')
+    .eq('case_id', payload.caseId)
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId)
+    .eq('status', 'pending_review')
+    .limit(1)
+    .single();
 
   if (existingDraft) {
-    db.prepare(`
-      UPDATE draft_replies SET
-        content = ?,
-        confidence = ?,
-        tone = ?,
-        has_policies = ?,
-        citations = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(
-      draft,
-      confidence,
-      tone,
-      hasPolicies,
-      citations,
-      existingDraft.id,
-      tenantId,
-      workspaceId,
-    );
+    await supabase
+      .from('draft_replies')
+      .update({
+        content: draft,
+        confidence,
+        tone,
+        has_policies: hasPolicies,
+        citations,
+        updated_at: now,
+      })
+      .eq('id', existingDraft.id)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId);
     log.info('Draft reply updated', { draftId: existingDraft.id });
   } else {
     const draftId = randomUUID();
-    db.prepare(`
-      INSERT INTO draft_replies (
-        id, case_id, conversation_id, content, generated_by, tone,
-        confidence, has_policies, citations, status, tenant_id
-      , workspace_id) VALUES (?, ?, ?, ?, 'draft_reply_agent', ?, ?, ?, ?, 'pending_review', ?, ?)
-    `).run(
-      draftId,
-      payload.caseId,
-      conversation.id,
-      draft,
+    await supabase.from('draft_replies').insert({
+      id: draftId,
+      case_id: payload.caseId,
+      conversation_id: conversation.id,
+      content: draft,
+      generated_by: 'draft_reply_agent',
       tone,
       confidence,
-      hasPolicies,
+      has_policies: hasPolicies,
       citations,
-      tenantId,
-      workspaceId,
-    );
+      status: 'pending_review',
+      tenant_id: tenantId,
+      workspace_id: workspaceId,
+    });
     log.info('Draft reply created', { draftId });
   }
 
-  db.prepare(`
-    UPDATE cases
-    SET updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(payload.caseId);
+  // 5. Touch case updated_at
+  await supabase
+    .from('cases')
+    .update({ updated_at: now })
+    .eq('id', payload.caseId);
 }
 
 registerHandler(JobType.DRAFT_REPLY, handleDraftReply);

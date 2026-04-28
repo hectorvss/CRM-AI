@@ -405,7 +405,9 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   const [isCopilotSending, setIsCopilotSending] = useState(false);
   const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [showCaseSummary, setShowCaseSummary] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const submitLockRef = useRef(false);
@@ -697,6 +699,33 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
     }
   };
 
+  const showFeedback = (msg: string, isError = false) => {
+    if (isError) setActionError(msg); else setActionSuccess(msg);
+    setTimeout(() => { setActionError(null); setActionSuccess(null); }, 3000);
+  };
+
+  const handleMarkResolved = async () => {
+    if (!selectedConv) return;
+    try {
+      await casesApi.resolve(selectedConv.id);
+      setRefreshKey(k => k + 1);
+      showFeedback('Case marked as resolved');
+    } catch {
+      showFeedback('Failed to resolve case', true);
+    }
+  };
+
+  const handleSnooze = async () => {
+    if (!selectedConv) return;
+    try {
+      await casesApi.updateStatus(selectedConv.id, 'snoozed', 'Snoozed by agent');
+      setRefreshKey(k => k + 1);
+      showFeedback('Case snoozed');
+    } catch {
+      showFeedback('Failed to snooze case', true);
+    }
+  };
+
   const handleCopilotSubmit = async () => {
     if (!selectedConv || !copilotInput.trim() || isCopilotSending) return;
 
@@ -974,17 +1003,70 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                   <span className="material-symbols-outlined text-lg">view_sidebar</span>
                 </button>
               )}
-              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                <span className="material-symbols-outlined text-lg">{selectedConv.channel === 'email' ? 'reply' : 'check_circle'}</span>
+              <button
+                onClick={handleMarkResolved}
+                title="Mark as resolved"
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">check_circle</span>
               </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                <span className="material-symbols-outlined text-lg">{selectedConv.channel === 'email' ? 'check_circle' : 'snooze'}</span>
+              <button
+                onClick={handleSnooze}
+                title="Snooze case"
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-amber-50 dark:hover:bg-amber-900/20 text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">snooze</span>
               </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                <span className="material-symbols-outlined text-lg">more_horiz</span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowMoreMenu(p => !p)}
+                  title="More actions"
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-lg">more_horiz</span>
+                </button>
+                {showMoreMenu && (
+                  <div className="absolute right-0 top-9 z-30 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+                    {[
+                      { label: 'Assign to me', status: 'open' },
+                      { label: 'Mark as pending', status: 'pending' },
+                      { label: 'Close case', status: 'closed' },
+                    ].map(({ label, status }) => (
+                      <button
+                        key={status}
+                        onClick={async () => {
+                          setShowMoreMenu(false);
+                          if (!selectedConv) return;
+                          try {
+                            await casesApi.updateStatus(selectedConv.id, status);
+                            setRefreshKey(k => k + 1);
+                            showFeedback(`Case set to ${status}`);
+                          } catch {
+                            showFeedback('Failed to update case status', true);
+                          }
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Action feedback toasts */}
+          {(actionSuccess || actionError) && (
+            <div className={`mx-4 mt-2 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
+              actionError
+                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+            }`}>
+              <span className="material-symbols-outlined text-base">{actionError ? 'error' : 'check_circle'}</span>
+              {actionError || actionSuccess}
+            </div>
+          )}
 
           {/* Chat Messages */}
           <div className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar ${

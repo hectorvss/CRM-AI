@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Payment, PaymentTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseCopilotPanel from './CaseCopilotPanel';
-import { paymentsApi } from '../api/client';
+import { paymentsApi, reconciliationApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
@@ -44,6 +44,7 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
   const refundMutation = useMutation<{ id: string; amount?: number; reason: string }, any>(
     ({ id, amount, reason }) => paymentsApi.refund(id, { amount, reason }),
   );
+  const reconcileMutation = useMutation((caseId: string) => reconciliationApi.processOpen(caseId));
 
   const mapApiPayment = (p: any): Payment => ({
     id: p.id,
@@ -288,7 +289,24 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
                     <p className="text-gray-500 text-sm">Order {selectedPayment.orderId} · {selectedPayment.customerName} · {selectedPayment.date}</p>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <button className="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <button
+                      onClick={() => {
+                        const id = selectedPayment.paymentId;
+                        const psp = (selectedPayment.psp || '').toLowerCase();
+                        let url = '';
+                        if (psp.includes('stripe')) {
+                          url = `https://dashboard.stripe.com/payments/${id}`;
+                        } else if (psp.includes('paypal')) {
+                          url = `https://www.paypal.com/activity/payment/${id}`;
+                        } else if (psp.includes('braintree')) {
+                          url = `https://www.braintreegateway.com/merchants/transactions/${id}`;
+                        } else {
+                          url = `https://dashboard.stripe.com/payments/${id}`;
+                        }
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      }}
+                      className="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
                       View in {selectedPayment.psp}
                     </button>
                     <button 
@@ -297,8 +315,20 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
                       className="px-4 py-2 text-sm font-bold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                       {refundMutation.loading ? 'Issuing...' : 'Issue Refund'}
                     </button>
-                    <button disabled title="Coming soon" className="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg opacity-40 cursor-not-allowed transition-colors">
-                      Reconcile
+                    <button
+                      onClick={async () => {
+                        if (!selectedPayment) return;
+                        try {
+                          await reconcileMutation.mutate(selectedPayment.id);
+                          setActionMessage('Reconciliation process triggered successfully.');
+                        } catch {
+                          setActionMessage('Failed to trigger reconciliation.');
+                        }
+                      }}
+                      disabled={reconcileMutation.loading}
+                      className="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {reconcileMutation.loading ? 'Processing…' : 'Reconcile'}
                     </button>
                     {!isRightSidebarOpen && (
                       <button 
