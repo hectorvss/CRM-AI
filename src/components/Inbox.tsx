@@ -1393,20 +1393,40 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                   <div className="flex flex-col h-full min-h-0">
 
                     {/* ── Command toolbar ─────────────────────────────── */}
-                    <div className="px-3 pt-3 pb-2.5 flex items-center gap-2 flex-wrap border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
-                      {/* Summary toggle */}
-                      <button
-                        onClick={() => setShowCaseSummary(prev => !prev)}
-                        title="Toggle case brief"
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
-                          showCaseSummary
-                            ? 'bg-purple-100 dark:bg-purple-900/30 text-secondary border-purple-200 dark:border-purple-700'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[14px]">description</span>
-                        Brief
-                      </button>
+                    <div className="px-4 pt-2.5 pb-2.5 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+                      {/* Summary / Messages toggle */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowCaseSummary(true)}
+                          className={`text-xs font-medium transition-colors ${
+                            showCaseSummary
+                              ? 'text-gray-900 dark:text-white'
+                              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                          }`}
+                        >
+                          Summary
+                        </button>
+                        <button
+                          onClick={() => setShowCaseSummary(false)}
+                          className={`text-xs font-medium transition-colors ${
+                            !showCaseSummary
+                              ? 'text-gray-900 dark:text-white'
+                              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                          }`}
+                        >
+                          Messages
+                        </button>
+                      </div>
+                      {showCaseSummary && (
+                        <span className="ml-2 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
+                          Summary
+                        </span>
+                      )}
+                      {!showCaseSummary && (
+                        <span className="ml-2 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
+                          Messages
+                        </span>
+                      )}
 
                       {/* Draft reply command */}
                       <button
