@@ -19,6 +19,7 @@
     "eval:super-agent-search": "tsx tests/super-agent/run-search-smoke.ts",
     "eval:super-agent-safety": "tsx tests/super-agent/run-safety.ts",
     "test:domain-interop": "tsx tests/domain-interop/run-domain-interop.ts",
+    "test:settings-profile-critical": "tsx tests/settings-profile/run-critical.ts",
     "test:interop-http": "tsx tests/interop-http/run-end-to-end.ts",
     "test:e2e:interop": "tsx tests/interop-http/run-end-to-end.ts",
     "worker": "tsx server/worker-standalone.ts",

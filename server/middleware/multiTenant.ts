@@ -4,6 +4,8 @@ import { createIAMRepository } from '../data/iam.js';
 import { createWorkspaceRepository } from '../data/workspaces.js';
 import { logger } from '../utils/logger.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
+import { sendError } from '../http/errors.js';
+import { decodeJwtTimes, evaluateAuthPolicy, type AuthPolicyResult } from '../services/authPolicy.js';
 
 /**
  * Custom Request type to include tenant and workspace context.
@@ -14,6 +16,7 @@ export interface MultiTenantRequest extends Request {
   userId?: string;
   roleId?: string;
   permissions?: string[];
+  authPolicy?: AuthPolicyResult;
 }
 
 const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
@@ -175,20 +178,29 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
   const authHeader = req.headers.authorization;
 
   const iamRepo = createIAMRepository();
+  const workspaceRepo = createWorkspaceRepository();
 
   try {
     let resolvedUserId = userHeader || '';
     let resolved = await resolveTenantWorkspaceContext(tenantHeader, workspaceHeader, resolvedUserId);
+    let authContext: Parameters<typeof evaluateAuthPolicy>[0]['auth'] = resolvedUserId === 'system' ? { provider: 'system' } : { provider: userHeader ? 'header' : 'system' };
 
-    if (!resolvedUserId && typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
+    if (typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
       const rawToken = authHeader.slice(7).trim();
       if (rawToken) {
         try {
+          const jwtTimes = decodeJwtTimes(rawToken);
           const supabase = getSupabaseAdmin();
           const { data: authData } = await supabase.auth.getUser(rawToken);
 
           if (authData?.user) {
             resolvedUserId = authData.user.id;
+            authContext = {
+              provider: 'supabase',
+              ...jwtTimes,
+              mfaVerified: Boolean(jwtTimes.mfaVerified || authData.user.app_metadata?.mfa_enabled || authData.user.user_metadata?.mfa_enabled),
+              ssoVerified: Boolean(jwtTimes.ssoVerified || authData.user.app_metadata?.sso || authData.user.user_metadata?.sso),
+            };
             
             let claimTenantId = authData.user.app_metadata?.tenant_id || authData.user.user_metadata?.tenant_id;
             let claimWorkspaceId = authData.user.app_metadata?.workspace_id || authData.user.user_metadata?.workspace_id;
@@ -212,6 +224,11 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
 
             if (session?.user_id) {
               resolvedUserId = session.user_id;
+              authContext = {
+                provider: 'local_session',
+                sessionExpiresAt: session.expires_at || null,
+                tokenIssuedAt: session.created_at || null,
+              };
               resolved = await resolveTenantWorkspaceContext(
                 session.tenant_id || tenantHeader,
                 session.workspace_id || workspaceHeader,
@@ -228,6 +245,18 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
     req.tenantId = resolved.tenantId;
     req.workspaceId = resolved.workspaceId;
     req.userId = resolved.userId;
+
+    const workspaceForPolicy = await workspaceRepo.getById(req.workspaceId, req.tenantId);
+    const policy = evaluateAuthPolicy({
+      workspaceSettings: workspaceForPolicy?.settings || {},
+      userId: req.userId,
+      request: req,
+      auth: authContext,
+    });
+    req.authPolicy = policy;
+    if (!policy.allowed) {
+      return sendError(res, policy.code === 'IP_NOT_ALLOWED' ? 403 : 401, policy.code!, policy.message!, policy.details);
+    }
 
     logger.debug('Multi-tenant context established', {
       tenantId: req.tenantId,

@@ -9,6 +9,7 @@ export interface WorkspaceRepository {
   findByOrg(orgId: string): Promise<any>;
   getFirstWorkspace(): Promise<any>;
   updateSettings(id: string, settings: any): Promise<void>;
+  update(id: string, updates: { name?: string; slug?: string; settings?: any }): Promise<void>;
   listFeatureFlags(tenantId: string, workspaceId: string): Promise<any[]>;
   updateFeatureFlag(data: {
     tenantId: string;
@@ -65,6 +66,30 @@ class SQLiteWorkspaceRepository implements WorkspaceRepository {
       SET settings = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(JSON.stringify(settings), id);
+  }
+
+  async update(id: string, updates: { name?: string; slug?: string; settings?: any }) {
+    const db = getDb();
+    const fields: string[] = [];
+    const params: any[] = [];
+
+    if (typeof updates.name === 'string') {
+      fields.push('name = ?');
+      params.push(updates.name);
+    }
+    if (typeof updates.slug === 'string') {
+      fields.push('slug = ?');
+      params.push(updates.slug);
+    }
+    if (updates.settings && typeof updates.settings === 'object' && !Array.isArray(updates.settings)) {
+      fields.push('settings = ?');
+      params.push(JSON.stringify(updates.settings));
+    }
+
+    if (fields.length === 0) return;
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+    db.prepare(`UPDATE workspaces SET ${fields.join(', ')} WHERE id = ?`).run(...params);
   }
 
   async listFeatureFlags(tenantId: string, workspaceId: string) {
@@ -189,6 +214,24 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const { error } = await supabase
       .from('workspaces')
       .update({ settings, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  }
+
+  async update(id: string, updates: { name?: string; slug?: string; settings?: any }) {
+    const supabase = getSupabaseAdmin();
+    const toUpdate: Record<string, any> = { updated_at: new Date().toISOString() };
+
+    if (typeof updates.name === 'string') toUpdate.name = updates.name;
+    if (typeof updates.slug === 'string') toUpdate.slug = updates.slug;
+    if (updates.settings && typeof updates.settings === 'object' && !Array.isArray(updates.settings)) {
+      toUpdate.settings = updates.settings;
+    }
+
+    if (Object.keys(toUpdate).length <= 1) return;
+    const { error } = await supabase
+      .from('workspaces')
+      .update(toUpdate)
       .eq('id', id);
     if (error) throw error;
   }

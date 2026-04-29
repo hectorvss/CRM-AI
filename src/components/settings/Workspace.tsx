@@ -56,7 +56,7 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
   useEffect(() => {
     if (!workspaceRecord) return;
     setName(workspaceRecord.name || fallbackWorkspace.name);
-    setDomain(`${workspaceRecord.slug || fallbackWorkspace.slug}.helpdesk.com`);
+    setDomain(workspaceSettings.workspace?.primaryDomain || workspaceSettings.primary_domain || `${workspaceRecord.slug || fallbackWorkspace.slug}.helpdesk.com`);
     setTimezone(workspaceSettings.timezone || '(GMT-05:00) Eastern Time');
     setBusinessHoursEnabled(workspaceSettings.businessHoursEnabled ?? true);
     setWeekdayStart(workspaceSettings.businessHours?.weekdayStart || workspaceSettings.businessHoursStart || '09:00 AM');
@@ -76,6 +76,10 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
       const normalizedSlug = domain.trim().replace(/\.helpdesk\.com$/i, '').replace(/^https?:\/\//i, '');
       const nextSettings = {
         ...workspaceSettings,
+        workspace: {
+          ...(workspaceSettings.workspace || {}),
+          primaryDomain: domain.trim(),
+        },
         timezone,
         businessHoursEnabled,
         businessHours: {

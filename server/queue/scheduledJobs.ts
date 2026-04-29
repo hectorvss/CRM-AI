@@ -91,12 +91,14 @@ export function startScheduledJobs(): void {
 
   // Session pruner: remove in-memory agent sessions whose TTL has expired
   sessionPruneIntervalId = setInterval(() => {
-    try {
-      const pruned = pruneExpiredSessions();
+    void (async () => {
+      try {
+      const pruned = await pruneExpiredSessions();
       if (pruned > 0) logger.info(`Session pruner: removed ${pruned} expired session(s)`);
-    } catch (err) {
-      logger.warn('Session prune failed', { error: String((err as any)?.message ?? err) });
-    }
+      } catch (err) {
+        logger.warn('Session prune failed', { error: String((err as any)?.message ?? err) });
+      }
+    })();
   }, SESSION_PRUNE_INTERVAL_MS);
 
   // Event bus recovery: retry workflow events stuck in 'pending' (process crash recovery)

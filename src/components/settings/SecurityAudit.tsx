@@ -26,6 +26,7 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
   const { isOwner, isSuperAdmin } = usePermissions();
   const { data: workspace, loading, error } = useApi<any>(workspacesApi.currentContext);
   const { data: roles } = useApi<any[]>(iamApi.roles);
+  const { data: enforcement } = useApi<any>(iamApi.securityEnforcement, []);
   const workspaceRecord = workspace || fallbackWorkspace;
   const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
   const [ssoEnabled, setSsoEnabled] = useState(true);
@@ -41,6 +42,13 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
 
   const canEditPolicies = isOwner || isSuperAdmin;
   const rolesList = roles || [];
+  const policyStates = enforcement?.policy?.states || {};
+  const stateLabel = (state?: string) => state === 'enforced' ? 'Enforced' : state === 'needs_setup' ? 'Needs setup' : state === 'configured_only' ? 'Configured only' : 'Disabled';
+  const stateTone = (state?: string) => state === 'enforced'
+    ? 'border-black/10 bg-black/[0.03] text-gray-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300'
+    : state === 'needs_setup'
+      ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300'
+      : 'border-black/10 bg-black/[0.02] text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400';
 
   useEffect(() => {
     setSsoEnabled(workspaceSettings.security?.ssoEnabled ?? true);
@@ -109,13 +117,13 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
               </div>
               <h2 className="text-sm font-semibold text-gray-950 dark:text-white uppercase tracking-wider">Access Control</h2>
             </div>
-            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${ssoEnabled ? 'border-black/10 bg-black/[0.03] text-gray-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300' : 'border-black/10 bg-black/[0.02] text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400'}`}>{ssoEnabled ? 'Active' : 'Disabled'}</span>
+            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${stateTone(policyStates.sso)}`}>{stateLabel(policyStates.sso)}</span>
           </div>
           <div className="space-y-6">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h3 className="mb-1 text-sm font-semibold text-gray-950 dark:text-white">SSO Authentication (SAML 2.0)</h3>
-                <p className="text-xs text-gray-500">Enforce single sign-on for all team members.</p>
+                <p className="text-xs text-gray-500">{policyStates.sso === 'needs_setup' ? 'Enabled in settings, but provider setup is required before enforcement.' : 'Evaluated by backend auth policy on API requests.'}</p>
               </div>
               <button type="button" onClick={() => setSsoEnabled(current => !current)} className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${ssoEnabled ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
                 <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${ssoEnabled ? 'translate-x-4' : 'translate-x-1'}`}></span>
@@ -179,6 +187,27 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
         </section>
       </div>
 
+      <section className="rounded-[24px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-950 dark:text-white">Authentication enforcement</h2>
+            <p className="mt-1 text-xs text-gray-500">Backend evaluates these states on every authenticated API request.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['SSO', policyStates.sso],
+              ['MFA', policyStates.mfa],
+              ['Session', policyStates.session],
+              ['IP allowlist', policyStates.ipAllowlist],
+            ].map(([label, state]) => (
+              <span key={label} className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${stateTone(String(state))}`}>
+                {label}: {stateLabel(String(state))}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ─── ACCESS POLICIES (Manager-only) ─────────────────────── */}
       <section className="overflow-hidden rounded-[24px] border border-black/5 bg-white dark:border-white/10 dark:bg-[#1b1b1b]">
         <div className="flex items-center justify-between gap-4 border-b border-black/5 px-6 py-4 dark:border-white/10">
@@ -200,7 +229,7 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
           <div className="flex items-start justify-between gap-4 rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
             <div className="flex-1">
               <h3 className="mb-1 text-sm font-semibold text-gray-950 dark:text-white">Require Two-Factor Authentication</h3>
-              <p className="text-xs text-gray-500">All members must have 2FA enabled to access this workspace.</p>
+              <p className="text-xs text-gray-500">Backend state: {stateLabel(policyStates.mfa)}.</p>
             </div>
             <button
               type="button"

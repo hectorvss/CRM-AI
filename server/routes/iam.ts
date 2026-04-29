@@ -108,8 +108,18 @@ router.get('/me', requirePermission('settings.read'), async (req: MultiTenantReq
   }
 });
 
-// Update current user profile and preferences
-router.patch('/me', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+router.get('/security/enforcement', async (req: MultiTenantRequest, res) => {
+  res.json({
+    user_id: req.userId,
+    workspace_id: req.workspaceId,
+    tenant_id: req.tenantId,
+    policy: req.authPolicy || null,
+  });
+});
+
+// Update current user profile and preferences. This route is self-service and
+// intentionally does not require settings.write.
+router.patch('/me', async (req: MultiTenantRequest, res) => {
   const userId = req.userId || 'user_alex';
   const { name, avatar_url, preferences } = req.body as {
     name?: string;
@@ -117,6 +127,18 @@ router.patch('/me', requirePermission('settings.write'), async (req: MultiTenant
     preferences?: Record<string, any>;
   };
 
+  if (!userId) {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
+  if (typeof name === 'string' && name.trim().length < 2) {
+    return sendError(res, 400, 'INVALID_PROFILE_UPDATE', 'Name must be at least 2 characters');
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'avatar_url') && avatar_url !== null && typeof avatar_url !== 'string') {
+    return sendError(res, 400, 'INVALID_PROFILE_UPDATE', 'avatar_url must be a string or null');
+  }
+  if (preferences && (typeof preferences !== 'object' || Array.isArray(preferences))) {
+    return sendError(res, 400, 'INVALID_PROFILE_UPDATE', 'preferences must be an object');
+  }
   if (typeof name !== 'string' && !Object.prototype.hasOwnProperty.call(req.body || {}, 'avatar_url') && !preferences) {
     return sendError(res, 400, 'INVALID_PROFILE_UPDATE', 'At least one profile field is required');
   }
@@ -128,7 +150,7 @@ router.patch('/me', requirePermission('settings.write'), async (req: MultiTenant
     }
 
     await iamRepository.updateUser(userId, {
-      name: typeof name === 'string' ? name : undefined,
+      name: typeof name === 'string' ? name.trim() : undefined,
       avatarUrl: Object.prototype.hasOwnProperty.call(req.body || {}, 'avatar_url') ? avatar_url ?? null : undefined,
       preferences: preferences && typeof preferences === 'object' ? preferences : undefined,
     });
