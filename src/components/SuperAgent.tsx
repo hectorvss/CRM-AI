@@ -918,11 +918,10 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
 
             {/* Loading */}
             {isBootstrapping ? (
-              <div className="flex justify-center py-20">
-                <div className="flex gap-1.5">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.2s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.1s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300" />
+              <div className="flex min-h-[42vh] items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="h-2 w-24 rounded-full bg-black/5 dark:bg-white/10" />
+                  <p className="text-xs text-gray-400">Preparing your workspace</p>
                 </div>
               </div>
             ) : null}

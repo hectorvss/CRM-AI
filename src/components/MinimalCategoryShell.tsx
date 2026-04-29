@@ -34,8 +34,8 @@ export function MinimalCategoryShell({
   children,
 }: MinimalCategoryShellProps) {
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#f8f7f4] dark:bg-[#121212] p-2 pl-0">
-      <div className="flex-1 flex flex-col mx-2 my-2 overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-[0_18px_50px_rgba(0,0,0,0.03)] dark:border-white/10 dark:bg-[#171717]">
+    <div className="flex-1 flex flex-col min-h-0 bg-[#fbfbfa] dark:bg-[#121212] p-2 pl-0">
+      <div className="flex-1 flex flex-col mx-2 my-2 overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-none dark:border-white/10 dark:bg-[#171717]">
         <div className="flex-shrink-0 border-b border-black/5 px-6 py-5 dark:border-white/10">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -71,17 +71,17 @@ export function MinimalCategoryShell({
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-1.5 border-t border-black/5 pt-4 dark:border-white/10">
+          <div className="mt-5 flex flex-wrap gap-5 border-t border-black/5 pt-4 text-sm dark:border-white/10">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => onTabChange(tab.id)}
                 className={[
-                  'rounded-full px-3 py-1.5 text-sm transition-colors',
+                  'pb-2 transition-colors border-b',
                   activeTab === tab.id
-                    ? 'bg-black text-white'
-                    : 'text-gray-500 hover:bg-black/5 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white',
+                    ? 'border-gray-950 text-gray-950 dark:border-white dark:text-white'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-950 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:text-white',
                 ].join(' ')}
               >
                 {tab.label}
@@ -112,11 +112,11 @@ export function MinimalCard({
   action?: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.03)] dark:border-white/10 dark:bg-[#1b1b1b]">
+    <section className="overflow-hidden rounded-[24px] border border-black/5 bg-white dark:border-white/10 dark:bg-[#1b1b1b]">
       <div className="flex items-center justify-between gap-4 border-b border-black/5 px-5 py-4 dark:border-white/10">
         <div className="flex items-center gap-3">
           {icon ? (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 text-gray-700 dark:bg-white/5 dark:text-gray-200">
               <span className="material-symbols-outlined text-[18px]">{icon}</span>
             </div>
           ) : null}
@@ -196,8 +196,8 @@ export function MinimalPill({
   tone?: 'neutral' | 'active' | 'subtle';
 }) {
   const styles = {
-    neutral: 'bg-black/5 text-gray-700 dark:bg-white/5 dark:text-gray-300',
-    active: 'bg-black text-white',
+    neutral: 'bg-black/[0.03] text-gray-700 dark:bg-white/[0.06] dark:text-gray-300',
+    active: 'border border-black/10 bg-white text-gray-900 dark:border-white/10 dark:bg-[#171717] dark:text-white',
     subtle: 'bg-transparent text-gray-500 dark:text-gray-400',
   } as const;
 
