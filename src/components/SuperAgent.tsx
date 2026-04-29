@@ -1214,7 +1214,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'mode' ? null : 'mode')}
-                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium transition-colors ${
                         mode === 'investigate'
                           ? 'text-gray-900 dark:text-white'
                           : 'text-gray-700 dark:text-gray-200'
@@ -1245,7 +1245,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                               }`}
                             >
                               <div>
-                                <div className="text-xs font-semibold">{option.label}</div>
+                                <div className="text-sm font-semibold">{option.label}</div>
                                 <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{option.description}</div>
                               </div>
                               {mode === option.value ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
