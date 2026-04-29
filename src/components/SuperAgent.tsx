@@ -931,7 +931,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             {!isBootstrapping && messages.length === 0 ? (
               <div className="flex min-h-[58vh] flex-col items-center justify-center gap-8 text-center">
                 <div className="relative">
-                  <div className="super-agent-title-glow pointer-events-none absolute -inset-x-10 -inset-y-6 rounded-full bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.16),rgba(59,130,246,0)_62%)] blur-xl dark:bg-[radial-gradient(circle_at_center,rgba(96,165,250,0.13),rgba(96,165,250,0)_62%)]" />
+                  <div className="super-agent-title-glow pointer-events-none absolute -inset-x-6 -inset-y-4 rounded-full bg-sky-500/5 blur-2xl dark:bg-sky-400/5" />
                   <h1 className="relative flex flex-wrap justify-center gap-x-2.5 gap-y-1 text-4xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
                     {HERO_TITLE_WORDS.map((word, index) => (
                       <span
@@ -1193,7 +1193,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   </button>
                 </div>
               ) : null}
-            <div className="rounded-3xl border border-gray-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.09)] transition-shadow focus-within:shadow-[0_22px_70px_rgba(15,23,42,0.13)] dark:border-gray-700 dark:bg-gray-900 dark:shadow-black/25">
+            <div className="rounded-3xl border border-gray-200 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.06)] transition-shadow focus-within:shadow-[0_12px_34px_rgba(15,23,42,0.08)] dark:border-gray-700 dark:bg-gray-900 dark:shadow-black/20">
               <textarea
                 ref={textareaRef}
                 value={composerText}
