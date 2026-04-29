@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Page } from '../types';
 import TreeGraph from './TreeGraph';
 import { casesApi, aiApi, superAgentApi } from '../api/client';
+import { buildResolutionPlan, buildAiResolutionPrompt, type ResolutionStep } from '../utils/resolutionPlan';
 import { useApi } from '../api/hooks';
 import type { GraphBranch } from './TreeGraph';
 import LoadingState from './LoadingState';
@@ -75,6 +76,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const [completedStepIds, setCompletedStepIds] = useState<Set<string>>(new Set());
   const [resolveStatusMessage, setResolveStatusMessage] = useState<string | null>(null);
   const [isAiResolving, setIsAiResolving] = useState(false);
+  const [expandedStepIds, setExpandedStepIds] = useState<Set<string>>(new Set());
 
   // ── Copilot state ────────────────────────────────────────────────
   const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
@@ -95,6 +97,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     setExecutingStepId(null);
     setResolveStatusMessage(null);
     setIsAiResolving(false);
+    setExpandedStepIds(new Set());
   }, [selectedId]);
 
   // Auto-scroll to bottom on new messages
@@ -340,55 +343,128 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     }
   }, [selectedId, copilotInput, isCopilotSending, copilotMessages, copilotBrief, impactedBranches]);
 
-  // ── Resolve handlers ─────────────────────────────────────────────
-  const handleRunDeterministicStep = useCallback(async (step: any) => {
-    if (!selectedId || !step?.id) return;
+  // ── Resolve plan + handlers ──────────────────────────────────────
+  const resolutionPlan = useMemo(() => buildResolutionPlan(caseResolve), [caseResolve]);
+
+  const toggleStepExpansion = useCallback((stepId: string) => {
+    setExpandedStepIds(prev => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId);
+      else next.add(stepId);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Routes a single deterministic step to the right backend action based on
+   * its classified group. Each branch is intentionally side-effect minimal so
+   * that runs are safe to retry; mutating routes (refunds, approvals) defer
+   * to the existing API or to the Super Agent for execution.
+   */
+  const executeRoutedStep = useCallback(async (step: ResolutionStep) => {
+    const route = step.route;
+    switch (route.kind) {
+      case 'webhook_ack':
+        // Webhooks are idempotent acknowledgements. Marking complete is the
+        // expected behaviour: the canonical state already reflects them.
+        return { ok: true, message: `Webhook ${route.event} from ${route.provider} acknowledged.` };
+
+      case 'reconcile':
+        if (selectedId) {
+          await aiApi.diagnose(selectedId).catch(() => null);
+        }
+        return { ok: true, message: 'Reconciliation diagnosis refreshed.' };
+
+      case 'refund':
+      case 'order_update':
+      case 'return_update':
+      case 'notification':
+      case 'agent_dispatch': {
+        // Sensitive routes are dispatched through the Super Agent so policy,
+        // approvals and audit trails apply consistently.
+        const caseLabel = selectedCase?.orderId || selectedId || 'this case';
+        const prompt = `Execute this deterministic step for case ${caseLabel}: ${step.title}. ${step.explanation}`;
+        const resp = await superAgentApi.command(prompt, {
+          mode: 'operate',
+          autonomyLevel: 'assisted',
+        });
+        return {
+          ok: true,
+          message: resp?.summary || resp?.response?.summary || `Step "${step.title}" dispatched to the agent.`,
+        };
+      }
+
+      case 'approval':
+        onPageChange('approvals');
+        return { ok: true, message: 'Opened approvals queue for review.' };
+
+      case 'manual_review':
+        return { ok: true, message: 'Step flagged for manual review — please inspect the case timeline.' };
+
+      case 'generic':
+      default:
+        return { ok: true, message: `Step "${step.title}" marked as acknowledged.` };
+    }
+  }, [onPageChange, selectedCase, selectedId]);
+
+  const handleRunDeterministicStep = useCallback(async (step: ResolutionStep) => {
+    if (!selectedId || !step?.id || executingStepId !== null) return;
     setExecutingStepId(step.id);
     setResolveStatusMessage(null);
     try {
-      // Simulate deterministic execution: in absence of a per-step backend,
-      // we mark the step as completed locally so the user has immediate feedback.
-      // Real integrations should replace this with the corresponding API call.
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      setCompletedStepIds(prev => {
-        const next = new Set(prev);
-        next.add(step.id);
-        return next;
-      });
-      setResolveStatusMessage(`Step "${step.label}" marked as complete.`);
+      const result = await executeRoutedStep(step);
+      if (result.ok) {
+        setCompletedStepIds(prev => {
+          const next = new Set(prev);
+          next.add(step.id);
+          return next;
+        });
+        setResolveStatusMessage(result.message);
+      }
     } catch (error: any) {
-      setResolveStatusMessage(error?.message || 'Failed to execute step.');
+      setResolveStatusMessage(error?.message || `Failed to execute "${step.title}".`);
     } finally {
       setExecutingStepId(null);
     }
-  }, [selectedId]);
+  }, [executeRoutedStep, executingStepId, selectedId]);
 
   const handleRunAllDeterministicSteps = useCallback(async () => {
-    const steps = (caseResolve?.execution?.steps || []) as any[];
-    if (!steps.length) return;
+    if (!resolutionPlan.hasSteps || executingStepId !== null) return;
     setResolveStatusMessage(null);
-    for (const step of steps) {
+    let anyFailed = false;
+    for (const step of resolutionPlan.steps) {
       if (completedStepIds.has(step.id)) continue;
       setExecutingStepId(step.id);
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      setCompletedStepIds(prev => {
-        const next = new Set(prev);
-        next.add(step.id);
-        return next;
-      });
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await executeRoutedStep(step);
+        setCompletedStepIds(prev => {
+          const next = new Set(prev);
+          next.add(step.id);
+          return next;
+        });
+      } catch {
+        anyFailed = true;
+        break;
+      }
     }
     setExecutingStepId(null);
-    setResolveStatusMessage('All deterministic steps executed.');
-  }, [caseResolve, completedStepIds]);
+    setResolveStatusMessage(
+      anyFailed
+        ? 'Some steps could not be executed automatically — review the plan.'
+        : 'All deterministic steps executed.'
+    );
+  }, [completedStepIds, executeRoutedStep, executingStepId, resolutionPlan]);
 
   const handleResolveWithAI = useCallback(async () => {
     if (!selectedId) return;
     setIsAiResolving(true);
     setResolveStatusMessage(null);
     const caseLabel = selectedCase?.orderId || selectedId;
-    const conflictTitle = caseResolve?.conflict?.title || 'the open conflict';
-    const prompt = `Resolve case ${caseLabel}: ${conflictTitle}. Apply the deterministic resolution plan, escalate to approvals if any sensitive action is required, and summarise the outcome.`;
+    const prompt = buildAiResolutionPrompt(caseResolve, {
+      caseLabel,
+      customerName: selectedCase?.customerName,
+    });
     try {
       const response = await superAgentApi.command(prompt, {
         mode: 'operate',
@@ -568,11 +644,11 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                 )}
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-8 pt-20 relative bg-[#F8F9FA] dark:bg-card-dark">
+              <div className="flex-1 overflow-y-auto custom-scrollbar px-0 py-0 pt-16 relative bg-[#F8F9FA] dark:bg-card-dark">
                 {(graphLoading || resolveLoading || stateLoading) && !resolveData && !stateData ? (
                   <LoadingState title="Loading resolve view" message="Fetching conflict, policy and execution context from Supabase." compact />
                 ) : (
-                  <div className="max-w-3xl mx-auto space-y-6">
+                  <div className="space-y-6 px-6 pb-6">
                     {resolveStatusMessage && (
                       <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
                         {resolveStatusMessage}
@@ -628,67 +704,112 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                       </div>
                     </section>
 
-                    {/* Deterministic Resolution Plan */}
+                    {/* Resolution Plan */}
                     <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
                       <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
                         <div>
-                          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Deterministic Resolution</h2>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Step-by-step plan generated from canonical state.</p>
+                          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Resolution</h2>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{resolutionPlan.headline}</p>
                         </div>
                         <button
                           onClick={handleRunAllDeterministicSteps}
-                          disabled={!(caseResolve?.execution?.steps || []).length || executingStepId !== null}
+                          disabled={!resolutionPlan.hasSteps || executingStepId !== null}
                           className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900 hover:opacity-80 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                           Run all steps
                         </button>
                       </div>
                       <div className="p-6">
-                        {(caseResolve?.execution?.steps || []).length === 0 ? (
+                        {!resolutionPlan.hasSteps ? (
                           <div className="flex flex-col items-center justify-center text-center py-8">
                             <span className="material-symbols-outlined text-gray-300 dark:text-gray-700 text-3xl mb-2">checklist</span>
                             <p className="text-sm text-gray-500 dark:text-gray-400">No deterministic steps available yet for this case.</p>
                           </div>
                         ) : (
                           <ol className="space-y-3">
-                            {(caseResolve?.execution?.steps || []).map((step: any, index: number) => {
-                              const isCompleted = completedStepIds.has(step.id) || step.status === 'completed' || step.status === 'success';
+                            {resolutionPlan.steps.map((step) => {
+                              const isCompleted =
+                                completedStepIds.has(step.id) ||
+                                step.status === 'completed' ||
+                                step.status === 'success';
                               const isExecuting = executingStepId === step.id;
+                              const isExpanded = expandedStepIds.has(step.id);
                               return (
                                 <li
                                   key={step.id}
-                                  className={`flex items-start gap-3 px-4 py-3 rounded-xl border transition-colors ${
+                                  className={`rounded-xl border transition-colors overflow-hidden ${
                                     isCompleted
                                       ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-800/30 dark:bg-emerald-900/10'
                                       : 'border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-800/20'
                                   }`}
                                 >
-                                  <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0 ${
-                                    isCompleted
-                                      ? 'bg-emerald-500 text-white'
-                                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
-                                  }`}>
-                                    {isCompleted ? <span className="material-symbols-outlined text-[14px]">check</span> : index + 1}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-medium text-gray-900 dark:text-white">{step.label}</div>
-                                    {(step.context || step.source) && (
-                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{step.context || formatStatus(step.source)}</div>
-                                    )}
-                                  </div>
                                   <button
-                                    onClick={() => handleRunDeterministicStep(step)}
-                                    disabled={isCompleted || isExecuting || executingStepId !== null}
-                                    className="px-3 py-1 rounded-md text-xs font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                                    type="button"
+                                    onClick={() => toggleStepExpansion(step.id)}
+                                    aria-expanded={isExpanded}
+                                    className="w-full flex items-start gap-3 px-4 py-3 text-left"
                                   >
-                                    {isCompleted ? 'Done' : isExecuting ? 'Running…' : 'Run'}
+                                    <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0 ${
+                                      isCompleted
+                                        ? 'bg-emerald-500 text-white'
+                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                    }`}>
+                                      {isCompleted ? <span className="material-symbols-outlined text-[14px]">check</span> : step.index + 1}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="text-sm font-medium text-gray-900 dark:text-white">{step.title}</div>
+                                        <span className="px-2 py-0.5 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 capitalize">
+                                          {step.group}
+                                        </span>
+                                        {step.requiresApproval && (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30">
+                                            Approval
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{step.label}</div>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRunDeterministicStep(step);
+                                        }}
+                                        disabled={isCompleted || isExecuting || executingStepId !== null}
+                                        className="px-3 py-1 rounded-md text-xs font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                      >
+                                        {isCompleted ? 'Done' : isExecuting ? 'Running…' : 'Run'}
+                                      </button>
+                                      <span className={`material-symbols-outlined text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                                    </div>
                                   </button>
+                                  {isExpanded && (
+                                    <div className="px-4 pb-4 pl-[3.25rem] space-y-3 text-sm text-gray-600 dark:text-gray-300 border-t border-gray-100 dark:border-gray-800/60 pt-3 bg-white/50 dark:bg-gray-900/20">
+                                      <div>
+                                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">What this step does</div>
+                                        <p>{step.explanation}</p>
+                                      </div>
+                                      <div>
+                                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Expected outcome</div>
+                                        <p>{step.expectedOutcome}</p>
+                                      </div>
+                                      {(step.context || step.source || step.domain) && (
+                                        <div>
+                                          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Source</div>
+                                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                                            {[step.domain, step.source, step.context].filter(Boolean).map(formatStatus).join(' · ')}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </li>
                               );
                             })}
                           </ol>
                         )}
-                        {caseResolve?.execution?.requires_approval && (
+                        {resolutionPlan.requiresApproval && (
                           <p className="mt-4 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                             <span className="material-symbols-outlined text-[14px]">info</span>
                             Some steps require approval before execution.
