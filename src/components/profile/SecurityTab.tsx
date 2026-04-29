@@ -94,9 +94,9 @@ export default function SecurityTab({ onSaveReady }: Props) {
                   <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">Password</h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Managed by internal authentication</p>
                 </div>
-                <button type="button" onClick={() => setStatusMessage('Password changes are handled by the authentication provider.')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                  Change password
-                </button>
+                <span className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                  Provider managed
+                </span>
               </div>
 
               <div className="flex items-center justify-between pb-6 border-b border-gray-100 dark:border-gray-800">
@@ -157,13 +157,13 @@ export default function SecurityTab({ onSaveReady }: Props) {
                     <p className="text-xs text-gray-500 dark:text-gray-400">Madrid, Spain • Last active 2 hours ago</p>
                   </div>
                 </div>
-                <button type="button" onClick={() => setStatusMessage('Session revocation is handled by the authentication provider.')} className="text-xs font-semibold text-red-600 dark:text-red-400 hover:underline">Revoke</button>
+                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Provider managed</span>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <button type="button" onClick={() => setStatusMessage('Sign out is available through the account menu.')} className="text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">
-                Sign out of all other sessions
-              </button>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                Session revocation is handled by the authentication provider.
+              </p>
             </div>
           </section>
         </div>

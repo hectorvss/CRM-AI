@@ -3,9 +3,13 @@ import { useApi } from '../../api/hooks';
 import { billingApi, workspacesApi } from '../../api/client';
 import LoadingState from '../LoadingState';
 import { MinimalButton, MinimalCard, MinimalPill, MinimalProgressBar } from '../MinimalCategoryShell';
+import { NavigateInput } from '../../types';
 
 type SaveHandler = (() => Promise<void> | void) | null;
-type Props = { onSaveReady?: (handler: SaveHandler) => void };
+type Props = {
+  onSaveReady?: (handler: SaveHandler) => void;
+  onNavigate?: (target: NavigateInput) => void;
+};
 
 const fallbackWorkspace = {
   id: 'ws_default',
@@ -32,7 +36,7 @@ function money(value: unknown): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(parsed);
 }
 
-export default function BillingUsageTab({ onSaveReady }: Props) {
+export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
   const { data: workspace, loading: workspaceLoading, error: workspaceError } = useApi(workspacesApi.currentContext);
   const workspaceRecord = workspace || fallbackWorkspace;
   const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
@@ -149,10 +153,10 @@ export default function BillingUsageTab({ onSaveReady }: Props) {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <MinimalButton onClick={() => setStatusMessage('Open the Upgrade section to manage plan tiers and seat packs.')}>
+              <MinimalButton onClick={() => onNavigate?.({ page: 'upgrade', entityType: 'workspace', section: 'plans', sourceContext: 'settings_billing' })}>
                 Manage plan & seats
               </MinimalButton>
-              <MinimalButton variant="outline" onClick={() => setStatusMessage('Billing preferences are editable in the controls panel.')}>
+              <MinimalButton variant="outline" onClick={() => setStatusMessage('Budget, alert thresholds, flexible usage, and billing email can be edited in the controls panel.')}>
                 Edit controls
               </MinimalButton>
             </div>
@@ -164,7 +168,7 @@ export default function BillingUsageTab({ onSaveReady }: Props) {
           subtitle="Budget, alerts, and contact details."
           icon="settings"
           action={(
-            <MinimalButton variant="ghost" onClick={() => setStatusMessage('Usage details are reflected below from the billing ledger.')}>
+            <MinimalButton variant="ghost" onClick={() => setStatusMessage('Usage details are reflected in the billing ledger below.')}>
               Details
             </MinimalButton>
           )}
@@ -232,7 +236,7 @@ export default function BillingUsageTab({ onSaveReady }: Props) {
         icon="receipt_long"
         action={(
           <div className="flex flex-wrap items-center gap-2">
-            <MinimalButton variant="outline" onClick={() => setStatusMessage('Billing email updates are stored in workspace settings.')}>
+            <MinimalButton variant="outline" onClick={() => setStatusMessage('Edit the Billing email field in Billing controls, then save preferences.')}>
               Update billing email
             </MinimalButton>
             <MinimalButton variant="ghost" onClick={() => setStatusMessage('The ledger below reflects the current billing history from the backend.')}>

@@ -8,16 +8,18 @@ import SecurityAuditTab from './settings/SecurityAudit';
 import BillingUsageTab from './settings/BillingUsage';
 import DataPrivacyTab from './settings/DataPrivacy';
 import PersonalTab from './settings/Personal';
+import { NavigateInput } from '../types';
 
 type SettingsTab = 'workspace' | 'teams_roles' | 'notifications' | 'security_audit' | 'billing_usage' | 'data_privacy' | 'personal';
 
 type TabErrorBoundaryProps = { children: ReactNode; label: string };
+type SettingsProps = { onNavigate?: (target: NavigateInput) => void };
 
 function TabErrorBoundary({ children }: TabErrorBoundaryProps) {
   return <>{children}</>;
 }
 
-export default function Settings() {
+export default function Settings({ onNavigate }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('workspace');
   const [hasSaveHandler, setHasSaveHandler] = useState(false);
   const [resetKey, setResetKey] = useState(0);
@@ -89,7 +91,7 @@ export default function Settings() {
             {activeTab === 'teams_roles' && <TeamsRolesTab onSaveReady={setSaveHandler} />}
             {activeTab === 'notifications' && <NotificationsTab onSaveReady={setSaveHandler} />}
             {activeTab === 'security_audit' && <SecurityAuditTab onSaveReady={setSaveHandler} />}
-            {activeTab === 'billing_usage' && <BillingUsageTab onSaveReady={setSaveHandler} />}
+            {activeTab === 'billing_usage' && <BillingUsageTab onSaveReady={setSaveHandler} onNavigate={onNavigate} />}
             {activeTab === 'data_privacy' && <DataPrivacyTab onSaveReady={setSaveHandler} />}
             {activeTab === 'personal' && <PersonalTab onSaveReady={setSaveHandler} />}
           </TabErrorBoundary>
