@@ -80,10 +80,10 @@ export function MinimalCategoryShell({
                 type="button"
                 onClick={() => onTabChange(tab.id)}
                 className={[
-                  'pb-2 transition-colors border-b',
+                  'pb-2 text-[15px] font-semibold transition-colors border-b',
                   activeTab === tab.id
                     ? 'border-gray-950 text-gray-950 dark:border-white dark:text-white'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-950 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:text-white',
+                    : 'border-transparent text-gray-700 hover:border-gray-400 hover:text-gray-950 dark:text-gray-300 dark:hover:border-gray-500 dark:hover:text-white',
                 ].join(' ')}
               >
                 {tab.label}
