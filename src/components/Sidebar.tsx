@@ -39,7 +39,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
   // Real user data
   const { data: me } = useApi(() => iamApi.me(), [], null as any);
   // Permissions
-  const { has, isAdmin, isSuperAdmin } = usePermissions();
+  const { has, isAdmin, isSuperAdmin, loading: permissionsLoading } = usePermissions();
   // Real pending approvals count
   const { data: pendingApprovals } = useApi(
     () => approvalsApi.list({ status: 'pending', limit: '99' }),
@@ -73,9 +73,10 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
     { target: 'tools_integrations',label: 'Integrations', icon: 'extension',         requiredPermission: 'integrations.read' },
   ];
 
-  // Filter nav items by permission — superAdmin / demo mode sees everything
+  // While permissions are loading, show all items to avoid an empty gap.
+  // Once resolved, filter by actual permission grants.
   const visibleNavItems = navItems.filter(item =>
-    !item.requiredPermission || isSuperAdmin || has(item.requiredPermission)
+    permissionsLoading || !item.requiredPermission || isSuperAdmin || has(item.requiredPermission)
   );
 
   return (
