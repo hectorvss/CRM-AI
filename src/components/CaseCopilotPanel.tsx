@@ -212,7 +212,12 @@ export default function CaseCopilotPanel({
                 </div>
                 <div className="max-w-[88%] rounded-2xl rounded-bl-sm border border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark p-4 shadow-card">
                   <p className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
-                    {`I've loaded the full state for ${subjectLabel}.\n\n${summary}${conflict ? `\n\nActive blocker: ${conflict}` : ''}${recommendation ? `\n\nRecommendation: ${recommendation}` : ''}\n\nWhat would you like to dig into?`}
+                    {`I've loaded the full state for ${subjectLabel}.\n\n${summary}${conflict ? `\n\nActive blocker: ${conflict}` : ''}${recommendation ? `\n\nRecommendation: ${recommendation}` : ''}\n\n`}
+                    {['What', 'would', 'you', 'like', 'to', 'dig', 'into?'].map((word, index) => (
+                      <span key={index} className="super-agent-title-word inline-block" style={{ animationDelay: `${index * 80}ms` }}>
+                        {word}{index < 6 ? ' ' : ''}
+                      </span>
+                    ))}
                   </p>
                   <span className="mt-2 block text-[10px] text-gray-400">{nowTime()}</span>
                 </div>
