@@ -107,60 +107,73 @@ export default function BillingUsageTab({ onSaveReady }: Props) {
   const ledgerEntries = Array.isArray(ledger) ? ledger : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {workspaceError && (
-        <div className="rounded-2xl border border-black/5 bg-black/[0.02] px-4 py-3 text-sm text-gray-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-300">
+        <div className="rounded-2xl border border-black/5 bg-black/[0.015] px-4 py-3 text-sm text-gray-600 dark:border-white/10 dark:bg-white/[0.02] dark:text-gray-300">
           Workspace context is still settling. Showing safe local defaults until Supabase responds.
         </div>
       )}
       {statusMessage && (
-        <div className="rounded-2xl border border-black/5 bg-black/[0.02] px-4 py-3 text-sm text-gray-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-300">
+        <div className="rounded-2xl border border-black/5 bg-black/[0.015] px-4 py-3 text-sm text-gray-600 dark:border-white/10 dark:bg-white/[0.02] dark:text-gray-300">
           {statusMessage}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
         <MinimalCard
-          title="Growth"
-          subtitle="Billed through the workspace subscription."
+          title="Billing overview"
+          subtitle="Current subscription and usage at a glance."
           icon="diamond"
           action={<MinimalPill tone="active">{subscription?.status || 'Active'}</MinimalPill>}
         >
           <div className="space-y-6">
-            <div className="space-y-4">
-              <MinimalProgressBar label="Seats used" value={seatsUsed} max={seatsIncluded} />
-              <p className="text-xs text-gray-500">{Math.max(seatsIncluded - seatsUsed, 0)} seats remaining</p>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="rounded-2xl border border-black/5 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Plan</p>
+                <p className="mt-2 text-base font-semibold text-gray-950 dark:text-white capitalize">{String(subscription?.plan_id || workspaceRecord?.plan_id || 'starter').replace(/_/g, ' ')}</p>
+              </div>
+              <div className="rounded-2xl border border-black/5 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Budget</p>
+                <p className="mt-2 text-base font-semibold text-gray-950 dark:text-white">{money(monthlyBudgetCap)}</p>
+              </div>
             </div>
 
-            <MinimalButton onClick={() => setStatusMessage('Open the Upgrade section to manage plan tiers and seat packs.')}>
-              Manage plan & seats
-            </MinimalButton>
+            <div className="space-y-5">
+              <MinimalProgressBar label="Seats used" value={seatsUsed} max={seatsIncluded} />
+              <MinimalProgressBar label="Credits used" value={creditsUsed} max={creditsIncluded} />
+            </div>
+
+            <div className="flex items-center justify-between gap-4 text-xs text-gray-500">
+              <span>{Math.max(seatsIncluded - seatsUsed, 0)} seats remaining</span>
+              <span>{creditsUsed.toLocaleString()} of {creditsIncluded.toLocaleString()} credits used</span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <MinimalButton onClick={() => setStatusMessage('Open the Upgrade section to manage plan tiers and seat packs.')}>
+                Manage plan & seats
+              </MinimalButton>
+              <MinimalButton variant="outline" onClick={() => setStatusMessage('Billing preferences are editable in the controls panel.')}>
+                Edit controls
+              </MinimalButton>
+            </div>
           </div>
         </MinimalCard>
 
         <MinimalCard
-          title="AI usage & budget"
-          subtitle="Current cycle usage from the subscription record"
-          icon="smart_toy"
+          title="Billing controls"
+          subtitle="Budget, alerts, and contact details."
+          icon="settings"
           action={(
             <MinimalButton variant="ghost" onClick={() => setStatusMessage('Usage details are reflected below from the billing ledger.')}>
-              View usage details
+              Details
             </MinimalButton>
           )}
         >
-          <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4">
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="text-4xl font-semibold tracking-tight text-gray-950 dark:text-white">
-                  {Math.round((creditsUsed / Math.max(creditsIncluded, 1)) * 100)}%
-                </div>
-                <p className="mt-2 text-xs text-gray-500">
-                  {creditsUsed.toLocaleString()} / {creditsIncluded.toLocaleString()} credits
-                </p>
-              </div>
-              <div className="w-44">
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Monthly budget cap (EUR)</label>
-                <div className="flex items-center gap-2 rounded-full border border-black/5 bg-black/[0.02] px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">
+                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Budget cap</label>
+                <div className="flex items-center gap-2 rounded-full border border-black/5 bg-black/[0.015] px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.02]">
                   <span className="text-sm text-gray-400">EUR</span>
                   <input
                     type="number"
@@ -170,56 +183,52 @@ export default function BillingUsageTab({ onSaveReady }: Props) {
                   />
                 </div>
               </div>
+              <div>
+                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Billing email</label>
+                <input
+                  type="email"
+                  value={billingEmail}
+                  onChange={event => setBillingEmail(event.target.value)}
+                  className="w-full rounded-full border border-black/5 bg-black/[0.015] px-4 py-2.5 text-sm text-gray-950 outline-none transition-colors focus:border-black/20 dark:border-white/10 dark:bg-white/[0.02] dark:text-white"
+                />
+              </div>
             </div>
 
-            <MinimalProgressBar label="Credits used" value={creditsUsed} max={creditsIncluded} />
-            <p className="text-xs text-gray-500">Monthly cap set to {money(monthlyBudgetCap)}.</p>
-
-            <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 text-sm text-gray-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-300">
-              Alerting is active at {alertAtPercent}% usage and usage stops at {stopAtPercent}% when flexible usage is enabled.
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Alert thresholds</label>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-4">
+            <div className="space-y-3">
+              <label className="block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Alert thresholds</label>
+              <div className="space-y-4 rounded-2xl border border-black/5 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="text-xs text-gray-600 dark:text-gray-300">Alert admins at {alertAtPercent}% usage</span>
-                    <input type="range" min={50} max={95} step={5} value={alertAtPercent} onChange={event => setAlertAtPercent(Number(event.target.value))} className="flex-1 accent-violet-500" />
+                    <span className="text-xs text-gray-400">{alertAtPercent}%</span>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <input type="range" min={50} max={95} step={5} value={alertAtPercent} onChange={event => setAlertAtPercent(Number(event.target.value))} className="w-full accent-violet-500" />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="text-xs text-gray-600 dark:text-gray-300">Stop autopilot at {stopAtPercent}% usage</span>
-                    <input type="range" min={60} max={100} step={5} value={stopAtPercent} onChange={event => setStopAtPercent(Number(event.target.value))} className="flex-1 accent-violet-500" />
+                    <span className="text-xs text-gray-400">{stopAtPercent}%</span>
                   </div>
+                  <input type="range" min={60} max={100} step={5} value={stopAtPercent} onChange={event => setStopAtPercent(Number(event.target.value))} className="w-full accent-violet-500" />
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setFlexibleUsageEnabled(current => !current)}
-                className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/5"
-              >
-                <span className="material-symbols-outlined text-[16px]">{flexibleUsageEnabled ? 'toggle_on' : 'toggle_off'}</span>
-                Flexible usage {flexibleUsageEnabled ? 'enabled' : 'disabled'}
-              </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Billing email</label>
-              <input
-                type="email"
-                value={billingEmail}
-                onChange={event => setBillingEmail(event.target.value)}
-                className="w-full rounded-full border border-black/5 bg-black/[0.02] px-4 py-2.5 text-sm text-gray-950 outline-none transition-colors focus:border-black/20 dark:border-white/10 dark:bg-white/[0.03] dark:text-white"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() => setFlexibleUsageEnabled(current => !current)}
+              className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/5"
+            >
+              <span className="material-symbols-outlined text-[16px]">{flexibleUsageEnabled ? 'toggle_on' : 'toggle_off'}</span>
+              Flexible usage {flexibleUsageEnabled ? 'enabled' : 'disabled'}
+            </button>
           </div>
         </MinimalCard>
       </div>
 
       <MinimalCard
         title="Invoices & payment history"
-        subtitle="Billing events from the workspace ledger"
+        subtitle="Billing events from the workspace ledger."
         icon="receipt_long"
         action={(
           <div className="flex flex-wrap items-center gap-2">
