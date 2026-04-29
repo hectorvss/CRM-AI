@@ -41,9 +41,9 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
   const [activeTab, setActiveTab] = useState<SubTab>('members');
   const initialized = useRef(false);
 
-  // Data
-  const { data: members, loading: membersLoading, refetch: refetchMembers } = useApi<any[]>(iamApi.members);
-  const { data: roles, loading: rolesLoading, refetch: refetchRoles } = useApi<any[]>(iamApi.roles);
+  // Data — fetch only once with empty deps
+  const { data: members, loading: membersLoading, refetch: refetchMembers } = useApi<any[]>(iamApi.members, []);
+  const { data: roles, loading: rolesLoading, refetch: refetchRoles } = useApi<any[]>(iamApi.roles, []);
   const membersList = members || [];
   const rolesList = roles || [];
 
@@ -72,28 +72,27 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
     PERMISSION_DOMAINS.reduce((acc, d) => ({ ...acc, [d]: true }), {} as Record<string, boolean>),
   );
 
-  // Initialize selections only once
+  // Initialize selections only once per data load
   useEffect(() => {
-    if (!initialized.current && membersList.length > 0 && !selectedMemberId) {
+    if (membersList.length > 0 && !selectedMemberId) {
       setSelectedMemberId(membersList[0].id);
-      initialized.current = true;
     }
-  }, [membersList.length, selectedMemberId]);
+  }, []); // Only run once on mount
 
   useEffect(() => {
-    if (!selectedRoleId && rolesList.length > 0) {
+    if (rolesList.length > 0 && !selectedRoleId) {
       setSelectedRoleId(rolesList[0].id);
     }
-  }, [rolesList.length, selectedRoleId]);
+  }, []); // Only run once on mount
 
   useEffect(() => {
-    if (!inviteRoleId && rolesList.length > 0) {
+    if (rolesList.length > 0 && !inviteRoleId) {
       setInviteRoleId(rolesList[0].id);
     }
-  }, [rolesList.length, inviteRoleId]);
+  }, []); // Only run once on mount
 
-  const selectedMember = useMemo(() => membersList.find(m => m.id === selectedMemberId) || null, [membersList, selectedMemberId]);
-  const selectedRole = useMemo(() => rolesList.find(r => r.id === selectedRoleId) || null, [rolesList, selectedRoleId]);
+  const selectedMember = useMemo(() => membersList.find(m => m.id === selectedMemberId) || null, [selectedMemberId]);
+  const selectedRole = useMemo(() => rolesList.find(r => r.id === selectedRoleId) || null, [selectedRoleId]);
 
   // Update form when member changes
   useEffect(() => {
@@ -101,14 +100,15 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
       setMemberStatus(selectedMember.status || 'active');
       setMemberRoleId(selectedMember.role_id || '');
     }
-  }, [selectedMember?.id]);
+  }, [selectedMemberId]);
 
+  // Update form when role changes
   useEffect(() => {
     if (selectedRole) {
       setRoleName(selectedRole.name || '');
       setRolePermissions(normalizePermissions(selectedRole.permissions));
     }
-  }, [selectedRole?.id]);
+  }, [selectedRoleId]);
 
   const filteredMembers = useMemo(() => {
     return membersList.filter(m => {
