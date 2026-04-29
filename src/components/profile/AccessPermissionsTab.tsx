@@ -98,8 +98,8 @@ export default function AccessPermissionsTab() {
                   const isGranted = hasWildcard || granted.has(p.key);
                   return (
                     <div key={p.key} className="flex items-start gap-3 px-4 py-2.5">
-                      <span className={`text-sm mt-0.5 flex-shrink-0 ${isGranted ? 'text-gray-900 dark:text-white' : 'text-gray-300 dark:text-gray-700'}`}>
-                        {isGranted ? '✓' : '–'}
+                      <span className={`material-symbols-outlined text-[18px] mt-0.5 flex-shrink-0 ${isGranted ? 'text-emerald-500' : 'text-gray-300 dark:text-gray-700'}`}>
+                        {isGranted ? 'check_circle' : 'cancel'}
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm ${isGranted ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-600'}`}>
