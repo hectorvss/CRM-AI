@@ -1214,7 +1214,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'mode' ? null : 'mode')}
-                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium transition-colors ${
+                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-medium transition-colors ${
                         mode === 'investigate'
                           ? 'text-gray-900 dark:text-white'
                           : 'text-gray-700 dark:text-gray-200'
@@ -1245,7 +1245,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                               }`}
                             >
                               <div>
-                                <div className="text-sm font-semibold">{option.label}</div>
+                                <div className="text-xs font-semibold">{option.label}</div>
                                 <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{option.description}</div>
                               </div>
                               {mode === option.value ? <span className="material-symbols-outlined text-[16px]">check</span> : null}
@@ -1287,7 +1287,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'autonomy' ? null : 'autonomy')}
-                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white dark:hover:bg-gray-800 dark:hover:text-white"
                     >
                       <span>{getAutonomyMeta(autonomyLevel).label}</span>
                       <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
@@ -1327,7 +1327,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     <button
                       type="button"
                       onClick={() => setOpenControlMenu(openControlMenu === 'model' ? null : 'model')}
-                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white dark:hover:bg-gray-800 dark:hover:text-white"
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-white dark:hover:bg-gray-800 dark:hover:text-white"
                     >
                       <span>{getModelMeta(selectedModelId).label}</span>
                       <span className="material-symbols-outlined text-[12px]">keyboard_arrow_down</span>
