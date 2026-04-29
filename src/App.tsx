@@ -31,6 +31,8 @@ const DEFAULT_TARGET: NavigationTarget = {
   section: null,
   sourceContext: null,
   runId: null,
+  draftPrompt: null,
+  draftLabel: null,
 };
 
 function entityTypeFromPage(page: Page): NavigationTarget['entityType'] {
@@ -70,6 +72,8 @@ function normalizeNavigationTarget(target: NavigateInput, entityId?: string | nu
       section: null,
       sourceContext: null,
       runId: null,
+      draftPrompt: null,
+      draftLabel: null,
     };
   }
 
@@ -80,6 +84,8 @@ function normalizeNavigationTarget(target: NavigateInput, entityId?: string | nu
     section: target.section ?? null,
     sourceContext: target.sourceContext ?? null,
     runId: target.runId ?? null,
+    draftPrompt: target.draftPrompt ?? null,
+    draftLabel: target.draftLabel ?? null,
   };
 }
 
@@ -254,7 +260,13 @@ export default function App() {
           {currentPage === 'orders' && <Orders onNavigate={navigate} focusEntityId={pageFocus.orderId} focusSection={navigationTarget.section} />}
           {currentPage === 'returns' && <Returns onNavigate={navigate} focusEntityId={pageFocus.returnId} focusSection={navigationTarget.section} />}
           {currentPage === 'payments' && <Payments onNavigate={navigate} focusEntityId={pageFocus.paymentId} focusSection={navigationTarget.section} />}
-          {currentPage === 'case_graph' && <CaseGraph onPageChange={(page) => navigate(page, page === 'case_graph' ? pageFocus.caseId : null)} focusCaseId={pageFocus.caseId} />}
+          {currentPage === 'case_graph' && <CaseGraph onPageChange={(target) => {
+            if (typeof target === 'string') {
+              navigate(target, target === 'case_graph' ? pageFocus.caseId : null);
+            } else {
+              navigate(target);
+            }
+          }} focusCaseId={pageFocus.caseId} />}
         </PageErrorBoundary>
       </main>
 

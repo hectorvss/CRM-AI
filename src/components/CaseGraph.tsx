@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { Page } from '../types';
+import { NavigateInput, Page } from '../types';
 import TreeGraph from './TreeGraph';
 import { casesApi, aiApi } from '../api/client';
 import { buildResolutionPlan, type ResolutionStep } from '../utils/resolutionPlan';
@@ -109,7 +109,41 @@ function approvalPayloadPreview(step: any) {
   return safeEntries.map(([key, value]) => `${formatStatus(key)}: ${String(value)}`).join(' · ');
 }
 
-export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange: (page: Page) => void; focusCaseId?: string | null }) {
+function buildSuperAgentResolutionDraft(input: {
+  caseResolve: any;
+  resolutionPlan: any;
+  caseLabel: string;
+  customerName?: string | null;
+}) {
+  const conflictTitle = input.caseResolve?.conflict?.title || input.resolutionPlan?.headline || 'open case';
+  const conflictSummary = input.caseResolve?.conflict?.summary || '';
+  const rootCause = input.caseResolve?.conflict?.root_cause || '';
+  const steps = Array.isArray(input.resolutionPlan?.steps) ? input.resolutionPlan.steps : [];
+  const lines = [
+    `Resolve case ${input.caseLabel}${input.customerName ? ` (customer: ${input.customerName})` : ''}.`,
+    `Conflict: ${conflictTitle}.`,
+    conflictSummary ? `Summary: ${conflictSummary}` : null,
+    rootCause ? `Root cause: ${rootCause}` : null,
+    '',
+    'Deterministic plan:',
+    ...(steps.length
+      ? steps.map((step: any, index: number) => {
+        const group = step?.group || 'generic';
+        const title = step?.title || step?.label || `Step ${index + 1}`;
+        const explanation = step?.explanation || step?.context || 'Execute the deterministic action for this case.';
+        const action = step?.execution?.kind === 'tool' ? ` Tool: ${step.execution.tool}.` : '';
+        const approval = step?.requiresApproval ? ' Requires explicit approval before execution.' : '';
+        return `${index + 1}. [${group}] ${title}: ${explanation}${action}${approval}`;
+      })
+      : ['1. [generic] Analyse case: inspect the canonical case state and identify the safe resolution path.']),
+    '',
+    'Execute safe steps through registered tools, route sensitive actions to approval, and leave a trace for every state change.',
+  ].filter((line): line is string => line !== null);
+
+  return lines.join('\n');
+}
+
+export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange: (target: NavigateInput) => void; focusCaseId?: string | null }) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [graphView, setGraphView] = useState<'tree' | 'timeline' | 'resolve'>('tree');
@@ -529,6 +563,27 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     }
   }, [refetchResolutionPlan, resolutionPlan.steps, selectedId]);
 
+  const handleOpenSuperAgentDraft = useCallback(() => {
+    const caseLabel = selectedCase?.orderId || caseState?.case?.case_number || selectedId || 'selected case';
+    const prompt = buildSuperAgentResolutionDraft({
+      caseResolve,
+      resolutionPlan,
+      caseLabel,
+      customerName: selectedCase?.customerName || caseState?.case?.customer_name || null,
+    });
+
+    onPageChange({
+      page: 'super_agent',
+      entityType: 'case',
+      entityId: selectedId,
+      section: 'command-center',
+      sourceContext: 'case_graph_resolve',
+      runId: `case-resolution-draft-${selectedId || Date.now()}`,
+      draftPrompt: prompt,
+      draftLabel: 'Case Graph resolution',
+    });
+  }, [caseResolve, caseState, onPageChange, resolutionPlan, selectedCase, selectedId]);
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
@@ -924,7 +979,8 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                             {isAiResolving ? 'Dispatching…' : 'Start AI resolution'}
                           </button>
                           <button
-                            onClick={() => onPageChange('super_agent')}
+                            onClick={handleOpenSuperAgentDraft}
+                            disabled={!selectedId}
                             className="px-4 py-2 rounded-lg text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
                           >
                             Open Super Agent

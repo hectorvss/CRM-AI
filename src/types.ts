@@ -21,6 +21,8 @@ export interface NavigationTarget {
   section?: string | null;
   sourceContext?: string | null;
   runId?: string | null;
+  draftPrompt?: string | null;
+  draftLabel?: string | null;
 }
 
 export type NavigateInput = NavigationTarget | Page;

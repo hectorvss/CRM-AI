@@ -480,6 +480,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamRunIdRef = useRef<string | null>(null);
   const streamMessageIdRef = useRef<string | null>(null);
+  const loadedDraftPromptRef = useRef<string | null>(null);
   const modeLabel = mode === 'investigate' ? 'Investigate' : 'Operate';
   const planSuggestionVisible = !planMode && /\bplan\b/i.test(composerText.trim());
 
@@ -548,6 +549,22 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, pendingAction, flashMessage, isSending, streamActivity]);
+
+  useEffect(() => {
+    const draftPrompt = activeTarget?.draftPrompt?.trim();
+    if (!draftPrompt) return;
+    const draftKey = `${activeTarget?.runId || activeTarget?.entityId || 'draft'}:${draftPrompt}`;
+    if (loadedDraftPromptRef.current === draftKey) return;
+
+    loadedDraftPromptRef.current = draftKey;
+    setComposerText(draftPrompt);
+    setMode('operate');
+    setPlanMode(false);
+    setOpenControlMenu(null);
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
+  }, [activeTarget]);
 
   useEffect(() => {
     const el = textareaRef.current;
