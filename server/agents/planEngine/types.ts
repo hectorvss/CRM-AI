@@ -99,7 +99,7 @@ export interface ToolSpec<TArgs = unknown, TReturns = unknown> {
   /** One-line description surfaced to the LLM. */
   description: string;
   /** Category for cataloguing and policy rules. */
-  category: 'case' | 'order' | 'payment' | 'return' | 'customer' | 'approval' | 'workflow' | 'knowledge' | 'report' | 'integration' | 'settings' | 'search' | 'system';
+  category: 'case' | 'order' | 'payment' | 'return' | 'customer' | 'approval' | 'workflow' | 'knowledge' | 'report' | 'integration' | 'settings' | 'search' | 'system' | 'resolution';
   /** Typed arg validator. */
   args: Schema<TArgs>;
   /** Typed returns validator (documentation + LLM hint). */

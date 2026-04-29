@@ -24,6 +24,28 @@
     from { stroke-dashoffset: 1000; }
     to { stroke-dashoffset: 0; }
   }
+
+  @keyframes super-agent-title-word {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes super-agent-composer-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 @layer base {
@@ -47,4 +69,82 @@
 
 .dark .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #374151;
+}
+
+@layer utilities {
+  .super-agent-title-word {
+    animation: super-agent-title-word 360ms ease-out both;
+  }
+
+  .super-agent-title-glow {
+    opacity: 0.28;
+  }
+
+  .super-agent-composer-shell {
+    animation: super-agent-composer-in 240ms ease-out both;
+  }
+
+  .settings-category {
+    color: rgb(17 24 39);
+  }
+
+  .settings-category h1,
+  .settings-category h2,
+  .settings-category h3,
+  .settings-category h4,
+  .settings-category label,
+  .settings-category button,
+  .settings-category input,
+  .settings-category select,
+  .settings-category textarea {
+    font-family: inherit;
+  }
+
+  .settings-category h1,
+  .settings-category h2,
+  .settings-category h3,
+  .settings-category h4 {
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .settings-category button {
+    font-weight: 600;
+  }
+
+  .settings-category input,
+  .settings-category select,
+  .settings-category textarea {
+    border-radius: 9999px !important;
+    border-color: rgba(17, 24, 39, 0.08) !important;
+    background-color: rgba(17, 24, 39, 0.015) !important;
+    box-shadow: none !important;
+    color: rgb(17 24 39) !important;
+    font-weight: 500 !important;
+  }
+
+  .settings-category input::placeholder,
+  .settings-category textarea::placeholder {
+    color: rgb(156 163 175) !important;
+  }
+
+  .settings-category section,
+  .settings-category [class*='rounded-2xl'][class*='border'],
+  .settings-category [class*='rounded-xl'][class*='border'] {
+    border-radius: 24px !important;
+    border-color: rgba(17, 24, 39, 0.06) !important;
+    box-shadow: none !important;
+  }
+
+  .settings-category select {
+    appearance: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .super-agent-title-word,
+    .super-agent-title-glow,
+    .super-agent-composer-shell {
+      animation: none;
+    }
+  }
 }

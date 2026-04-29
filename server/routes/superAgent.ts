@@ -52,7 +52,8 @@ type SuperAgentActionPayload = {
     | 'order.cancel'
     | 'payment.refund'
     | 'approval.decide'
-    | 'workflow.publish';
+    | 'workflow.publish'
+    | 'reconciliation.list_issues';
   entityType: 'case' | 'order' | 'payment' | 'approval' | 'workflow';
   entityId: string;
   caseId?: string | null;
@@ -2761,10 +2762,10 @@ function shouldRequireApprovalForAction(payload: SuperAgentActionPayload, entity
     return risk === 'high' || status.includes('packed') || status.includes('shipped') || status.includes('delivered');
   }
 
-  if (payload.kind === 'workflow.publish') return false;
   if (payload.kind === 'case.update_status') return false;
   if (payload.kind === 'approval.decide') return false;
   if (payload.kind === 'case.add_internal_note') return false;
+  if (payload.kind === 'reconciliation.list_issues') return false;
   if (payload.kind === 'workflow.publish') return true;
   return false;
 }

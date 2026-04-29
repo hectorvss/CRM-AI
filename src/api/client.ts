@@ -374,6 +374,7 @@ export const aiApi = {
 // ── IAM & Workspaces ──────────────────────────────────────────
 export const iamApi = {
   me: () => request<any>('/iam/me'),
+  securityEnforcement: () => request<any>('/iam/security/enforcement'),
   permissionsMe: () => request<any>('/iam/permissions/me'),
   permissionsCatalog: () => request<any>('/iam/permissions/catalog').then(unwrapList),
   users: () => request<any>('/iam/users').then(unwrapList),
@@ -420,13 +421,9 @@ export const workspacesApi = {
   currentContext: () => request<any>('/workspaces/current/context'),
   get: (id: string) => request<any>(`/workspaces/${id}`),
   update: (id: string, payload: Record<string, any>) =>
-    request<any>(`/workspaces/${id}/settings`, {
+    request<any>(`/workspaces/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({
-        settings: (payload && typeof payload === 'object' && 'settings' in payload)
-          ? (payload as Record<string, any>).settings
-          : payload,
-      }),
+      body: JSON.stringify(payload),
     }),
   updateSettings: (id: string, settings: Record<string, any>) =>
     request<any>(`/workspaces/${id}/settings`, {
@@ -487,6 +484,16 @@ export const operationsApi = {
 
 export const auditApi = {
   workspaceAll: () => request<any>('/audit/workspace/all').then(unwrapList),
+  requestWorkspaceExport: (payload?: Record<string, any>) =>
+    request<any>('/audit/workspace/export-request', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+  requestWorkspaceDeletion: (payload?: Record<string, any>) =>
+    request<any>('/audit/workspace/deletion-request', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
   entity: (entityType: string, entityId: string) => request<any>(`/audit/${entityType}/${entityId}`).then(unwrapList),
 };
 

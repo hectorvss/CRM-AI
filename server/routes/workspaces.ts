@@ -52,22 +52,39 @@ router.get('/:id', async (req: MultiTenantRequest, res) => {
   }
 });
 
-// Update workspace settings
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeSlug(value: string) {
+  return value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[^a-z0-9.-]/g, '-').replace(/-+/g, '-');
+}
+
+function validateWorkspaceSettingsPayload(settings: unknown) {
+  return isPlainObject(settings);
+}
+
+async function resolveWorkspaceForUpdate(req: MultiTenantRequest) {
+  const existing = await workspaceRepository.getById(req.params.id, req.tenantId);
+  if (!existing) return null;
+  return { existing, resolvedWorkspaceId: existing.id || req.params.id };
+}
+
+// Update workspace settings only (compatibility route)
 async function updateWorkspaceSettingsHandler(req: MultiTenantRequest, res: Response) {
   if (!req.tenantId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant context is missing');
   }
 
   const { settings } = req.body as { settings?: Record<string, unknown> };
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+  if (!validateWorkspaceSettingsPayload(settings)) {
     return sendError(res, 400, 'INVALID_SETTINGS', 'settings must be an object');
   }
 
   try {
-    const existing = await workspaceRepository.getById(req.params.id, req.tenantId);
-    if (!existing) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
-
-    const resolvedWorkspaceId = existing.id || req.params.id;
+    const resolved = await resolveWorkspaceForUpdate(req);
+    if (!resolved) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
+    const { resolvedWorkspaceId } = resolved;
     await workspaceRepository.updateSettings(resolvedWorkspaceId, settings);
     const updated = await workspaceRepository.getById(resolvedWorkspaceId, req.tenantId);
     res.json(updated);
@@ -77,8 +94,58 @@ async function updateWorkspaceSettingsHandler(req: MultiTenantRequest, res: Resp
   }
 }
 
+async function updateWorkspaceHandler(req: MultiTenantRequest, res: Response) {
+  if (!req.tenantId) {
+    return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant context is missing');
+  }
+
+  const { name, slug, settings } = req.body as { name?: string; slug?: string; settings?: Record<string, unknown> };
+  const updates: { name?: string; slug?: string; settings?: Record<string, unknown> } = {};
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'name')) {
+    if (typeof name !== 'string' || name.trim().length < 2) {
+      return sendError(res, 400, 'INVALID_WORKSPACE_NAME', 'Workspace name must be at least 2 characters');
+    }
+    updates.name = name.trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'slug')) {
+    if (typeof slug !== 'string' || slug.trim().length < 2) {
+      return sendError(res, 400, 'INVALID_WORKSPACE_SLUG', 'Workspace slug/domain must be at least 2 characters');
+    }
+    const normalizedSlug = normalizeSlug(slug);
+    if (!normalizedSlug || normalizedSlug.length < 2) {
+      return sendError(res, 400, 'INVALID_WORKSPACE_SLUG', 'Workspace slug/domain contains no valid characters');
+    }
+    updates.slug = normalizedSlug;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'settings')) {
+    if (!validateWorkspaceSettingsPayload(settings)) {
+      return sendError(res, 400, 'INVALID_SETTINGS', 'settings must be an object');
+    }
+    updates.settings = settings;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return sendError(res, 400, 'INVALID_WORKSPACE_UPDATE', 'At least one workspace field is required');
+  }
+
+  try {
+    const resolved = await resolveWorkspaceForUpdate(req);
+    if (!resolved) return sendError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
+    const { resolvedWorkspaceId } = resolved;
+    await workspaceRepository.update(resolvedWorkspaceId, updates);
+    const updated = await workspaceRepository.getById(resolvedWorkspaceId, req.tenantId);
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating workspace:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+}
+
 router.patch('/:id/settings', requirePermission('settings.write'), updateWorkspaceSettingsHandler);
-router.patch('/:id', requirePermission('settings.write'), updateWorkspaceSettingsHandler);
+router.patch('/:id', requirePermission('settings.write'), updateWorkspaceHandler);
 
 // List members for a workspace
 router.get('/:id/members', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {

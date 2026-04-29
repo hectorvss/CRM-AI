@@ -26,6 +26,7 @@ function parsePreferences(preferences: any) {
 
 export default function SecurityTab({ onSaveReady }: Props) {
   const { data: user, loading } = useApi<any>(iamApi.me);
+  const { data: enforcement } = useApi<any>(iamApi.securityEnforcement, []);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
@@ -34,6 +35,8 @@ export default function SecurityTab({ onSaveReady }: Props) {
   const [trustedDevicesOnly, setTrustedDevicesOnly] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const policyStates = enforcement?.policy?.states || {};
+  const stateLabel = (state?: string) => state === 'enforced' ? 'Enforced' : state === 'needs_setup' ? 'Needs setup' : state === 'configured_only' ? 'Configured only' : 'Disabled';
 
   useEffect(() => {
     setTwoFactorEnabled(preferences.security?.twoFactorEnabled ?? true);
@@ -94,9 +97,9 @@ export default function SecurityTab({ onSaveReady }: Props) {
                   <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">Password</h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Managed by internal authentication</p>
                 </div>
-                <button type="button" onClick={() => setStatusMessage('Password changes are handled by the authentication provider.')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                  Change password
-                </button>
+                <span className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                  Provider managed
+                </span>
               </div>
 
               <div className="flex items-center justify-between pb-6 border-b border-gray-100 dark:border-gray-800">
@@ -105,7 +108,7 @@ export default function SecurityTab({ onSaveReady }: Props) {
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white">Two-Factor Authentication (2FA)</h3>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${twoFactorEnabled ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>{twoFactorEnabled ? 'Enabled' : 'Disabled'}</span>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Saved on your profile preferences</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Profile preference. Workspace enforcement: {stateLabel(policyStates.mfa)}.</p>
                 </div>
                 <button type="button" onClick={() => setTwoFactorEnabled(current => !current)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${twoFactorEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}>
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${twoFactorEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -115,7 +118,7 @@ export default function SecurityTab({ onSaveReady }: Props) {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">Session Timeout</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Controls how long your session stays active.</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Preference saved on profile. Workspace enforcement: {stateLabel(policyStates.session)}.</p>
                 </div>
                 <select value={sessionTimeout} onChange={e => setSessionTimeout(e.target.value)} className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300">
                   <option>12 hours</option>
@@ -157,13 +160,13 @@ export default function SecurityTab({ onSaveReady }: Props) {
                     <p className="text-xs text-gray-500 dark:text-gray-400">Madrid, Spain • Last active 2 hours ago</p>
                   </div>
                 </div>
-                <button type="button" onClick={() => setStatusMessage('Session revocation is handled by the authentication provider.')} className="text-xs font-semibold text-red-600 dark:text-red-400 hover:underline">Revoke</button>
+                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Provider managed</span>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-              <button type="button" onClick={() => setStatusMessage('Sign out is available through the account menu.')} className="text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">
-                Sign out of all other sessions
-              </button>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                Session revocation is handled by the authentication provider.
+              </p>
             </div>
           </section>
         </div>
@@ -177,11 +180,11 @@ export default function SecurityTab({ onSaveReady }: Props) {
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-300">2FA Enabled</span>
-                <span className={`material-symbols-outlined text-[18px] ${twoFactorEnabled ? 'text-green-500' : 'text-gray-300'}`}>{twoFactorEnabled ? 'check_circle' : 'cancel'}</span>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{stateLabel(policyStates.mfa)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-300">Email Verified</span>
-                <span className="material-symbols-outlined text-green-500 text-[18px]">check_circle</span>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Provider managed</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-300">New login alerts</span>
@@ -195,7 +198,7 @@ export default function SecurityTab({ onSaveReady }: Props) {
               <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
                 <div className="flex items-center gap-2 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/10 p-3 rounded-xl border border-green-100 dark:border-green-800/30">
                   <span className="material-symbols-outlined text-[20px]">verified_user</span>
-                  <span className="text-sm font-medium">Account is secure</span>
+                  <span className="text-sm font-medium">{Object.values(policyStates).includes('needs_setup') ? 'Security setup needs attention' : 'Security policy evaluated'}</span>
                 </div>
               </div>
             </div>

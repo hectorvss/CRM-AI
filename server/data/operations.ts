@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 import { workerStatus } from '../queue/worker.js';
 import { integrationRegistry } from '../integrations/registry.js';
+import { redactForWorkspacePolicy } from '../services/privacyRedaction.js';
 
 export interface OperationsScope {
   tenantId: string;
@@ -245,43 +246,45 @@ function listAgentRunsSqlite(scope: OperationsScope, limit = 100) {
 
 async function logAuditSupabase(scope: OperationsScope, entry: any) {
   const supabase = getSupabaseAdmin();
+  const redactedEntry = await redactForWorkspacePolicy(scope, entry);
   const { error } = await supabase.from('audit_events').insert({
-    id: entry.id ?? crypto.randomUUID(),
+    id: redactedEntry.id ?? crypto.randomUUID(),
     tenant_id: scope.tenantId,
     workspace_id: scope.workspaceId,
-    actor_type: entry.actorType ?? entry.actor_type ?? 'system',
-    actor_id: entry.actorId ?? entry.actor_id ?? 'system',
-    action: entry.action,
-    entity_type: entry.entityType ?? entry.entity_type ?? null,
-    entity_id: entry.entityId ?? entry.entity_id ?? null,
-    old_value: entry.oldValue ?? entry.old_value ?? null,
-    new_value: entry.newValue ?? entry.new_value ?? null,
-    metadata: entry.metadata ?? null,
-    occurred_at: entry.occurred_at ?? new Date().toISOString(),
+    actor_type: redactedEntry.actorType ?? redactedEntry.actor_type ?? 'system',
+    actor_id: redactedEntry.actorId ?? redactedEntry.actor_id ?? 'system',
+    action: redactedEntry.action,
+    entity_type: redactedEntry.entityType ?? redactedEntry.entity_type ?? null,
+    entity_id: redactedEntry.entityId ?? redactedEntry.entity_id ?? null,
+    old_value: redactedEntry.oldValue ?? redactedEntry.old_value ?? null,
+    new_value: redactedEntry.newValue ?? redactedEntry.new_value ?? null,
+    metadata: redactedEntry.metadata ?? null,
+    occurred_at: redactedEntry.occurred_at ?? new Date().toISOString(),
   });
   if (error) throw error;
 }
 
-function logAuditSqlite(scope: OperationsScope, entry: any) {
+async function logAuditSqlite(scope: OperationsScope, entry: any) {
   const db = getDb();
+  const redactedEntry = await redactForWorkspacePolicy(scope, entry);
   db.prepare(`
     INSERT INTO audit_events (
       id, tenant_id, workspace_id, actor_type, actor_id, action,
       entity_type, entity_id, old_value, new_value, metadata, occurred_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    entry.id ?? crypto.randomUUID(),
+    redactedEntry.id ?? crypto.randomUUID(),
     scope.tenantId,
     scope.workspaceId,
-    entry.actorType ?? entry.actor_type ?? 'system',
-    entry.actorId ?? entry.actor_id ?? 'system',
-    entry.action,
-    entry.entityType ?? entry.entity_type ?? null,
-    entry.entityId ?? entry.entity_id ?? null,
-    JSON.stringify(entry.oldValue ?? entry.old_value ?? null),
-    JSON.stringify(entry.newValue ?? entry.new_value ?? null),
-    JSON.stringify(entry.metadata ?? null),
-    entry.occurred_at ?? new Date().toISOString(),
+    redactedEntry.actorType ?? redactedEntry.actor_type ?? 'system',
+    redactedEntry.actorId ?? redactedEntry.actor_id ?? 'system',
+    redactedEntry.action,
+    redactedEntry.entityType ?? redactedEntry.entity_type ?? null,
+    redactedEntry.entityId ?? redactedEntry.entity_id ?? null,
+    JSON.stringify(redactedEntry.oldValue ?? redactedEntry.old_value ?? null),
+    JSON.stringify(redactedEntry.newValue ?? redactedEntry.new_value ?? null),
+    JSON.stringify(redactedEntry.metadata ?? null),
+    redactedEntry.occurred_at ?? new Date().toISOString(),
   );
 }
 

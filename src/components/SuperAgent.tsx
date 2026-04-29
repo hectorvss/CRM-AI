@@ -167,6 +167,8 @@ const MODEL_OPTIONS: ModelOption[] = [
   { id: 'claude-4-opus', label: 'Claude Opus', description: 'Higher-capacity Claude placeholder' },
 ];
 
+const HERO_TITLE_WORDS = ['What', 'can', 'I', 'help', 'with?'];
+
 function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<string, any>, fallbackInput: string, fallbackRunId?: string | null): AssistantPayload {
   const consultedModules = Array.isArray(payload.consultedModules)
     ? [...new Set(payload.consultedModules.map((item) => String(item)).filter(Boolean))]
@@ -475,6 +477,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [traceMetrics, setTraceMetrics] = useState<{ total: number; success: number; partial: number; failed: number; pendingApproval: number; rejectedByPolicy: number; averageLatencyMs: number; averageSpanCount: number } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const controlBarRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamRunIdRef = useRef<string | null>(null);
   const streamMessageIdRef = useRef<string | null>(null);
   const modeLabel = mode === 'investigate' ? 'Investigate' : 'Operate';
@@ -545,6 +548,14 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, pendingAction, flashMessage, isSending, streamActivity]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const nextHeight = Math.min(Math.max(el.scrollHeight, 74), 220);
+    el.style.height = `${nextHeight}px`;
+  }, [composerText, planSuggestionVisible, planMode, mode]);
 
   useEffect(() => {
     const source = new EventSource('/api/sse/agent-runs');
@@ -902,26 +913,36 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
         ) : null}
 
         {/* Scroll area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-52 pt-10">
-          <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-56 pt-10 sm:px-6">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
 
             {/* Loading */}
             {isBootstrapping ? (
-              <div className="flex justify-center py-20">
-                <div className="flex gap-1.5">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.2s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.1s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-300" />
+              <div className="flex min-h-[42vh] items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="h-2 w-24 rounded-full bg-black/5 dark:bg-white/10" />
+                  <p className="text-xs text-gray-400">Preparing your workspace</p>
                 </div>
               </div>
             ) : null}
 
             {/* Empty state — minimalist */}
             {!isBootstrapping && messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center min-h-[60vh] gap-8">
-                <h1 className="text-4xl font-semibold text-gray-900 dark:text-white tracking-tight">
-                  What can I help with?
-                </h1>
+              <div className="flex min-h-[58vh] flex-col items-center justify-center gap-8 text-center">
+                <div className="relative">
+                  <div className="super-agent-title-glow pointer-events-none absolute -inset-x-6 -inset-y-4 rounded-full bg-sky-500/5 blur-2xl dark:bg-sky-400/5" />
+                  <h1 className="relative flex flex-wrap justify-center gap-x-2.5 gap-y-1 text-4xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
+                    {HERO_TITLE_WORDS.map((word, index) => (
+                      <span
+                        key={word}
+                        className="super-agent-title-word inline-block"
+                        style={{ animationDelay: `${120 + index * 80}ms` }}
+                      >
+                        {word}
+                      </span>
+                    ))}
+                  </h1>
+                </div>
               </div>
             ) : null}
 
@@ -1085,8 +1106,8 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
         </div>
 
         {/* Input — pinned bottom */}
-        <div className="absolute inset-x-0 bottom-0 px-6 pb-6 pt-16 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-card-dark dark:via-card-dark/95">
-          <div className="mx-auto max-w-2xl">
+        <div className="absolute inset-x-0 bottom-0 px-4 pb-5 pt-16 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-card-dark dark:via-card-dark/95 sm:px-6 sm:pb-6">
+          <div className="mx-auto w-full max-w-3xl">
 
             {flashMessage ? (
               <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">{flashMessage}</p>
@@ -1153,7 +1174,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
               </div>
             ) : null}
 
-            <div className="space-y-2">
+            <div className="super-agent-composer-shell space-y-2">
               {planSuggestionVisible ? (
                 <div className="flex justify-center px-4">
                   <button
@@ -1171,8 +1192,9 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   </button>
                 </div>
               ) : null}
-            <div className="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div className="rounded-3xl border border-gray-200 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.06)] transition-shadow focus-within:shadow-[0_12px_34px_rgba(15,23,42,0.08)] dark:border-gray-700 dark:bg-gray-900 dark:shadow-black/20">
               <textarea
+                ref={textareaRef}
                 value={composerText}
                 onChange={(e) => setComposerText(e.target.value)}
                 onKeyDown={handleComposerKeyDown}
@@ -1183,8 +1205,8 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     ? 'Ask to update, refund, cancel, or publish...'
                     : 'Ask about an order, payment, customer, case, or approval...'
                 }
-                rows={2}
-                className={`w-full resize-none bg-transparent px-4 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500 ${planSuggestionVisible ? 'pt-2 pb-1' : 'pt-3 pb-1'}`}
+                rows={3}
+                className={`max-h-[220px] min-h-[74px] w-full resize-none overflow-y-auto bg-transparent px-5 text-[15px] leading-6 text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500 ${planSuggestionVisible ? 'pt-3 pb-1' : 'pt-4 pb-1'}`}
               />
               <div ref={controlBarRef} className="flex items-center justify-between gap-3 px-3 pb-3 pt-1">
                 <div className="flex flex-wrap items-center gap-1">

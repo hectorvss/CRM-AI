@@ -248,7 +248,7 @@ export default function App() {
           {currentPage === 'customers' && <Customers onNavigate={navigate} focusCustomerId={pageFocus.customerId} />}
           {currentPage === 'tools_integrations' && <ToolsIntegrations />}
           {currentPage === 'reports' && <Reports />}
-          {currentPage === 'settings' && <Settings />}
+          {currentPage === 'settings' && <Settings onNavigate={navigate} />}
           {currentPage === 'upgrade' && <Upgrade />}
           {currentPage === 'profile' && <Profile />}
           {currentPage === 'orders' && <Orders onNavigate={navigate} focusEntityId={pageFocus.orderId} focusSection={navigationTarget.section} />}

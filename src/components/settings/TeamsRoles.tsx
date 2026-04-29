@@ -68,6 +68,9 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [roleName, setRoleName] = useState('');
   const [rolePermissions, setRolePermissions] = useState<string[]>([]);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [showNewRoleForm, setShowNewRoleForm] = useState(false);
+  const [ownershipConfirmId, setOwnershipConfirmId] = useState<string | null>(null);
   const [openDomains, setOpenDomains] = useState<Record<string, boolean>>(() =>
     PERMISSION_DOMAINS.reduce((acc, d) => ({ ...acc, [d]: true }), {} as Record<string, boolean>),
   );
@@ -217,11 +220,11 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
 
   const handleTransferOwnership = async () => {
     if (!selectedMember) return;
-    if (!confirm(`Transfer workspace ownership to ${selectedMember.name || selectedMember.email}? This action cannot be undone.`)) return;
     setIsSaving(true);
     try {
       await iamApi.transferOwnership(selectedMember.id);
       showMessage('success', 'Ownership transferred.');
+      setOwnershipConfirmId(null);
       await refetchMembers();
     } catch (error: any) {
       showMessage('error', error?.message || 'Unable to transfer ownership.');
@@ -230,11 +233,12 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
     }
   };
 
-  const handleResendInvite = async () => {
-    if (!selectedMember || !selectedMember.email || !selectedMember.role_id) return;
+  const handleResendInvite = async (memberOverride?: any) => {
+    const targetMember = memberOverride || selectedMember;
+    if (!targetMember || !targetMember.email || !targetMember.role_id) return;
     setIsSaving(true);
     try {
-      const result = await iamApi.resendInvite({ email: selectedMember.email, role_id: selectedMember.role_id });
+      const result = await iamApi.resendInvite({ email: targetMember.email, role_id: targetMember.role_id });
       if (result?.accept_url) {
         try {
           await navigator.clipboard.writeText(result.accept_url);
@@ -266,12 +270,20 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
   };
 
   const handleCreateBlankRole = async () => {
-    const name = prompt('Role name (e.g. "Senior Agent"):');
-    if (!name?.trim()) return;
+    const name = newRoleName.trim();
+    if (!name) {
+      showMessage('error', 'Role name is required.');
+      return;
+    }
     setIsSaving(true);
     try {
-      await iamApi.createRole({ name: name.trim(), permissions: [] });
+      const created = await iamApi.createRole({ name, permissions: [] });
       showMessage('success', `Role "${name}" created.`);
+      setNewRoleName('');
+      setShowNewRoleForm(false);
+      if (created?.role?.id || created?.id) {
+        setSelectedRoleId(created.role?.id || created.id);
+      }
       await refetchRoles();
     } catch (error: any) {
       showMessage('error', error?.message || 'Unable to create role.');
@@ -296,6 +308,21 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
     invited: membersList.filter(m => m.status === 'invited').length,
     suspended: membersList.filter(m => m.status === 'suspended').length,
   };
+
+  const auditItems = [
+    ...membersList.slice(0, 5).map(member => ({
+      id: `member-${member.id}`,
+      title: member.status === 'invited' ? 'Member invited' : 'Member updated',
+      description: `${member.name || member.email} · ${member.role_name || 'No role'} · ${member.status}`,
+      time: relativeTime(member.updated_at || member.created_at),
+    })),
+    ...rolesList.slice(0, 5).map(role => ({
+      id: `role-${role.id}`,
+      title: role.is_system ? 'System role synced' : 'Role available',
+      description: `${role.name} · ${(role.permissions || []).length} permissions`,
+      time: relativeTime(role.updated_at || role.created_at),
+    })),
+  ].slice(0, 8);
 
   return (
     <div className="space-y-6">
@@ -548,13 +575,38 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
                       </div>
                       <button
                         type="button"
-                        onClick={handleTransferOwnership}
+                        onClick={() => setOwnershipConfirmId(selectedMember.id)}
                         disabled={isSaving}
                         className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
                       >
                         Transfer ownership
                       </button>
                     </div>
+                    {ownershipConfirmId === selectedMember.id && (
+                      <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/40">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">Confirm ownership transfer</p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {selectedMember.name || selectedMember.email} will become workspace owner and your account will be demoted to Admin.
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleTransferOwnership}
+                            disabled={isSaving}
+                            className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-black"
+                          >
+                            Confirm transfer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setOwnershipConfirmId(null)}
+                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -570,12 +622,35 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={handleCreateBlankRole}
+              onClick={() => setShowNewRoleForm(current => !current)}
               className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg text-sm font-semibold hover:opacity-80"
             >
-              New Blank Role
+              {showNewRoleForm ? 'Cancel new role' : 'New Blank Role'}
             </button>
           </div>
+
+          {showNewRoleForm && (
+            <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Role name</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newRoleName}
+                  onChange={event => setNewRoleName(event.target.value)}
+                  placeholder="Senior Agent"
+                  className="flex-1 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 outline-none focus:border-gray-900 dark:focus:border-white"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateBlankRole}
+                  disabled={isSaving || !newRoleName.trim()}
+                  className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg text-sm font-semibold hover:opacity-80 disabled:opacity-50"
+                >
+                  Create role
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-6">
             {/* Role list */}
@@ -708,7 +783,7 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
                   type="button"
                   onClick={() => {
                     setSelectedMemberId(member.id);
-                    handleResendInvite();
+                    void handleResendInvite(member);
                   }}
                   className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg text-sm font-semibold hover:opacity-80"
                 >
@@ -722,7 +797,21 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
 
       {/* AUDIT TAB */}
       {activeTab === 'audit' && (
-        <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">Audit log not yet implemented</div>
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden divide-y divide-gray-200 dark:divide-gray-700">
+          {auditItems.length === 0 ? (
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400 text-sm">No team activity yet.</div>
+          ) : (
+            auditItems.map(item => (
+              <div key={item.id} className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{item.title}</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.description}</p>
+                </div>
+                <span className="text-xs text-gray-400 dark:text-gray-500">{item.time}</span>
+              </div>
+            ))
+          )}
+        </div>
       )}
     </div>
   );
