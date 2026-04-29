@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
-import { workspacesApi, iamApi } from '../../api/client';
+import { auditApi, workspacesApi, iamApi } from '../../api/client';
 import { usePermissions } from '../../contexts/PermissionsContext';
 import LoadingState from '../LoadingState';
 
@@ -27,6 +27,7 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
   const { data: workspace, loading, error } = useApi<any>(workspacesApi.currentContext);
   const { data: roles } = useApi<any[]>(iamApi.roles);
   const { data: enforcement } = useApi<any>(iamApi.securityEnforcement, []);
+  const { data: auditRows, refetch: refetchAuditRows } = useApi<any[]>(() => auditApi.workspaceAll().catch(() => []), [], []);
   const workspaceRecord = workspace || fallbackWorkspace;
   const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
   const [ssoEnabled, setSsoEnabled] = useState(true);
@@ -37,11 +38,15 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
   // Access policies (Sprint 6)
   const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
   const [defaultInviteRoleId, setDefaultInviteRoleId] = useState<string>('');
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditFilter, setAuditFilter] = useState<'all' | 'user' | 'agent' | 'system'>('all');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const canEditPolicies = isOwner || isSuperAdmin;
   const rolesList = roles || [];
+  const auditLog = auditRows || [];
   const policyStates = enforcement?.policy?.states || {};
   const stateLabel = (state?: string) => state === 'enforced' ? 'Enforced' : state === 'needs_setup' ? 'Needs setup' : state === 'configured_only' ? 'Configured only' : 'Disabled';
   const stateTone = (state?: string) => state === 'enforced'
@@ -49,6 +54,56 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
     : state === 'needs_setup'
       ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300'
       : 'border-black/10 bg-black/[0.02] text-gray-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400';
+  const filteredAuditRows = useMemo(() => {
+    const query = auditSearch.trim().toLowerCase();
+    return auditLog.filter((row: any) => {
+      if (auditFilter !== 'all' && String(row.actor_type || '').toLowerCase() !== auditFilter) {
+        return false;
+      }
+      if (!query) return true;
+      const haystack = [
+        row.action,
+        row.entity_type,
+        row.entity_id,
+        row.actor_type,
+        row.actor_id,
+        row.ip_address,
+        row.old_value,
+        row.new_value,
+        typeof row.metadata === 'string' ? row.metadata : JSON.stringify(row.metadata || {}),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [auditFilter, auditLog, auditSearch]);
+
+  const handleAuditExport = useCallback(async () => {
+    setIsExporting(true);
+    setStatusMessage(null);
+    try {
+      const response = await auditApi.requestWorkspaceExport({
+        entity_type: 'workspace',
+        entity_id: workspace?.id || workspaceRecord.id,
+        reason: `Audit export requested from settings by ${auditFilter} filter${auditSearch ? ` with search "${auditSearch}"` : ''}`,
+        filters: {
+          actorType: auditFilter,
+          query: auditSearch.trim() || null,
+        },
+      });
+      const approvalId = response?.approval?.id;
+      setStatusMessage(approvalId
+        ? `Audit export requested. Approval ${approvalId} is now pending review.`
+        : 'Audit export requested and forwarded for approval.');
+      refetchAuditRows();
+    } catch (exportError: any) {
+      setStatusMessage(exportError?.message || 'Unable to request audit export.');
+      throw exportError;
+    } finally {
+      setIsExporting(false);
+    }
+  }, [auditFilter, auditSearch, refetchAuditRows, workspace?.id, workspaceRecord.id]);
 
   useEffect(() => {
     setSsoEnabled(workspaceSettings.security?.ssoEnabled ?? true);
@@ -177,11 +232,11 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
           <div className="mt-auto flex items-center justify-between border-t border-black/5 pt-6 dark:border-white/10">
             <div>
               <h4 className="text-xs font-semibold text-gray-950 dark:text-white">Export Audit Logs</h4>
-              <p className="text-[10px] text-gray-500">Download full activity history as CSV/JSON.</p>
+              <p className="text-[10px] text-gray-500">Request an audited export of the full activity history.</p>
             </div>
-            <button type="button" onClick={() => void handleSave().catch(() => undefined)} disabled={isSaving} className="flex items-center gap-2 rounded-full bg-black px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50">
+            <button type="button" onClick={() => void handleAuditExport().catch(() => undefined)} disabled={isSaving || isExporting} className="flex items-center gap-2 rounded-full bg-black px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50">
               <span className="material-symbols-outlined text-sm">download</span>
-              Save
+              {isExporting ? 'Requesting…' : 'Request export'}
             </button>
           </div>
         </section>
@@ -309,14 +364,55 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
             <h2 className="text-sm font-semibold text-gray-950 dark:text-white uppercase tracking-wider">Audit Log</h2>
           </div>
           <div className="flex gap-3 items-center">
-            <input type="text" placeholder="Search events, users, or IPs..." className="w-64 rounded-full border border-black/5 bg-black/[0.015] px-4 py-2 text-xs outline-none dark:border-white/10 dark:bg-white/[0.03]" />
-            <button type="button" className="flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/5">
-              <span className="material-symbols-outlined text-sm">filter_list</span>
-              Filter
-            </button>
+            <input value={auditSearch} onChange={e => setAuditSearch(e.target.value)} type="text" placeholder="Search events, users, or IPs..." className="w-64 rounded-full border border-black/5 bg-black/[0.015] px-4 py-2 text-xs outline-none dark:border-white/10 dark:bg-white/[0.03]" />
+            <select value={auditFilter} onChange={e => setAuditFilter(e.target.value as typeof auditFilter)} className="rounded-full border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/5">
+              <option value="all">All actors</option>
+              <option value="user">Users</option>
+              <option value="agent">Agents</option>
+              <option value="system">System</option>
+            </select>
           </div>
         </div>
-        <div className="p-6 text-sm text-gray-500">Security events will continue to surface here once the audit feed is wired.</div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-black/5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:border-white/10">
+                <th className="px-6 py-3">Action</th>
+                <th className="px-6 py-3">Entity</th>
+                <th className="px-6 py-3">Actor</th>
+                <th className="px-6 py-3">Occurred</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/5 text-sm dark:divide-white/10">
+              {filteredAuditRows.length === 0 && (
+                <tr>
+                  <td className="px-6 py-10 text-sm text-gray-500" colSpan={4}>
+                    No audit entries match the current search and filter.
+                  </td>
+                </tr>
+              )}
+              {filteredAuditRows.slice(0, 80).map((row: any) => (
+                <tr key={row.id || `${row.action}-${row.entity_id}-${row.occurred_at}`} className="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-gray-950 dark:text-white">{row.action || row.event_type || 'Audit event'}</span>
+                      <span className="text-xs text-gray-400">{row.ip_address || row.actor_id || 'No actor reference'}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-gray-600 dark:text-gray-300">{row.entity_type && row.entity_id ? `${row.entity_type} #${row.entity_id}` : row.entity_type || 'Workspace'}</td>
+                  <td className="px-6 py-4">
+                    <span className="rounded-full border border-black/10 bg-black/[0.03] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
+                      {row.actor_type || 'system'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-xs text-gray-500">
+                    {row.created_at ? new Date(row.created_at).toLocaleString() : row.occurred_at ? new Date(row.occurred_at).toLocaleString() : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <div className="flex items-center justify-between">

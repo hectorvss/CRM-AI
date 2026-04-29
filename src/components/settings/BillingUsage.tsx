@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { billingApi, workspacesApi } from '../../api/client';
 import LoadingState from '../LoadingState';
@@ -42,12 +42,12 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
   const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
   const orgId = workspaceRecord?.org_id;
 
-  const { data: subscription } = useApi(
+  const { data: subscription, refetch: refetchSubscription } = useApi(
     () => (orgId ? billingApi.subscription(orgId) : Promise.resolve(null)),
     [orgId],
     null,
   );
-  const { data: ledger } = useApi(
+  const { data: ledger, refetch: refetchLedger } = useApi(
     () => (orgId ? billingApi.ledger(orgId) : Promise.resolve([])),
     [orgId],
     [],
@@ -60,6 +60,9 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
   const [billingEmail, setBillingEmail] = useState('billing@acme.com');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const controlsRef = useRef<HTMLDivElement | null>(null);
+  const ledgerRef = useRef<HTMLDivElement | null>(null);
+  const billingEmailRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setMonthlyBudgetCap(String(workspaceSettings.billing?.monthlyBudgetCap ?? 2500));
@@ -156,19 +159,33 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
               <MinimalButton onClick={() => onNavigate?.({ page: 'upgrade', entityType: 'workspace', section: 'plans', sourceContext: 'settings_billing' })}>
                 Manage plan & seats
               </MinimalButton>
-              <MinimalButton variant="outline" onClick={() => setStatusMessage('Budget, alert thresholds, flexible usage, and billing email can be edited in the controls panel.')}>
+              <MinimalButton
+                variant="outline"
+                onClick={() => {
+                  controlsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  billingEmailRef.current?.focus();
+                  setStatusMessage('Billing controls are ready to edit below.');
+                }}
+              >
                 Edit controls
               </MinimalButton>
             </div>
           </div>
         </MinimalCard>
 
+        <div ref={controlsRef}>
         <MinimalCard
           title="Billing controls"
           subtitle="Budget, alerts, and contact details."
           icon="settings"
           action={(
-            <MinimalButton variant="ghost" onClick={() => setStatusMessage('Usage details are reflected in the billing ledger below.')}>
+            <MinimalButton
+              variant="ghost"
+              onClick={() => {
+                ledgerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                setStatusMessage('Billing details are reflected in the ledger below.');
+              }}
+            >
               Details
             </MinimalButton>
           )}
@@ -190,6 +207,7 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
               <div>
                 <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Billing email</label>
                 <input
+                  ref={billingEmailRef}
                   type="email"
                   value={billingEmail}
                   onChange={event => setBillingEmail(event.target.value)}
@@ -228,18 +246,34 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
             </button>
           </div>
         </MinimalCard>
+        </div>
       </div>
 
+      <div ref={ledgerRef}>
       <MinimalCard
         title="Invoices & payment history"
         subtitle="Billing events from the workspace ledger."
         icon="receipt_long"
         action={(
           <div className="flex flex-wrap items-center gap-2">
-            <MinimalButton variant="outline" onClick={() => setStatusMessage('Edit the Billing email field in Billing controls, then save preferences.')}>
+            <MinimalButton
+              variant="outline"
+              onClick={() => {
+                controlsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                billingEmailRef.current?.focus();
+                setStatusMessage('Billing email field focused in the controls panel.');
+              }}
+            >
               Update billing email
             </MinimalButton>
-            <MinimalButton variant="ghost" onClick={() => setStatusMessage('The ledger below reflects the current billing history from the backend.')}>
+            <MinimalButton
+              variant="ghost"
+              onClick={() => {
+                refetchSubscription();
+                refetchLedger();
+                setStatusMessage('Refreshing subscription and ledger data from the backend.');
+              }}
+            >
               Refresh
             </MinimalButton>
           </div>
@@ -279,6 +313,7 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
           </table>
         </div>
       </MinimalCard>
+      </div>
 
       <div className="flex items-center justify-between gap-4 rounded-[24px] border border-black/5 bg-black/[0.02] p-6 dark:border-white/10 dark:bg-white/[0.03]">
         <div>

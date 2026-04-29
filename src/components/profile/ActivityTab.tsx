@@ -1,7 +1,12 @@
 import React, { useMemo } from 'react';
 import { useApi } from '../../api/hooks';
-import { auditApi, operationsApi } from '../../api/client';
+import { auditApi, iamApi, operationsApi } from '../../api/client';
 import LoadingState from '../LoadingState';
+import { NavigateInput } from '../../types';
+
+type Props = {
+  onNavigate?: (target: NavigateInput) => void;
+};
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
@@ -9,9 +14,17 @@ function formatDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-export default function ActivityTab() {
+function isWithinLastDays(value: string | null | undefined, days: number) {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return false;
+  return Date.now() - timestamp <= days * 24 * 60 * 60 * 1000;
+}
+
+export default function ActivityTab({ onNavigate }: Props) {
   const { data: auditLog, loading } = useApi(() => auditApi.workspaceAll().catch(() => []), [], []);
   const { data: agentRuns } = useApi(() => operationsApi.agentRuns().catch(() => []), [], []);
+  const { data: user } = useApi(() => iamApi.me().catch(() => null), [], null);
 
   const recentEvents = useMemo(() => {
     const auditRows = Array.isArray(auditLog) ? auditLog.slice(0, 6).map((row: any) => ({
@@ -30,6 +43,49 @@ export default function ActivityTab() {
 
     return [...auditRows, ...runRows];
   }, [agentRuns, auditLog]);
+
+  const summaryRows = useMemo(() => {
+    const auditRows = Array.isArray(auditLog) ? auditLog : [];
+    const runRows = Array.isArray(agentRuns) ? agentRuns : [];
+    const audit30d = auditRows.filter((row: any) => isWithinLastDays(row.created_at || row.occurred_at || row.updated_at, 30));
+    const agent30d = runRows.filter((run: any) => isWithinLastDays(run.started_at || run.created_at || run.finished_at, 30));
+
+    return [
+      ['Audit events', String(audit30d.length)],
+      ['Agent runs', String(agent30d.length)],
+      ['Sensitive actions', String(audit30d.filter((row: any) => ['high', 'critical'].includes(String(row.risk_level || row.risk))).length)],
+      ['Approvals touched', String(audit30d.filter((row: any) => String(row.entity_type).toLowerCase() === 'approval').length)],
+      ['Cases touched', String(audit30d.filter((row: any) => String(row.entity_type).toLowerCase() === 'case').length)],
+    ];
+  }, [agentRuns, auditLog]);
+
+  const accountLog = useMemo(() => {
+    const userId = user?.id;
+    const userEmail = user?.email;
+    const rows = (Array.isArray(auditLog) ? auditLog : []).filter((row: any) => {
+      const actorId = row.actor_id || row.user_id || row.created_by;
+      const actorEmail = row.actor_email || row.email;
+      return (userId && actorId === userId) || (userEmail && actorEmail === userEmail);
+    });
+
+    const normalized = rows.slice(0, 6).map((row: any) => ({
+      title: row.action || row.event_type || 'Account activity',
+      time: formatDate(row.created_at || row.occurred_at || row.updated_at),
+      icon: row.actor_type === 'agent' ? 'smart_toy' : row.action?.toLowerCase().includes('login') ? 'login' : 'history',
+    }));
+
+    if (normalized.length > 0) {
+      return normalized;
+    }
+
+    return [
+      {
+        title: 'Signed in',
+        time: 'Current authenticated session',
+        icon: 'login',
+      },
+    ];
+  }, [auditLog, user?.email, user?.id]);
 
   if (loading) return <LoadingState title="Loading recent activity" message="Pulling the latest audit and agent run history." compact />;
 
@@ -77,7 +133,11 @@ export default function ActivityTab() {
               </table>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20 text-center">
-              <button type="button" className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+              <button
+                type="button"
+                onClick={() => onNavigate?.({ page: 'settings', entityType: 'setting', section: 'security_audit', sourceContext: 'profile_activity' })}
+                className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
                 View full audit log
               </button>
             </div>
@@ -91,16 +151,10 @@ export default function ActivityTab() {
               <span className="material-symbols-outlined text-gray-400">bar_chart</span>
             </div>
             <div className="p-6 space-y-4">
-              {[
-                ['Cases Handled', '142'],
-                ['Approvals Reviewed', '38'],
-                ['Workflows Triggered', '12'],
-                ['Knowledge Edits', '5'],
-                ['AI Actions Reviewed', '89'],
-              ].map(([label, value]) => (
+              {summaryRows.map(([label, value]) => (
                 <div key={String(label)} className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{label as string}</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">{value as string}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-white">{value}</span>
                 </div>
               ))}
             </div>
@@ -112,27 +166,15 @@ export default function ActivityTab() {
               <span className="material-symbols-outlined text-gray-400">manage_accounts</span>
             </div>
             <div className="p-0">
-              <div className="p-4 border-b border-gray-50 dark:border-gray-800/50 flex gap-3">
-                <span className="material-symbols-outlined text-gray-400 text-[18px] mt-0.5">login</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Signed in</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Today, 08:42 AM</p>
+              {accountLog.map((entry, index) => (
+                <div key={`${entry.title}-${index}`} className={`p-4 flex gap-3 ${index < accountLog.length - 1 ? 'border-b border-gray-50 dark:border-gray-800/50' : ''}`}>
+                  <span className="material-symbols-outlined text-gray-400 text-[18px] mt-0.5">{entry.icon}</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{entry.title}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{entry.time}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="p-4 border-b border-gray-50 dark:border-gray-800/50 flex gap-3">
-                <span className="material-symbols-outlined text-gray-400 text-[18px] mt-0.5">notifications_active</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Updated notification preferences</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Oct 12, 2024</p>
-                </div>
-              </div>
-              <div className="p-4 flex gap-3">
-                <span className="material-symbols-outlined text-gray-400 text-[18px] mt-0.5">person</span>
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Updated profile photo</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Sep 05, 2024</p>
-                </div>
-              </div>
+              ))}
             </div>
           </section>
         </div>

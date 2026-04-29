@@ -26,6 +26,17 @@ export default function PersonalTab({ onSaveReady }: Props) {
   const { data: workspace, loading: workspaceLoading } = useApi<any>(workspacesApi.currentContext);
   const workspaceRecord = workspace || fallbackWorkspace;
   const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
+  const userPreferences = useMemo(() => {
+    if (!user?.preferences) return {};
+    if (typeof user.preferences === 'string') {
+      try {
+        return JSON.parse(user.preferences);
+      } catch {
+        return {};
+      }
+    }
+    return user.preferences;
+  }, [user]);
   const [fullName, setFullName] = useState('Hector Smith');
   const [emailAddress, setEmailAddress] = useState('hector.smith@enterprise.co');
   const [timezone, setTimezone] = useState('(GMT-08:00) Pacific Time (US & Canada)');
@@ -39,33 +50,35 @@ export default function PersonalTab({ onSaveReady }: Props) {
   useEffect(() => {
     setFullName(user?.name || 'Hector Smith');
     setEmailAddress(user?.email || 'hector.smith@enterprise.co');
-    setTimezone(workspaceSettings.personal?.timezone || '(GMT-08:00) Pacific Time (US & Canada)');
-    setTheme(workspaceSettings.personal?.theme || 'system');
-    setAllowDrafting(workspaceSettings.personal?.allowDrafting ?? true);
-    setAutoSummarize(workspaceSettings.personal?.autoSummarize ?? true);
-    setShowCitations(workspaceSettings.personal?.showCitations ?? true);
-  }, [user, workspaceSettings]);
+    setTimezone(userPreferences.profile?.timezone || workspaceSettings.personal?.timezone || '(GMT-08:00) Pacific Time (US & Canada)');
+    setTheme(userPreferences.profile?.theme || workspaceSettings.personal?.theme || 'system');
+    setAllowDrafting(userPreferences.profile?.allowDrafting ?? workspaceSettings.personal?.allowDrafting ?? true);
+    setAutoSummarize(userPreferences.profile?.autoSummarize ?? workspaceSettings.personal?.autoSummarize ?? true);
+    setShowCitations(userPreferences.profile?.showCitations ?? workspaceSettings.personal?.showCitations ?? true);
+  }, [user, userPreferences, workspaceSettings]);
 
   const handleSave = useCallback(async () => {
-    if (!workspace?.id) {
-      setStatusMessage('Workspace is still loading. Please try again in a moment.');
+    if (!user?.id) {
+      setStatusMessage('Profile is still loading. Please try again in a moment.');
       return;
     }
     setIsSaving(true);
     setStatusMessage(null);
     try {
-      const nextSettings = {
-        ...workspaceSettings,
-        personal: {
-          timezone,
-          theme,
-          allowDrafting,
-          autoSummarize,
-          showCitations,
+      await iamApi.updateMe({
+        name: fullName,
+        preferences: {
+          ...userPreferences,
+          profile: {
+            ...(userPreferences.profile || {}),
+            timezone,
+            theme,
+            allowDrafting,
+            autoSummarize,
+            showCitations,
+          },
         },
-      };
-      await workspacesApi.update(workspace.id, { settings: nextSettings });
-      await iamApi.updateMe({ name: fullName });
+      });
       setStatusMessage('Personal preferences saved.');
     } catch (error: any) {
       setStatusMessage(error?.message || 'Unable to save personal preferences.');
@@ -73,7 +86,7 @@ export default function PersonalTab({ onSaveReady }: Props) {
     } finally {
       setIsSaving(false);
     }
-  }, [allowDrafting, autoSummarize, emailAddress, fullName, showCitations, theme, timezone, workspace?.id, workspaceSettings]);
+  }, [allowDrafting, autoSummarize, fullName, showCitations, theme, timezone, user?.id, userPreferences]);
 
   useEffect(() => {
     onSaveReady?.(handleSave);
@@ -183,7 +196,7 @@ export default function PersonalTab({ onSaveReady }: Props) {
       </section>
 
       <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">{isSaving ? 'Saving personal preferences...' : 'Personal preferences are stored in workspace settings and your profile.'}</span>
+        <span className="text-xs text-gray-500">{isSaving ? 'Saving personal preferences...' : 'Personal preferences are stored on your profile and use workspace values only as fallback.'}</span>
         <button type="button" onClick={() => void handleSave().catch(() => undefined)} className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold">Save preferences</button>
       </div>
     </div>

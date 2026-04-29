@@ -13,13 +13,16 @@ import { NavigateInput } from '../types';
 type SettingsTab = 'workspace' | 'teams_roles' | 'notifications' | 'security_audit' | 'billing_usage' | 'data_privacy' | 'personal';
 
 type TabErrorBoundaryProps = { children: ReactNode; label: string };
-type SettingsProps = { onNavigate?: (target: NavigateInput) => void };
+type SettingsProps = {
+  onNavigate?: (target: NavigateInput) => void;
+  initialSection?: string | null;
+};
 
 function TabErrorBoundary({ children }: TabErrorBoundaryProps) {
   return <>{children}</>;
 }
 
-export default function Settings({ onNavigate }: SettingsProps) {
+export default function Settings({ onNavigate, initialSection }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('workspace');
   const [hasSaveHandler, setHasSaveHandler] = useState(false);
   const [resetKey, setResetKey] = useState(0);
@@ -35,6 +38,14 @@ export default function Settings({ onNavigate }: SettingsProps) {
     saveHandlerRef.current = null;
     setHasSaveHandler(false);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!initialSection) return;
+    const nextSection = initialSection as SettingsTab;
+    if (['workspace', 'teams_roles', 'notifications', 'security_audit', 'billing_usage', 'data_privacy', 'personal'].includes(nextSection)) {
+      setActiveTab(nextSection);
+    }
+  }, [initialSection]);
 
   const handleDiscard = useCallback(() => {
     saveHandlerRef.current = null;

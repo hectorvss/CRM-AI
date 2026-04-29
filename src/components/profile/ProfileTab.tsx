@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
+import { supabase } from '../../api/supabase';
 import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
@@ -25,8 +26,10 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
   const currentUser = user || FALLBACK_USER;
   const [name, setName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [sessionMeta, setSessionMeta] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -34,9 +37,47 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
     setAvatarUrl(currentUser.avatar_url || '');
   }, [currentUser]);
 
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled) {
+        setSessionMeta(data.session);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setSessionMeta(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const workspace = useMemo(() => {
     return currentUser?.memberships && currentUser.memberships.length > 0 ? currentUser.memberships[0] : null;
   }, [currentUser]);
+  const authProvider = sessionMeta?.user?.app_metadata?.provider || sessionMeta?.user?.app_metadata?.providers?.[0] || 'local';
+  const loginMethodLabel = authProvider === 'email' || authProvider === 'local'
+    ? 'Email & password'
+    : String(authProvider).replace(/_/g, ' ');
+  const emailVerified = Boolean(sessionMeta?.user?.email_confirmed_at);
+  const handleAvatarUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setStatusMessage('Please choose an image file for the profile photo.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAvatarUrl(typeof reader.result === 'string' ? reader.result : '');
+      setStatusMessage(`Profile photo ready to save: ${file.name}`);
+    };
+    reader.onerror = () => setStatusMessage('Unable to read the selected profile image.');
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  }, []);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -80,14 +121,15 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
           <div className="flex items-center gap-6">
             <div className="relative">
               <img src={avatarUrl || currentUser.avatar_url || 'https://i.pravatar.cc/150?img=11'} alt="User" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover" />
-              <button type="button" className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
+              <button type="button" onClick={() => uploadInputRef.current?.click()} className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
                 <span className="material-symbols-outlined text-[14px]">edit</span>
               </button>
             </div>
             <div>
               <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Profile Photo</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">This will be displayed on your profile and in conversations.</p>
-              <button type="button" className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
+              <button type="button" onClick={() => uploadInputRef.current?.click()} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
+              <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
             </div>
           </div>
 
@@ -163,7 +205,7 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
               <span className="text-sm text-gray-500 dark:text-gray-400">Login Method</span>
               <div className="flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-[14px] text-gray-400">password</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-white">Internal Auth</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{loginMethodLabel}</span>
               </div>
             </div>
           </div>
@@ -186,13 +228,13 @@ export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
             </div>
             <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
               <span className="text-sm text-gray-500 dark:text-gray-400">Identity Provider</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">System (Local)</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{String(authProvider).replace(/_/g, ' ')}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-500 dark:text-gray-400">Email Status</span>
-              <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
-                <span className="material-symbols-outlined text-[16px]">verified</span>
-                <span className="text-sm font-medium">Verified</span>
+              <div className={`flex items-center gap-1.5 ${emailVerified ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                <span className="material-symbols-outlined text-[16px]">{emailVerified ? 'verified' : 'pending'}</span>
+                <span className="text-sm font-medium">{emailVerified ? 'Verified' : 'Pending verification'}</span>
               </div>
             </div>
           </div>

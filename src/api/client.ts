@@ -53,6 +53,22 @@ export const casesApi = {
   state: (id: string) => request<any>(`/cases/${id}/state`),
   graph: (id: string) => request<any>(`/cases/${id}/graph`),
   resolve: (id: string) => request<any>(`/cases/${id}/resolve`),
+  resolutionPlan: (id: string) => request<any>(`/cases/${id}/resolution-plan`),
+  runResolutionStep: (id: string, stepId: string, payload?: Record<string, any>) =>
+    request<any>(`/cases/${id}/resolution-plan/steps/${encodeURIComponent(stepId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+  runResolutionPlan: (id: string, payload?: Record<string, any>) =>
+    request<any>(`/cases/${id}/resolution-plan/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+  resolveWithAI: (id: string, payload?: Record<string, any>) =>
+    request<any>(`/cases/${id}/resolve-with-ai`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
   timeline: (id: string) => request<any[]>(`/cases/${id}/timeline`),
   inboxView: (id: string) => request<any>(`/cases/${id}/inbox-view`),
   updateStatus: (id: string, status: string, reason?: string, changed_by?: string) =>
@@ -375,6 +391,7 @@ export const aiApi = {
 export const iamApi = {
   me: () => request<any>('/iam/me'),
   securityEnforcement: () => request<any>('/iam/security/enforcement'),
+  accessRequestTargets: () => request<any>('/iam/access-request-targets').then(unwrapList),
   permissionsMe: () => request<any>('/iam/permissions/me'),
   permissionsCatalog: () => request<any>('/iam/permissions/catalog').then(unwrapList),
   users: () => request<any>('/iam/users').then(unwrapList),

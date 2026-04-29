@@ -17,6 +17,7 @@ const FALLBACK_USER = {
 export default function AccessPermissionsTab() {
   const { data: user, loading } = useApi<any>(iamApi.me, []);
   const { data: roles } = useApi<any[]>(iamApi.roles, []);
+  const { data: accessTargets } = useApi<any[]>(iamApi.accessRequestTargets, []);
   const { isOwner, isSuperAdmin } = usePermissions();
   const currentUser = user || FALLBACK_USER;
 
@@ -33,6 +34,44 @@ export default function AccessPermissionsTab() {
   const totalPermissions = PERMISSION_CATALOG.length;
   const grantedCount = hasWildcard ? totalPermissions : PERMISSION_CATALOG.filter(p => granted.has(p.key)).length;
   const deniedCount = totalPermissions - grantedCount;
+  const adminContacts = useMemo(() => {
+    if (Array.isArray(accessTargets) && accessTargets.length > 0) {
+      return accessTargets;
+    }
+    const roleMap = new Map((roles || []).map((item: any) => [item.id, item]));
+    return (currentUser?.memberships || []).filter((membership: any) => {
+      const roleRecord = roleMap.get(membership.role_id);
+      const roleName = String(roleRecord?.name || membership.role_name || '').toLowerCase();
+      return roleName === 'owner' || roleName === 'workspace_admin';
+    }).map((membership: any) => ({
+      name: membership.role_name,
+      email: '',
+    }));
+  }, [accessTargets, currentUser?.memberships, roles]);
+  const requestAccessHref = useMemo(() => {
+    const recipients = adminContacts
+      .map((workspaceUser: any) => workspaceUser.email)
+      .filter((email: string | undefined): email is string => Boolean(email));
+    const to = encodeURIComponent(recipients[0] || currentUser?.email || 'support@crm-ai.local');
+    const cc = recipients.slice(1).join(',');
+    const subject = encodeURIComponent(`Access request for ${currentRoleName}`);
+    const body = encodeURIComponent(
+      [
+        'Hello,',
+        '',
+        `I would like to request a review of my workspace permissions.`,
+        `Current role: ${currentRoleName}`,
+        `User: ${currentUser.name} <${currentUser.email}>`,
+        '',
+        'Requested change:',
+        '- ',
+      ].join('\n'),
+    );
+    return `mailto:${to}?subject=${subject}&body=${body}${cc ? `&cc=${encodeURIComponent(cc)}` : ''}`;
+  }, [adminContacts, currentRoleName, currentUser.email, currentUser.name]);
+  const adminSummary = adminContacts.length > 0
+    ? adminContacts.map((workspaceUser: any) => workspaceUser.name || workspaceUser.email).join(', ')
+    : 'workspace administrators';
 
   return (
     <div className="space-y-6">
@@ -57,7 +96,7 @@ export default function AccessPermissionsTab() {
           </div>
           {!isOwner && !isSuperAdmin && (
             <a
-              href="mailto:admin@workspace.local?subject=Permission%20Request"
+              href={requestAccessHref}
               className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white underline underline-offset-2"
             >
               Request access
@@ -119,7 +158,7 @@ export default function AccessPermissionsTab() {
       {/* Help note */}
       {!isOwner && !isSuperAdmin && (
         <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
-          Your access is governed by your role. Contact your workspace administrator to request changes.
+          Your access is governed by your role. Requests will be addressed to {adminSummary}.
         </p>
       )}
     </div>

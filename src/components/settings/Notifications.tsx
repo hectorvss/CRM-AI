@@ -200,7 +200,7 @@ export default function NotificationsTab({ onSaveReady }: Props) {
       <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 p-6 flex items-center justify-between gap-4">
         <div>
           <h3 className="text-sm font-bold text-indigo-900 dark:text-indigo-200 mb-1">Workspace Notification Policy</h3>
-          <p className="text-xs text-indigo-800/70 dark:text-indigo-300/70">Changes apply to the workspace notification defaults and personal overrides are preserved in settings.</p>
+          <p className="text-xs text-indigo-800/70 dark:text-indigo-300/70">Changes apply to workspace defaults. User profile notifications inherit these values until a personal override is saved.</p>
         </div>
         <button type="button" onClick={() => void handleSave().catch(() => undefined)} disabled={isSaving} className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold">
           Save preferences

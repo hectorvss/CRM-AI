@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi, workspacesApi } from '../../api/client';
 import LoadingState from '../LoadingState';
@@ -39,8 +39,10 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
   const [weekdayStart, setWeekdayStart] = useState('09:00 AM');
   const [weekdayEnd, setWeekdayEnd] = useState('06:00 PM');
   const [languages, setLanguages] = useState<string[]>(defaultLanguages);
+  const [logoUrl, setLogoUrl] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const workspaceRecord = useMemo(() => (
     workspace
@@ -62,7 +64,26 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
     setWeekdayStart(workspaceSettings.businessHours?.weekdayStart || workspaceSettings.businessHoursStart || '09:00 AM');
     setWeekdayEnd(workspaceSettings.businessHours?.weekdayEnd || workspaceSettings.businessHoursEnd || '06:00 PM');
     setLanguages(Array.isArray(workspaceSettings.languages) && workspaceSettings.languages.length > 0 ? workspaceSettings.languages : defaultLanguages);
+    setLogoUrl(workspaceSettings.workspace?.logoUrl || workspaceSettings.branding?.logoUrl || '');
   }, [workspaceRecord, workspaceSettings]);
+
+  const handleLogoUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setStatusMessage('Please choose an image file for the workspace logo.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setLogoUrl(typeof reader.result === 'string' ? reader.result : '');
+      setStatusMessage(`Workspace logo ready to save: ${file.name}`);
+    };
+    reader.onerror = () => setStatusMessage('Unable to read the selected workspace logo.');
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  }, []);
 
   const handleSave = useCallback(async () => {
     if (!workspace?.id) {
@@ -79,6 +100,11 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
         workspace: {
           ...(workspaceSettings.workspace || {}),
           primaryDomain: domain.trim(),
+          logoUrl: logoUrl || null,
+        },
+        branding: {
+          ...(workspaceSettings.branding || {}),
+          logoUrl: logoUrl || null,
         },
         timezone,
         businessHoursEnabled,
@@ -102,7 +128,7 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [businessHoursEnabled, domain, languages, name, timezone, weekdayEnd, weekdayStart, workspace?.id, workspaceRecord?.slug, workspaceSettings]);
+  }, [businessHoursEnabled, domain, languages, logoUrl, name, timezone, weekdayEnd, weekdayStart, workspace?.id, workspaceRecord?.slug, workspaceSettings]);
 
   useEffect(() => {
     onSaveReady?.(handleSave);
@@ -135,17 +161,22 @@ export default function WorkspaceTab({ onSaveReady }: WorkspaceTabProps) {
         <div className="p-6 space-y-6">
           <div className="flex items-center gap-6">
             <div className="relative">
-              <div className="w-20 h-20 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50">
-                <span className="material-symbols-outlined text-gray-400 text-3xl">image</span>
-              </div>
-              <button type="button" className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
+              {logoUrl ? (
+                <img src={logoUrl} alt="Workspace logo" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover bg-gray-50 dark:bg-gray-800/50" />
+              ) : (
+                <div className="w-20 h-20 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 flex items-center justify-center bg-gray-50 dark:bg-gray-800/50">
+                  <span className="material-symbols-outlined text-gray-400 text-3xl">image</span>
+                </div>
+              )}
+              <button type="button" onClick={() => uploadInputRef.current?.click()} className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
                 <span className="material-symbols-outlined text-[14px]">edit</span>
               </button>
             </div>
             <div>
               <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Workspace Logo</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">This logo will appear on your help center and email notifications.</p>
-              <button type="button" className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
+              <button type="button" onClick={() => uploadInputRef.current?.click()} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
+              <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
             </div>
           </div>
 

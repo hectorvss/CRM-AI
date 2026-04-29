@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
-import { iamApi } from '../../api/client';
+import { iamApi, workspacesApi } from '../../api/client';
 import { PERMISSION_CATALOG, PERMISSION_DOMAINS, ROLE_PRESETS } from '../../permissions/catalog';
 import { usePermissions } from '../../contexts/PermissionsContext';
 import LoadingState from '../LoadingState';
@@ -39,13 +39,24 @@ function relativeTime(value?: string | null) {
 export default function TeamsRolesTab({ onSaveReady }: Props) {
   const { isOwner, isSuperAdmin } = usePermissions();
   const [activeTab, setActiveTab] = useState<SubTab>('members');
-  const initialized = useRef(false);
 
   // Data — fetch only once with empty deps
   const { data: members, loading: membersLoading, refetch: refetchMembers } = useApi<any[]>(iamApi.members, []);
   const { data: roles, loading: rolesLoading, refetch: refetchRoles } = useApi<any[]>(iamApi.roles, []);
+  const { data: workspace } = useApi<any>(workspacesApi.currentContext);
   const membersList = members || [];
   const rolesList = roles || [];
+  const workspaceSettings = useMemo(() => {
+    if (!workspace?.settings) return {};
+    if (typeof workspace.settings === 'string') {
+      try {
+        return JSON.parse(workspace.settings);
+      } catch {
+        return {};
+      }
+    }
+    return workspace.settings;
+  }, [workspace]);
 
   // Status
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -86,10 +97,14 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
     if (!rolesLoading && rolesList.length > 0 && !selectedRoleId) {
       setSelectedRoleId(rolesList[0].id);
     }
-    if (!rolesLoading && rolesList.length > 0 && !inviteRoleId) {
-      setInviteRoleId(rolesList[0].id);
-    }
-  }, [rolesLoading]);
+  }, [rolesLoading, rolesList, selectedRoleId]);
+
+  useEffect(() => {
+    if (rolesLoading || rolesList.length === 0 || inviteRoleId) return;
+    const preferredRoleId = workspaceSettings?.access?.defaultInviteRoleId;
+    const preferredRole = preferredRoleId ? rolesList.find((role: any) => role.id === preferredRoleId) : null;
+    setInviteRoleId(preferredRole?.id || rolesList[0].id);
+  }, [inviteRoleId, rolesList, rolesLoading, workspaceSettings]);
 
   const selectedMember = useMemo(() => membersList.find(m => m.id === selectedMemberId) || null, [selectedMemberId]);
   const selectedRole = useMemo(() => rolesList.find(r => r.id === selectedRoleId) || null, [selectedRoleId]);

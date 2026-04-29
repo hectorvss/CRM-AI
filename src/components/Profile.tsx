@@ -7,10 +7,16 @@ import SecurityTab from './profile/SecurityTab';
 import NotificationsTab from './profile/NotificationsTab';
 import PreferencesTab from './profile/PreferencesTab';
 import ActivityTab from './profile/ActivityTab';
+import { NavigateInput } from '../types';
 
 type ProfileTabType = 'profile' | 'access_permissions' | 'security' | 'notifications' | 'preferences' | 'activity';
 
-export default function Profile() {
+type ProfileProps = {
+  onNavigate?: (target: NavigateInput) => void;
+  initialSection?: string | null;
+};
+
+export default function Profile({ onNavigate, initialSection }: ProfileProps) {
   const [activeTab, setActiveTab] = useState<ProfileTabType>('profile');
   const [saveHandler, setSaveHandler] = useState<null | (() => Promise<void> | void)>(null);
   const [profileDiscardTick, setProfileDiscardTick] = useState(0);
@@ -18,6 +24,14 @@ export default function Profile() {
   useEffect(() => {
     setSaveHandler(null);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!initialSection) return;
+    const nextSection = initialSection as ProfileTabType;
+    if (['profile', 'access_permissions', 'security', 'notifications', 'preferences', 'activity'].includes(nextSection)) {
+      setActiveTab(nextSection);
+    }
+  }, [initialSection]);
 
   const handleSave = useCallback(async () => {
     if (saveHandler) {
@@ -71,7 +85,7 @@ export default function Profile() {
           {activeTab === 'security' && <SecurityTab onSaveReady={setSaveHandler} />}
           {activeTab === 'notifications' && <NotificationsTab onSaveReady={setSaveHandler} />}
           {activeTab === 'preferences' && <PreferencesTab onSaveReady={setSaveHandler} />}
-          {activeTab === 'activity' && <ActivityTab />}
+          {activeTab === 'activity' && <ActivityTab onNavigate={onNavigate} />}
         </motion.div>
       </AnimatePresence>
     </MinimalCategoryShell>

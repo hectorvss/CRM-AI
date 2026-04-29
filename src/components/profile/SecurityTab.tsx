@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
+import { supabase } from '../../api/supabase';
 import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
@@ -33,6 +34,7 @@ export default function SecurityTab({ onSaveReady }: Props) {
   const [sessionTimeout, setSessionTimeout] = useState('12 hours');
   const [alertOnNewLogin, setAlertOnNewLogin] = useState(true);
   const [trustedDevicesOnly, setTrustedDevicesOnly] = useState(false);
+  const [sessionMeta, setSessionMeta] = useState<any>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const policyStates = enforcement?.policy?.states || {};
@@ -44,6 +46,26 @@ export default function SecurityTab({ onSaveReady }: Props) {
     setAlertOnNewLogin(preferences.security?.alertOnNewLogin ?? true);
     setTrustedDevicesOnly(preferences.security?.trustedDevicesOnly ?? false);
   }, [preferences]);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled) {
+        setSessionMeta(data.session);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setSessionMeta(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const authProvider = sessionMeta?.user?.app_metadata?.provider || sessionMeta?.user?.app_metadata?.providers?.[0] || 'local';
+  const emailVerified = Boolean(sessionMeta?.user?.email_confirmed_at);
+  const sessionLastSignIn = sessionMeta?.user?.last_sign_in_at ? new Date(sessionMeta.user.last_sign_in_at).toLocaleString() : null;
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -95,7 +117,7 @@ export default function SecurityTab({ onSaveReady }: Props) {
               <div className="flex items-center justify-between pb-6 border-b border-gray-100 dark:border-gray-800">
                 <div>
                   <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">Password</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Managed by internal authentication</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Managed by {String(authProvider).replace(/_/g, ' ')} authentication.</p>
                 </div>
                 <span className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">
                   Provider managed
@@ -135,29 +157,17 @@ export default function SecurityTab({ onSaveReady }: Props) {
               <span className="material-symbols-outlined text-gray-400">devices</span>
             </div>
             <div className="p-0">
-              <div className="flex items-center justify-between p-6 border-b border-gray-50 dark:border-gray-800/50">
+              <div className="flex items-center justify-between p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                    <span className="material-symbols-outlined">laptop_mac</span>
+                    <span className="material-symbols-outlined">devices</span>
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
-                      <h3 className="text-sm font-bold text-gray-900 dark:text-white">Mac OS • Chrome</h3>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white capitalize">{String(authProvider).replace(/_/g, ' ')} session</h3>
                       <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 border-blue-100 dark:border-blue-800/30">Current Session</span>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Madrid, Spain • Active now</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                    <span className="material-symbols-outlined">smartphone</span>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-0.5">iOS • Safari</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Madrid, Spain • Last active 2 hours ago</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{sessionLastSignIn ? `Last sign-in ${sessionLastSignIn}` : 'Authenticated session is active.'}</p>
                   </div>
                 </div>
                 <span className="text-xs font-semibold text-gray-400 dark:text-gray-500">Provider managed</span>
@@ -165,7 +175,7 @@ export default function SecurityTab({ onSaveReady }: Props) {
             </div>
             <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Session revocation is handled by the authentication provider.
+                Session inventory and revocation are handled by the authentication provider; this view reflects the current authenticated session only.
               </p>
             </div>
           </section>
@@ -184,7 +194,7 @@ export default function SecurityTab({ onSaveReady }: Props) {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-300">Email Verified</span>
-                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Provider managed</span>
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{emailVerified ? 'Verified' : 'Pending'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600 dark:text-gray-300">New login alerts</span>

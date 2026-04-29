@@ -248,9 +248,9 @@ export default function App() {
           {currentPage === 'customers' && <Customers onNavigate={navigate} focusCustomerId={pageFocus.customerId} />}
           {currentPage === 'tools_integrations' && <ToolsIntegrations />}
           {currentPage === 'reports' && <Reports />}
-          {currentPage === 'settings' && <Settings onNavigate={navigate} />}
+          {currentPage === 'settings' && <Settings onNavigate={navigate} initialSection={navigationTarget.section} />}
           {currentPage === 'upgrade' && <Upgrade />}
-          {currentPage === 'profile' && <Profile />}
+          {currentPage === 'profile' && <Profile onNavigate={navigate} initialSection={navigationTarget.section} />}
           {currentPage === 'orders' && <Orders onNavigate={navigate} focusEntityId={pageFocus.orderId} focusSection={navigationTarget.section} />}
           {currentPage === 'returns' && <Returns onNavigate={navigate} focusEntityId={pageFocus.returnId} focusSection={navigationTarget.section} />}
           {currentPage === 'payments' && <Payments onNavigate={navigate} focusEntityId={pageFocus.paymentId} focusSection={navigationTarget.section} />}

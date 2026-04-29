@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
-import { iamApi } from '../../api/client';
+import { iamApi, workspacesApi } from '../../api/client';
 import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
@@ -26,8 +26,20 @@ function parsePreferences(preferences: any) {
 
 export default function NotificationsTab({ onSaveReady }: Props) {
   const { data: user, loading } = useApi<any>(iamApi.me);
+  const { data: workspace } = useApi<any>(workspacesApi.currentContext);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
+  const workspaceSettings = useMemo(() => {
+    if (!workspace?.settings) return {};
+    if (typeof workspace.settings === 'string') {
+      try {
+        return JSON.parse(workspace.settings);
+      } catch {
+        return {};
+      }
+    }
+    return workspace.settings;
+  }, [workspace]);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [inAppNotifications, setInAppNotifications] = useState(true);
   const [approvalRequests, setApprovalRequests] = useState(true);
@@ -45,20 +57,21 @@ export default function NotificationsTab({ onSaveReady }: Props) {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    setEmailNotifications(preferences.notifications?.email ?? true);
-    setInAppNotifications(preferences.notifications?.inApp ?? true);
-    setApprovalRequests(preferences.notifications?.approvalRequests ?? true);
-    setCaseEscalations(preferences.notifications?.caseEscalations ?? true);
-    setMentions(preferences.notifications?.mentions ?? true);
-    setWorkflowFailures(preferences.notifications?.workflowFailures ?? false);
-    setSecurityAlerts(preferences.notifications?.securityAlerts ?? true);
-    setEmailDigest(preferences.notifications?.emailDigest ?? 'Real-time (Immediate)');
-    setNotifyAssignedCases(preferences.notifications?.personal?.assignedCases ?? true);
-    setNotifyApprovals(preferences.notifications?.personal?.approvals ?? true);
-    setNotifyAIFailures(preferences.notifications?.personal?.aiFailures ?? false);
-    setQuietStart(preferences.notifications?.quietHours?.start ?? '10:00 PM');
-    setQuietEnd(preferences.notifications?.quietHours?.end ?? '07:00 AM');
-  }, [preferences]);
+    const workspaceDefaults = workspaceSettings.notifications || {};
+    setEmailNotifications(preferences.notifications?.email ?? workspaceDefaults.email ?? true);
+    setInAppNotifications(preferences.notifications?.inApp ?? workspaceDefaults.inApp ?? true);
+    setApprovalRequests(preferences.notifications?.approvalRequests ?? workspaceDefaults.approvalRequests ?? true);
+    setCaseEscalations(preferences.notifications?.caseEscalations ?? workspaceDefaults.caseEscalations ?? true);
+    setMentions(preferences.notifications?.mentions ?? workspaceDefaults.mentions ?? true);
+    setWorkflowFailures(preferences.notifications?.workflowFailures ?? workspaceDefaults.workflowFailures ?? false);
+    setSecurityAlerts(preferences.notifications?.securityAlerts ?? workspaceDefaults.securityAlerts ?? true);
+    setEmailDigest(preferences.notifications?.emailDigest ?? workspaceDefaults.emailDigest ?? 'Real-time (Immediate)');
+    setNotifyAssignedCases(preferences.notifications?.personal?.assignedCases ?? workspaceDefaults.personal?.assignedCases ?? true);
+    setNotifyApprovals(preferences.notifications?.personal?.approvals ?? workspaceDefaults.personal?.approvals ?? true);
+    setNotifyAIFailures(preferences.notifications?.personal?.aiFailures ?? workspaceDefaults.personal?.aiFailures ?? false);
+    setQuietStart(preferences.notifications?.quietHours?.start ?? workspaceDefaults.quietHours?.start ?? '10:00 PM');
+    setQuietEnd(preferences.notifications?.quietHours?.end ?? workspaceDefaults.quietHours?.end ?? '07:00 AM');
+  }, [preferences, workspaceSettings]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -222,7 +235,7 @@ export default function NotificationsTab({ onSaveReady }: Props) {
       <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 p-6 flex items-center justify-between gap-4">
         <div>
           <h3 className="text-sm font-bold text-indigo-900 dark:text-indigo-200 mb-1">Personal Notification Policy</h3>
-          <p className="text-xs text-indigo-800/70 dark:text-indigo-300/70">These preferences are stored on your user profile so they stay with your account.</p>
+          <p className="text-xs text-indigo-800/70 dark:text-indigo-300/70">These preferences are stored on your user profile and override workspace defaults only where you choose to change them.</p>
         </div>
         <button type="button" onClick={() => void handleSave().catch(() => undefined)} disabled={isSaving} className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold">
           Save preferences

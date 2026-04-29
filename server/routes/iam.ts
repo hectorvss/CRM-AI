@@ -117,6 +117,44 @@ router.get('/security/enforcement', async (req: MultiTenantRequest, res) => {
   });
 });
 
+router.get('/access-request-targets', async (req: MultiTenantRequest, res) => {
+  if (!req.tenantId || !req.workspaceId) {
+    return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  }
+
+  try {
+    const workspace = await workspaceRepository.getById(req.workspaceId, req.tenantId);
+    const resolvedWorkspaceId = workspace?.id || req.workspaceId;
+    const [users, roles] = await Promise.all([
+      iamRepository.listWorkspaceUsers(req.tenantId, resolvedWorkspaceId),
+      iamRepository.listRoles(req.tenantId, resolvedWorkspaceId),
+    ]);
+    const roleMap = new Map((roles || []).map((role: any) => [role.id, role]));
+    const approvers = (users || []).filter((workspaceUser: any) => {
+      const role = roleMap.get(workspaceUser.role_id);
+      const roleName = String(role?.name || workspaceUser.role || '').toLowerCase();
+      const permissions = Array.isArray(role?.permissions)
+        ? role.permissions
+        : typeof role?.permissions === 'string'
+          ? (() => {
+              try { return JSON.parse(role.permissions); } catch { return []; }
+            })()
+          : [];
+      return roleName === 'owner' || roleName === 'workspace_admin' || permissions.includes('*') || permissions.includes('settings.write');
+    }).map((workspaceUser: any) => ({
+      id: workspaceUser.id,
+      email: workspaceUser.email,
+      name: workspaceUser.name,
+      role_id: workspaceUser.role_id,
+    }));
+
+    res.json(approvers);
+  } catch (error) {
+    console.error('Error fetching access request targets:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
 // Update current user profile and preferences. This route is self-service and
 // intentionally does not require settings.write.
 router.patch('/me', async (req: MultiTenantRequest, res) => {
@@ -424,7 +462,7 @@ router.post('/members/invite', requirePermission('members.invite'), async (req: 
 });
 
 // Update member status or role
-router.patch('/members/:id', requirePermission('members.remove'), async (req: MultiTenantRequest, res) => {
+router.patch('/members/:id', async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
   }
@@ -432,6 +470,18 @@ router.patch('/members/:id', requirePermission('members.remove'), async (req: Mu
   const { status, role_id } = req.body as { status?: 'active' | 'invited' | 'suspended'; role_id?: string };
   if (!status && !role_id) {
     return sendError(res, 400, 'INVALID_MEMBER_UPDATE', 'At least one field is required: status or role_id');
+  }
+
+  const permissions = req.permissions || [];
+  const hasPermission = (permission: string) => permissions.includes('*') || permissions.includes(permission);
+  const isStatusChange = typeof status === 'string';
+  const isRoleChange = typeof role_id === 'string' && role_id.trim().length > 0;
+
+  if (isStatusChange && !hasPermission('members.remove')) {
+    return sendError(res, 403, 'FORBIDDEN', 'Missing permission: members.remove', { required: 'members.remove', role: req.roleId || 'unknown' });
+  }
+  if (isRoleChange && !hasPermission('settings.write')) {
+    return sendError(res, 403, 'FORBIDDEN', 'Missing permission: settings.write', { required: 'settings.write', role: req.roleId || 'unknown' });
   }
 
   try {

@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Page } from '../types';
 import TreeGraph from './TreeGraph';
-import { casesApi, aiApi, superAgentApi } from '../api/client';
-import { buildResolutionPlan, buildAiResolutionPrompt, type ResolutionStep } from '../utils/resolutionPlan';
+import { casesApi, aiApi } from '../api/client';
+import { buildResolutionPlan, type ResolutionStep } from '../utils/resolutionPlan';
 import { useApi } from '../api/hooks';
 import type { GraphBranch } from './TreeGraph';
 import LoadingState from './LoadingState';
@@ -148,6 +148,11 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   // ── Fetch case resolve data ─────────────────────────────────────
   const { data: resolveData, loading: resolveLoading } = useApi(
     () => selectedId ? casesApi.resolve(selectedId) : Promise.resolve(null),
+    [selectedId]
+  );
+
+  const { data: serverResolutionPlan, refetch: refetchResolutionPlan } = useApi(
+    () => selectedId ? casesApi.resolutionPlan(selectedId) : Promise.resolve(null),
     [selectedId]
   );
 
@@ -344,7 +349,10 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   }, [selectedId, copilotInput, isCopilotSending, copilotMessages, copilotBrief, impactedBranches]);
 
   // ── Resolve plan + handlers ──────────────────────────────────────
-  const resolutionPlan = useMemo(() => buildResolutionPlan(caseResolve), [caseResolve]);
+  const resolutionPlan = useMemo(
+    () => serverResolutionPlan || buildResolutionPlan(caseResolve),
+    [caseResolve, serverResolutionPlan],
+  );
 
   const toggleStepExpansion = useCallback((stepId: string) => {
     setExpandedStepIds(prev => {
@@ -355,57 +363,21 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     });
   }, []);
 
-  /**
-   * Routes a single deterministic step to the right backend action based on
-   * its classified group. Each branch is intentionally side-effect minimal so
-   * that runs are safe to retry; mutating routes (refunds, approvals) defer
-   * to the existing API or to the Super Agent for execution.
-   */
   const executeRoutedStep = useCallback(async (step: ResolutionStep) => {
-    const route = step.route;
-    switch (route.kind) {
-      case 'webhook_ack':
-        // Webhooks are idempotent acknowledgements. Marking complete is the
-        // expected behaviour: the canonical state already reflects them.
-        return { ok: true, message: `Webhook ${route.event} from ${route.provider} acknowledged.` };
-
-      case 'reconcile':
-        if (selectedId) {
-          await aiApi.diagnose(selectedId).catch(() => null);
-        }
-        return { ok: true, message: 'Reconciliation diagnosis refreshed.' };
-
-      case 'refund':
-      case 'order_update':
-      case 'return_update':
-      case 'notification':
-      case 'agent_dispatch': {
-        // Sensitive routes are dispatched through the Super Agent so policy,
-        // approvals and audit trails apply consistently.
-        const caseLabel = selectedCase?.orderId || selectedId || 'this case';
-        const prompt = `Execute this deterministic step for case ${caseLabel}: ${step.title}. ${step.explanation}`;
-        const resp = await superAgentApi.command(prompt, {
-          mode: 'operate',
-          autonomyLevel: 'assisted',
-        });
-        return {
-          ok: true,
-          message: resp?.summary || resp?.response?.summary || `Step "${step.title}" dispatched to the agent.`,
-        };
-      }
-
-      case 'approval':
-        onPageChange('approvals');
-        return { ok: true, message: 'Opened approvals queue for review.' };
-
-      case 'manual_review':
-        return { ok: true, message: 'Step flagged for manual review — please inspect the case timeline.' };
-
-      case 'generic':
-      default:
-        return { ok: true, message: `Step "${step.title}" marked as acknowledged.` };
+    if (!selectedId) return { ok: false, message: 'No case selected.' };
+    const result = await casesApi.runResolutionStep(selectedId, step.id, {
+      sessionId: `case-resolution-${selectedId}`,
+    });
+    if (result?.action === 'navigate' && result.targetPage === 'approvals') {
+      onPageChange('approvals');
     }
-  }, [onPageChange, selectedCase, selectedId]);
+    return {
+      ok: result?.ok !== false,
+      message: result?.message || result?.error || `Step "${step.title}" executed.`,
+      approvalRequired: Boolean(result?.approvalRequired),
+      trace: result?.trace,
+    };
+  }, [onPageChange, selectedId]);
 
   const handleRunDeterministicStep = useCallback(async (step: ResolutionStep) => {
     if (!selectedId || !step?.id || executingStepId !== null) return;
@@ -420,64 +392,75 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
           return next;
         });
         setResolveStatusMessage(result.message);
+        refetchResolutionPlan();
       }
     } catch (error: any) {
       setResolveStatusMessage(error?.message || `Failed to execute "${step.title}".`);
     } finally {
       setExecutingStepId(null);
     }
-  }, [executeRoutedStep, executingStepId, selectedId]);
+  }, [executeRoutedStep, executingStepId, refetchResolutionPlan, selectedId]);
 
   const handleRunAllDeterministicSteps = useCallback(async () => {
-    if (!resolutionPlan.hasSteps || executingStepId !== null) return;
+    if (!selectedId || !resolutionPlan.hasSteps || executingStepId !== null) return;
     setResolveStatusMessage(null);
-    let anyFailed = false;
-    for (const step of resolutionPlan.steps) {
-      if (completedStepIds.has(step.id)) continue;
-      setExecutingStepId(step.id);
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await executeRoutedStep(step);
-        setCompletedStepIds(prev => {
-          const next = new Set(prev);
-          next.add(step.id);
-          return next;
+    setExecutingStepId('all');
+    try {
+      const result = await casesApi.runResolutionPlan(selectedId, {
+        sessionId: `case-resolution-${selectedId}`,
+      });
+      const executedStepIds = new Set<string>(
+        (result?.trace?.spans || [])
+          .filter((span: any) => span?.result?.ok)
+          .map((span: any) => String(span.stepId).replace(/_/g, ':')),
+      );
+      setCompletedStepIds(prev => {
+        const next = new Set(prev);
+        resolutionPlan.steps.forEach((step: ResolutionStep) => {
+          const normalized = step.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+          if (executedStepIds.has(step.id) || executedStepIds.has(normalized)) next.add(step.id);
         });
-      } catch {
-        anyFailed = true;
-        break;
-      }
+        return next;
+      });
+      setResolveStatusMessage(result?.message || 'Deterministic resolution plan executed.');
+      refetchResolutionPlan();
+    } catch (error: any) {
+      setResolveStatusMessage(error?.message || 'Some steps could not be executed automatically. Review the plan.');
+    } finally {
+      setExecutingStepId(null);
     }
-    setExecutingStepId(null);
-    setResolveStatusMessage(
-      anyFailed
-        ? 'Some steps could not be executed automatically — review the plan.'
-        : 'All deterministic steps executed.'
-    );
-  }, [completedStepIds, executeRoutedStep, executingStepId, resolutionPlan]);
+  }, [executingStepId, refetchResolutionPlan, resolutionPlan, selectedId]);
 
   const handleResolveWithAI = useCallback(async () => {
     if (!selectedId) return;
     setIsAiResolving(true);
     setResolveStatusMessage(null);
-    const caseLabel = selectedCase?.orderId || selectedId;
-    const prompt = buildAiResolutionPrompt(caseResolve, {
-      caseLabel,
-      customerName: selectedCase?.customerName,
-    });
     try {
-      const response = await superAgentApi.command(prompt, {
-        mode: 'operate',
-        autonomyLevel: 'assisted',
+      const response = await casesApi.resolveWithAI(selectedId, {
+        sessionId: `case-resolution-ai-${selectedId}`,
       });
-      const summary = response?.summary || response?.response?.summary || 'AI agent has started resolving the case.';
+      const executedStepIds = new Set<string>(
+        (response?.trace?.spans || [])
+          .filter((span: any) => span?.result?.ok)
+          .map((span: any) => String(span.stepId).replace(/_/g, ':')),
+      );
+      setCompletedStepIds(prev => {
+        const next = new Set(prev);
+        resolutionPlan.steps.forEach((step: ResolutionStep) => {
+          const normalized = step.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+          if (executedStepIds.has(step.id) || executedStepIds.has(normalized)) next.add(step.id);
+        });
+        return next;
+      });
+      const summary = response?.message || 'AI resolution completed through the Plan Engine.';
       setResolveStatusMessage(summary);
+      refetchResolutionPlan();
     } catch (error: any) {
       setResolveStatusMessage(error?.message || 'Unable to dispatch the AI resolution agent.');
     } finally {
       setIsAiResolving(false);
     }
-  }, [caseResolve, selectedCase, selectedId]);
+  }, [refetchResolutionPlan, resolutionPlan.steps, selectedId]);
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
