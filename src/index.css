@@ -145,6 +145,34 @@
     appearance: none;
   }
 
+  .customers-category .text-indigo-500,
+  .customers-category .text-indigo-600,
+  .customers-category .text-indigo-700,
+  .customers-category .dark\:text-indigo-300,
+  .customers-category .dark\:text-indigo-400 {
+    color: rgb(55 65 81) !important;
+  }
+
+  .customers-category .bg-indigo-50,
+  .customers-category .bg-purple-50,
+  .customers-category .bg-blue-50,
+  .customers-category .bg-green-50,
+  .customers-category .bg-amber-50,
+  .customers-category .bg-red-50 {
+    background-color: rgba(17, 24, 39, 0.03) !important;
+  }
+
+  .customers-category .border-indigo-100,
+  .customers-category .border-purple-100,
+  .customers-category .border-blue-100,
+  .customers-category .border-green-100,
+  .customers-category .border-amber-100,
+  .customers-category .border-red-100,
+  .customers-category .border-green-200,
+  .customers-category .border-amber-200 {
+    border-color: rgba(17, 24, 39, 0.08) !important;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .super-agent-title-word,
     .super-agent-title-glow,

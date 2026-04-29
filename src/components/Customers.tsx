@@ -136,9 +136,12 @@ function normalizeReconciliation(raw?: any): NonNullable<Customer['reconciliatio
 
 function buildInitialsAvatar(name: string) {
   const initials = name.split(' ').map(part => part[0]).slice(0, 2).join('').toUpperCase() || 'CU';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="32" fill="#EDE9FE"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="24" font-weight="700" fill="#6D28D9">${initials}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="32" fill="#F4F4F5"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="24" font-weight="700" fill="#18181B">${initials}</text></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
+
+const neutralChipClass = 'inline-flex items-center rounded-full border border-black/10 bg-black/[0.03] px-2.5 py-1 text-[11px] font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300';
+const neutralDotClass = 'mr-1.5 h-1.5 w-1.5 rounded-full bg-gray-400';
 
 export default function Customers({ onNavigate, focusCustomerId }: CustomersProps) {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -268,6 +271,20 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
       return matchesSearch && matchesSegment && matchesSource && matchesOpenTickets && matchesRisk && matchesAiHandled;
     });
   }, [aiHandledFilter, customers, openTicketsFilter, riskFilter, searchQuery, segmentFilter, sourceFilter]);
+
+  const customerSummary = useMemo(() => {
+    const total = customers.length;
+    const resolved = customers.reduce((sum, customer) => sum + (customer.aiImpact.resolved || 0), 0);
+    const approvals = customers.reduce((sum, customer) => sum + (customer.aiImpact.approvals || 0), 0);
+    const escalated = customers.reduce((sum, customer) => sum + (customer.aiImpact.escalated || 0), 0);
+    const openTickets = customers.reduce((sum, customer) => sum + customer.openTickets, 0);
+    const atRisk = customers.filter(customer => customer.risk && customer.risk !== 'Healthy').length;
+    const handledCustomers = customers.filter(customer => customer.aiImpact.resolved > 0).length;
+    const resolutionRate = Math.round((resolved / Math.max(resolved + approvals + escalated, 1)) * 100);
+    const handledRate = Math.round((handledCustomers / Math.max(total, 1)) * 100);
+    return { total, resolved, approvals, escalated, openTickets, atRisk, handledCustomers, resolutionRate, handledRate };
+  }, [customers]);
+
   const selectedCustomer = React.useMemo(() => {
     // Prefer full state data; fall back to list-level data while loading
     const listCustomer = customers.find(c => c.id === selectedCustomerId) || null;
@@ -365,6 +382,10 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
 
   const openCustomerCase = (page: Page) => {
     if (!selectedCustomerCaseId) {
+      if (page === 'case_graph') {
+        onNavigate?.('case_graph');
+        return;
+      }
       setActionMessage('No linked case found for this customer.');
       return;
     }
@@ -511,7 +532,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                 onClick={() => setSegmentFilter(prev => prev === 'vip' ? 'all' : 'vip')}
                 className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
                   segmentFilter === 'vip'
-                    ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border-purple-100 dark:border-purple-800'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
                     : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
@@ -531,7 +552,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                 onClick={() => setAiHandledFilter(prev => prev === 'all' ? 'handled' : 'all')}
                 className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-lg border transition-all shadow-card ${
                   aiHandledFilter === 'handled'
-                    ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border-gray-900 dark:border-white'
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white'
                     : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
@@ -623,11 +644,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                       </div>
                     </td>
                     <td className="px-4 py-5 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 inline-flex text-xs leading-4 font-semibold rounded-md border ${
-                        customer.segment === 'VIP Enterprise' 
-                          ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-100 dark:border-purple-800' 
-                          : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-100 dark:border-blue-800'
-                      }`}>
+                      <span className={neutralChipClass}>
                         {customer.segment}
                       </span>
                     </td>
@@ -636,30 +653,22 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                     </td>
                     <td className="px-4 py-5 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-1 rounded text-[11px] font-semibold bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border border-green-200 dark:border-green-900">{customer.aiImpact.resolved} Resolved</span>
+                        <span className={neutralChipClass}>{customer.aiImpact.resolved} Resolved</span>
                         {customer.aiImpact.approvals && (
-                          <span className="px-2 py-1 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border border-amber-200 dark:border-amber-900">{customer.aiImpact.approvals} Approval</span>
+                          <span className={neutralChipClass}>{customer.aiImpact.approvals} Approval</span>
                         )}
                         {customer.aiImpact.escalated && (
-                          <span className="px-2 py-1 rounded text-[11px] font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">{customer.aiImpact.escalated} Escalated</span>
+                          <span className={neutralChipClass}>{customer.aiImpact.escalated} Escalated</span>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-5 whitespace-nowrap">
-                      <span className="px-2 py-1 rounded text-[11px] font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">{customer.topIssue}</span>
+                      <span className={neutralChipClass}>{customer.topIssue}</span>
                     </td>
                     <td className="px-4 py-5 whitespace-nowrap">
                       {customer.risk && (
-                        <span className={`px-2 py-1 rounded text-[11px] font-semibold border flex items-center w-fit ${
-                          customer.risk === 'Churn Risk' || customer.risk === 'Refund Abuse' ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 border-red-100 dark:border-red-900/30' :
-                          customer.risk === 'Watchlist' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400 border-amber-100 dark:border-amber-900/30' :
-                          'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-900/30'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                            customer.risk === 'Churn Risk' || customer.risk === 'Refund Abuse' ? 'bg-red-500' :
-                            customer.risk === 'Watchlist' ? 'bg-amber-500' :
-                            'bg-green-500'
-                          }`}></span>
+                        <span className={neutralChipClass}>
+                          <span className={neutralDotClass}></span>
                           {customer.risk}
                         </span>
                       )}
@@ -703,71 +712,78 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
           </div>
         </div>
         <div className="w-80 flex flex-col gap-3 flex-shrink-0">
-          <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
+          <div className="bg-white dark:bg-card-dark rounded-[24px] border border-black/5 dark:border-white/10 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm">AI Impact Overview</h3>
-              <span className="text-xs text-gray-400 font-medium">Last 7 days</span>
+              <h3 className="font-semibold text-gray-950 dark:text-white text-sm">AI Impact Overview</h3>
+              <span className="text-xs text-gray-400 font-medium">{customerSummary.total} customers</span>
             </div>
             <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-1.5">
                   <span className="text-gray-600 dark:text-gray-400 text-xs font-medium">Resolution Rate</span>
-                  <span className="font-bold text-green-600 dark:text-green-400 text-xs">88%</span>
+                  <span className="font-semibold text-gray-950 dark:text-white text-xs">{customerSummary.resolutionRate}%</span>
                 </div>
-                <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
-                  <div className="bg-green-500 h-2 rounded-full shadow-card" style={{ width: '88%' }}></div>
+                <div className="w-full bg-black/5 dark:bg-white/10 rounded-full h-2">
+                  <div className="bg-violet-500 h-2 rounded-full" style={{ width: `${customerSummary.resolutionRate}%` }}></div>
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1.5">
-                  <span className="text-gray-600 dark:text-gray-400 text-xs font-medium">Customer CSAT</span>
-                  <span className="font-bold text-gray-900 dark:text-white text-xs">4.8/5</span>
+                  <span className="text-gray-600 dark:text-gray-400 text-xs font-medium">AI Handled</span>
+                  <span className="font-semibold text-gray-950 dark:text-white text-xs">{customerSummary.handledRate}%</span>
                 </div>
-                <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
-                  <div className="bg-indigo-500 h-2 rounded-full shadow-card" style={{ width: '96%' }}></div>
+                <div className="w-full bg-black/5 dark:bg-white/10 rounded-full h-2">
+                  <div className="bg-violet-500 h-2 rounded-full" style={{ width: `${customerSummary.handledRate}%` }}></div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 mt-4">
-                <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
+                <div className="bg-black/[0.02] dark:bg-white/[0.04] p-3 rounded-2xl border border-black/5 dark:border-white/10">
                   <div className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wide">Conversations</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-white mt-1">1,204</div>
+                  <div className="text-lg font-semibold text-gray-950 dark:text-white mt-1">{customerSummary.openTickets}</div>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
-                  <div className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wide">Handover</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-white mt-1">142</div>
+                <div className="bg-black/[0.02] dark:bg-white/[0.04] p-3 rounded-2xl border border-black/5 dark:border-white/10">
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wide">Approvals</div>
+                  <div className="text-lg font-semibold text-gray-950 dark:text-white mt-1">{customerSummary.approvals}</div>
                 </div>
               </div>
             </div>
           </div>
-          <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30 rounded-xl p-5 shadow-card">
+          <div className="bg-white dark:bg-card-dark border border-black/5 dark:border-white/10 rounded-[24px] p-5">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-indigo-100 dark:bg-indigo-800/30 rounded-lg text-indigo-600 dark:text-indigo-400 flex-shrink-0">
-                <span className="material-symbols-outlined text-lg">auto_awesome</span>
+              <div className="p-2 bg-black/5 dark:bg-white/5 rounded-full text-gray-700 dark:text-gray-200 flex-shrink-0">
+                <span className="material-symbols-outlined text-lg">tune</span>
               </div>
               <div>
-                <h3 className="font-bold text-gray-900 dark:text-white text-sm">Churn Prediction</h3>
+                <h3 className="font-semibold text-gray-950 dark:text-white text-sm">Operational Focus</h3>
                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
-                  AI detected 3 high-value customers at risk of churning due to recent billing disputes.
+                  Filter the customer table by live workspace signals. No mock shortcuts.
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button onClick={() => setRiskFilter('risk')} className="rounded-full border border-black/10 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-black/[0.04] dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.06]">
+                    {customerSummary.atRisk} at risk
+                  </button>
+                  <button onClick={() => setAiHandledFilter('handled')} className="rounded-full border border-black/10 px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-black/[0.04] dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.06]">
+                    {customerSummary.handledCustomers} AI handled
+                  </button>
+                </div>
                         <button onClick={() => openCustomerCase('case_graph')} className="mt-3 text-xs font-bold text-indigo-700 dark:text-indigo-300 transition-colors hover:underline">View analysis →</button>
               </div>
             </div>
           </div>
-          <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5 flex-1 overflow-y-auto">
-            <h3 className="font-bold text-gray-900 dark:text-white mb-4 text-sm">Recent Activity</h3>
-            <div className="space-y-4">
+          <div className="bg-white dark:bg-card-dark rounded-[24px] border border-black/5 dark:border-white/10 p-5 flex-1 overflow-y-auto">
+            <h3 className="font-semibold text-gray-950 dark:text-white mb-4 text-sm">Customer Segments</h3>
+            <div className="space-y-2">
               {[
-                { label: 'Refund approved for Order #2910', time: '2 mins ago', user: 'Sarah Jenkins', color: 'bg-green-500' },
-                { label: 'New ticket: API Integration help', time: '15 mins ago', user: 'Tech Corp', color: 'bg-blue-500' },
-                { label: 'Payment failed warning sent', time: '1 hour ago', user: 'Auto-system', color: 'bg-amber-500' }
+                { label: 'Open tickets', value: customerSummary.openTickets, time: `${customerSummary.openTickets}`, user: 'open', action: () => setOpenTicketsFilter('open') },
+                { label: 'Risk flags', value: customerSummary.atRisk, time: `${customerSummary.atRisk}`, user: 'at risk', action: () => setRiskFilter('risk') },
+                { label: 'AI resolved', value: customerSummary.resolved, time: `${customerSummary.resolved}`, user: 'resolved', action: () => setAiHandledFilter('handled') },
               ].map((activity, i) => (
-                <div key={i} className="flex gap-3 items-start group">
-                  <div className={`mt-1.5 w-2 h-2 rounded-full ${activity.color} flex-shrink-0 ring-2 ring-white dark:ring-card-dark shadow-card`}></div>
-                  <div>
-                    <p className="text-xs text-gray-800 dark:text-gray-200 font-medium group-hover:text-black dark:group-hover:text-white transition-colors">{activity.label}</p>
+                <button key={i} onClick={activity.action} className="w-full rounded-2xl border border-black/5 bg-black/[0.02] px-3 py-3 text-left transition-colors hover:bg-black/[0.04] dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.07]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{activity.label}</span>
                     <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{activity.time} • {activity.user}</p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -1286,7 +1302,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
+    <div className="customers-category flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
         <AnimatePresence mode="wait">
           {selectedCustomerId ? (
