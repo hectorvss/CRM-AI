@@ -168,7 +168,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
           )}
         </button>
 
-        {(isSuperAdmin || has('billing.read')) && (
+        {(permissionsLoading || isSuperAdmin || has('billing.read')) && (
           <button
             onClick={() => onPageChange('upgrade')}
             className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'upgrade' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
@@ -179,7 +179,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
           </button>
         )}
 
-        {(isSuperAdmin || has('settings.read')) && (
+        {(permissionsLoading || isSuperAdmin || has('settings.read')) && (
           <button
             onClick={() => onPageChange('settings')}
             className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'settings' ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
