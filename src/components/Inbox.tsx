@@ -1353,23 +1353,23 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
           {selectedConv ? (
             <>
               {/* Tabs */}
-              <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 px-3 py-2.5 flex-shrink-0">
+              <div className="flex items-center gap-2 px-4 pt-4 pb-3 flex-shrink-0">
                 <button
                   onClick={() => setRightTab('details')}
-                  className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border ${
+                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
                     rightTab === 'details'
-                      ? 'text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
-                      : 'text-gray-500 dark:text-gray-400 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                      : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
                   }`}
                 >
                   Details
                 </button>
                 <button
                   onClick={() => setRightTab('copilot')}
-                  className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border ${
+                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
                     rightTab === 'copilot'
-                      ? 'text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
-                      : 'text-gray-500 dark:text-gray-400 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                      : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
                   }`}
                 >
                   Copilot
@@ -1392,12 +1392,21 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                     {/* ── Chat messages ───────────────────────────────── */}
                     <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
                       {copilotMessages.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-center py-10">
-                          <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3 border border-purple-100 dark:border-purple-800/30 shadow-sm">
-                            <span className="material-symbols-outlined text-secondary text-2xl">auto_awesome</span>
+                        <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                          <div className="relative">
+                            <div className="super-agent-title-glow pointer-events-none absolute -inset-x-6 -inset-y-4 rounded-full bg-sky-500/5 blur-2xl dark:bg-sky-400/5" />
+                            <h1 className="relative flex flex-wrap justify-center gap-x-2 gap-y-1 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
+                              {['Ask', 'about', 'this', 'case'].map((word, index) => (
+                                <span
+                                  key={`${word}-${index}`}
+                                  className="super-agent-title-word inline-block"
+                                  style={{ animationDelay: `${120 + index * 80}ms` }}
+                                >
+                                  {word}
+                                </span>
+                              ))}
+                            </h1>
                           </div>
-                          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Ask me anything about this case</p>
-                          <p className="text-[11px] text-gray-400 max-w-[200px] leading-relaxed">I have full context: orders, payments, conflicts and history.</p>
                         </div>
                       ) : (
                         copilotMessages.map(message => (

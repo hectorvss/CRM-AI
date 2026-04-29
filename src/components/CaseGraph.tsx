@@ -644,26 +644,25 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
           {/* ── Right Panel: Details / Copilot ───────────────────── */}
           <div className="w-80 lg:w-96 border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-card-dark flex flex-col overflow-hidden">
             {/* Tabs */}
-            <div className="flex items-center border-b border-gray-100 dark:border-gray-800 px-2 flex-shrink-0">
+            <div className="flex items-center gap-2 px-4 pt-4 pb-3 flex-shrink-0">
               <button
                 onClick={() => setRightTab('details')}
-                className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${
+                className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
                   rightTab === 'details'
-                    ? 'text-gray-900 dark:text-white border-gray-900 dark:border-white font-bold'
-                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
+                    ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                    : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
                 }`}
               >
                 Details
               </button>
               <button
                 onClick={() => setRightTab('copilot')}
-                className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 flex items-center justify-center gap-2 ${
+                className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
                   rightTab === 'copilot'
-                    ? 'text-secondary border-secondary font-bold bg-purple-50/50 dark:bg-purple-900/10'
-                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
+                    ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                    : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
                 }`}
               >
-                <span className="material-symbols-outlined text-lg">chat_bubble</span>
                 Copilot
               </button>
             </div>
@@ -673,76 +672,30 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
               {rightTab === 'copilot' ? (
                 <div className="flex flex-col h-full min-h-0">
 
-                  {/* Command toolbar */}
-                  <div className="px-3 pt-3 pb-2.5 flex items-center gap-2 flex-wrap border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
-                    <button
-                      onClick={() => setShowCaseBrief(prev => !prev)}
-                      title="Toggle case brief"
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
-                        showCaseBrief
-                          ? 'bg-purple-100 dark:bg-purple-900/30 text-secondary border-purple-200 dark:border-purple-700'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[14px]">description</span>
-                      Brief
-                    </button>
-
-                    <button
-                      onClick={() => onPageChange(impactedModule)}
-                      title="Go to impacted module"
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary transition-all"
-                    >
-                      <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-                      View module
-                    </button>
-
-                    {/* Risk pill */}
-                    <div className={`ml-auto flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
-                      riskLabel.toLowerCase() === 'high' || riskLabel.toLowerCase() === 'critical'
-                        ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800/30'
-                        : riskLabel.toLowerCase() === 'medium'
-                        ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border-yellow-100 dark:border-yellow-800/30'
-                        : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-100 dark:border-green-800/30'
-                    }`}>
-                      <span className="material-symbols-outlined text-[13px]">trending_up</span>
-                      {riskLabel}
-                    </div>
-                  </div>
-
-                  {/* Collapsible brief */}
-                  {showCaseBrief && (
-                    <div className="mx-3 mt-2.5 bg-white dark:bg-card-dark rounded-xl border border-gray-100 dark:border-gray-700 p-3 text-xs space-y-2 flex-shrink-0 shadow-card">
-                      <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{copilotBrief.summary}</p>
-                      {copilotBrief.conflict && (
-                        <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                          <span className="material-symbols-outlined text-red-500 text-[13px] flex-shrink-0 mt-0.5">warning</span>
-                          <span>{copilotBrief.conflict}</span>
-                        </div>
-                      )}
-                      {copilotBrief.recommendation && (
-                        <div className="flex items-start gap-1.5 bg-white dark:bg-card-dark rounded-lg p-2 border border-gray-100 dark:border-gray-700">
-                          <span className="material-symbols-outlined text-secondary text-[13px] flex-shrink-0 mt-0.5">bolt</span>
-                          <span className="italic text-gray-600 dark:text-gray-400">{copilotBrief.recommendation}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* Chat messages */}
                   <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
                     {copilotMessages.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full text-center py-10">
-                        <div className={`w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center mb-3 border border-purple-100 dark:border-purple-800/30 shadow-sm`}>
-                          <span className={`material-symbols-outlined text-secondary text-2xl ${stateLoading ? 'animate-pulse' : ''}`}>auto_awesome</span>
-                        </div>
+                      <div className="flex flex-col items-center justify-center h-full text-center px-4">
                         {stateLoading ? (
-                          <p className="text-sm text-gray-400">Reading case data...</p>
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="h-2 w-24 rounded-full bg-black/5 dark:bg-white/10 animate-pulse" />
+                            <p className="text-xs text-gray-400">Reading case data...</p>
+                          </div>
                         ) : (
-                          <>
-                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Ask me anything about this case</p>
-                            <p className="text-[11px] text-gray-400 max-w-[200px] leading-relaxed">I have full context: graph state, conflicts, blockers and history.</p>
-                          </>
+                          <div className="relative">
+                            <div className="super-agent-title-glow pointer-events-none absolute -inset-x-6 -inset-y-4 rounded-full bg-sky-500/5 blur-2xl dark:bg-sky-400/5" />
+                            <h1 className="relative flex flex-wrap justify-center gap-x-2 gap-y-1 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
+                              {['Ask', 'about', 'this', 'case'].map((word, index) => (
+                                <span
+                                  key={`${word}-${index}`}
+                                  className="super-agent-title-word inline-block"
+                                  style={{ animationDelay: `${120 + index * 80}ms` }}
+                                >
+                                  {word}
+                                </span>
+                              ))}
+                            </h1>
+                          </div>
                         )}
                       </div>
                     ) : (

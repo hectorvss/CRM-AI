@@ -505,23 +505,23 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
 
           {/* Right Pane: Copilot/Details */}
           <div className={`transition-all duration-300 bg-white dark:bg-card-dark flex flex-col overflow-hidden ${isRightSidebarOpen ? 'w-80 lg:w-96 border-l border-gray-100 dark:border-gray-700' : 'w-0 border-none'}`}>
-            <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 px-3 py-2.5 flex-shrink-0">
+            <div className="flex items-center gap-2 px-4 pt-4 pb-3 flex-shrink-0">
               <button
                 onClick={() => setRightTab('details')}
-                className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border ${
+                className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
                   rightTab === 'details'
-                    ? 'text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
-                    : 'text-gray-500 dark:text-gray-400 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                    : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
                 }`}
               >
                 Details
               </button>
               <button
                 onClick={() => setRightTab('copilot')}
-                className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border ${
+                className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
                   rightTab === 'copilot'
-                    ? 'text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
-                    : 'text-gray-500 dark:text-gray-400 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                    : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
                 }`}
               >
                 Copilot

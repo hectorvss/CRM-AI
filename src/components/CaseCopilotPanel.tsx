@@ -139,39 +139,27 @@ export default function CaseCopilotPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="px-4 pt-3 pb-3 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowCaseBrief(true)}
-            className={`text-xs font-medium transition-colors ${
-              showCaseBrief
-                ? 'text-gray-900 dark:text-white'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            Details
-          </button>
-          <button
-            onClick={() => setShowCaseBrief(false)}
-            className={`text-xs font-medium transition-colors ${
-              !showCaseBrief
-                ? 'text-gray-900 dark:text-white'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            Copilot
-          </button>
-        </div>
-        {showCaseBrief && (
-          <span className="ml-2 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
-            Details
-          </span>
-        )}
-        {!showCaseBrief && (
-          <span className="ml-2 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
-            Copilot
-          </span>
-        )}
+      <div className="px-4 pt-4 pb-3 flex items-center gap-2 flex-shrink-0">
+        <button
+          onClick={() => setShowCaseBrief(true)}
+          className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+            showCaseBrief
+              ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+              : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+          }`}
+        >
+          Details
+        </button>
+        <button
+          onClick={() => setShowCaseBrief(false)}
+          className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+            !showCaseBrief
+              ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+              : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+          }`}
+        >
+          Copilot
+        </button>
       </div>
 
       {showCaseBrief && (
@@ -194,47 +182,40 @@ export default function CaseCopilotPanel({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
         {copilotMessages.length === 0 ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col items-center justify-center h-full gap-6 px-4">
             {isLoading ? (
-              <div className="rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark p-4 shadow-card">
-                <div className="space-y-2">
-                  <div className="h-3.5 w-2/3 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
-                  <div className="h-3.5 w-full rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
-                  <div className="h-3.5 w-5/6 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
-                  <div className="h-3.5 w-3/5 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />
-                </div>
-                <p className="mt-4 text-xs text-gray-400">{`Reading ${entityLabel.toLowerCase()} data...`}</p>
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="h-2 w-24 rounded-full bg-black/5 dark:bg-white/10 animate-pulse" />
+                <p className="text-xs text-gray-400">{`Reading ${entityLabel.toLowerCase()} data...`}</p>
               </div>
             ) : (
-              <div className="flex items-end gap-2">
-                <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
-                  <span className="material-symbols-outlined text-white text-[14px]">auto_awesome</span>
-                </div>
-                <div className="max-w-[88%] rounded-2xl rounded-bl-sm border border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark p-4 shadow-card">
-                  <p className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
-                    {`I've loaded the full state for ${subjectLabel}.\n\n${summary}${conflict ? `\n\nActive blocker: ${conflict}` : ''}${recommendation ? `\n\nRecommendation: ${recommendation}` : ''}\n\n`}
-                    {['What', 'would', 'you', 'like', 'to', 'dig', 'into?'].map((word, index) => (
-                      <span key={index} className="super-agent-title-word inline-block" style={{ animationDelay: `${index * 80}ms` }}>
-                        {word}{index < 6 ? ' ' : ''}
+              <>
+                <div className="relative">
+                  <div className="super-agent-title-glow pointer-events-none absolute -inset-x-6 -inset-y-4 rounded-full bg-sky-500/5 blur-2xl dark:bg-sky-400/5" />
+                  <h1 className="relative flex flex-wrap justify-center gap-x-2 gap-y-1 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
+                    {['Ask', 'about', 'this', entityLabel.toLowerCase()].map((word, index) => (
+                      <span
+                        key={`${word}-${index}`}
+                        className="super-agent-title-word inline-block"
+                        style={{ animationDelay: `${120 + index * 80}ms` }}
+                      >
+                        {word}
                       </span>
                     ))}
-                  </p>
-                  <span className="mt-2 block text-[10px] text-gray-400">{nowTime()}</span>
+                  </h1>
                 </div>
-              </div>
-            )}
-            {!isLoading && (
-              <div className="flex flex-wrap gap-2 pl-9">
-                {effectiveSuggestions.map(q => (
-                  <button
-                    key={q}
-                    onClick={() => handleCopilotSubmit(q)}
-                    className="text-[11px] px-3 py-1.5 rounded-full border border-secondary/30 text-secondary hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-secondary transition-all font-medium"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
+                <div className="flex flex-wrap justify-center gap-2 max-w-md">
+                  {effectiveSuggestions.map(q => (
+                    <button
+                      key={q}
+                      onClick={() => handleCopilotSubmit(q)}
+                      className="text-[11px] px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-white transition-all font-medium"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         ) : (
