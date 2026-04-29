@@ -77,6 +77,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const [copilotInput, setCopilotInput] = useState('');
   const [isCopilotSending, setIsCopilotSending] = useState(false);
   const [showCaseBrief, setShowCaseBrief] = useState(false);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const copilotBottomRef = useRef<HTMLDivElement>(null);
   const copilotInputRef = useRef<HTMLInputElement>(null);
   const welcomeSentForRef = useRef<string | null>(null);
@@ -237,37 +238,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
 
   const selectedCase = useMemo(() => cases.find(c => c.id === selectedId), [cases, selectedId]);
 
-  // Auto-welcome when state data loads for the selected case.
-  // Placed here (after stateData/resolveData/selectedCase) to avoid TDZ
-  // errors at module evaluation time in production bundles.
-  useEffect(() => {
-    if (!selectedId || !stateData) return;
-    if (welcomeSentForRef.current === selectedId) return;
-    welcomeSentForRef.current = selectedId;
-
-    const name = selectedCase?.customerName;
-    const caseNum = selectedCase?.orderId;
-    const parts: string[] = [];
-
-    if (name) {
-      parts.push(`I've loaded the full state for ${name}${caseNum ? ` (${caseNum})` : ''}.`);
-    }
-    const summary = stateData?.case?.ai_diagnosis || resolveData?.conflict?.summary;
-    if (summary) parts.push(summary);
-    const rootCause = resolveData?.conflict?.root_cause || stateData?.case?.ai_root_cause;
-    if (rootCause) parts.push(`Root cause: ${rootCause}`);
-    const conflict = resolveData?.conflict?.title;
-    if (conflict) parts.push(`Active blocker: ${conflict}`);
-    parts.push('What would you like to dig into?');
-
-    setCopilotMessages([{
-      id: `welcome-${selectedId}`,
-      role: 'assistant',
-      content: parts.join('\n\n'),
-      time: nowTime(),
-    }]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, stateData, resolveData]);
+  // No auto-welcome message — copilot starts empty until user asks something.
 
   const riskLevel = rootData.riskLevel || selectedCase?.riskLevel || 'low';
   const riskLabel = typeof riskLevel === 'string' ? riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1).toLowerCase() : 'Low';
@@ -451,6 +422,15 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                 ))}
               </div>
             </div>
+            {!isRightSidebarOpen && (
+              <button
+                onClick={() => setIsRightSidebarOpen(true)}
+                className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-gray-100 dark:border-gray-700 shadow-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
+                title="Show Sidebar"
+              >
+                <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
+              </button>
+            )}
 
             {graphView === 'tree' ? (
               <div className="flex-1 flex items-center justify-center relative bg-white dark:bg-card-dark">
@@ -642,28 +622,37 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
           </div>
 
           {/* ── Right Panel: Details / Copilot ───────────────────── */}
-          <div className="w-80 lg:w-96 border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-card-dark flex flex-col overflow-hidden">
+          <div className={`transition-all duration-300 bg-white dark:bg-card-dark flex flex-col overflow-hidden ${isRightSidebarOpen ? 'w-80 lg:w-96 border-l border-gray-100 dark:border-gray-800' : 'w-0 border-none'}`}>
             {/* Tabs */}
-            <div className="flex items-center gap-2 px-4 pt-4 pb-3 flex-shrink-0">
+            <div className="relative flex items-center justify-center px-4 pt-4 pb-3 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setRightTab('details')}
+                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+                    rightTab === 'details'
+                      ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                      : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                  }`}
+                >
+                  Details
+                </button>
+                <button
+                  onClick={() => setRightTab('copilot')}
+                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+                    rightTab === 'copilot'
+                      ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                      : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                  }`}
+                >
+                  Copilot
+                </button>
+              </div>
               <button
-                onClick={() => setRightTab('details')}
-                className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
-                  rightTab === 'details'
-                    ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
-                    : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-                }`}
+                onClick={() => setIsRightSidebarOpen(false)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
+                title="Hide Sidebar"
               >
-                Details
-              </button>
-              <button
-                onClick={() => setRightTab('copilot')}
-                className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
-                  rightTab === 'copilot'
-                    ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
-                    : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-                }`}
-              >
-                Copilot
+                <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
               </button>
             </div>
 

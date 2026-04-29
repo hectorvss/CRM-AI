@@ -50,9 +50,7 @@ export default function CaseCopilotPanel({
   const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
   const [copilotInput, setCopilotInput] = useState('');
   const [isCopilotSending, setIsCopilotSending] = useState(false);
-  const [showCaseBrief, setShowCaseBrief] = useState(false);
   const copilotBottomRef = useRef<HTMLDivElement>(null);
-  const welcomeSentForRef = useRef<string | null>(null);
 
   const effectiveSuggestions = useMemo(() => {
     if (suggestedQuestions && suggestedQuestions.length > 0) return suggestedQuestions;
@@ -70,33 +68,11 @@ export default function CaseCopilotPanel({
   useEffect(() => {
     setCopilotMessages([]);
     setCopilotInput('');
-    setShowCaseBrief(false);
-    welcomeSentForRef.current = null;
   }, [caseId]);
 
   useEffect(() => {
     copilotBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [copilotMessages, isCopilotSending]);
-
-  useEffect(() => {
-    if (!caseId || isLoading) return;
-    if (welcomeSentForRef.current === caseId) return;
-    welcomeSentForRef.current = caseId;
-
-    const parts: string[] = [];
-    parts.push(`I've loaded the full state for ${subjectLabel}.`);
-    if (summary) parts.push(summary);
-    if (conflict) parts.push(`Active blocker: ${conflict}`);
-    if (recommendation) parts.push(`Recommendation: ${recommendation}`);
-    parts.push('What would you like to dig into?');
-
-    setCopilotMessages([{
-      id: `welcome-${caseId}`,
-      role: 'assistant',
-      content: parts.join('\n\n'),
-      time: nowTime(),
-    }]);
-  }, [caseId, conflict, isLoading, recommendation, subjectLabel, summary]);
 
   const handleCopilotSubmit = useCallback(async (questionOverride?: string) => {
     const question = (questionOverride !== undefined ? questionOverride : copilotInput).trim();
@@ -139,47 +115,6 @@ export default function CaseCopilotPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="px-4 pt-4 pb-3 flex items-center gap-2 flex-shrink-0">
-        <button
-          onClick={() => setShowCaseBrief(true)}
-          className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
-            showCaseBrief
-              ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
-              : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-          }`}
-        >
-          Details
-        </button>
-        <button
-          onClick={() => setShowCaseBrief(false)}
-          className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
-            !showCaseBrief
-              ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
-              : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-          }`}
-        >
-          Copilot
-        </button>
-      </div>
-
-      {showCaseBrief && (
-        <div className="mx-3 mt-2.5 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark p-4 text-sm space-y-3 flex-shrink-0 shadow-card">
-          <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{summary}</p>
-          {conflict && (
-            <div className="flex items-start gap-2 rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 text-gray-600 dark:text-gray-400">
-              <span className="material-symbols-outlined text-red-500 text-[14px] flex-shrink-0 mt-0.5">warning</span>
-              <span>{conflict}</span>
-            </div>
-          )}
-          {recommendation && (
-            <div className="flex items-start gap-2 rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3">
-              <span className="material-symbols-outlined text-secondary text-[14px] flex-shrink-0 mt-0.5">bolt</span>
-              <span className="italic text-gray-600 dark:text-gray-400">{recommendation}</span>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
         {copilotMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-6 px-4">

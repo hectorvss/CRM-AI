@@ -1353,30 +1353,32 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
           {selectedConv ? (
             <>
               {/* Tabs */}
-              <div className="flex items-center gap-2 px-4 pt-4 pb-3 flex-shrink-0">
-                <button
-                  onClick={() => setRightTab('details')}
-                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
-                    rightTab === 'details'
-                      ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
-                      : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-                  }`}
-                >
-                  Details
-                </button>
-                <button
-                  onClick={() => setRightTab('copilot')}
-                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
-                    rightTab === 'copilot'
-                      ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
-                      : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-                  }`}
-                >
-                  Copilot
-                </button>
+              <div className="relative flex items-center justify-center px-4 pt-4 pb-3 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setRightTab('details')}
+                    className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+                      rightTab === 'details'
+                        ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                        : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    Details
+                  </button>
+                  <button
+                    onClick={() => setRightTab('copilot')}
+                    className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+                      rightTab === 'copilot'
+                        ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                        : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    Copilot
+                  </button>
+                </div>
                 <button
                   onClick={() => setIsRightSidebarOpen(false)}
-                  className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
                   title="Hide Sidebar"
                 >
                   <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
