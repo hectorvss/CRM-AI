@@ -63,6 +63,7 @@ export default function Settings() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={tabId => setActiveTab(tabId as SettingsTab)}
+      contentClassName="settings-category"
       primaryAction={{
         label: 'Save changes',
         onClick: () => { void handleSave().catch(() => undefined); },

@@ -20,6 +20,7 @@ type MinimalCategoryShellProps = {
   onTabChange: (tabId: string) => void;
   primaryAction?: ActionButton;
   secondaryAction?: ActionButton;
+  contentClassName?: string;
   children: React.ReactNode;
 };
 
@@ -31,6 +32,7 @@ export function MinimalCategoryShell({
   onTabChange,
   primaryAction,
   secondaryAction,
+  contentClassName,
   children,
 }: MinimalCategoryShellProps) {
   return (
@@ -90,7 +92,7 @@ export function MinimalCategoryShell({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 sm:p-6">
+        <div className={`flex-1 overflow-y-auto custom-scrollbar p-5 sm:p-6 ${contentClassName || ''}`}>
           {children}
         </div>
       </div>
