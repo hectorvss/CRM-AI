@@ -544,48 +544,34 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
 
           {/* Right Pane: Copilot/Details */}
           <div className={`transition-all duration-300 bg-white dark:bg-card-dark flex flex-col overflow-hidden ${isRightSidebarOpen ? 'w-80 lg:w-96 border-l border-gray-100 dark:border-gray-700' : 'w-0 border-none'}`}>
-            <div className="flex items-center border-b border-gray-100 dark:border-gray-700 px-2 flex-shrink-0">
-              <div className="flex items-center gap-2 px-2">
-                <button
-                  onClick={() => setRightTab('details')}
-                  className={`text-xs font-medium transition-colors ${
-                    rightTab === 'details'
-                      ? 'text-gray-900 dark:text-white'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Details
-                </button>
-                <button
-                  onClick={() => setRightTab('copilot')}
-                  className={`text-xs font-medium transition-colors ${
-                    rightTab === 'copilot'
-                      ? 'text-gray-900 dark:text-white'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  Copilot
-                </button>
-                {rightTab === 'details' && (
-                  <span className="ml-1 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
-                    Details
-                  </span>
-                )}
-                {rightTab === 'copilot' && (
-                  <span className="ml-1 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
-                    Copilot
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1 ml-auto">
-                <button 
-                  onClick={() => setIsRightSidebarOpen(false)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
-                  title="Hide Sidebar"
-                >
-                  <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
-                </button>
-              </div>
+            <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 px-3 py-2.5 flex-shrink-0">
+              <button
+                onClick={() => setRightTab('details')}
+                className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border ${
+                  rightTab === 'details'
+                    ? 'text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
+                    : 'text-gray-500 dark:text-gray-400 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                Details
+              </button>
+              <button
+                onClick={() => setRightTab('copilot')}
+                className={`inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border ${
+                  rightTab === 'copilot'
+                    ? 'text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
+                    : 'text-gray-500 dark:text-gray-400 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                Copilot
+              </button>
+              <button
+                onClick={() => setIsRightSidebarOpen(false)}
+                className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
+                title="Hide Sidebar"
+              >
+                <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
+              </button>
             </div>
 
             {/* Tab Content */}
