@@ -49,6 +49,7 @@ export const JobType = {
 
   // Phase 6 — observability
   SLA_CHECK:               'sla.check',               // check SLA deadlines across cases
+  CHURN_RISK_SCAN:         'churn.risk.scan',         // scan for customers at churn risk
 
   // Phase 7 — agent engine
   AGENT_TRIGGER:           'agent.trigger',            // trigger one or more agents for a case
@@ -139,6 +140,11 @@ export interface SlaCheckPayload {
   caseId?: string;
 }
 
+export interface ChurnRiskScanPayload {
+  /** If set, only scan this specific customer */
+  customerId?: string;
+}
+
 export interface AgentTriggerPayload {
   /** Which lifecycle event fired this trigger */
   triggerEvent: 'case_created' | 'message_received' | 'conflicts_detected' | 'approval_approved' | 'approval_rejected' | 'case_resolved';
@@ -187,6 +193,7 @@ export type JobPayloadMap = {
   [JobType.DRAFT_REPLY]:         DraftReplyPayload;
   [JobType.SEND_MESSAGE]:        SendMessagePayload;
   [JobType.SLA_CHECK]:           SlaCheckPayload;
+  [JobType.CHURN_RISK_SCAN]:     ChurnRiskScanPayload;
   [JobType.AGENT_TRIGGER]:       AgentTriggerPayload;
   [JobType.AGENT_EXECUTE]:       AgentExecutePayload;
   [JobType.AI_DIAGNOSE]:         AiDiagnosePayload;

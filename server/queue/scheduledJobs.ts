@@ -30,6 +30,7 @@ let orphanSweeperIntervalId:    ReturnType<typeof setInterval> | null = null;
 let sessionPruneIntervalId:     ReturnType<typeof setInterval> | null = null;
 let eventBusRecoveryIntervalId: ReturnType<typeof setInterval> | null = null;
 let eventLogPruneIntervalId:    ReturnType<typeof setInterval> | null = null;
+let churnRiskScanIntervalId:    ReturnType<typeof setInterval> | null = null;
 
 const SLA_INTERVAL_MS                =  5 * 60 * 1_000;   // 5 minutes
 const RECONCILE_INTERVAL_MS          = 15 * 60 * 1_000;   // 15 minutes
@@ -40,6 +41,7 @@ const ORPHAN_THRESHOLD_MS            = 30 * 60 * 1_000;   // runs stuck > 30 min
 const SESSION_PRUNE_INTERVAL_MS      = 30 * 60 * 1_000;   // 30 minutes
 const EVENT_BUS_RECOVERY_INTERVAL_MS =  5 * 60 * 1_000;   // 5 minutes — retry stuck events
 const EVENT_LOG_PRUNE_INTERVAL_MS    = 60 * 60 * 1_000;   // 1 hour — remove old executed rows
+const CHURN_RISK_SCAN_INTERVAL_MS    = 24 * 60 * 60 * 1_000; // 24 hours (daily)
 
 export function startScheduledJobs(): void {
   logger.info('Starting scheduled job intervals', {
@@ -110,6 +112,12 @@ export function startScheduledJobs(): void {
       logger.warn('Event log prune failed', { error: String((err as any)?.message ?? err) }),
     );
   }, EVENT_LOG_PRUNE_INTERVAL_MS);
+
+  // Churn risk scanner: daily scan for customers at risk of churning
+  enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 60_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 6 });
+  churnRiskScanIntervalId = setInterval(() => {
+    enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 6 });
+  }, CHURN_RISK_SCAN_INTERVAL_MS);
 }
 
 /**
@@ -253,6 +261,7 @@ export function stopScheduledJobs(): void {
   if (sessionPruneIntervalId)      clearInterval(sessionPruneIntervalId);
   if (eventBusRecoveryIntervalId)  clearInterval(eventBusRecoveryIntervalId);
   if (eventLogPruneIntervalId)     clearInterval(eventLogPruneIntervalId);
+  if (churnRiskScanIntervalId)     clearInterval(churnRiskScanIntervalId);
   slaIntervalId              = null;
   reconcileIntervalId        = null;
   workflowDelayIntervalId    = null;
