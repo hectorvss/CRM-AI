@@ -18,23 +18,32 @@ function TabErrorBoundary({ children }: TabErrorBoundaryProps) {
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('workspace');
-  const [saveHandler, setSaveHandler] = useState<null | (() => Promise<void> | void)>(null);
+  const [hasSaveHandler, setHasSaveHandler] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const saveHandlerRef = React.useRef<null | (() => Promise<void> | void)>(null);
+
+  // Stable callback — does NOT cause Settings to re-render when child calls it
+  const setSaveHandler = useCallback((handler: null | (() => Promise<void> | void)) => {
+    saveHandlerRef.current = handler;
+    setHasSaveHandler(handler !== null);
+  }, []);
 
   useEffect(() => {
-    setSaveHandler(null);
+    saveHandlerRef.current = null;
+    setHasSaveHandler(false);
   }, [activeTab]);
 
   const handleDiscard = useCallback(() => {
-    setSaveHandler(null);
+    saveHandlerRef.current = null;
+    setHasSaveHandler(false);
     setResetKey(k => k + 1);
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (saveHandler) {
-      await saveHandler();
+    if (saveHandlerRef.current) {
+      await saveHandlerRef.current();
     }
-  }, [saveHandler]);
+  }, []);
 
   const tabs: { id: SettingsTab; label: string }[] = [
     { id: 'workspace', label: 'Workspace' },
@@ -60,7 +69,7 @@ export default function Settings() {
             <div className="flex items-center gap-3">
               <button
                 onClick={handleDiscard}
-                disabled={!saveHandler}
+                disabled={!hasSaveHandler}
                 className="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Discard Changes
@@ -68,7 +77,7 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={() => { void handleSave().catch(() => undefined); }}
-                disabled={!saveHandler}
+                disabled={!hasSaveHandler}
                 className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-md hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Save changes

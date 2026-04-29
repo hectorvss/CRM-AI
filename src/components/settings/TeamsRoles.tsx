@@ -665,15 +665,16 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">Clone a template to create a new role quickly.</p>
           <div className="grid grid-cols-1 gap-4">
-            {ROLE_PRESETS.map((template: any) => (
-              <div key={template.name} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 flex items-center justify-between">
+            {Object.entries(ROLE_PRESETS).map(([key, template]) => (
+              <div key={key} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 flex items-center justify-between">
                 <div>
-                  <p className="font-semibold text-gray-900 dark:text-white text-sm">{template.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{template.permissions.length} permissions</p>
+                  <p className="font-semibold text-gray-900 dark:text-white text-sm">{template.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{template.description}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{template.permissions.length} permissions</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleCreateFromTemplate(template)}
+                  onClick={() => handleCreateFromTemplate({ name: template.label, permissions: template.permissions })}
                   disabled={isSaving}
                   className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg text-sm font-semibold hover:opacity-80 disabled:opacity-50"
                 >
