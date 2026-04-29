@@ -72,24 +72,21 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
     PERMISSION_DOMAINS.reduce((acc, d) => ({ ...acc, [d]: true }), {} as Record<string, boolean>),
   );
 
-  // Initialize selections only once per data load
+  // Initialize selections once data has finished loading
   useEffect(() => {
-    if (membersList.length > 0 && !selectedMemberId) {
+    if (!membersLoading && membersList.length > 0 && !selectedMemberId) {
       setSelectedMemberId(membersList[0].id);
     }
-  }, []); // Only run once on mount
+  }, [membersLoading]);
 
   useEffect(() => {
-    if (rolesList.length > 0 && !selectedRoleId) {
+    if (!rolesLoading && rolesList.length > 0 && !selectedRoleId) {
       setSelectedRoleId(rolesList[0].id);
     }
-  }, []); // Only run once on mount
-
-  useEffect(() => {
-    if (rolesList.length > 0 && !inviteRoleId) {
+    if (!rolesLoading && rolesList.length > 0 && !inviteRoleId) {
       setInviteRoleId(rolesList[0].id);
     }
-  }, []); // Only run once on mount
+  }, [rolesLoading]);
 
   const selectedMember = useMemo(() => membersList.find(m => m.id === selectedMemberId) || null, [selectedMemberId]);
   const selectedRole = useMemo(() => rolesList.find(r => r.id === selectedRoleId) || null, [selectedRoleId]);
