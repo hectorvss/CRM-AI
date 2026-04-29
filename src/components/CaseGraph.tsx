@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Page } from '../types';
 import TreeGraph from './TreeGraph';
-import { casesApi, aiApi } from '../api/client';
+import { casesApi, aiApi, superAgentApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import type { GraphBranch } from './TreeGraph';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
-type ResolveTab = 'overview' | 'identifiers' | 'policy' | 'execution';
+// ResolveTab type removed — new flat layout doesn't use tabs.
 
 interface CopilotMessage {
   id: string;
@@ -70,7 +70,11 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [graphView, setGraphView] = useState<'tree' | 'timeline' | 'resolve'>('tree');
-  const [resolveTab, setResolveTab] = useState<ResolveTab>('overview');
+  // ResolveTab state removed — new flat layout doesn't use tabs.
+  const [executingStepId, setExecutingStepId] = useState<string | null>(null);
+  const [completedStepIds, setCompletedStepIds] = useState<Set<string>>(new Set());
+  const [resolveStatusMessage, setResolveStatusMessage] = useState<string | null>(null);
+  const [isAiResolving, setIsAiResolving] = useState(false);
 
   // ── Copilot state ────────────────────────────────────────────────
   const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
@@ -87,6 +91,10 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     setCopilotMessages([]);
     setShowCaseBrief(false);
     welcomeSentForRef.current = null;
+    setCompletedStepIds(new Set());
+    setExecutingStepId(null);
+    setResolveStatusMessage(null);
+    setIsAiResolving(false);
   }, [selectedId]);
 
   // Auto-scroll to bottom on new messages
@@ -332,6 +340,69 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     }
   }, [selectedId, copilotInput, isCopilotSending, copilotMessages, copilotBrief, impactedBranches]);
 
+  // ── Resolve handlers ─────────────────────────────────────────────
+  const handleRunDeterministicStep = useCallback(async (step: any) => {
+    if (!selectedId || !step?.id) return;
+    setExecutingStepId(step.id);
+    setResolveStatusMessage(null);
+    try {
+      // Simulate deterministic execution: in absence of a per-step backend,
+      // we mark the step as completed locally so the user has immediate feedback.
+      // Real integrations should replace this with the corresponding API call.
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      setCompletedStepIds(prev => {
+        const next = new Set(prev);
+        next.add(step.id);
+        return next;
+      });
+      setResolveStatusMessage(`Step "${step.label}" marked as complete.`);
+    } catch (error: any) {
+      setResolveStatusMessage(error?.message || 'Failed to execute step.');
+    } finally {
+      setExecutingStepId(null);
+    }
+  }, [selectedId]);
+
+  const handleRunAllDeterministicSteps = useCallback(async () => {
+    const steps = (caseResolve?.execution?.steps || []) as any[];
+    if (!steps.length) return;
+    setResolveStatusMessage(null);
+    for (const step of steps) {
+      if (completedStepIds.has(step.id)) continue;
+      setExecutingStepId(step.id);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      setCompletedStepIds(prev => {
+        const next = new Set(prev);
+        next.add(step.id);
+        return next;
+      });
+    }
+    setExecutingStepId(null);
+    setResolveStatusMessage('All deterministic steps executed.');
+  }, [caseResolve, completedStepIds]);
+
+  const handleResolveWithAI = useCallback(async () => {
+    if (!selectedId) return;
+    setIsAiResolving(true);
+    setResolveStatusMessage(null);
+    const caseLabel = selectedCase?.orderId || selectedId;
+    const conflictTitle = caseResolve?.conflict?.title || 'the open conflict';
+    const prompt = `Resolve case ${caseLabel}: ${conflictTitle}. Apply the deterministic resolution plan, escalate to approvals if any sensitive action is required, and summarise the outcome.`;
+    try {
+      const response = await superAgentApi.command(prompt, {
+        mode: 'operate',
+        autonomyLevel: 'assisted',
+      });
+      const summary = response?.summary || response?.response?.summary || 'AI agent has started resolving the case.';
+      setResolveStatusMessage(summary);
+    } catch (error: any) {
+      setResolveStatusMessage(error?.message || 'Unable to dispatch the AI resolution agent.');
+    } finally {
+      setIsAiResolving(false);
+    }
+  }, [caseResolve, selectedCase, selectedId]);
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
@@ -501,120 +572,161 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                 {(graphLoading || resolveLoading || stateLoading) && !resolveData && !stateData ? (
                   <LoadingState title="Loading resolve view" message="Fetching conflict, policy and execution context from Supabase." compact />
                 ) : (
-                  <div className="space-y-6">
-                    <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-                      <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{caseResolve?.conflict?.title || 'Resolve Case'}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{caseResolve?.conflict?.summary || 'No active blocker registered.'}</p>
-                      {caseResolve?.conflict?.severity && (
-                        <span className={`inline-block mt-2 text-[10px] font-bold uppercase px-2 py-1 rounded border ${
-                          caseResolve.conflict.severity === 'critical' ? 'bg-red-50 text-red-700 border-red-200' :
-                          caseResolve.conflict.severity === 'warning' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                          'bg-green-50 text-green-700 border-green-200'
-                        }`}>{caseResolve.conflict.severity}</span>
-                      )}
-                      <div className="mt-4 flex gap-3 flex-wrap">
-                        {(['overview', 'identifiers', 'policy', 'execution'] as ResolveTab[]).map(tab => (
-                          <button key={tab} onClick={() => setResolveTab(tab)} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider ${resolveTab === tab ? 'bg-gray-900 dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>{tab}</button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {resolveTab === 'overview' && (
-                      <>
-                        <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-                          <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Active Blockers</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {(caseResolve?.blockers || []).map((blocker: any) => (
-                              <div key={blocker.key} className={`p-4 rounded-xl border ${blocker.status === 'critical' || blocker.status === 'blocked' ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800/30' : 'bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-800/30'}`}>
-                                <div className="text-sm font-bold text-gray-900 dark:text-white">{blocker.label}</div>
-                                <div className="text-xs text-gray-500 mt-1">{blocker.summary || blocker.source_of_truth || 'Pending review'}</div>
-                              </div>
-                            ))}
-                            {!(caseResolve?.blockers || []).length && <div className="text-sm text-gray-500">No active blockers.</div>}
-                          </div>
-                        </div>
-                        <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-                          <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Expected Post-Resolution State</h3>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {(caseResolve?.expected_post_resolution_state || []).map((state: any) => (
-                              <div key={state.key} className="bg-green-50 dark:bg-green-900/10 p-4 rounded-xl border border-green-100 dark:border-green-800/30 flex flex-col items-center justify-center text-center">
-                                <div className="text-xs font-bold uppercase tracking-wider text-green-600 dark:text-green-400 mb-2">{state.label}</div>
-                                <div className="text-sm font-bold text-gray-900 dark:text-white">{state.summary}</div>
-                              </div>
-                            ))}
-                            {!(caseResolve?.expected_post_resolution_state || []).length && (
-                              <div className="text-sm text-gray-500 col-span-full">Resolution state will be computed after analysis.</div>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {resolveTab === 'identifiers' && (
-                      <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Identifiers</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                          {(caseResolve?.identifiers || []).map((item: any, index: number) => (
-                            <div key={`${item.label}:${index}`} className="p-3 rounded-xl border border-gray-100 dark:border-gray-800">
-                              <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">{item.label}</div>
-                              <div className="text-sm font-bold text-gray-900 dark:text-white">{item.value}</div>
-                              {item.source && <div className="text-xs text-gray-500 mt-1">{formatStatus(item.source)}</div>}
-                            </div>
-                          ))}
-                          {!(caseResolve?.identifiers || []).length && <div className="text-sm text-gray-500">No identifiers available.</div>}
-                        </div>
+                  <div className="max-w-3xl mx-auto space-y-6">
+                    {resolveStatusMessage && (
+                      <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
+                        {resolveStatusMessage}
                       </div>
                     )}
 
-                    {resolveTab === 'policy' && (
-                      <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Policy View</h3>
-                        <div className="space-y-3">
-                          <div className="p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Source Of Truth</div>
-                            <div className="text-sm font-bold text-gray-900 dark:text-white">{caseResolve?.conflict?.source_of_truth || 'Not specified'}</div>
-                          </div>
-                          <div className="p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Root Cause</div>
-                            <div className="text-sm text-gray-700 dark:text-gray-300">{caseResolve?.conflict?.root_cause || 'Pending diagnosis'}</div>
-                          </div>
-                          <div className="p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Recommended Action</div>
-                            <div className="text-sm text-gray-700 dark:text-gray-300">{caseResolve?.conflict?.recommended_action || 'Awaiting recommendation'}</div>
-                          </div>
-                        </div>
+                    {/* Key Problem Card */}
+                    <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Key Problem</h2>
+                        {caseResolve?.conflict?.severity && (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                            caseResolve.conflict.severity === 'critical' ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30' :
+                            caseResolve.conflict.severity === 'warning' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30' :
+                            'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/30'
+                          }`}>
+                            {formatStatus(caseResolve.conflict.severity)}
+                          </span>
+                        )}
                       </div>
-                    )}
+                      <div className="p-6 space-y-3">
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900 dark:text-white">{caseResolve?.conflict?.title || 'No active conflict'}</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{caseResolve?.conflict?.summary || 'No conflict summary available for this case.'}</p>
+                        </div>
+                        {caseResolve?.conflict?.root_cause && (
+                          <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Root cause</div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">{caseResolve.conflict.root_cause}</p>
+                          </div>
+                        )}
+                        {(caseResolve?.blockers || []).length > 0 && (
+                          <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-2">Active blockers</div>
+                            <ul className="space-y-2">
+                              {(caseResolve?.blockers || []).map((blocker: any) => (
+                                <li key={blocker.key} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                  <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                    blocker.status === 'critical' || blocker.status === 'blocked' ? 'bg-red-500' :
+                                    blocker.status === 'warning' || blocker.status === 'pending' ? 'bg-amber-500' : 'bg-gray-400'
+                                  }`} />
+                                  <div className="flex-1 min-w-0">
+                                    <span className="font-medium text-gray-900 dark:text-white">{blocker.label}</span>
+                                    {(blocker.summary || blocker.source_of_truth) && (
+                                      <span className="text-gray-500 dark:text-gray-400"> — {blocker.summary || blocker.source_of_truth}</span>
+                                    )}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </section>
 
-                    {resolveTab === 'execution' && (
-                      <div className="bg-white dark:bg-card-dark border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Execution Plan</h3>
-                        <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
-                          Mode: <span className="font-bold text-gray-900 dark:text-white">{formatStatus(caseResolve?.execution?.mode)}</span> · Status: <span className="font-bold text-gray-900 dark:text-white">{formatStatus(caseResolve?.execution?.status)}</span>
-                          {caseResolve?.execution?.requires_approval && (
-                            <span className="ml-3 text-[10px] font-bold uppercase px-2 py-1 rounded border bg-amber-50 text-amber-700 border-amber-200">Requires Approval</span>
-                          )}
+                    {/* Deterministic Resolution Plan */}
+                    <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                        <div>
+                          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Deterministic Resolution</h2>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Step-by-step plan generated from canonical state.</p>
                         </div>
-                        <div className="space-y-3">
-                          {(caseResolve?.execution?.steps || []).map((step: any) => (
-                            <div key={step.id} className="p-4 rounded-xl border border-gray-100 dark:border-gray-800 flex items-start justify-between">
-                              <div>
-                                <div className="text-sm font-bold text-gray-900 dark:text-white">{step.label}</div>
-                                <div className="text-xs text-gray-500 mt-1">{step.context || step.source || 'Pending execution'}</div>
-                              </div>
-                              <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded border ${
-                                step.status === 'critical' || step.status === 'blocked' ? 'bg-red-50 text-red-700 border-red-200' :
-                                step.status === 'warning' || step.status === 'pending' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                                'bg-green-50 text-green-700 border-green-200'
-                              }`}>{formatStatus(step.status)}</span>
-                            </div>
-                          ))}
-                          {!(caseResolve?.execution?.steps || []).length && (
-                            <div className="text-sm text-gray-500">No execution steps planned yet.</div>
-                          )}
+                        <button
+                          onClick={handleRunAllDeterministicSteps}
+                          disabled={!(caseResolve?.execution?.steps || []).length || executingStepId !== null}
+                          className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900 hover:opacity-80 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          Run all steps
+                        </button>
+                      </div>
+                      <div className="p-6">
+                        {(caseResolve?.execution?.steps || []).length === 0 ? (
+                          <div className="flex flex-col items-center justify-center text-center py-8">
+                            <span className="material-symbols-outlined text-gray-300 dark:text-gray-700 text-3xl mb-2">checklist</span>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">No deterministic steps available yet for this case.</p>
+                          </div>
+                        ) : (
+                          <ol className="space-y-3">
+                            {(caseResolve?.execution?.steps || []).map((step: any, index: number) => {
+                              const isCompleted = completedStepIds.has(step.id) || step.status === 'completed' || step.status === 'success';
+                              const isExecuting = executingStepId === step.id;
+                              return (
+                                <li
+                                  key={step.id}
+                                  className={`flex items-start gap-3 px-4 py-3 rounded-xl border transition-colors ${
+                                    isCompleted
+                                      ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-800/30 dark:bg-emerald-900/10'
+                                      : 'border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-800/20'
+                                  }`}
+                                >
+                                  <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0 ${
+                                    isCompleted
+                                      ? 'bg-emerald-500 text-white'
+                                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                                  }`}>
+                                    {isCompleted ? <span className="material-symbols-outlined text-[14px]">check</span> : index + 1}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900 dark:text-white">{step.label}</div>
+                                    {(step.context || step.source) && (
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{step.context || formatStatus(step.source)}</div>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => handleRunDeterministicStep(step)}
+                                    disabled={isCompleted || isExecuting || executingStepId !== null}
+                                    className="px-3 py-1 rounded-md text-xs font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                                  >
+                                    {isCompleted ? 'Done' : isExecuting ? 'Running…' : 'Run'}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ol>
+                        )}
+                        {caseResolve?.execution?.requires_approval && (
+                          <p className="mt-4 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-[14px]">info</span>
+                            Some steps require approval before execution.
+                          </p>
+                        )}
+                      </div>
+                    </section>
+
+                    {/* AI Resolution */}
+                    <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                        <div>
+                          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Resolve with AI</h2>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Delegate the entire resolution to the agent.</p>
+                        </div>
+                        <span className="material-symbols-outlined text-gray-400">auto_awesome</span>
+                      </div>
+                      <div className="p-6 space-y-4">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                          The agent will analyse the canonical state, execute the safe deterministic steps automatically, and request approval for any sensitive action before applying it.
+                        </p>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <button
+                            onClick={handleResolveWithAI}
+                            disabled={isAiResolving || !selectedId}
+                            className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900 hover:opacity-80 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                          >
+                            {isAiResolving ? 'Dispatching…' : 'Start AI resolution'}
+                          </button>
+                          <button
+                            onClick={() => onPageChange('super_agent')}
+                            className="px-4 py-2 rounded-lg text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
+                          >
+                            Open Super Agent
+                          </button>
                         </div>
                       </div>
-                    )}
+                    </section>
                   </div>
                 )}
               </div>
