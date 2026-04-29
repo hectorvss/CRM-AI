@@ -506,27 +506,38 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
           {/* Right Pane: Copilot/Details */}
           <div className={`transition-all duration-300 bg-white dark:bg-card-dark flex flex-col overflow-hidden ${isRightSidebarOpen ? 'w-80 lg:w-96 border-l border-gray-100 dark:border-gray-700' : 'w-0 border-none'}`}>
             <div className="flex items-center border-b border-gray-100 dark:border-gray-700 px-2 flex-shrink-0">
-              <button
-                onClick={() => setRightTab('details')}
-                className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${
-                  rightTab === 'details'
-                    ? 'text-gray-900 border-gray-900 font-bold'
-                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
-                }`}
-              >
-                Details
-              </button>
-              <button
-                onClick={() => setRightTab('copilot')}
-                className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 flex items-center justify-center gap-2 ${
-                  rightTab === 'copilot'
-                    ? 'text-secondary border-secondary font-bold bg-purple-50/50 dark:bg-purple-900/10'
-                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
-                }`}
-              >
-                <span className="material-symbols-outlined text-lg">smart_toy</span>
-                Copilot
-              </button>
+              <div className="flex items-center gap-2 px-2">
+                <button
+                  onClick={() => setRightTab('details')}
+                  className={`text-xs font-medium transition-colors ${
+                    rightTab === 'details'
+                      ? 'text-gray-900 dark:text-white'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Details
+                </button>
+                <button
+                  onClick={() => setRightTab('copilot')}
+                  className={`text-xs font-medium transition-colors ${
+                    rightTab === 'copilot'
+                      ? 'text-gray-900 dark:text-white'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Copilot
+                </button>
+                {rightTab === 'details' && (
+                  <span className="ml-1 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
+                    Details
+                  </span>
+                )}
+                {rightTab === 'copilot' && (
+                  <span className="ml-1 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
+                    Copilot
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-1 ml-auto">
                 <button 
                   onClick={() => setIsRightSidebarOpen(false)}
