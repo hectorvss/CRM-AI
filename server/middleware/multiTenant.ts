@@ -17,6 +17,7 @@ export interface MultiTenantRequest extends Request {
 }
 
 const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
+  owner: ['*'],
   workspace_admin: ['*'],
   supervisor: [
     'cases.read', 'cases.write', 'cases.assign',

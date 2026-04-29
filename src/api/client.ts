@@ -374,6 +374,8 @@ export const aiApi = {
 // ── IAM & Workspaces ──────────────────────────────────────────
 export const iamApi = {
   me: () => request<any>('/iam/me'),
+  permissionsMe: () => request<any>('/iam/permissions/me'),
+  permissionsCatalog: () => request<any>('/iam/permissions/catalog').then(unwrapList),
   users: () => request<any>('/iam/users').then(unwrapList),
   members: () => request<any>('/iam/members').then(unwrapList),
   roles: () => request<any>('/iam/roles').then(unwrapList),
@@ -382,10 +384,19 @@ export const iamApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  resendInvite: (payload: { email: string; role_id: string }) =>
+    request<any>('/iam/members/invite/resend', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   updateMember: (id: string, payload: { status?: string; role_id?: string }) =>
     request<any>(`/iam/members/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
+    }),
+  transferOwnership: (id: string) =>
+    request<any>(`/iam/members/${id}/transfer-ownership`, {
+      method: 'POST',
     }),
   createRole: (payload: { name: string; permissions: string[] }) =>
     request<any>('/iam/roles', {

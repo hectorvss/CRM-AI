@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { PermissionsProvider } from './contexts/PermissionsContext';
 import Sidebar from './components/Sidebar';
 import Inbox from './components/Inbox';
 import Home from './components/Home';
@@ -225,6 +226,7 @@ export default function App() {
   }
 
   return (
+    <PermissionsProvider>
     <div className="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200 font-sans h-screen flex overflow-hidden selection:bg-purple-200 dark:selection:bg-purple-900">
       <Sidebar
         currentPage={currentPage}
@@ -263,5 +265,6 @@ export default function App() {
         onNavigate={navigate}
       />
     </div>
+    </PermissionsProvider>
   );
 }

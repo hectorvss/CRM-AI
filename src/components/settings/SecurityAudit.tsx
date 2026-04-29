@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
-import { workspacesApi } from '../../api/client';
+import { workspacesApi, iamApi } from '../../api/client';
+import { usePermissions } from '../../contexts/PermissionsContext';
 import LoadingState from '../LoadingState';
 
 type SaveHandler = (() => Promise<void> | void) | null;
@@ -22,21 +23,33 @@ function parseSettings(settings: any) {
 }
 
 export default function SecurityAuditTab({ onSaveReady }: Props) {
+  const { isOwner, isSuperAdmin } = usePermissions();
   const { data: workspace, loading, error } = useApi<any>(workspacesApi.currentContext);
+  const { data: roles } = useApi<any[]>(iamApi.roles);
   const workspaceRecord = workspace || fallbackWorkspace;
   const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
   const [ssoEnabled, setSsoEnabled] = useState(true);
+  const [require2fa, setRequire2fa] = useState(false);
   const [sessionTimeout, setSessionTimeout] = useState('12 hours');
   const [ipAllowlist, setIpAllowlist] = useState<string[]>([]);
   const [retentionDays, setRetentionDays] = useState(90);
+  // Access policies (Sprint 6)
+  const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
+  const [defaultInviteRoleId, setDefaultInviteRoleId] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const canEditPolicies = isOwner || isSuperAdmin;
+  const rolesList = roles || [];
+
   useEffect(() => {
     setSsoEnabled(workspaceSettings.security?.ssoEnabled ?? true);
+    setRequire2fa(workspaceSettings.security?.require2fa ?? false);
     setSessionTimeout(workspaceSettings.security?.sessionTimeout ?? '12 hours');
     setIpAllowlist(Array.isArray(workspaceSettings.security?.ipAllowlist) ? workspaceSettings.security.ipAllowlist : ['192.168.1.0/24', '10.0.0.55']);
     setRetentionDays(workspaceSettings.security?.retentionDays ?? 90);
+    setAllowedDomains(Array.isArray(workspaceSettings.access?.allowedDomains) ? workspaceSettings.access.allowedDomains : []);
+    setDefaultInviteRoleId(workspaceSettings.access?.defaultInviteRoleId || '');
   }, [workspaceSettings]);
 
   const handleSave = useCallback(async () => {
@@ -51,20 +64,25 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
         ...workspaceSettings,
         security: {
           ssoEnabled,
+          require2fa,
           sessionTimeout,
           ipAllowlist,
           retentionDays,
         },
+        access: {
+          allowedDomains: allowedDomains.filter(d => d.trim()),
+          defaultInviteRoleId: defaultInviteRoleId || null,
+        },
       };
       await workspacesApi.update(workspace.id, { settings: nextSettings });
-      setStatusMessage('Security settings saved.');
+      setStatusMessage('Security & access policies saved.');
     } catch (error: any) {
       setStatusMessage(error?.message || 'Unable to save security settings.');
       throw error;
     } finally {
       setIsSaving(false);
     }
-  }, [ipAllowlist, retentionDays, sessionTimeout, ssoEnabled, workspace?.id, workspaceSettings]);
+  }, [allowedDomains, defaultInviteRoleId, ipAllowlist, require2fa, retentionDays, sessionTimeout, ssoEnabled, workspace?.id, workspaceSettings]);
 
   useEffect(() => {
     onSaveReady?.(handleSave);
@@ -160,6 +178,100 @@ export default function SecurityAuditTab({ onSaveReady }: Props) {
           </div>
         </section>
       </div>
+
+      {/* ─── ACCESS POLICIES (Manager-only) ─────────────────────── */}
+      <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/20">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <span className="material-symbols-outlined">policy</span>
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Access Policies</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Workspace-level rules enforced on member invitations and authentication.</p>
+            </div>
+          </div>
+          {!canEditPolicies && (
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-gray-100 text-gray-500 border-gray-200 uppercase">Owner / Admin only</span>
+          )}
+        </div>
+        <div className="p-6 grid grid-cols-2 gap-6">
+          {/* Require 2FA */}
+          <div className="flex items-start justify-between gap-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">Require Two-Factor Authentication</h3>
+              <p className="text-xs text-gray-500">All members must have 2FA enabled to access this workspace.</p>
+            </div>
+            <button
+              type="button"
+              disabled={!canEditPolicies}
+              onClick={() => setRequire2fa(c => !c)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed ${require2fa ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${require2fa ? 'translate-x-4' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          {/* Default invite role */}
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">Default Role for New Invites</h3>
+            <p className="text-xs text-gray-500 mb-3">Pre-selected role when inviting a new member.</p>
+            <select
+              value={defaultInviteRoleId}
+              disabled={!canEditPolicies}
+              onChange={e => setDefaultInviteRoleId(e.target.value)}
+              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm outline-none disabled:opacity-50"
+            >
+              <option value="">No default — manager picks each time</option>
+              {rolesList.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+
+          {/* Allowed email domains */}
+          <div className="col-span-2 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Allowed Email Domains</h3>
+                <p className="text-xs text-gray-500">Only emails from these domains can be invited. Leave empty to allow any domain.</p>
+              </div>
+              <button
+                type="button"
+                disabled={!canEditPolicies}
+                onClick={() => setAllowedDomains(c => [...c, ''])}
+                className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold shadow-card hover:bg-gray-50 transition-all disabled:opacity-50"
+              >
+                + Add Domain
+              </button>
+            </div>
+            {allowedDomains.length === 0 ? (
+              <p className="text-xs text-gray-400 italic mt-3">No restrictions — invitations to any domain are allowed.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {allowedDomains.map((domain, index) => (
+                  <div key={index} className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg">
+                    <span className="text-gray-400 text-xs">@</span>
+                    <input
+                      value={domain}
+                      disabled={!canEditPolicies}
+                      onChange={e => setAllowedDomains(current => current.map((item, i) => i === index ? e.target.value : item))}
+                      placeholder="company.com"
+                      className="bg-transparent text-xs font-medium outline-none w-32 disabled:opacity-50"
+                    />
+                    <button
+                      type="button"
+                      disabled={!canEditPolicies}
+                      onClick={() => setAllowedDomains(current => current.filter((_, i) => i !== index))}
+                      className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">close</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/20">

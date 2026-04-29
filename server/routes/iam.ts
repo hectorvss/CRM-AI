@@ -261,7 +261,10 @@ router.patch('/roles/:id', requirePermission('settings.write'), async (req: Mult
   }
 });
 
-// List workspace members
+// Owner role names — first member of a workspace is automatically the owner
+const OWNER_ROLE_NAMES = ['owner', 'workspace_admin'];
+
+// List workspace members (with is_owner flag)
 router.get('/members', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {
     return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
@@ -271,7 +274,24 @@ router.get('/members', requirePermission('members.read'), async (req: MultiTenan
     const workspace = await workspaceRepository.getById(req.workspaceId, req.tenantId);
     const resolvedWorkspaceId = workspace?.id || req.workspaceId;
     const members = await iamRepository.listWorkspaceMembers(req.tenantId, resolvedWorkspaceId);
-    res.json(members);
+
+    // Mark the first member (oldest joined_at) with an owner-like role as the workspace owner.
+    // Sort by joined_at ascending so the seed user is always considered owner.
+    const sorted = [...members].sort((a: any, b: any) => {
+      const ta = new Date(a.joined_at || 0).getTime();
+      const tb = new Date(b.joined_at || 0).getTime();
+      return ta - tb;
+    });
+    const ownerMember = sorted.find((m: any) =>
+      OWNER_ROLE_NAMES.includes(String(m.role_name || '').toLowerCase())
+    ) || sorted[0];
+
+    const enriched = members.map((m: any) => ({
+      ...m,
+      is_owner: ownerMember && m.id === ownerMember.id,
+    }));
+
+    res.json(enriched);
   } catch (error) {
     console.error('Error fetching members:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
@@ -290,6 +310,38 @@ router.post('/members/invite', requirePermission('members.invite'), async (req: 
   }
 
   try {
+    // ─── Workspace policy enforcement ───
+    const workspace = await workspaceRepository.getById(req.workspaceId, req.tenantId);
+    let workspaceSettings: any = workspace?.settings;
+    if (typeof workspaceSettings === 'string') {
+      try { workspaceSettings = JSON.parse(workspaceSettings); } catch { workspaceSettings = {}; }
+    }
+    workspaceSettings = workspaceSettings || {};
+
+    // Domain whitelist
+    const allowedDomains: string[] = Array.isArray(workspaceSettings?.access?.allowedDomains)
+      ? workspaceSettings.access.allowedDomains.filter(Boolean)
+      : [];
+    if (allowedDomains.length > 0) {
+      const emailDomain = email.split('@')[1]?.toLowerCase();
+      const normalized = allowedDomains.map((d: string) => d.toLowerCase().replace(/^@/, ''));
+      if (!emailDomain || !normalized.includes(emailDomain)) {
+        return sendError(res, 403, 'DOMAIN_NOT_ALLOWED',
+          `Email domain "${emailDomain}" is not in the workspace allowlist. Allowed: ${normalized.join(', ')}`);
+      }
+    }
+
+    // Seat limit (read from billing if configured)
+    const seatLimit = Number(workspaceSettings?.billing?.seatLimit ?? workspaceSettings?.seats?.limit ?? 0);
+    if (seatLimit > 0) {
+      const existingMembers = await iamRepository.listWorkspaceMembers(req.tenantId, req.workspaceId);
+      const activeOrInvited = existingMembers.filter((m: any) => m.status === 'active' || m.status === 'invited').length;
+      if (activeOrInvited >= seatLimit) {
+        return sendError(res, 402, 'SEAT_LIMIT_REACHED',
+          `Seat limit reached (${activeOrInvited}/${seatLimit}). Upgrade your plan to invite more members.`);
+      }
+    }
+
     const role = await iamRepository.getRoleById(role_id, req.tenantId, req.workspaceId);
     if (!role) return sendError(res, 404, 'ROLE_NOT_FOUND', 'Role not found');
 
@@ -326,7 +378,23 @@ router.post('/members/invite', requirePermission('members.invite'), async (req: 
       tenantId: req.tenantId
     });
 
-    res.status(201).json({ id: memberId, user_id: userId, role_id, status: 'invited' });
+    // Generate invite token (mock — real flow would store this in member_invitations table)
+    const token = crypto.randomBytes(24).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')?.replace(/:\d+$/, ':5173') || 'localhost:5173'}`;
+    const acceptUrl = `${baseUrl}/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
+
+    res.status(201).json({
+      id: memberId,
+      user_id: userId,
+      role_id,
+      status: 'invited',
+      invite: {
+        token,
+        accept_url: acceptUrl,
+        expires_at: expiresAt,
+      },
+    });
   } catch (error) {
     console.error('Error inviting member:', error);
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
@@ -347,6 +415,21 @@ router.patch('/members/:id', requirePermission('members.remove'), async (req: Mu
   try {
     const member = await iamRepository.getMemberById(req.params.id, req.tenantId, req.workspaceId);
     if (!member) return sendError(res, 404, 'MEMBER_NOT_FOUND', 'Member not found');
+
+    // Owner protection: cannot change role or suspend the workspace owner
+    const allMembers = await iamRepository.listWorkspaceMembers(req.tenantId, req.workspaceId);
+    const sorted = [...allMembers].sort((a: any, b: any) => {
+      const ta = new Date(a.joined_at || 0).getTime();
+      const tb = new Date(b.joined_at || 0).getTime();
+      return ta - tb;
+    });
+    const ownerMember = sorted.find((m: any) =>
+      OWNER_ROLE_NAMES.includes(String(m.role_name || '').toLowerCase())
+    ) || sorted[0];
+
+    if (ownerMember && member.id === ownerMember.id) {
+      return sendError(res, 403, 'OWNER_PROTECTED', 'The workspace owner cannot be modified. Use transfer-ownership to change the owner.');
+    }
 
     let nextRoleId = member.role_id;
     if (role_id) {
@@ -377,6 +460,97 @@ router.get('/permissions/me', (req: MultiTenantRequest, res) => {
     workspace_id: req.workspaceId,
     permissions: req.permissions || [],
   });
+});
+
+// Permission catalog — all known permission keys with metadata
+router.get('/permissions/catalog', (_req, res) => {
+  const catalog = [
+    { key: 'inbox.read',         domain: 'Inbox',        action: 'read',    label: 'View conversations',         description: 'Read cases, messages and conversations' },
+    { key: 'inbox.write',        domain: 'Inbox',        action: 'write',   label: 'Reply & manage cases',       description: 'Send replies, change status, assign cases' },
+    { key: 'cases.read',         domain: 'Inbox',        action: 'read',    label: 'View cases',                 description: 'Read case details and timeline' },
+    { key: 'cases.write',        domain: 'Inbox',        action: 'write',   label: 'Edit cases',                 description: 'Update case fields, notes and status' },
+    { key: 'cases.assign',       domain: 'Inbox',        action: 'assign',  label: 'Assign cases',               description: 'Reassign cases to agents or teams' },
+    { key: 'customers.read',     domain: 'Customers',    action: 'read',    label: 'View customers',             description: 'Read customer profiles and history' },
+    { key: 'customers.write',    domain: 'Customers',    action: 'write',   label: 'Edit customers',             description: 'Update customer data, tags and segments' },
+    { key: 'orders.read',        domain: 'Orders',       action: 'read',    label: 'View orders',                description: 'Read order details and line items' },
+    { key: 'orders.write',       domain: 'Orders',       action: 'write',   label: 'Manage orders',              description: 'Cancel, modify or fulfill orders' },
+    { key: 'payments.read',      domain: 'Payments',     action: 'read',    label: 'View payments',              description: 'Read payment records and transactions' },
+    { key: 'payments.write',     domain: 'Payments',     action: 'write',   label: 'Process payments & refunds', description: 'Issue refunds, void charges, adjust amounts' },
+    { key: 'returns.read',       domain: 'Returns',      action: 'read',    label: 'View returns',               description: 'Read return requests and status' },
+    { key: 'returns.write',      domain: 'Returns',      action: 'write',   label: 'Manage returns',             description: 'Approve, reject and process return requests' },
+    { key: 'approvals.read',     domain: 'Approvals',    action: 'read',    label: 'View approvals',             description: 'Read approval requests and decisions' },
+    { key: 'approvals.write',    domain: 'Approvals',    action: 'write',   label: 'Submit approvals',           description: 'Create and submit approval requests' },
+    { key: 'approvals.decide',   domain: 'Approvals',    action: 'decide',  label: 'Approve / Reject',           description: 'Make final decisions on approval requests' },
+    { key: 'workflows.read',     domain: 'Workflows',    action: 'read',    label: 'View workflows',             description: 'Read workflow definitions and run history' },
+    { key: 'workflows.write',    domain: 'Workflows',    action: 'write',   label: 'Edit workflows',             description: 'Create and edit workflow definitions' },
+    { key: 'workflows.trigger',  domain: 'Workflows',    action: 'trigger', label: 'Trigger workflows',          description: 'Manually execute workflow runs' },
+    { key: 'knowledge.read',     domain: 'Knowledge',    action: 'read',    label: 'View knowledge base',        description: 'Read articles, snippets and policies' },
+    { key: 'knowledge.write',    domain: 'Knowledge',    action: 'write',   label: 'Edit knowledge articles',    description: 'Create and edit knowledge articles' },
+    { key: 'knowledge.publish',  domain: 'Knowledge',    action: 'publish', label: 'Publish articles',           description: 'Publish and unpublish knowledge articles' },
+    { key: 'reports.read',       domain: 'Reports',      action: 'read',    label: 'View reports',               description: 'Access analytics dashboards and reports' },
+    { key: 'reports.export',     domain: 'Reports',      action: 'export',  label: 'Export reports',             description: 'Download reports as CSV / PDF' },
+    { key: 'integrations.read',  domain: 'Integrations', action: 'read',    label: 'View integrations',          description: 'See connected apps and API configurations' },
+    { key: 'integrations.write', domain: 'Integrations', action: 'write',   label: 'Manage integrations',        description: 'Connect, disconnect and configure apps' },
+    { key: 'settings.read',      domain: 'Settings',     action: 'read',    label: 'View workspace settings',    description: 'Read workspace configuration and policies' },
+    { key: 'settings.write',     domain: 'Settings',     action: 'write',   label: 'Edit workspace settings',    description: 'Change workspace name, logo and policies' },
+    { key: 'members.read',       domain: 'Members',      action: 'read',    label: 'View team members',          description: 'See workspace members, roles and status' },
+    { key: 'members.invite',     domain: 'Members',      action: 'invite',  label: 'Invite members',             description: 'Send invitations to new team members' },
+    { key: 'members.remove',     domain: 'Members',      action: 'delete',  label: 'Remove / suspend members',   description: 'Suspend or remove members from workspace' },
+    { key: 'billing.read',       domain: 'Billing',      action: 'read',    label: 'View billing & usage',       description: 'Read invoices, usage metrics and plan info' },
+    { key: 'billing.manage',     domain: 'Billing',      action: 'manage',  label: 'Manage billing',             description: 'Upgrade plan, manage seats and payment methods' },
+    { key: 'audit.read',         domain: 'Audit',        action: 'read',    label: 'View audit log',             description: 'Read workspace activity and security log' },
+  ];
+  res.json(catalog);
+});
+
+// Transfer workspace ownership
+router.post('/members/:id/transfer-ownership', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+  if (!req.tenantId || !req.workspaceId) {
+    return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  }
+
+  try {
+    const targetMember = await iamRepository.getMemberById(req.params.id, req.tenantId, req.workspaceId);
+    if (!targetMember) return sendError(res, 404, 'MEMBER_NOT_FOUND', 'Member not found');
+
+    // Find the owner role
+    const ownerRole = await iamRepository.getRoleByName('owner', req.tenantId, req.workspaceId)
+      || await iamRepository.getRoleByName('workspace_admin', req.tenantId, req.workspaceId);
+
+    if (ownerRole) {
+      // Demote current caller to admin role
+      if (req.userId) {
+        const currentMember = await iamRepository.getMember(req.userId, req.tenantId, req.workspaceId);
+        const adminRole = await iamRepository.getRoleByName('supervisor', req.tenantId, req.workspaceId);
+        if (currentMember && adminRole) {
+          await iamRepository.updateMember(currentMember.id, { roleId: adminRole.id });
+        }
+      }
+      // Promote target to owner
+      await iamRepository.updateMember(req.params.id, { roleId: ownerRole.id });
+    }
+
+    res.json({ id: req.params.id, ownership_transferred: true });
+  } catch (error) {
+    console.error('Error transferring ownership:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// Resend / create invitation link (mock — returns a token URL)
+router.post('/members/invite/resend', requirePermission('members.invite'), async (req: MultiTenantRequest, res) => {
+  const { email, role_id } = req.body as { email?: string; role_id?: string };
+  if (!email) return sendError(res, 400, 'INVALID_PAYLOAD', 'email is required');
+
+  try {
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const acceptUrl = `${process.env.APP_URL || 'http://localhost:5173'}/accept-invite?token=${token}`;
+
+    res.json({ email, token, expires_at: expiresAt, accept_url: acceptUrl, role_id });
+  } catch (error) {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
 });
 
 export default router;

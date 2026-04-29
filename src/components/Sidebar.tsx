@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigateInput, NavigationTarget, Page } from '../types';
 import { useApi } from '../api/hooks';
 import { iamApi, approvalsApi } from '../api/client';
+import { usePermissions } from '../contexts/PermissionsContext';
 
 interface SidebarProps {
   currentPage: Page;
@@ -18,6 +19,8 @@ type SidebarItem = {
   icon: string;
   badge?: number;
   description?: string;
+  /** Permission key required to see this item. Omit = always visible */
+  requiredPermission?: string;
 };
 
 function targetPageOf(target: NavigateInput) {
@@ -35,6 +38,8 @@ function isTargetActive(currentPage: Page, currentSection: string | null | undef
 export default function Sidebar({ currentPage, currentSection, onPageChange, isOpen, onToggle, onSearchOpen }: SidebarProps) {
   // Real user data
   const { data: me } = useApi(() => iamApi.me(), [], null as any);
+  // Permissions
+  const { has, isAdmin, isSuperAdmin } = usePermissions();
   // Real pending approvals count
   const { data: pendingApprovals } = useApi(
     () => approvalsApi.list({ status: 'pending', limit: '99' }),
@@ -44,7 +49,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
   const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0;
 
   const userName  = me?.name  || me?.email?.split('@')[0] || 'User';
-  const userRole  = me?.role  || me?.role_id || 'Agent';
+  const userRole  = me?.context?.role_id || me?.role  || me?.role_id || 'Agent';
   const userAvatar = me?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&size=64`;
 
   const superAgentItem: SidebarItem = {
@@ -54,19 +59,24 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
   };
 
   const navItems: SidebarItem[] = [
-    { target: 'inbox',             label: 'Inbox',        icon: 'inbox' },
-    { target: 'case_graph',        label: 'Case Graph',   icon: 'hub' },
-    { target: 'customers',         label: 'Customers',    icon: 'people' },
-    { target: 'orders',            label: 'Orders',       icon: 'shopping_bag' },
-    { target: 'payments',          label: 'Payments',     icon: 'payments' },
-    { target: 'returns',           label: 'Returns',      icon: 'assignment_return' },
-    { target: 'approvals',         label: 'Approvals',    icon: 'check_circle', badge: pendingCount > 0 ? pendingCount : undefined },
+    { target: 'inbox',             label: 'Inbox',        icon: 'inbox',             requiredPermission: 'inbox.read' },
+    { target: 'case_graph',        label: 'Case Graph',   icon: 'hub',               requiredPermission: 'cases.read' },
+    { target: 'customers',         label: 'Customers',    icon: 'people',            requiredPermission: 'customers.read' },
+    { target: 'orders',            label: 'Orders',       icon: 'shopping_bag',      requiredPermission: 'orders.read' },
+    { target: 'payments',          label: 'Payments',     icon: 'payments',          requiredPermission: 'payments.read' },
+    { target: 'returns',           label: 'Returns',      icon: 'assignment_return', requiredPermission: 'returns.read' },
+    { target: 'approvals',         label: 'Approvals',    icon: 'check_circle',      requiredPermission: 'approvals.read', badge: pendingCount > 0 ? pendingCount : undefined },
     { target: 'ai_studio',         label: 'AI Studio',    icon: 'smart_toy' },
-    { target: 'workflows',         label: 'Workflows',    icon: 'account_tree' },
-    { target: 'knowledge',         label: 'Knowledge',    icon: 'menu_book' },
-    { target: 'reports',           label: 'Reports',      icon: 'bar_chart' },
-    { target: 'tools_integrations',label: 'Integrations', icon: 'extension' },
+    { target: 'workflows',         label: 'Workflows',    icon: 'account_tree',      requiredPermission: 'workflows.read' },
+    { target: 'knowledge',         label: 'Knowledge',    icon: 'menu_book',         requiredPermission: 'knowledge.read' },
+    { target: 'reports',           label: 'Reports',      icon: 'bar_chart',         requiredPermission: 'reports.read' },
+    { target: 'tools_integrations',label: 'Integrations', icon: 'extension',         requiredPermission: 'integrations.read' },
   ];
+
+  // Filter nav items by permission — superAdmin / demo mode sees everything
+  const visibleNavItems = navItems.filter(item =>
+    !item.requiredPermission || isSuperAdmin || has(item.requiredPermission)
+  );
 
   return (
     <aside className={`${isOpen ? 'w-64' : 'w-20'} bg-sidebar-light dark:bg-sidebar-dark flex-shrink-0 flex flex-col justify-between border-r border-transparent dark:border-gray-800 transition-all duration-300 py-4 overflow-hidden relative`}>
@@ -113,7 +123,7 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
           </div>
 
           <div className="space-y-1">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <button
                 key={typeof item.target === 'string' ? item.target : `${item.target.page}-${item.target.section || 'root'}`}
                 onClick={() => onPageChange(item.target)}
@@ -157,23 +167,27 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
           )}
         </button>
 
-        <button
-          onClick={() => onPageChange('upgrade')}
-          className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'upgrade' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
-          title={!isOpen ? "Upgrade" : undefined}
-        >
-          <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${currentPage === 'upgrade' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`}>bolt</span>
-          {isOpen && <span>Upgrade</span>}
-        </button>
+        {(isSuperAdmin || has('billing.read')) && (
+          <button
+            onClick={() => onPageChange('upgrade')}
+            className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'upgrade' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
+            title={!isOpen ? "Upgrade" : undefined}
+          >
+            <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${currentPage === 'upgrade' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`}>bolt</span>
+            {isOpen && <span>Upgrade</span>}
+          </button>
+        )}
 
-        <button
-          onClick={() => onPageChange('settings')}
-          className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'settings' ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
-          title={!isOpen ? "Settings" : undefined}
-        >
-          <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${currentPage === 'settings' ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`}>settings</span>
-          {isOpen && <span>Settings</span>}
-        </button>
+        {(isSuperAdmin || has('settings.read')) && (
+          <button
+            onClick={() => onPageChange('settings')}
+            className={`flex items-center ${isOpen ? 'px-3 py-1.5 w-full justify-start' : 'justify-center w-10 h-10 mx-auto'} text-sm font-medium rounded-md group transition-all ${currentPage === 'settings' ? 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}`}
+            title={!isOpen ? "Settings" : undefined}
+          >
+            <span className={`material-symbols-outlined text-xl flex-shrink-0 ${isOpen ? 'mr-3' : ''} ${currentPage === 'settings' ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200'}`}>settings</span>
+            {isOpen && <span>Settings</span>}
+          </button>
+        )}
 
         <button
           onClick={() => onPageChange('profile')}
