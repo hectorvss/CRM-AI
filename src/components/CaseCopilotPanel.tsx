@@ -139,41 +139,39 @@ export default function CaseCopilotPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="px-3 pt-3 pb-3 flex items-center gap-2 flex-wrap border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
-        <button
-          onClick={() => setShowCaseBrief(prev => !prev)}
-          title="Toggle case brief"
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border shadow-sm ${
-            showCaseBrief
-              ? 'bg-purple-50 dark:bg-purple-900/20 text-secondary border-purple-200 dark:border-purple-700'
-              : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary'
-          }`}
-        >
-          <span className="material-symbols-outlined text-[14px]">description</span>
-          Brief
-        </button>
-
-        {onOpenModule && (
+      <div className="px-4 pt-3 pb-3 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center gap-2">
           <button
-            onClick={onOpenModule}
-            title={moduleButtonLabel}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:border-secondary/50 hover:text-secondary transition-all shadow-sm"
+            onClick={() => setShowCaseBrief(true)}
+            className={`text-xs font-medium transition-colors ${
+              showCaseBrief
+                ? 'text-gray-900 dark:text-white'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
           >
-            <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-            {moduleButtonLabel}
+            Details
           </button>
-        )}
-
-        <div className={`ml-auto flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
-          riskLabel.toLowerCase() === 'high' || riskLabel.toLowerCase() === 'critical'
-            ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800/30'
-            : riskLabel.toLowerCase() === 'medium'
-            ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border-yellow-100 dark:border-yellow-800/30'
-            : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-100 dark:border-green-800/30'
-        }`}>
-          <span className="material-symbols-outlined text-[13px]">trending_up</span>
-          {riskLabel}
+          <button
+            onClick={() => setShowCaseBrief(false)}
+            className={`text-xs font-medium transition-colors ${
+              !showCaseBrief
+                ? 'text-gray-900 dark:text-white'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            Copilot
+          </button>
         </div>
+        {showCaseBrief && (
+          <span className="ml-2 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
+            Details
+          </span>
+        )}
+        {!showCaseBrief && (
+          <span className="ml-2 inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded px-1.5 py-0.5">
+            Copilot
+          </span>
+        )}
       </div>
 
       {showCaseBrief && (
