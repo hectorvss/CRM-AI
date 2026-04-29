@@ -473,31 +473,61 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
 
           {/* Member details */}
           {selectedMember && (
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6 space-y-4">
-              <h4 className="font-semibold text-gray-900 dark:text-white">{selectedMember.name || selectedMember.email}</h4>
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
 
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Status</label>
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+                <p className="font-semibold text-gray-900 dark:text-white text-sm">{selectedMember.name || selectedMember.email}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedMember.email}</p>
+              </div>
+
+              <div className="p-6 space-y-6">
+
+                {/* Account status — read-only, driven by action buttons below */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Account status</p>
+                    <p className="text-sm text-gray-900 dark:text-white capitalize">{selectedMember.status}</p>
+                  </div>
                   {selectedMember.is_owner ? (
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Workspace Owner (protected)</div>
-                  ) : (
-                    <select
-                      value={memberStatus}
-                      onChange={e => setMemberStatus(e.target.value)}
-                      className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 outline-none focus:border-gray-900 dark:focus:border-white"
+                    <span className="text-xs text-gray-400 dark:text-gray-500">Protected — workspace owner</span>
+                  ) : selectedMember.status === 'suspended' ? (
+                    <button
+                      type="button"
+                      onClick={handleReactivateMember}
+                      disabled={isSaving}
+                      className="px-3 py-1.5 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-semibold hover:opacity-80 disabled:opacity-50"
                     >
-                      <option value="active">Active</option>
-                      <option value="suspended">Suspended</option>
-                    </select>
+                      Reactivate member
+                    </button>
+                  ) : selectedMember.status === 'invited' ? (
+                    <button
+                      type="button"
+                      onClick={handleResendInvite}
+                      disabled={isSaving}
+                      className="px-3 py-1.5 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg text-xs font-semibold hover:opacity-80 disabled:opacity-50"
+                    >
+                      Resend invite link
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSuspendMember}
+                      disabled={isSaving}
+                      className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      Suspend member
+                    </button>
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Role</label>
-                  {selectedMember.is_owner ? (
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Workspace Owner (protected)</div>
-                  ) : (
+                {/* Role — editable, saved via "Save changes" header button */}
+                {!selectedMember.is_owner && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                      Role
+                      <span className="ml-2 font-normal normal-case text-gray-400 dark:text-gray-500">— saved via Save changes ↑</span>
+                    </label>
                     <select
                       value={memberRoleId}
                       onChange={e => setMemberRoleId(e.target.value)}
@@ -508,50 +538,29 @@ export default function TeamsRolesTab({ onSaveReady }: Props) {
                         <option key={r.id} value={r.id}>{r.name}</option>
                       ))}
                     </select>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                {selectedMember.status === 'suspended' ? (
-                  <button
-                    type="button"
-                    onClick={handleReactivateMember}
-                    disabled={isSaving}
-                    className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg text-sm font-semibold hover:opacity-80 disabled:opacity-50"
-                  >
-                    Reactivate
-                  </button>
-                ) : selectedMember.status !== 'invited' ? (
-                  <button
-                    type="button"
-                    onClick={handleSuspendMember}
-                    disabled={isSaving || selectedMember.is_owner}
-                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg text-sm font-semibold hover:opacity-80 disabled:opacity-50"
-                  >
-                    Suspend
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleResendInvite}
-                    disabled={isSaving}
-                    className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg text-sm font-semibold hover:opacity-80 disabled:opacity-50"
-                  >
-                    Resend Invite
-                  </button>
+                  </div>
                 )}
 
+                {/* Ownership transfer — separated as a destructive zone */}
                 {isOwner && selectedMember.status === 'active' && !selectedMember.is_owner && (
-                  <button
-                    type="button"
-                    onClick={handleTransferOwnership}
-                    disabled={isSaving}
-                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg text-sm font-semibold hover:opacity-80 disabled:opacity-50"
-                  >
-                    Transfer Ownership
-                  </button>
+                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Ownership</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">You will be demoted to Admin. Cannot be undone.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleTransferOwnership}
+                        disabled={isSaving}
+                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                      >
+                        Transfer ownership
+                      </button>
+                    </div>
+                  </div>
                 )}
+
               </div>
             </div>
           )}
