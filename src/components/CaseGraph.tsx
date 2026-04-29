@@ -67,6 +67,48 @@ function nowTime() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function approvalActionSummary(step: any) {
+  const execution = step?.execution;
+  if (!execution) return 'This step requires approval before execution.';
+  if (execution.kind === 'navigate') return execution.reason || 'Open the approval queue for this action.';
+  if (execution.kind === 'blocked') return execution.reason || 'This action cannot run until missing context is resolved.';
+  const tool = execution.tool || 'registered tool';
+  const args = execution.args || {};
+  if (tool === 'payment.refund') {
+    return `Refund payment ${args.paymentId || 'linked payment'}${args.amount ? ` for ${args.amount}` : ''}.`;
+  }
+  if (tool === 'order.cancel') {
+    return `Cancel order ${args.orderId || 'linked order'}${args.currentStatus ? ` currently ${formatStatus(String(args.currentStatus))}` : ''}.`;
+  }
+  if (tool === 'message.send_to_customer') {
+    return `Send a ${args.channel || 'customer'} message for this case.`;
+  }
+  if (tool === 'return.update_status') {
+    return `Update return ${args.returnId || 'linked return'} to ${formatStatus(String(args.status || 'next status'))}.`;
+  }
+  if (tool === 'reconciliation.resolve_issue') {
+    return `Resolve reconciliation issue ${args.issueId || 'linked issue'} using target state ${args.targetStatus || 'resolved'}.`;
+  }
+  if (tool === 'agent.run') {
+    return `Run agent ${args.agentSlug || 'configured agent'} for this case.`;
+  }
+  if (tool === 'case.update_status') {
+    return `Move this case to ${formatStatus(String(args.status || 'the next status'))}.`;
+  }
+  return `Execute ${tool}.`;
+}
+
+function approvalPayloadPreview(step: any) {
+  const execution = step?.execution;
+  if (!execution || execution.kind !== 'tool') return null;
+  const args = execution.args || {};
+  const safeEntries = Object.entries(args)
+    .filter(([key]) => !['message', 'content', 'extraContext'].includes(key))
+    .slice(0, 5);
+  if (!safeEntries.length) return null;
+  return safeEntries.map(([key, value]) => `${formatStatus(key)}: ${String(value)}`).join(' · ');
+}
+
 export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange: (page: Page) => void; focusCaseId?: string | null }) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -77,6 +119,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const [resolveStatusMessage, setResolveStatusMessage] = useState<string | null>(null);
   const [isAiResolving, setIsAiResolving] = useState(false);
   const [expandedStepIds, setExpandedStepIds] = useState<Set<string>>(new Set());
+  const [approvedStepIds, setApprovedStepIds] = useState<Set<string>>(new Set());
 
   // ── Copilot state ────────────────────────────────────────────────
   const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
@@ -98,6 +141,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     setResolveStatusMessage(null);
     setIsAiResolving(false);
     setExpandedStepIds(new Set());
+    setApprovedStepIds(new Set());
   }, [selectedId]);
 
   // Auto-scroll to bottom on new messages
@@ -363,6 +407,15 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     });
   }, []);
 
+  const toggleStepApproval = useCallback((stepId: string) => {
+    setApprovedStepIds(prev => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId);
+      else next.add(stepId);
+      return next;
+    });
+  }, []);
+
   const executeRoutedStep = useCallback(async (step: ResolutionStep) => {
     if (!selectedId) return { ok: false, message: 'No case selected.' };
     const result = await casesApi.runResolutionStep(selectedId, step.id, {
@@ -381,6 +434,11 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
 
   const handleRunDeterministicStep = useCallback(async (step: ResolutionStep) => {
     if (!selectedId || !step?.id || executingStepId !== null) return;
+    if ((step as any).requiresApproval && !approvedStepIds.has(step.id)) {
+      setExpandedStepIds(prev => new Set(prev).add(step.id));
+      setResolveStatusMessage('Review and approve this sensitive action before running it.');
+      return;
+    }
     setExecutingStepId(step.id);
     setResolveStatusMessage(null);
     try {
@@ -399,10 +457,19 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     } finally {
       setExecutingStepId(null);
     }
-  }, [executeRoutedStep, executingStepId, refetchResolutionPlan, selectedId]);
+  }, [approvedStepIds, executeRoutedStep, executingStepId, refetchResolutionPlan, selectedId]);
 
   const handleRunAllDeterministicSteps = useCallback(async () => {
     if (!selectedId || !resolutionPlan.hasSteps || executingStepId !== null) return;
+    const pendingApprovalStep = resolutionPlan.steps.find((step: ResolutionStep) => {
+      const isAlreadyDone = completedStepIds.has(step.id) || step.status === 'completed' || step.status === 'success';
+      return (step as any).requiresApproval && !isAlreadyDone && !approvedStepIds.has(step.id);
+    });
+    if (pendingApprovalStep) {
+      setExpandedStepIds(prev => new Set(prev).add(pendingApprovalStep.id));
+      setResolveStatusMessage(`Review and approve "${pendingApprovalStep.title}" before running all steps.`);
+      return;
+    }
     setResolveStatusMessage(null);
     setExecutingStepId('all');
     try {
@@ -429,7 +496,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     } finally {
       setExecutingStepId(null);
     }
-  }, [executingStepId, refetchResolutionPlan, resolutionPlan, selectedId]);
+  }, [approvedStepIds, completedStepIds, executingStepId, refetchResolutionPlan, resolutionPlan, selectedId]);
 
   const handleResolveWithAI = useCallback(async () => {
     if (!selectedId) return;
@@ -717,6 +784,11 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                                 step.status === 'success';
                               const isExecuting = executingStepId === step.id;
                               const isExpanded = expandedStepIds.has(step.id);
+                              const requiresApproval = Boolean((step as any).requiresApproval);
+                              const isApproved = approvedStepIds.has(step.id);
+                              const canRunStep = !isCompleted && !isExecuting && executingStepId === null && (!requiresApproval || isApproved);
+                              const execution = (step as any).execution;
+                              const payloadPreview = approvalPayloadPreview(step);
                               return (
                                 <li
                                   key={step.id}
@@ -747,7 +819,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                                         </span>
                                         {step.requiresApproval && (
                                           <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30">
-                                            Approval
+                                            {isApproved ? 'Approved' : 'Approval'}
                                           </span>
                                         )}
                                       </div>
@@ -759,10 +831,10 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                                           e.stopPropagation();
                                           handleRunDeterministicStep(step);
                                         }}
-                                        disabled={isCompleted || isExecuting || executingStepId !== null}
+                                        disabled={!canRunStep}
                                         className="px-3 py-1 rounded-md text-xs font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                       >
-                                        {isCompleted ? 'Done' : isExecuting ? 'Running…' : 'Run'}
+                                        {isCompleted ? 'Done' : isExecuting ? 'Running…' : requiresApproval && !isApproved ? 'Approve first' : 'Run'}
                                       </button>
                                       <span className={`material-symbols-outlined text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>expand_more</span>
                                     </div>
@@ -783,6 +855,35 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                                           <p className="text-xs text-gray-500 dark:text-gray-400">
                                             {[step.domain, step.source, step.context].filter(Boolean).map(formatStatus).join(' · ')}
                                           </p>
+                                        </div>
+                                      )}
+                                      {requiresApproval && (
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-amber-900 dark:border-amber-800/50 dark:bg-amber-900/15 dark:text-amber-100">
+                                          <div className="flex items-start gap-2">
+                                            <span className="material-symbols-outlined text-[17px] text-amber-600 dark:text-amber-300 mt-0.5">privacy_tip</span>
+                                            <div className="min-w-0 flex-1">
+                                              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">Approval required before run</div>
+                                              <p className="text-sm font-medium">{approvalActionSummary(step)}</p>
+                                              <div className="mt-2 grid gap-1 text-xs text-amber-800/80 dark:text-amber-100/80">
+                                                <p><span className="font-semibold">Action:</span> {execution?.kind === 'tool' ? execution.tool : execution?.kind || 'approval'}</p>
+                                                {payloadPreview && <p><span className="font-semibold">Payload:</span> {payloadPreview}</p>}
+                                                <p><span className="font-semibold">Policy:</span> this may create an approval request or execute after explicit user approval.</p>
+                                              </div>
+                                              <label className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-amber-900 dark:text-amber-100">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isApproved}
+                                                  onChange={(event) => {
+                                                    event.stopPropagation();
+                                                    toggleStepApproval(step.id);
+                                                  }}
+                                                  onClick={(event) => event.stopPropagation()}
+                                                  className="h-3.5 w-3.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                                                />
+                                                I approve this action and understand what will run.
+                                              </label>
+                                            </div>
+                                          </div>
                                         </div>
                                       )}
                                     </div>
