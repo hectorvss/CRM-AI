@@ -441,7 +441,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     });
   }, []);
 
-<<<<<<< Updated upstream
   const toggleStepApproval = useCallback((stepId: string) => {
     setApprovedStepIds(prev => {
       const next = new Set(prev);
@@ -498,12 +497,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
         message: error?.message || `Failed to execute "${step.title}".`,
       };
     }
-    return {
-      ok: result?.ok !== false,
-      message: result?.message || result?.error || `Step "${step.title}" executed.`,
-      approvalRequired: Boolean(result?.approvalRequired),
-      trace: result?.trace,
-    };
   }, [onPageChange, selectedId]);
 
   const handleRunDeterministicStep = useCallback(async (step: ResolutionStep) => {
