@@ -1383,45 +1383,187 @@ export default function AIStudio() {
                                 exit={{ height: 0, opacity: 0 }}
                                 className="overflow-hidden border-t border-gray-50 dark:border-gray-800"
                               >
-                                <div className="p-6 grid grid-cols-2 gap-8">
-                                  <div className="space-y-4">
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">What it does</p>
-                                      <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                                        {agent.purpose}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Triggers</p>
-                                      <ul className="space-y-1.5">
-                                        {agent.triggers.map((trigger, i) => (
-                                          <li key={i} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                                            {trigger}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  </div>
-                                  <div className="space-y-4">
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Dependencies</p>
-                                      <div className="flex flex-wrap gap-2">
-                                        {agent.dependencies.map(dep => (
-                                          <span key={dep} className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-[10px] font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">{dep}</span>
-                                        ))}
+                                {(() => {
+                                  // ── Parse the purpose string into mandate / does / doesn't ──
+                                  const purposeText: string = agent.purpose || '';
+                                  const sentences = purposeText
+                                    .split(/(?<=\.)\s+/)
+                                    .map((s: string) => s.trim().replace(/\.$/, ''))
+                                    .filter(Boolean);
+                                  const mandate = sentences[0] || agent.desc || '';
+                                  const remaining = sentences.slice(1);
+                                  const doesItems = remaining.filter((s: string) => !/^Does\s*NOT\b/i.test(s) && !/^Does\s*not\b/i.test(s));
+                                  const doesNotItems = remaining
+                                    .filter((s: string) => /^Does\s*NOT\b/i.test(s) || /^Does\s*not\b/i.test(s))
+                                    .map((s: string) => s.replace(/^Does\s*NOT\s*/i, '').replace(/^Does\s*not\s*/i, ''));
+
+                                  const ioInput = agent.ioLogic?.input || 'Canonical event';
+                                  const ioOutput = agent.ioLogic?.output || 'Routing decision';
+
+                                  return (
+                                    <div className="p-6 space-y-5">
+                                      {/* TLDR header */}
+                                      <div className="rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50/60 to-white px-4 py-3 dark:border-violet-500/20 dark:from-violet-950/20 dark:to-[#1a1a1a]">
+                                        <div className="flex items-start gap-3">
+                                          <div className={`mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-lg ${agent.iconColor} bg-white/70 dark:bg-white/10`}>
+                                            <span className="material-symbols-outlined text-[16px]">{agent.icon}</span>
+                                          </div>
+                                          <div className="min-w-0">
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400">
+                                              Primary mandate
+                                            </p>
+                                            <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white leading-snug">
+                                              {mandate}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                                        {/* ── WHAT IT DOES ── */}
+                                        <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-[#1a1a1a]">
+                                          <div className="flex items-center gap-2 mb-3">
+                                            <span className="material-symbols-outlined text-[16px] text-emerald-500">check_circle</span>
+                                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">What it does</p>
+                                          </div>
+                                          {doesItems.length > 0 ? (
+                                            <ul className="space-y-2 mb-4">
+                                              {doesItems.map((item: string, i: number) => (
+                                                <li key={i} className="flex items-start gap-2 text-[12px] text-gray-700 dark:text-gray-300 leading-snug">
+                                                  <span className="mt-1 flex h-1.5 w-1.5 flex-none rounded-full bg-emerald-400" />
+                                                  <span>{item}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          ) : (
+                                            <p className="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed mb-4">
+                                              {mandate}
+                                            </p>
+                                          )}
+                                          {doesNotItems.length > 0 && (
+                                            <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
+                                              <div className="flex items-center gap-2 mb-2">
+                                                <span className="material-symbols-outlined text-[14px] text-rose-500">block</span>
+                                                <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest">Boundaries (does NOT)</p>
+                                              </div>
+                                              <ul className="space-y-1.5">
+                                                {doesNotItems.map((item: string, i: number) => (
+                                                  <li key={i} className="flex items-start gap-2 text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                                                    <span className="mt-1 flex h-1.5 w-1.5 flex-none rounded-full bg-rose-300" />
+                                                    <span className="line-through decoration-rose-200/70 dark:decoration-rose-500/30">{item}</span>
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* ── TRIGGERS ── */}
+                                        <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-[#1a1a1a]">
+                                          <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                              <span className="material-symbols-outlined text-[16px] text-amber-500">bolt</span>
+                                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Triggers</p>
+                                            </div>
+                                            <span className="text-[10px] font-semibold text-gray-400">{agent.triggers.length} event{agent.triggers.length !== 1 ? 's' : ''}</span>
+                                          </div>
+                                          <div className="space-y-2">
+                                            {agent.triggers.map((trigger: string, i: number) => (
+                                              <div key={i} className="flex items-start gap-2.5 rounded-lg border border-amber-100 bg-amber-50/40 px-3 py-2 dark:border-amber-900/30 dark:bg-amber-950/15">
+                                                <div className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-md bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+                                                  <span className="text-[10px] font-bold">{i + 1}</span>
+                                                </div>
+                                                <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300 leading-snug">
+                                                  {trigger}
+                                                </p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                          <p className="mt-3 text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                                            Any of these events fires the agent automatically through the runtime orchestrator.
+                                          </p>
+                                        </div>
+
+                                        {/* ── DEPENDENCIES ── */}
+                                        <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-[#1a1a1a]">
+                                          <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                              <span className="material-symbols-outlined text-[16px] text-indigo-500">hub</span>
+                                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Dependencies</p>
+                                            </div>
+                                            <span className="text-[10px] font-semibold text-gray-400">{agent.dependencies.length} link{agent.dependencies.length !== 1 ? 's' : ''}</span>
+                                          </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {agent.dependencies.map((dep: string) => {
+                                              const linked = connectionAgentByName.get(dep);
+                                              const role = linked?.role || 'External link / module';
+                                              const icon = linked?.icon || 'link';
+                                              const iconColor = linked?.iconColor || 'text-indigo-500';
+                                              return (
+                                                <div key={dep} className="flex items-start gap-2.5 rounded-lg border border-indigo-100 bg-indigo-50/40 px-3 py-2 dark:border-indigo-900/30 dark:bg-indigo-950/15">
+                                                  <div className={`mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-md bg-white shadow-sm ${iconColor} dark:bg-[#1f1f1f]`}>
+                                                    <span className="material-symbols-outlined text-[13px]">{icon}</span>
+                                                  </div>
+                                                  <div className="min-w-0">
+                                                    <p className="text-[11px] font-bold text-gray-900 dark:text-white truncate">{dep}</p>
+                                                    <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-snug">
+                                                      {role}
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+
+                                        {/* ── I/O LOGIC ── */}
+                                        <div className="rounded-xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-[#1a1a1a]">
+                                          <div className="flex items-center gap-2 mb-3">
+                                            <span className="material-symbols-outlined text-[16px] text-cyan-500">swap_vert</span>
+                                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">I/O Logic</p>
+                                          </div>
+                                          <div className="space-y-3">
+                                            <div>
+                                              <div className="flex items-center gap-2 mb-1.5">
+                                                <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                                                  <span className="material-symbols-outlined text-[10px]">login</span>
+                                                </span>
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Input</p>
+                                              </div>
+                                              <div className="rounded-lg border border-violet-100 bg-violet-50/40 px-3 py-2 dark:border-violet-900/30 dark:bg-violet-950/15">
+                                                <p className="font-mono text-[11px] font-semibold text-gray-800 dark:text-gray-200">{ioInput}</p>
+                                                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 leading-snug">
+                                                  Structured payload received from upstream agent or runtime event bus.
+                                                </p>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 pl-2">
+                                              <div className="h-3 w-px bg-gray-200 dark:bg-gray-700"></div>
+                                              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Deterministic transform</p>
+                                              <span className="material-symbols-outlined text-[12px] text-gray-400">arrow_downward</span>
+                                            </div>
+
+                                            <div>
+                                              <div className="flex items-center gap-2 mb-1.5">
+                                                <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                                                  <span className="material-symbols-outlined text-[10px]">logout</span>
+                                                </span>
+                                                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Output</p>
+                                              </div>
+                                              <div className="rounded-lg border border-blue-100 bg-blue-50/40 px-3 py-2 dark:border-blue-900/30 dark:bg-blue-950/15">
+                                                <p className="font-mono text-[11px] font-semibold text-gray-800 dark:text-gray-200">{ioOutput}</p>
+                                                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 leading-snug">
+                                                  Result handed off to downstream agents, written to the canonical state, or surfaced to the operator.
+                                                </p>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">I/O Logic</p>
-                                      <div className="flex items-center gap-2">
-                                        <div className="px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700 text-[10px] font-mono">{agent.ioLogic?.input || 'Canonical Event'}</div>
-                                        <span className="material-symbols-outlined text-xs text-gray-400">arrow_forward</span>
-                                        <div className="px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700 text-[10px] font-mono">{agent.ioLogic?.output || 'Routing Decision'}</div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
+                                  );
+                                })()}
                                 <div className="px-6 pb-6">
                                   <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
                                     <div className="flex items-center justify-between gap-3">

@@ -2,10 +2,10 @@
  * AgentNetworkGraph.tsx
  *
  * n8n-style network visualization for AI Studio agents.
- * Renders the real connections (receivesFrom / reportsTo / uses / writesTo /
- * blockedBy / steps) as a node graph with curved SVG bezier connections.
+ * Renders the real connections (receivesFrom / reportsTo / uses / steps)
+ * as a node graph with curved SVG bezier connections.
  *
- * Layout:
+ * Layout (responsive — fills the parent container width):
  *   ┌────────────┐                                    ┌────────────┐
  *   │ Source 1   │──╮                              ╭──│ Target 1   │
  *   ├────────────┤  │      ┌──────────────────┐    │  ├────────────┤
@@ -22,7 +22,7 @@
  * Pure visual component — no data fetching.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ interface Props {
   roadmap: AgentRoadmap;
 }
 
-// ─── Layout constants ───────────────────────────────────────────────────────
+// ─── Layout constants (node sizes stay fixed; column gaps are dynamic) ─────
 
 const NODE_W = 184;
 const NODE_H = 54;
@@ -65,14 +65,13 @@ const NODE_GAP_Y = 14;
 const AGENT_W = 240;
 const AGENT_H = 96;
 
-const COL_GAP_X = 100;          // empty space between cols
-const TOOL_GAP_Y = 70;          // gap from agent bottom to tools row
+const TOOL_GAP_Y = 70;
 const TOOL_W = 130;
 const TOOL_H = 56;
 const TOOL_GAP_X = 14;
 
 const PADDING_X = 24;
-const PADDING_Y = 24;
+const PADDING_Y = 32;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -94,26 +93,45 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
   const sources = roadmap.receivesFrom.slice(0, 6);
   const targets = roadmap.reportsTo.slice(0, 6);
   const tools = roadmap.uses.slice(0, 6);
-  const writes = roadmap.writesTo.slice(0, 4);
-  const blockers = roadmap.blockedBy.slice(0, 4);
   const steps = roadmap.steps;
+
+  // ─── Track container width so the graph fills available horizontal space ──
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(1200);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const update = () => {
+      if (containerRef.current) {
+        // subtract internal padding (p-4 = 16px on each side = 32px total)
+        const w = containerRef.current.offsetWidth - 32;
+        if (w > 0) setContainerWidth(w);
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   // ─── Compute coordinates ──────────────────────────────────────────────────
 
   const layout = useMemo(() => {
+    const usableW = Math.max(900, containerWidth);
+
     const lanesH = Math.max(sources.length, targets.length, 1) * (NODE_H + NODE_GAP_Y) - NODE_GAP_Y;
     const canvasH = Math.max(lanesH, AGENT_H) + TOOL_GAP_Y + TOOL_H + 60;
 
-    // x columns
+    // x columns (responsive)
     const sourceX = PADDING_X;
-    const agentX = sourceX + NODE_W + COL_GAP_X;
-    const targetX = agentX + AGENT_W + COL_GAP_X;
-    const canvasW = targetX + NODE_W + PADDING_X;
+    const targetX = usableW - PADDING_X - NODE_W;
+    const agentX = (sourceX + NODE_W + targetX) / 2 - AGENT_W / 2;
 
-    // y center for agent (vertical center in lanesH)
+    // y center for agent
     const agentY = PADDING_Y + Math.max(0, (lanesH - AGENT_H) / 2);
 
-    // source positions
+    // source positions (vertical center within lanes block)
     const sourceTotalH = sources.length * (NODE_H + NODE_GAP_Y) - NODE_GAP_Y;
     const sourceStartY = PADDING_Y + Math.max(0, (Math.max(lanesH, AGENT_H) - sourceTotalH) / 2);
     const sourcePos = sources.map((label, i) => ({
@@ -142,7 +160,7 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
     }));
 
     return {
-      canvasW,
+      canvasW: usableW,
       canvasH,
       agentX,
       agentY,
@@ -153,18 +171,21 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
       toolPos,
       toolY,
     };
-  }, [sources, targets, tools]);
+  }, [sources, targets, tools, containerWidth]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative mt-5 overflow-x-auto rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+    <div
+      ref={containerRef}
+      className="relative mt-5 w-full overflow-hidden rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]"
+    >
       {/* dotted grid background */}
       <div className="pointer-events-none absolute inset-0 opacity-[0.18] [background-image:radial-gradient(circle,#d1d5db_1px,transparent_1px)] [background-size:18px_18px] dark:opacity-[0.10]" />
 
       <div
-        className="relative"
-        style={{ width: `${layout.canvasW}px`, height: `${layout.canvasH}px`, minWidth: '900px' }}
+        className="relative w-full"
+        style={{ height: `${layout.canvasH}px`, minWidth: '900px' }}
       >
         {/* ─── SVG connectors layer ───────────────────────────────────────── */}
         <svg
@@ -174,7 +195,6 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
           style={{ zIndex: 1 }}
         >
           <defs>
-            {/* Solid arrow markers */}
             <marker id="agArrowIn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="#a78bfa" />
             </marker>
@@ -186,7 +206,7 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
             </marker>
           </defs>
 
-          {/* sources → agent (curves entering left side of agent) */}
+          {/* sources → agent */}
           {layout.sourcePos.map((s, i) => {
             const x1 = s.x + NODE_W;
             const y1 = s.y + NODE_H / 2;
@@ -206,7 +226,7 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
             );
           })}
 
-          {/* agent → targets (curves leaving right side of agent) */}
+          {/* agent → targets */}
           {layout.targetPos.map((t, i) => {
             const x1 = layout.agentX + AGENT_W;
             const y1 = layout.agentY + AGENT_H / 2;
@@ -226,7 +246,7 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
             );
           })}
 
-          {/* agent → tools (dashed vertical curves below) */}
+          {/* agent → tools (dashed) */}
           {layout.toolPos.map((tool, i) => {
             const x1 = layout.agentX + AGENT_W / 2;
             const y1 = layout.agentY + AGENT_H;
@@ -262,13 +282,11 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
               <p className="line-clamp-2 text-[11px] font-semibold text-gray-700 leading-tight dark:text-gray-200">
                 {s.label}
               </p>
-              {/* output port */}
               <span className="absolute -right-1 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border border-violet-400 bg-white dark:bg-[#1d1d1d]" />
             </div>
           </div>
         ))}
 
-        {/* Lane label: Receives From */}
         {sources.length > 0 && (
           <div
             className="absolute text-[9px] font-bold uppercase tracking-[0.2em] text-violet-500/80"
@@ -278,7 +296,7 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
           </div>
         )}
 
-        {/* ─── Agent node (center, big) ───────────────────────────────────── */}
+        {/* ─── Agent node ─────────────────────────────────────────────────── */}
         <div
           className="absolute"
           style={{ left: `${layout.agentX}px`, top: `${layout.agentY}px`, width: `${AGENT_W}px`, height: `${AGENT_H}px`, zIndex: 3 }}
@@ -293,11 +311,8 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
             <p className="mt-0.5 px-1 text-[9px] font-medium uppercase tracking-wider text-violet-600/80 dark:text-violet-300/80">
               {agent.active ? '● Live' : '○ Paused'}
             </p>
-            {/* input port */}
             <span className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-violet-400 bg-white dark:bg-[#1d1d1d]" />
-            {/* output port */}
             <span className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-blue-400 bg-white dark:bg-[#1d1d1d]" />
-            {/* tools port */}
             {tools.length > 0 && (
               <span className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-gray-400 bg-white dark:bg-[#1d1d1d]" />
             )}
@@ -312,7 +327,6 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
             style={{ left: `${t.x}px`, top: `${t.y}px`, width: `${NODE_W}px`, height: `${NODE_H}px`, zIndex: 2 }}
           >
             <div className="flex h-full items-center gap-2 rounded-lg border border-blue-200/60 bg-white px-3 py-2 shadow-sm transition-all hover:border-blue-400 hover:shadow-md dark:border-blue-500/30 dark:bg-[#1d1d1d]">
-              {/* input port */}
               <span className="absolute -left-1 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border border-blue-400 bg-white dark:bg-[#1d1d1d]" />
               <div className="flex h-6 w-6 flex-none items-center justify-center rounded-md bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300">
                 <span className="material-symbols-outlined text-[14px]">output</span>
@@ -324,7 +338,6 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
           </div>
         ))}
 
-        {/* Lane label: Reports To */}
         {targets.length > 0 && (
           <div
             className="absolute text-[9px] font-bold uppercase tracking-[0.2em] text-blue-500/80"
@@ -348,13 +361,11 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
               <p className="mt-0.5 line-clamp-2 text-[10px] font-medium leading-tight text-gray-600 dark:text-gray-400">
                 {tool.label}
               </p>
-              {/* input port */}
               <span className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full border border-gray-400 bg-white dark:bg-[#1d1d1d]" />
             </div>
           </div>
         ))}
 
-        {/* Lane label: Uses */}
         {tools.length > 0 && (
           <div
             className="absolute text-[9px] font-bold uppercase tracking-[0.2em] text-gray-400"
@@ -364,42 +375,6 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
           </div>
         )}
       </div>
-
-      {/* ─── Sub-info row: Writes To + Blocked By ─────────────────────────── */}
-      {(writes.length > 0 || blockers.length > 0) && (
-        <div className="relative mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
-          {writes.length > 0 && (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 dark:border-emerald-900/30 dark:bg-emerald-950/20">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px] text-emerald-600 dark:text-emerald-400">edit_note</span>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Writes to</p>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {writes.map((w) => (
-                  <span key={w} className="rounded-md border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-[#1a1a1a] dark:text-emerald-300">
-                    {w}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {blockers.length > 0 && (
-            <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-4 py-3 dark:border-amber-900/30 dark:bg-amber-950/20">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px] text-amber-600 dark:text-amber-400">block</span>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300">Blocked by</p>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {blockers.map((b) => (
-                  <span key={b} className="rounded-md border border-amber-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-[#1a1a1a] dark:text-amber-300">
-                    {b}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ─── Execution path (sub-flow) ────────────────────────────────────── */}
       {steps.length > 0 && (
