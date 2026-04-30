@@ -894,16 +894,23 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
           </div>
         )}
 
-        {/* ── KPI Strip ─────────────────────────────────────────────
-             Layout mirrors the two-column body below it:
-             · 3 left KPIs  → flex-1  (matches left content column)
-             · Risk Level   → w-[340px] flex-shrink-0 (matches sidebar)
-        ──────────────────────────────────────────────────────── */}
-        {(() => {
-          const kpiCard = (kpi: { label: string; value: string; sub: string; accent: boolean; accentColor?: string }) => (
+        {/* ── Unified 4-col grid: KPIs + body ──────────────────────────
+             grid-cols-4 + gap-4 is shared by both rows so the sidebar
+             column (col-span-1) is always pixel-perfect with the KPI
+             cards above it.
+        ──────────────────────────────────────────────────────────── */}
+        <div className="px-6 pt-5 pb-6 grid grid-cols-4 gap-4">
+
+          {/* ── Row 1: 4 identical KPI cards ───────────────────────── */}
+          {[
+            { label: 'Lifetime Value', value: selectedCustomer.ltv, sub: selectedCustomer.plan, accent: false, accentColor: undefined as string | undefined },
+            { label: 'Open Cases', value: String(selectedCustomer.openTickets), sub: selectedCustomer.openTickets === 1 ? '1 active ticket' : `${selectedCustomer.openTickets} active tickets`, accent: selectedCustomer.openTickets > 0, accentColor: 'amber' as string | undefined },
+            { label: 'Next Renewal', value: selectedCustomer.nextRenewal, sub: selectedCustomer.plan, accent: false, accentColor: undefined as string | undefined },
+            { label: 'Risk Level', value: churnHigh ? 'Churn Risk' : churn === 'Watchlist' ? 'Watchlist' : 'Healthy', sub: `Fraud risk: ${fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low'}`, accent: churnHigh || fraudHigh, accentColor: 'red' as string | undefined },
+          ].map((kpi) => (
             <section
               key={kpi.label}
-              className={`rounded-2xl border shadow-card overflow-hidden h-full ${
+              className={`rounded-2xl border shadow-card overflow-hidden ${
                 kpi.accent && kpi.accentColor === 'red'
                   ? 'border-red-200 dark:border-red-800/40 bg-white dark:bg-card-dark'
                   : kpi.accent && kpi.accentColor === 'amber'
@@ -921,28 +928,10 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{kpi.sub}</p>
               </div>
             </section>
-          );
-          return (
-            <div className="px-6 pt-5 pb-1 flex gap-4">
-              {/* Left group — flex-1, matches left column */}
-              <div className="flex-1 grid grid-cols-3 gap-4">
-                {kpiCard({ label: 'Lifetime Value', value: selectedCustomer.ltv, sub: selectedCustomer.plan, accent: false })}
-                {kpiCard({ label: 'Open Cases', value: String(selectedCustomer.openTickets), sub: selectedCustomer.openTickets === 1 ? '1 active ticket' : `${selectedCustomer.openTickets} active tickets`, accent: selectedCustomer.openTickets > 0, accentColor: 'amber' })}
-                {kpiCard({ label: 'Next Renewal', value: selectedCustomer.nextRenewal, sub: selectedCustomer.plan, accent: false })}
-              </div>
-              {/* Right — w-[340px], matches sidebar */}
-              <div className="w-[340px] flex-shrink-0">
-                {kpiCard({ label: 'Risk Level', value: churnHigh ? 'Churn Risk' : churn === 'Watchlist' ? 'Watchlist' : 'Healthy', sub: `Fraud risk: ${fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low'}`, accent: churnHigh || fraudHigh, accentColor: 'red' })}
-              </div>
-            </div>
-          );
-        })()}
+          ))}
 
-        {/* ── Main Area (two columns) ───────────────────────────────── */}
-        <div className="flex gap-4 px-6 pt-4 pb-6 items-start">
-
-          {/* ── Left: AI Summary + Activity Feed ─────────────────── */}
-          <div className="flex-1 flex flex-col gap-4 min-w-0">
+          {/* ── Row 2, col-span-3: AI Summary + Activity ────────────── */}
+          <div className="col-span-3 flex flex-col gap-4 min-w-0">
 
             {/* AI Executive Summary */}
             <section className={cardCls}>
@@ -1123,8 +1112,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
             </section>
           </div>
 
-          {/* ── Right: Identity + Health + Actions ─────────────────── */}
-          <div className="w-[340px] flex-shrink-0 flex flex-col gap-3">
+          {/* ── Row 2, col-span-1: Right sidebar ────────────────────── */}
+          <div className="col-span-1 flex flex-col gap-3">
 
             {/* Identity card */}
             <section className={cardCls}>
@@ -1305,8 +1294,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
               </div>
             </section>
 
-          </div>{/* end right sidebar */}
-        </div>
+          </div>{/* end right sidebar col-span-1 */}
+        </div>{/* end unified grid */}
       </div>
     );
   };
