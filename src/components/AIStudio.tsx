@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { aiApi, agentsApi, connectorsApi, operationsApi, reportsApi, workspacesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import ConnectionsView from './ConnectionsView';
+import { ActionModal } from './ActionModal';
 import PermissionsView from './PermissionsView';
 import KnowledgeView from './KnowledgeView';
 import ReasoningView from './ReasoningView';
@@ -375,6 +376,7 @@ export default function AIStudio() {
   const [agentListFilter, setAgentListFilter] = useState<'All' | 'Needs setup' | 'Enabled' | 'Disabled'>('All');
   const [overviewMessage, setOverviewMessage] = useState<string>('');
   const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
+  const [pendingAgentToggle, setPendingAgentToggle] = useState<any | null>(null);
   const [savingCostControls, setSavingCostControls] = useState(false);
 
   const { data: studioData, refetch: refetchStudio } = useApi(aiApi.studio);
@@ -400,7 +402,7 @@ export default function AIStudio() {
     communication: 'text-green-600', observability: 'text-gray-600', connectors: 'text-cyan-600',
   };
 
-  const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Connections', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
+  const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
 
   // Map API agents into the categories structure for rendering
   const mappedCategories = useMemo(() => (
@@ -534,8 +536,8 @@ export default function AIStudio() {
       {
         label: 'At least one connector online',
         completed: connectedConnectors > 0,
-        actionLabel: 'Open Connections',
-        onClick: () => setActiveTab('Connections'),
+        actionLabel: 'Review setup',
+        onClick: () => setActiveTab('Overview'),
       },
       {
         label: 'Knowledge imported',
@@ -636,15 +638,6 @@ export default function AIStudio() {
     refetchRuns();
   };
 
-  const handleDeployRollout = async (percentage: number) => {
-    await persistAiStudioSettings({
-      ...aiStudioSettings,
-      rolloutPercentage: percentage,
-      costControls: costControls,
-    });
-    setOverviewMessage(`Rollout target updated to ${percentage}%.`);
-  };
-
   const handleCostControlToggle = async () => {
     setSavingCostControls(true);
     await persistAiStudioSettings({
@@ -688,6 +681,27 @@ export default function AIStudio() {
     setPendingAgentId(null);
   };
 
+  const confirmAgentToggle = async () => {
+    if (!pendingAgentToggle?.agent) return;
+    await handleToggleAgent(pendingAgentToggle.agent);
+    setPendingAgentToggle(null);
+  };
+
+  const agentRoadmap = (agent: any) => {
+    const inputs = Array.isArray(agent?.triggers) ? agent.triggers.slice(0, 4) : [];
+    const dependencies = Array.isArray(agent?.dependencies) ? agent.dependencies.slice(0, 5) : [];
+    const toolSignals = [agent?.ioLogic?.input, agent?.ioLogic?.output].filter(Boolean) as string[];
+    const upstream = dependencies.filter((item: string) => !/Agent|Runtime|Window|Window|Window|Knowledge|Composer/i.test(item)).slice(0, 3);
+    const downstream = dependencies.filter((item: string) => /Agent|Runtime|Workflow|Helpdesk|Stripe|Shopify|OMS|Returns|Logistics|Recharge|Audit|SLA|Customer/i.test(item)).slice(0, 4);
+
+    return {
+      inputs,
+      upstream: upstream.length ? upstream : dependencies.slice(0, 3),
+      downstream: downstream.length ? downstream : dependencies.slice(0, 4),
+      toolSignals,
+    };
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
@@ -698,16 +712,17 @@ export default function AIStudio() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-semibold text-gray-900 dark:text-white">AI Studio</h1>
-                <MinimalPill tone="active">Limited rollout ({costControls.rolloutPercentage}%)</MinimalPill>
               </div>
               <p className="text-xs text-gray-500 mt-0.5">Prebuilt AI agents for support</p>
             </div>
             <div className="flex items-center gap-4">
-              <MinimalButton variant="ghost" onClick={handleEmergencyStop}>Emergency stop</MinimalButton>
-              <MinimalButton onClick={() => handleDeployRollout(25)}>Deploy to 25%</MinimalButton>
-              <div className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full text-[11px] font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
-                Ecommerce Support preset
-              </div>
+              <button
+                type="button"
+                onClick={handleEmergencyStop}
+                className="inline-flex items-center justify-center rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Emergency stop
+              </button>
             </div>
           </div>
           <div className="px-6 flex items-center space-x-8 border-t border-gray-100 dark:border-gray-800 pt-3">
@@ -825,11 +840,11 @@ export default function AIStudio() {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => handleToggleAgent(agent)}
+                              onClick={() => setPendingAgentToggle({ agent, nextActive: !agent.active })}
                               disabled={pendingAgentId === agent.id}
-                              className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
+                              className={`relative inline-flex h-8 w-14 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
                             >
-                              <span className={`absolute h-5 w-5 rounded-full bg-white transition-all ${agent.active ? 'right-1' : 'left-1'}`} />
+                              <span className={`absolute h-6 w-6 rounded-full bg-white transition-all ${agent.active ? 'right-1' : 'left-1'}`} />
                             </button>
                           )}
                         </div>
@@ -1258,12 +1273,12 @@ export default function AIStudio() {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleToggleAgent(agent);
+                                    setPendingAgentToggle({ agent, nextActive: !agent.active });
                                   }}
                                   disabled={pendingAgentId === agent.id}
-                                  className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
+                                  className={`relative inline-flex h-8 w-14 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
                                 >
-                                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${agent.active ? 'right-0.5' : 'left-0.5'}`}></div>
+                                  <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${agent.active ? 'right-1' : 'left-1'}`}></div>
                                 </button>
                               )}
                               <span className={`material-symbols-outlined text-gray-400 transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
@@ -1282,7 +1297,7 @@ export default function AIStudio() {
                                 <div className="p-6 grid grid-cols-2 gap-8">
                                   <div className="space-y-4">
                                     <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Purpose</p>
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">What it does</p>
                                       <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
                                         {agent.purpose}
                                       </p>
@@ -1318,6 +1333,65 @@ export default function AIStudio() {
                                     </div>
                                   </div>
                                 </div>
+                                <div className="px-6 pb-6">
+                                  <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Mental roadmap</p>
+                                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                          How this agent fits into the wider SaaS flow.
+                                        </p>
+                                      </div>
+                                      <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
+                                    </div>
+                                    {(() => {
+                                      const roadmap = agentRoadmap(agent);
+                                      return (
+                                        <div className="mt-4 grid gap-4 lg:grid-cols-4">
+                                          <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Receives</p>
+                                            <div className="space-y-1.5">
+                                              {roadmap.inputs.slice(0, 3).map((item: string) => (
+                                                <div key={item} className="rounded-xl border border-black/5 bg-white px-3 py-2 text-xs text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
+                                                  {item}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Core handoff</p>
+                                            <div className="rounded-xl border border-black/5 bg-white px-3 py-3 text-xs text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
+                                              {agent.ioLogic?.output || 'Routing decision'}
+                                            </div>
+                                            <div className="mt-2 rounded-xl border border-black/5 bg-white px-3 py-2 text-xs text-gray-500 dark:border-white/10 dark:bg-[#171717] dark:text-gray-400">
+                                              {agent.ioLogic?.input || 'Canonical event'}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Connects to</p>
+                                            <div className="space-y-1.5">
+                                              {roadmap.downstream.slice(0, 3).map((item: string) => (
+                                                <div key={item} className="rounded-xl border border-black/5 bg-white px-3 py-2 text-xs text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
+                                                  {item}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Systems / tools</p>
+                                            <div className="space-y-1.5">
+                                              {roadmap.upstream.slice(0, 3).map((item: string) => (
+                                                <div key={item} className="rounded-xl border border-black/5 bg-white px-3 py-2 text-xs text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
+                                                  {item}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                </div>
                               </motion.div>
                             )}
                           </AnimatePresence>
@@ -1332,6 +1406,41 @@ export default function AIStudio() {
         </AnimatePresence>
       </div>
       </div>
+      <ActionModal
+        open={Boolean(pendingAgentToggle?.agent)}
+        onClose={() => setPendingAgentToggle(null)}
+        loading={pendingAgentId === pendingAgentToggle?.agent?.id}
+        variant={pendingAgentToggle?.nextActive ? 'warning' : 'danger'}
+        icon={pendingAgentToggle?.nextActive ? 'toggle_on' : 'toggle_off'}
+        title={pendingAgentToggle?.nextActive ? `Enable ${pendingAgentToggle?.agent?.name || 'agent'}` : `Disable ${pendingAgentToggle?.agent?.name || 'agent'}`}
+        subtitle={pendingAgentToggle?.nextActive
+          ? 'This will activate the agent in the live runtime and let it receive new tasks.'
+          : 'This will pause the agent so it stops receiving new tasks from the runtime.'}
+        context={pendingAgentToggle?.agent ? [
+          { label: 'Agent', value: pendingAgentToggle.agent.name },
+          { label: 'Category', value: pendingAgentToggle.agent.category || 'Workspace agent' },
+          { label: 'Current state', value: pendingAgentToggle.agent.active ? 'Active' : 'Disabled' },
+          { label: 'Next state', value: pendingAgentToggle?.nextActive ? 'Active' : 'Disabled', accent: !pendingAgentToggle?.nextActive },
+        ] : []}
+        steps={pendingAgentToggle?.nextActive ? [
+          { text: 'The agent becomes available to the runtime', detail: 'New tasks can be routed to this agent once the toggle is confirmed.' },
+          { text: 'Any policy bundle stays intact', detail: 'Only the activation state changes; permissions, safety and reasoning profiles remain in place.' },
+          { text: 'Operational routing is refreshed', detail: 'The dashboard refetches agent state so the UI reflects the new live status.' },
+        ] : [
+          { text: 'The agent stops receiving new work', detail: 'The runtime will avoid routing fresh tasks to this agent.' },
+          { text: 'Current policy definitions remain stored', detail: 'No policy or configuration bundle is deleted; only execution is paused.' },
+          { text: 'The workspace agent map is refreshed', detail: 'The list and live status indicators update after the change lands.' },
+        ]}
+        considerations={pendingAgentToggle?.nextActive ? [
+          { text: 'Turning an agent on can immediately expose it to live traffic.' },
+          { text: 'If the agent depends on incomplete setup, it may route but still fail on missing tools or connectors.' },
+        ] : [
+          { text: 'Disabling an agent prevents it from receiving new tasks, which can pause part of the support flow.' },
+          { text: 'Locked agents cannot be toggled from this screen.' },
+        ]}
+        confirmLabel={pendingAgentToggle?.nextActive ? 'Enable agent' : 'Disable agent'}
+        onConfirm={confirmAgentToggle}
+      />
     </div>
   );
 }
