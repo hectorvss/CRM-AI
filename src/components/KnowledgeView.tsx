@@ -6,6 +6,7 @@ import { useApi, useMutation } from '../api/hooks';
 import { cloneJson, ensureArray, ensureBoolean, mergeProfile } from './aiStudioProfileUtils';
 import { MinimalButton } from './MinimalCategoryShell';
 import StyledSelect from './StyledSelect';
+import PolicyActionsBar from './PolicyActionsBar';
 
 type AccessLevel = 'No access' | 'Metadata only' | 'Read summaries only' | 'Read raw documents' | 'Read + extract' | 'Approval required';
 type SensitiveRule = 'Hidden completely' | 'Masked' | 'Summary only' | 'View with approval' | 'Never accessible';
@@ -165,7 +166,16 @@ export default function KnowledgeView() {
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4"><div className={`w-14 h-14 rounded-2xl ${currentAgent.iconColor} flex items-center justify-center shadow-inner`}><span className="material-symbols-outlined text-2xl">{currentAgent.icon}</span></div><div><h2 className="text-xl font-bold text-gray-900 dark:text-white">{currentAgent.name}</h2><p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{currentAgent.role || 'Agent role description'}</p><div className="flex items-center gap-2 mt-3"><span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700">{currentAgent.active ? 'Live' : 'Draft'}</span><span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-md text-xs font-medium border border-indigo-100 dark:border-indigo-800/50">System Agent</span></div></div></div>
-                <div className="flex items-center gap-3"><MinimalButton variant="ghost" onClick={handleRollback}>Reset</MinimalButton><MinimalButton variant="outline" onClick={() => saveAndRefresh(false)} disabled={saveDraft.loading}>Save draft</MinimalButton><MinimalButton onClick={() => saveAndRefresh(true)} disabled={saveDraft.loading || publishDraft.loading}>Publish changes</MinimalButton></div>
+                <PolicyActionsBar
+                  scope="Knowledge"
+                  agentName={currentAgent.name}
+                  resetting={rollbackDraft.loading}
+                  saving={saveDraft.loading}
+                  publishing={publishDraft.loading}
+                  onReset={handleRollback}
+                  onSaveDraft={() => saveAndRefresh(false)}
+                  onPublish={() => saveAndRefresh(true)}
+                />
               </div>
             </div>
 

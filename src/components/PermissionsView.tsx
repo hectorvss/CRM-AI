@@ -13,6 +13,7 @@ import {
 import { cloneJson, ensureArray, ensureBoolean, ensureNumber, ensureRecord, mergeProfile, mergeRecord } from './aiStudioProfileUtils';
 import { MinimalButton, MinimalPill } from './MinimalCategoryShell';
 import StyledSelect from './StyledSelect';
+import PolicyActionsBar from './PolicyActionsBar';
 
 type PermissionProfileState = AgentPermissionConfig & {
   actionPermissions: Record<string, PermissionState>;
@@ -286,11 +287,16 @@ export default function PermissionsView() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <MinimalButton variant="ghost" onClick={handleRollback}>Reset</MinimalButton>
-                  <MinimalButton variant="outline" onClick={() => saveAndRefresh(false)} disabled={saveDraft.loading}>Save draft</MinimalButton>
-                  <MinimalButton onClick={() => saveAndRefresh(true)} disabled={saveDraft.loading || publishDraft.loading}>Publish changes</MinimalButton>
-                </div>
+                <PolicyActionsBar
+                  scope="Permissions"
+                  agentName={selectedAgent || 'this agent'}
+                  resetting={rollbackDraft.loading}
+                  saving={saveDraft.loading}
+                  publishing={publishDraft.loading}
+                  onReset={handleRollback}
+                  onSaveDraft={() => saveAndRefresh(false)}
+                  onPublish={() => saveAndRefresh(true)}
+                />
               </div>
             </div>
 

@@ -5,6 +5,7 @@ import { agentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import { agentReasoningConfig, defaultReasoningConfig, AgentReasoningConfig } from '../agentReasoningConfig';
 import { cloneJson, ensureArray, mergeProfile } from './aiStudioProfileUtils';
+import PolicyActionsBar from './PolicyActionsBar';
 
 function createReasoningProfile(base: AgentReasoningConfig, persisted?: Record<string, any> | null): AgentReasoningConfig {
   const merged = mergeProfile(base, persisted);
@@ -133,11 +134,16 @@ export default function ReasoningView() {
                     <p className="text-sm text-gray-500 dark:text-gray-400">{currentAgent.summary || 'Agent reasoning configuration'}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={handleRollback} className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">Reset</button>
-                  <button onClick={() => saveAndRefresh(false)} className="px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400 rounded-lg transition-colors">Save draft</button>
-                  <button onClick={() => saveAndRefresh(true)} className="px-4 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 rounded-lg transition-colors shadow-sm">Publish</button>
-                </div>
+                <PolicyActionsBar
+                  scope="Reasoning"
+                  agentName={selectedAgent || currentAgent?.name}
+                  resetting={rollbackDraft.loading}
+                  saving={saveDraft.loading}
+                  publishing={publishDraft.loading}
+                  onReset={handleRollback}
+                  onSaveDraft={() => saveAndRefresh(false)}
+                  onPublish={() => saveAndRefresh(true)}
+                />
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700">

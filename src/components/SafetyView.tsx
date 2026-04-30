@@ -6,6 +6,7 @@ import { useApi, useMutation } from '../api/hooks';
 import { agentSafetyConfig, defaultSafetyConfig, AgentSafetyConfig } from '../agentSafetyConfig';
 import { cloneJson, ensureArray, ensureNumber, mergeProfile } from './aiStudioProfileUtils';
 import StyledSelect from './StyledSelect';
+import PolicyActionsBar from './PolicyActionsBar';
 
 function createSafetyProfile(base: AgentSafetyConfig, persisted?: Record<string, any> | null): AgentSafetyConfig {
   const merged = mergeProfile(base, persisted);
@@ -98,7 +99,16 @@ export default function SafetyView() {
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4"><div className={`w-14 h-14 rounded-2xl ${currentAgent.iconColor} flex items-center justify-center shadow-inner`}><span className="material-symbols-outlined text-2xl">{currentAgent.icon}</span></div><div><div className="flex items-center gap-3 mb-1"><h2 className="text-xl font-bold text-gray-900 dark:text-white">{selectedAgent}</h2><span className="px-2.5 py-0.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-full text-xs font-bold border border-green-200 dark:border-green-900/30">Active</span><span className="px-2.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-bold border border-indigo-200 dark:border-indigo-900/30 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">security</span>{agentConfig.template}</span></div><p className="text-sm text-gray-500 dark:text-gray-400">{currentAgent.summary || 'Agent safety configuration'}</p></div></div>
-                <div className="flex items-center gap-2"><button onClick={handleRollback} className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">Reset</button><button onClick={() => saveAndRefresh(false)} className="px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400 rounded-lg transition-colors">Save draft</button><button onClick={() => saveAndRefresh(true)} className="px-4 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 rounded-lg transition-colors shadow-sm">Publish</button></div>
+                <PolicyActionsBar
+                  scope="Safety"
+                  agentName={selectedAgent || currentAgent.name}
+                  resetting={rollbackDraft.loading}
+                  saving={saveDraft.loading}
+                  publishing={publishDraft.loading}
+                  onReset={handleRollback}
+                  onSaveDraft={() => saveAndRefresh(false)}
+                  onPublish={() => saveAndRefresh(true)}
+                />
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700"><div className="flex items-center gap-2 mb-2"><span className="material-symbols-outlined text-gray-400 text-sm">shield</span><h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Effective Safety Summary</h3></div><ul className="space-y-1">{agentConfig.effectiveSafetySummary.map((summary, idx) => <li key={idx} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2"><span className="material-symbols-outlined text-[14px] text-indigo-500 mt-0.5">check_circle</span>{summary}</li>)}</ul></div>

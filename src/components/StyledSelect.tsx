@@ -4,6 +4,11 @@
  * Drop-in replacement for native <select> that mimics the inbox-style
  * dropdown menu (white card · shadow-lg · rounded-xl · py-1 · hover bg).
  *
+ * The dropdown menu is rendered through a React portal attached to
+ * document.body so it always escapes parent containers with `overflow-hidden`
+ * or `overflow-y-auto`, and is positioned with viewport coordinates derived
+ * from the trigger button's bounding rect.
+ *
  * Same API as <select>:
  *   <StyledSelect value={x} onChange={(e) => setX(e.target.value)} className="...">
  *     <option value="a">Option A</option>
@@ -14,7 +19,8 @@
  * existing handlers (`e.target.value`) keep working without modification.
  */
 
-import React, { ReactNode, useEffect, useRef, useState } from 'react';
+import React, { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface StyledSelectProps {
   value: string;
@@ -23,6 +29,13 @@ interface StyledSelectProps {
   className?: string;
   disabled?: boolean;
   placeholder?: string;
+}
+
+interface MenuPos {
+  top: number;
+  left: number;
+  width: number;
+  placeAbove: boolean;
 }
 
 export default function StyledSelect({
@@ -35,6 +48,9 @@ export default function StyledSelect({
 }: StyledSelectProps) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<MenuPos | null>(null);
 
   // Extract <option> children into [{ value, label }]
   const options: { value: string; label: string }[] = [];
@@ -51,13 +67,45 @@ export default function StyledSelect({
   const selected = options.find((o) => o.value === value);
   const displayLabel = selected?.label ?? placeholder ?? options[0]?.label ?? '';
 
-  // Close on outside click
+  // Compute menu position relative to viewport whenever it opens or layout changes
+  const updatePosition = () => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const menuMaxH = 288; // tailwind max-h-72
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placeAbove = spaceBelow < menuMaxH + 16 && rect.top > spaceBelow;
+    setMenuPos({
+      top: placeAbove ? rect.top - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      placeAbove,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = () => updatePosition();
+    window.addEventListener('scroll', handler, true);
+    window.addEventListener('resize', handler);
+    return () => {
+      window.removeEventListener('scroll', handler, true);
+      window.removeEventListener('resize', handler);
+    };
+  }, [open]);
+
+  // Close on outside click (must check both trigger wrapper AND portal menu)
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (wrapperRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -71,8 +119,6 @@ export default function StyledSelect({
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // Pass through whatever className the caller used; we only enforce the
-  // structural classes needed for the trigger button to behave correctly.
   const triggerClass = className && className.trim().length > 0
     ? `${className} inline-flex items-center justify-between gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`
     : 'inline-flex items-center justify-between gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
@@ -80,6 +126,7 @@ export default function StyledSelect({
   return (
     <div ref={wrapperRef} className="relative inline-block">
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
@@ -93,8 +140,19 @@ export default function StyledSelect({
         </span>
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 min-w-full max-h-72 overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+      {open && menuPos && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: menuPos.placeAbove ? undefined : `${menuPos.top}px`,
+            bottom: menuPos.placeAbove ? `${window.innerHeight - menuPos.top}px` : undefined,
+            left: `${menuPos.left}px`,
+            minWidth: `${menuPos.width}px`,
+            zIndex: 1000,
+          }}
+          className="max-h-72 overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1"
+        >
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -115,7 +173,8 @@ export default function StyledSelect({
           {options.length === 0 && (
             <div className="px-4 py-2 text-sm text-gray-400">No options</div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
