@@ -940,13 +940,13 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                 }`}
               >
                 <div className="px-5 pt-4 pb-3">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{kpi.label}</p>
-                  <p className={`text-2xl font-bold tracking-tight ${
+                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">{kpi.label}</p>
+                  <p className={`text-[17px] font-bold tracking-tight leading-snug ${
                     kpi.accent && kpi.accentColor === 'red' ? 'text-red-600 dark:text-red-400'
                     : kpi.accent && kpi.accentColor === 'amber' ? 'text-amber-600 dark:text-amber-400'
                     : 'text-gray-900 dark:text-white'
                   }`}>{kpi.value}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{kpi.sub}</p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{kpi.sub}</p>
                 </div>
               </section>
             ))}
@@ -1139,7 +1139,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
           </div>
 
           {/* ── Right: Identity + Health + Actions ─────────────────── */}
-          <div className="w-[280px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto custom-scrollbar min-h-0 pb-4">
+          <div className="w-[280px] flex-shrink-0 overflow-y-auto custom-scrollbar min-h-0">
+          <div className="flex flex-col gap-3 pb-4">
 
             {/* Identity card */}
             <section className={cardCls}>
@@ -1320,7 +1321,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
               </div>
             </section>
 
-          </div>
+          </div>{/* end inner flex-col */}
+          </div>{/* end scrollable sidebar */}
         </div>
       </div>
     );
