@@ -121,6 +121,15 @@ type AgentTimelineEvent = {
   tool?: string | null;
 };
 
+type ResponseArtifact = {
+  id: string;
+  kind: 'analysis' | 'bulk' | 'playbook' | 'schedule' | 'feedback' | 'approval';
+  title: string;
+  summary: string;
+  bullets: string[];
+  status?: 'info' | 'success' | 'warning' | 'danger';
+};
+
 function getScope(req: MultiTenantRequest): CommandScope {
   return {
     tenantId: req.tenantId!,
@@ -1733,6 +1742,140 @@ function generateSuggestedReplies(input: {
   return Array.from(replies).slice(0, 4);
 }
 
+function describeSpanResult(span: any): string {
+  const tool = String(span?.tool || '');
+  const value = span?.result?.value;
+  if (!span?.result?.ok) {
+    return span?.result?.error || 'Failed';
+  }
+  if (tool === 'analysis.root_cause' && value) {
+    return value.rootCause || value.diagnosis || value.summary || 'Root cause analysis completed';
+  }
+  if (tool === 'bulk.preview' && value?.preview) {
+    return `Previewed ${value.toolName} for ${value.preview.previewCount || value.preview.total || 0} records`;
+  }
+  if (/\.bulk_/.test(tool) && value) {
+    return `${value.succeeded ?? 0}/${value.total ?? 0} records updated${value.failed ? `, ${value.failed} failed` : ''}`;
+  }
+  if (tool === 'playbook.preview' && value) {
+    return value.summary || `Previewed playbook ${value.playbookId}`;
+  }
+  if (tool === 'playbook.execute' && value) {
+    return `${value.playbookId} finished with ${value.succeeded ?? 0} successful step${value.succeeded === 1 ? '' : 's'}${value.failed ? ` and ${value.failed} failed` : ''}`;
+  }
+  if (tool === 'scheduled_action.create' && value) {
+    return `Scheduled ${value.kind || 'action'} for ${value.runAt || value.dueAt || 'later'}`;
+  }
+  if (tool === 'scheduled_action.list' && Array.isArray(value)) {
+    return `${value.length} scheduled action${value.length === 1 ? '' : 's'} found`;
+  }
+  if (tool === 'feedback.record_decision' && value) {
+    return `Recorded ${value.decision || 'feedback'} feedback`;
+  }
+  return value ? toText(value).slice(0, 180) : 'Completed';
+}
+
+function buildResponseArtifacts(runId: string, trace: any): ResponseArtifact[] {
+  if (!Array.isArray(trace?.spans)) return [];
+  const artifacts: ResponseArtifact[] = [];
+  for (const span of trace.spans) {
+    if (!span?.result?.ok) continue;
+    const tool = String(span.tool || '');
+    const value = span.result.value;
+    if (tool === 'analysis.root_cause' && value) {
+      artifacts.push({
+        id: `${runId}-${span.stepId || tool}-analysis`,
+        kind: 'analysis',
+        title: 'Root cause',
+        summary: value.rootCause || value.diagnosis || value.summary || 'Analysis completed',
+        bullets: [
+          ...(Array.isArray(value.signals) ? value.signals.slice(0, 4) : []),
+          value.recommendedAction ? `Recommended action: ${value.recommendedAction}` : null,
+        ].filter(Boolean),
+        status: 'info',
+      });
+    } else if (tool === 'bulk.preview' && value?.preview) {
+      artifacts.push({
+        id: `${runId}-${span.stepId || tool}-bulk-preview`,
+        kind: 'bulk',
+        title: 'Bulk preview',
+        summary: `Prepared ${value.toolName} for ${value.preview.previewCount || value.preview.total || 0} records.`,
+        bullets: [
+          `Risk: ${titleCase(value.risk || 'unknown')}`,
+          value.requiredPermission ? `Permission: ${value.requiredPermission}` : null,
+          value.args ? `Args ready for execution` : null,
+        ].filter(Boolean),
+        status: 'warning',
+      });
+    } else if (/\.bulk_/.test(tool) && value) {
+      artifacts.push({
+        id: `${runId}-${span.stepId || tool}-bulk`,
+        kind: 'bulk',
+        title: 'Bulk execution',
+        summary: `${value.succeeded ?? 0} of ${value.total ?? 0} records completed.`,
+        bullets: [
+          value.failed ? `${value.failed} records failed and need review` : 'No failed records',
+          ...((Array.isArray(value.results) ? value.results : [])
+            .filter((item: any) => item && item.ok === false)
+            .slice(0, 3)
+            .map((item: any) => `${item.id}: ${item.error || 'Failed'}`)),
+        ].filter(Boolean),
+        status: value.failed ? 'warning' : 'success',
+      });
+    } else if (tool === 'playbook.preview' && value) {
+      artifacts.push({
+        id: `${runId}-${span.stepId || tool}-playbook-preview`,
+        kind: 'playbook',
+        title: 'Playbook preview',
+        summary: value.summary || `Prepared ${value.playbookId}`,
+        bullets: [
+          value.requiresApproval ? 'At least one step is likely to require approval' : 'No obvious approval step detected',
+          ...((Array.isArray(value.steps) ? value.steps : []).slice(0, 4).map((step: any) => `${step.tool}: ${step.rationale || 'Ready'}`)),
+        ].filter(Boolean),
+        status: value.requiresApproval ? 'warning' : 'info',
+      });
+    } else if (tool === 'playbook.execute' && value) {
+      artifacts.push({
+        id: `${runId}-${span.stepId || tool}-playbook`,
+        kind: 'playbook',
+        title: 'Playbook run',
+        summary: `${value.playbookId} finished with status ${value.status || 'completed'}.`,
+        bullets: [
+          `${value.succeeded ?? 0} step${value.succeeded === 1 ? '' : 's'} succeeded`,
+          value.failed ? `${value.failed} step${value.failed === 1 ? '' : 's'} failed` : null,
+          value.skipped ? `${value.skipped} step${value.skipped === 1 ? '' : 's'} skipped` : null,
+        ].filter(Boolean),
+        status: value.failed ? 'warning' : 'success',
+      });
+    } else if (tool === 'scheduled_action.create' && value) {
+      artifacts.push({
+        id: `${runId}-${span.stepId || tool}-schedule`,
+        kind: 'schedule',
+        title: 'Scheduled action',
+        summary: `Queued ${value.kind || 'action'} for ${value.runAt || value.dueAt || 'a later time'}.`,
+        bullets: [
+          value.label ? `Label: ${value.label}` : null,
+          value.status ? `Status: ${value.status}` : null,
+        ].filter(Boolean),
+        status: 'info',
+      });
+    } else if (tool === 'feedback.record_decision' && value) {
+      artifacts.push({
+        id: `${runId}-${span.stepId || tool}-feedback`,
+        kind: 'feedback',
+        title: 'Feedback recorded',
+        summary: `Stored operator feedback as ${value.decision || 'decision'}.`,
+        bullets: [
+          value.reason ? `Reason: ${value.reason}` : null,
+          value.entityType ? `Entity: ${value.entityType}` : null,
+        ].filter(Boolean),
+        status: 'success',
+      });
+    }
+  }
+  return artifacts;
+}
+
 function createResponse(input: {
   input: string;
   summary: string;
@@ -1750,6 +1893,7 @@ function createResponse(input: {
   evidence?: string[];
   steps?: StreamStep[];
   timelineEvents?: AgentTimelineEvent[];
+  artifacts?: ResponseArtifact[];
   reasoningTrail?: ReasoningTrail | null;
   runId?: string | null;
   structuredIntent?: StructuredCommand | null;
@@ -1773,6 +1917,7 @@ function createResponse(input: {
     evidence: input.evidence || [],
     steps: input.steps || [],
     timelineEvents: input.timelineEvents || [],
+    artifacts: input.artifacts || [],
     reasoningTrail: input.reasoningTrail || null,
     runId: input.runId || null,
     structuredIntent: input.structuredIntent || null,
@@ -1822,9 +1967,7 @@ async function buildResponseFromPlanOutcome(
   const steps = Array.isArray(trace?.spans)
     ? trace.spans.map((span: any) => ({
         label: span.tool,
-        value: span.result?.ok
-          ? toText(span.result?.value)
-          : span.result?.error || 'Failed',
+        value: describeSpanResult(span),
       }))
     : [];
   const navigationTarget = inferPlanNavigationTargetFromTrace(trace, runId);
@@ -1855,9 +1998,7 @@ async function buildResponseFromPlanOutcome(
             type: span.result?.ok ? (isWriteToolName(tool) ? 'edit' as const : 'tool_result' as const) : 'blocked' as const,
             label: tool || 'tool',
             status: span.result?.ok ? 'completed' as const : 'failed' as const,
-            detail: span.result?.ok
-              ? (span.result?.value ? toText(span.result.value).slice(0, 180) : 'Completed')
-              : span.result?.error || 'Failed',
+            detail: describeSpanResult(span),
             tool,
           };
           return [startedAt, resultEvent];
@@ -1923,7 +2064,7 @@ async function buildResponseFromPlanOutcome(
     }
   }
 
-  // â”€â”€ Item 1: Conversational narrative via LLM (with deterministic fallback) â”€â”€
+  // â”€â”€ Item 1: Conversational narrative via LLM â”€â”€
   let narrative: string;
   if (response?.kind === 'chat') {
     narrative = response.message;
@@ -2006,6 +2147,7 @@ async function buildResponseFromPlanOutcome(
     trace,
     narrative,
   });
+  const artifacts = buildResponseArtifacts(runId, trace);
 
   return createResponse({
     input,
@@ -2044,10 +2186,11 @@ async function buildResponseFromPlanOutcome(
           id: span.stepId,
           label: span.tool,
           status: span.result?.ok ? 'completed' : 'failed',
-          detail: span.result?.error || null,
-        }))
-      : [],
+        detail: span.result?.error || null,
+      }))
+    : [],
     timelineEvents,
+    artifacts,
     reasoningTrail,
     runId,
     structuredIntent: response?.kind === 'plan' ? response.plan : null,

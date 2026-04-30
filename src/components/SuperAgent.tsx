@@ -67,6 +67,15 @@ type AgentTimelineEvent = {
   tool?: string | null;
 };
 
+type ResponseArtifact = {
+  id: string;
+  kind: 'analysis' | 'bulk' | 'playbook' | 'schedule' | 'feedback' | 'approval';
+  title: string;
+  summary: string;
+  bullets: string[];
+  status?: 'info' | 'success' | 'warning' | 'danger';
+};
+
 type ReasoningTrailPayload = {
   summary: string;
   intent: string;
@@ -107,6 +116,7 @@ type AssistantPayload = {
   evidence?: string[];
   steps?: StreamStep[];
   timelineEvents?: AgentTimelineEvent[];
+  artifacts?: ResponseArtifact[];
   reasoningTrail?: ReasoningTrailPayload | null;
   runId?: string | null;
   structuredIntent?: Record<string, any> | null;
@@ -234,6 +244,16 @@ function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<s
         tool: event.tool ? String(event.tool) : null,
       })) as AgentTimelineEvent[]
     : [];
+  const artifacts = Array.isArray(payload.artifacts)
+    ? payload.artifacts.map((artifact: any, index: number) => ({
+        id: String(artifact.id || `artifact-${index}`),
+        kind: String(artifact.kind || 'analysis') as ResponseArtifact['kind'],
+        title: String(artifact.title || 'Insight'),
+        summary: String(artifact.summary || ''),
+        bullets: Array.isArray(artifact.bullets) ? artifact.bullets.map((item: any) => String(item)) : [],
+        status: artifact.status === 'success' || artifact.status === 'warning' || artifact.status === 'danger' ? artifact.status : 'info',
+      })) as ResponseArtifact[]
+    : [];
   const actions = Array.isArray(payload.actions)
     ? payload.actions.map((action: any, index: number) => ({
         id: String(action.id || `action-${index}`),
@@ -276,6 +296,7 @@ function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<s
     evidence: Array.isArray(payload.evidence) ? payload.evidence.map((item: any) => String(item)) : undefined,
     steps,
     timelineEvents,
+    artifacts,
     reasoningTrail: payload.reasoningTrail || null,
     runId: payload.runId ?? fallbackRunId ?? null,
     structuredIntent: payload.structuredIntent || null,
@@ -322,8 +343,38 @@ function pageFromContextPanel(entityType?: string | null): Page {
   }
 }
 
+function humanizeSuperAgentError(message: string) {
+  const text = String(message || '').trim();
+  const lower = text.toLowerCase();
+  if (!text) return 'Super Agent could not complete the request.';
+  if (lower.includes('llm_provider_not_configured') || lower.includes('configura un proveedor llm')) {
+    return 'Super Agent needs a configured LLM provider before it can respond or execute actions.';
+  }
+  if (lower.includes('quota exceeded') || lower.includes('too many requests') || lower.includes('rate limit')) {
+    return 'The configured LLM provider is currently out of quota or rate-limited, so Super Agent cannot answer right now.';
+  }
+  if (lower.includes('max_output_tokens must be positive')) {
+    return 'The active LLM profile had an invalid token limit. The runtime now falls back safely, but this request failed before the fix was applied.';
+  }
+  if (lower === 'internal server error') {
+    return 'Super Agent hit an internal server error while processing the request.';
+  }
+  return text;
+}
+
 function assistantFromError(input: string, message: string): AssistantPayload {
-  return { id: `assistant-error-${Date.now()}`, input, summary: message, statusLine: '', sections: [], actions: [], contextPanel: null, agents: [], suggestedReplies: ['Retry', 'Open pending approvals'], consultedModules: [] };
+  return {
+    id: `assistant-error-${Date.now()}`,
+    input,
+    summary: humanizeSuperAgentError(message),
+    statusLine: 'Unavailable',
+    sections: [],
+    actions: [],
+    contextPanel: null,
+    agents: [],
+    suggestedReplies: ['Retry', 'Open pending approvals'],
+    consultedModules: [],
+  };
 }
 
 function assistantFromExecution(summary: string, sectionTitle: string, items: string[], actions: SuperAgentAction[] = []): AssistantPayload {
@@ -464,6 +515,19 @@ function eventLabel(event: AgentTimelineEvent) {
     case 'blocked': return 'Blocked';
     case 'done': return 'Done';
     default: return 'Agent';
+  }
+}
+
+function artifactAccent(status?: ResponseArtifact['status']) {
+  switch (status) {
+    case 'success':
+      return 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/60 dark:bg-emerald-950/20';
+    case 'warning':
+      return 'border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/20';
+    case 'danger':
+      return 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20';
+    default:
+      return 'border-gray-200 bg-white/80 dark:border-gray-800 dark:bg-gray-950/70';
   }
 }
 
@@ -1336,6 +1400,38 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                               </div>
                             ) : null}
                           </div>
+                        </div>
+                      ) : null}
+
+                      {msg.payload.artifacts && msg.payload.artifacts.length > 0 ? (
+                        <div className="space-y-3">
+                          {msg.payload.artifacts.slice(0, 3).map((artifact) => (
+                            <div
+                              key={`${msg.id}-${artifact.id}`}
+                              className={`rounded-2xl border p-4 shadow-sm ${artifactAccent(artifact.status)}`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                                  {artifact.title}
+                                </div>
+                                <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                                  {artifact.kind.replace('_', ' ')}
+                                </div>
+                              </div>
+                              <div className="mt-2 text-[14px] leading-6 text-gray-900 dark:text-white">
+                                {artifact.summary}
+                              </div>
+                              {artifact.bullets.length > 0 ? (
+                                <div className="mt-3 space-y-1 text-[13px] leading-5 text-gray-600 dark:text-gray-400">
+                                  {artifact.bullets.slice(0, 4).map((bullet, index) => (
+                                    <div key={`${artifact.id}-bullet-${index}`} className="pl-3">
+                                      • {bullet}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
                       ) : null}
 

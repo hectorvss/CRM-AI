@@ -88,11 +88,12 @@ import { reconListIssuesTool, reconResolveIssueTool } from './reconciliation.js'
 import {
   caseBulkAddNoteTool,
   caseBulkAssignTool,
+  bulkPreviewTool,
   caseBulkUpdatePriorityTool,
   caseBulkUpdateStatusTool,
   orderBulkCancelTool,
 } from './bulk.js';
-import { playbookExecuteTool, playbookGetTool, playbookListTool } from './playbooks.js';
+import { playbookExecuteTool, playbookGetTool, playbookListTool, playbookPreviewTool } from './playbooks.js';
 import { searchGlobalTool } from './search.js';
 import { rootCauseAnalyzeTool } from './analysis.js';
 import { feedbackListTool, feedbackRecordDecisionTool } from './feedback.js';
@@ -120,6 +121,7 @@ export function registerAllTools(): void {
   toolRegistry.register(caseBulkUpdatePriorityTool);
   toolRegistry.register(caseBulkAssignTool);
   toolRegistry.register(caseBulkAddNoteTool);
+  toolRegistry.register(bulkPreviewTool);
 
   // Returns
   toolRegistry.register(returnGetTool);
@@ -206,6 +208,7 @@ export function registerAllTools(): void {
   // Playbooks
   toolRegistry.register(playbookListTool);
   toolRegistry.register(playbookGetTool);
+  toolRegistry.register(playbookPreviewTool);
   toolRegistry.register(playbookExecuteTool);
 
   // Feedback loop

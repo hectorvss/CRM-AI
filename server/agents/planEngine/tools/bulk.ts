@@ -69,6 +69,17 @@ async function runBulk<TArgs extends { id: string }, TVal>(
   return { total: ids.length, succeeded, failed, results };
 }
 
+function dryRunSummary(value: unknown) {
+  const result = value as BulkResult | undefined;
+  return {
+    total: result?.total ?? 0,
+    previewCount: result?.total ?? 0,
+    succeeded: result?.succeeded ?? 0,
+    failed: result?.failed ?? 0,
+    previewOnly: true,
+  };
+}
+
 // ── case.bulk_update_status ──────────────────────────────────────────────────
 
 const CASE_STATUS_VALUES = ['open', 'pending', 'resolved', 'closed', 'escalated'] as const;
@@ -405,5 +416,81 @@ export const orderBulkCancelTool: ToolSpec<OrderBulkCancelArgs, unknown> = {
     });
 
     return { ok: true, value: summary };
+  },
+};
+
+type SupportedBulkToolName =
+  | 'case.bulk_update_status'
+  | 'case.bulk_update_priority'
+  | 'case.bulk_assign'
+  | 'case.bulk_add_note'
+  | 'order.bulk_cancel';
+
+interface BulkPreviewArgs {
+  toolName: SupportedBulkToolName;
+  args: unknown;
+}
+
+const bulkToolMap: Record<SupportedBulkToolName, ToolSpec<any, unknown>> = {
+  'case.bulk_update_status': caseBulkUpdateStatusTool,
+  'case.bulk_update_priority': caseBulkUpdatePriorityTool,
+  'case.bulk_assign': caseBulkAssignTool,
+  'case.bulk_add_note': caseBulkAddNoteTool,
+  'order.bulk_cancel': orderBulkCancelTool,
+};
+
+export const bulkPreviewTool: ToolSpec<BulkPreviewArgs, unknown> = {
+  name: 'bulk.preview',
+  version: '1.0.0',
+  description:
+    'Preview a bulk write tool before executing it. Validates args, checks permissions, and runs the target bulk tool in dry-run mode so the operator can confirm the scope and intent first.',
+  category: 'system',
+  sideEffect: 'read',
+  risk: 'none',
+  idempotent: true,
+  args: s.object({
+    toolName: s.enum(
+      ['case.bulk_update_status', 'case.bulk_update_priority', 'case.bulk_assign', 'case.bulk_add_note', 'order.bulk_cancel'] as const,
+      { description: 'Bulk write tool to preview before execution' },
+    ),
+    args: s.any('Arguments you would pass to the target bulk tool'),
+  }),
+  returns: s.any('{ toolName, risk, requiredPermission, preview, args }'),
+  async run({ args, context }) {
+    const target = bulkToolMap[args.toolName];
+    if (!target) {
+      return { ok: false, error: `Bulk tool "${args.toolName}" is not available`, errorCode: 'NOT_FOUND' };
+    }
+    if (target.requiredPermission && !context.hasPermission(target.requiredPermission)) {
+      return {
+        ok: false,
+        error: `Caller lacks permission "${target.requiredPermission}"`,
+        errorCode: 'FORBIDDEN',
+      };
+    }
+    const parsed = target.args.parse(args.args);
+    if (!parsed.ok) {
+      return { ok: false, error: ('error' in parsed ? parsed.error : 'Invalid args'), errorCode: 'INVALID_ARGS' };
+    }
+    const preview = await target.run({
+      args: parsed.value,
+      context: {
+        ...context,
+        dryRun: true,
+      },
+    });
+    if (!preview.ok) {
+      return preview;
+    }
+    return {
+      ok: true,
+      value: {
+        toolName: target.name,
+        risk: target.risk,
+        requiredPermission: target.requiredPermission ?? null,
+        args: parsed.value,
+        preview: dryRunSummary(preview.value),
+      },
+    };
   },
 };

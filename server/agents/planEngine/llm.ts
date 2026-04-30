@@ -233,7 +233,7 @@ ${toolDocs}${knowledgeSection}${safetySection}${modeInstructions}
 - Steps may run in parallel if dependsOn is empty or references already-satisfied steps.
 - Use "kind": "chat" for greetings, small talk, capability questions, or any request that needs no tool execution.
 - For any request involving real data or actions (look up, find, search, list, show, update, cancel, refund, send, notify, create), produce "kind": "plan" and use tools instead of answering from imagination.
-- Generate as many steps as needed to fully satisfy the request. Chain reads before writes. Prefer bulk tools for repeated mutations and playbook tools for known operational procedures. Use dependsOn for sequential dependencies. Steps with empty dependsOn run in parallel. Reject multi-step plans that could cause irreversible harm without first setting needsApproval: true.
+- Generate as many steps as needed to fully satisfy the request. Chain reads before writes. Prefer bulk tools for repeated mutations and playbook tools for known operational procedures. Before executing a large bulk write, call bulk.preview first. Before executing a playbook with several side effects, call playbook.preview first. Use dependsOn for sequential dependencies. Steps with empty dependsOn run in parallel. Reject multi-step plans that could cause irreversible harm without first setting needsApproval: true.
 - Set needsApproval: true when you believe the action is sensitive.
 - Use analysis.root_cause when the user asks why something is happening, asks for root cause, or needs a causal explanation grounded in canonical state.
 - Use scheduled_action.create for reminders, deferred follow-ups, and time-aware actions instead of asking the user to remember manually.
@@ -342,6 +342,18 @@ function buildContextMessages(req: PlanRequest): Array<{ role: 'user' | 'model';
   return messages;
 }
 
+function normalizeTemperature(value: number | undefined, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  if (value < 0) return 0;
+  if (value > 2) return 2;
+  return value;
+}
+
+function normalizeMaxOutputTokens(value: number | undefined, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+  return Math.max(1, Math.floor(value));
+}
+
 // ── Response parser ──────────────────────────────────────────────────────────
 
 function parseResponse(raw: string, planId: string, sessionId: string): LLMResponse {
@@ -416,8 +428,8 @@ class GeminiProvider implements LLMProvider {
 
     // Resolve model/generation overrides from AI Studio Reasoning tab
     const modelName = agentConfig?.model ?? this.modelName;
-    const temperature = typeof agentConfig?.temperature === 'number' ? agentConfig.temperature : 0.2;
-    const maxOutputTokens = typeof agentConfig?.maxOutputTokens === 'number' ? agentConfig.maxOutputTokens : 2048;
+    const temperature = normalizeTemperature(agentConfig?.temperature, 0.2);
+    const maxOutputTokens = normalizeMaxOutputTokens(agentConfig?.maxOutputTokens, 2048);
 
     return withGeminiRetry(
       async () => {

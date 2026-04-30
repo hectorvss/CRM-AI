@@ -68,6 +68,101 @@ export const playbookGetTool: ToolSpec<PlaybookGetArgs, unknown> = {
   },
 };
 
+interface PlaybookPreviewArgs {
+  playbookId: string;
+  parameters: unknown;
+}
+
+export const playbookPreviewTool: ToolSpec<PlaybookPreviewArgs, unknown> = {
+  name: 'playbook.preview',
+  version: '1.0.0',
+  description:
+    'Preview a playbook before execution. Validates parameters, resolves the concrete steps, and explains risk, permissions, and likely approval needs without mutating state.',
+  category: 'system',
+  sideEffect: 'read',
+  risk: 'none',
+  idempotent: true,
+  args: s.object({
+    playbookId: s.string({ description: 'ID of the playbook to preview' }),
+    parameters: s.any('Object mapping parameter name to value. Use the same shape as playbook.execute.'),
+  }),
+  returns: s.any('{ playbookId, summary, steps, requiresApproval, missingPermissions }'),
+  async run({ args, context }) {
+    const pb = getPlaybook(args.playbookId);
+    if (!pb) return { ok: false, error: `Playbook "${args.playbookId}" not found`, errorCode: 'NOT_FOUND' };
+
+    const params = (args.parameters && typeof args.parameters === 'object' && !Array.isArray(args.parameters))
+      ? args.parameters as Record<string, unknown>
+      : {};
+
+    for (const p of pb.parameters) {
+      if (p.required && (params[p.name] === undefined || params[p.name] === null || params[p.name] === '')) {
+        return {
+          ok: false,
+          error: `Missing required parameter "${p.name}" for playbook "${pb.id}"`,
+          errorCode: 'MISSING_PARAMETER',
+        };
+      }
+    }
+
+    const stepOutputs: Record<string, unknown> = {};
+    const ordered = topologicalOrder(pb.steps);
+    const steps = ordered.map((step) => {
+      const tool = toolRegistry.get(step.tool);
+      const interpolated = interpolatePlaybookArgs(step.args, params, stepOutputs);
+      const parsed: { ok: true; value: unknown } | { ok: false; error: string } = tool
+        ? (tool.args.parse(interpolated) as { ok: true; value: unknown } | { ok: false; error: string })
+        : { ok: false, error: 'Tool not registered' };
+      const valid = parsed.ok === true;
+      const permission = tool?.requiredPermission ?? null;
+      const hasPermission = permission ? context.hasPermission(permission) : true;
+      const risk = tool?.risk ?? 'unknown';
+      const approvalLikely = risk === 'high' || risk === 'critical';
+
+      if (parsed.ok) {
+        stepOutputs[step.id] = parsed.value;
+      }
+
+      let validationError: string | null = null;
+      let resolvedArgs: unknown = interpolated;
+      if (parsed.ok) {
+        resolvedArgs = parsed.value;
+      } else {
+        validationError = 'error' in parsed ? parsed.error : 'Invalid args';
+      }
+
+      return {
+        id: step.id,
+        tool: step.tool,
+        rationale: step.rationale,
+        dependsOn: step.dependsOn ?? [],
+        risk,
+        requiredPermission: permission,
+        hasPermission,
+        approvalLikely,
+        validArgs: valid,
+        validationError,
+        resolvedArgs,
+      };
+    });
+
+    return {
+      ok: true,
+      value: {
+        playbookId: pb.id,
+        name: pb.name,
+        description: pb.description,
+        summary: `${pb.name} will run ${steps.length} step${steps.length === 1 ? '' : 's'}.`,
+        requiresApproval: steps.some((step) => step.approvalLikely),
+        missingPermissions: steps
+          .filter((step) => step.requiredPermission && !step.hasPermission)
+          .map((step) => ({ tool: step.tool, permission: step.requiredPermission })),
+        steps,
+      },
+    };
+  },
+};
+
 // ── playbook.execute ─────────────────────────────────────────────────────────
 
 interface PlaybookExecuteArgs {
