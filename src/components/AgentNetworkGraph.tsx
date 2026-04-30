@@ -378,9 +378,10 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
 
       {/* ─── Execution path (sub-flow) ────────────────────────────────────── */}
       {steps.length > 0 && (
-        <div className="relative mt-6 overflow-x-auto rounded-xl border border-black/5 bg-gradient-to-br from-gray-50 to-white p-4 dark:border-white/10 dark:from-[#1a1a1a] dark:to-[#1d1d1d]">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Execution path</p>
-          <div className="mt-3 flex min-w-max items-center">
+        <div className="relative mt-6 rounded-xl border border-black/5 bg-gradient-to-br from-gray-50 to-white p-4 dark:border-white/10 dark:from-[#1a1a1a] dark:to-[#1d1d1d]">
+          <p className="text-center text-[10px] font-bold uppercase tracking-widest text-gray-400">Execution path</p>
+          <div className="mt-3 overflow-x-auto custom-scrollbar">
+            <div className="flex min-w-max items-center justify-center mx-auto">
             {steps.map((step, index) => (
               <React.Fragment key={`${step.num}-${step.title}`}>
                 <div className="relative w-[200px] flex-none rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-[#242424]">
@@ -419,6 +420,7 @@ export default function AgentNetworkGraph({ agent, roadmap }: Props) {
                 )}
               </React.Fragment>
             ))}
+            </div>
           </div>
         </div>
       )}

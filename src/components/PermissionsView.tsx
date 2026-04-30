@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { connectionCategories } from '../connectionsData';
 import { agentsApi, policyRulesApi } from '../api/client';
@@ -12,6 +12,7 @@ import {
 } from '../agentPermissionsConfig';
 import { cloneJson, ensureArray, ensureBoolean, ensureNumber, ensureRecord, mergeProfile, mergeRecord } from './aiStudioProfileUtils';
 import { MinimalButton, MinimalPill } from './MinimalCategoryShell';
+import StyledSelect from './StyledSelect';
 
 type PermissionProfileState = AgentPermissionConfig & {
   actionPermissions: Record<string, PermissionState>;
@@ -397,7 +398,7 @@ export default function PermissionsView() {
                                           <div className="space-y-3">
                                             <div className="flex items-center gap-3">
                                               <span className="text-sm text-gray-600 dark:text-gray-400">Only allow if</span>
-                                              <select
+                                              <StyledSelect
                                                 value={ensureArray<string>(profile.conditionalRules[action], [defaultConditionalRule])[0]}
                                                 onChange={(e) => setProfile(prev => prev ? { ...prev, conditionalRules: { ...prev.conditionalRules, [action]: [e.target.value] } } : prev)}
                                                 className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -406,20 +407,20 @@ export default function PermissionsView() {
                                                 <option>Customer is VIP</option>
                                                 <option>Order value &lt; $100</option>
                                                 <option>Within business hours</option>
-                                              </select>
+                                              </StyledSelect>
                                             </div>
                                           </div>
                                         ) : (
                                           <div className="space-y-3">
                                             <div className="flex items-center gap-3">
                                               <span className="text-sm text-gray-600 dark:text-gray-400">Require approval from</span>
-                                              <select
+                                              <StyledSelect
                                                 value={profile.approvalAssignments[action] || 'Tier 2 Support'}
                                                 onChange={(e) => setProfile(prev => prev ? { ...prev, approvalAssignments: { ...prev.approvalAssignments, [action]: e.target.value } } : prev)}
                                                 className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                               >
                                                 {approverOptions.map(option => <option key={option}>{option}</option>)}
-                                              </select>
+                                              </StyledSelect>
                                             </div>
                                             <div className="flex items-center gap-3">
                                               <span className="text-sm text-gray-600 dark:text-gray-400">Auto-escalate after</span>
@@ -464,13 +465,13 @@ export default function PermissionsView() {
                             <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">{isMain ? 'Main Tool' : 'Optional'}</span>
                           </div>
                         </div>
-                        <select value={level} onChange={(e) => handleToolAccessChange(tool, e.target.value as ToolAccessLevel)} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                        <StyledSelect value={level} onChange={(e) => handleToolAccessChange(tool, e.target.value as ToolAccessLevel)} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
                           <option>No access</option>
                           <option>Read only</option>
                           <option>Limited write</option>
                           <option>Approval required</option>
                           <option>Full access</option>
-                        </select>
+                        </StyledSelect>
                       </div>
                     );
                   })}
@@ -538,11 +539,11 @@ export default function PermissionsView() {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Default Approver</label>
-                        <select value={profile.defaultApprover} onChange={(e) => setProfile(prev => prev ? { ...prev, defaultApprover: e.target.value } : prev)} className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                        <StyledSelect value={profile.defaultApprover} onChange={(e) => setProfile(prev => prev ? { ...prev, defaultApprover: e.target.value } : prev)} className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
                           <option>Tier 2 Support Team</option>
                           <option>Shift Manager</option>
                           <option>Finance Department</option>
-                        </select>
+                        </StyledSelect>
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Evidence Requirements</label>
@@ -575,7 +576,7 @@ export default function PermissionsView() {
                 </div>
               </section>
 
-              {/* ── Live DB Policy Rules ─────────────────────────────────── */}
+              {/* â”€â”€ Live DB Policy Rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -615,7 +616,7 @@ export default function PermissionsView() {
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Entity type</label>
-                          <select
+                          <StyledSelect
                             value={newRuleEntity}
                             onChange={(e) => setNewRuleEntity(e.target.value)}
                             className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -623,7 +624,7 @@ export default function PermissionsView() {
                             {['payment', 'order', 'case', 'return', 'customer', 'approval', 'knowledge'].map(t => (
                               <option key={t}>{t}</option>
                             ))}
-                          </select>
+                          </StyledSelect>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 pt-1">
@@ -632,7 +633,7 @@ export default function PermissionsView() {
                           disabled={!newRuleName.trim() || createRule.loading}
                           className="px-4 py-2 text-sm font-bold text-white bg-black hover:bg-black/90 disabled:opacity-50 rounded-lg transition-colors"
                         >
-                          {createRule.loading ? 'Creating…' : 'Create rule'}
+                          {createRule.loading ? 'Creatingâ€¦' : 'Create rule'}
                         </button>
                         <button
                           onClick={() => setShowNewRuleForm(false)}
@@ -668,7 +669,7 @@ export default function PermissionsView() {
                             )}
                           </div>
                           <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700">
-                            {rule.entity_type ?? '—'}
+                            {rule.entity_type ?? 'â€”'}
                           </span>
                           <span className={`px-2 py-1 rounded-md text-xs font-bold border ${
                             rule.action_mapping?.action === 'block' || rule.action_mapping?.action === 'deny'

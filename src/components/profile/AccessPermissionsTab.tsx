@@ -21,19 +21,14 @@ export default function AccessPermissionsTab() {
   const { isOwner, isSuperAdmin } = usePermissions();
   const currentUser = user || FALLBACK_USER;
 
+  // ── All hooks must run unconditionally on every render (React Rules of Hooks) ──
   const roleId = currentUser?.context?.role_id || currentUser?.memberships?.[0]?.role_id || null;
   const role = useMemo(() => (roles || []).find((item: any) => item.id === roleId) || null, [roleId, roles]);
   const rolePermissions = Array.isArray(role?.permissions) ? role.permissions : [];
   const userPermissions = currentUser?.context?.permissions || rolePermissions || [];
   const granted = useMemo(() => new Set<string>(userPermissions), [userPermissions]);
-  const hasWildcard = granted.has('*');
-
-  if (loading) return <LoadingState title="Loading access permissions" message="Checking your live role membership and access matrix." compact />;
-
   const currentRoleName = role?.name || currentUser?.memberships?.[0]?.role_name || currentUser?.role || 'Unknown';
-  const totalPermissions = PERMISSION_CATALOG.length;
-  const grantedCount = hasWildcard ? totalPermissions : PERMISSION_CATALOG.filter(p => granted.has(p.key)).length;
-  const deniedCount = totalPermissions - grantedCount;
+
   const adminContacts = useMemo(() => {
     if (Array.isArray(accessTargets) && accessTargets.length > 0) {
       return accessTargets;
@@ -48,6 +43,7 @@ export default function AccessPermissionsTab() {
       email: '',
     }));
   }, [accessTargets, currentUser?.memberships, roles]);
+
   const requestAccessHref = useMemo(() => {
     const recipients = adminContacts
       .map((workspaceUser: any) => workspaceUser.email)
@@ -68,7 +64,15 @@ export default function AccessPermissionsTab() {
       ].join('\n'),
     );
     return `mailto:${to}?subject=${subject}&body=${body}${cc ? `&cc=${encodeURIComponent(cc)}` : ''}`;
-  }, [adminContacts, currentRoleName, currentUser.email, currentUser.name]);
+  }, [adminContacts, currentRoleName, currentUser?.email, currentUser?.name]);
+
+  // Conditional return is now safe — all hooks above already executed.
+  if (loading) return <LoadingState title="Loading access permissions" message="Checking your live role membership and access matrix." compact />;
+
+  const hasWildcard = granted.has('*');
+  const totalPermissions = PERMISSION_CATALOG.length;
+  const grantedCount = hasWildcard ? totalPermissions : PERMISSION_CATALOG.filter(p => granted.has(p.key)).length;
+  const deniedCount = totalPermissions - grantedCount;
   const adminSummary = adminContacts.length > 0
     ? adminContacts.map((workspaceUser: any) => workspaceUser.name || workspaceUser.email).join(', ')
     : 'workspace administrators';
