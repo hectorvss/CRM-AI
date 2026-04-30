@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { NavigateInput, Page } from '../types';
+import { Page } from '../types';
 import TreeGraph from './TreeGraph';
 import { casesApi, aiApi, superAgentApi } from '../api/client';
-import { buildResolutionPlan, type ResolutionStep } from '../utils/resolutionPlan';
+import { buildResolutionPlan, buildAiResolutionPrompt, type ResolutionStep } from '../utils/resolutionPlan';
 import { useApi } from '../api/hooks';
 import type { GraphBranch } from './TreeGraph';
 import LoadingState from './LoadingState';
@@ -67,83 +67,7 @@ function nowTime() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function approvalActionSummary(step: any) {
-  const execution = step?.execution;
-  if (!execution) return 'This step requires approval before execution.';
-  if (execution.kind === 'navigate') return execution.reason || 'Open the approval queue for this action.';
-  if (execution.kind === 'blocked') return execution.reason || 'This action cannot run until missing context is resolved.';
-  const tool = execution.tool || 'registered tool';
-  const args = execution.args || {};
-  if (tool === 'payment.refund') {
-    return `Refund payment ${args.paymentId || 'linked payment'}${args.amount ? ` for ${args.amount}` : ''}.`;
-  }
-  if (tool === 'order.cancel') {
-    return `Cancel order ${args.orderId || 'linked order'}${args.currentStatus ? ` currently ${formatStatus(String(args.currentStatus))}` : ''}.`;
-  }
-  if (tool === 'message.send_to_customer') {
-    return `Send a ${args.channel || 'customer'} message for this case.`;
-  }
-  if (tool === 'return.update_status') {
-    return `Update return ${args.returnId || 'linked return'} to ${formatStatus(String(args.status || 'next status'))}.`;
-  }
-  if (tool === 'reconciliation.resolve_issue') {
-    return `Resolve reconciliation issue ${args.issueId || 'linked issue'} using target state ${args.targetStatus || 'resolved'}.`;
-  }
-  if (tool === 'agent.run') {
-    return `Run agent ${args.agentSlug || 'configured agent'} for this case.`;
-  }
-  if (tool === 'case.update_status') {
-    return `Move this case to ${formatStatus(String(args.status || 'the next status'))}.`;
-  }
-  return `Execute ${tool}.`;
-}
-
-function approvalPayloadPreview(step: any) {
-  const execution = step?.execution;
-  if (!execution || execution.kind !== 'tool') return null;
-  const args = execution.args || {};
-  const safeEntries = Object.entries(args)
-    .filter(([key]) => !['message', 'content', 'extraContext'].includes(key))
-    .slice(0, 5);
-  if (!safeEntries.length) return null;
-  return safeEntries.map(([key, value]) => `${formatStatus(key)}: ${String(value)}`).join(' · ');
-}
-
-function buildSuperAgentResolutionDraft(input: {
-  caseResolve: any;
-  resolutionPlan: any;
-  caseLabel: string;
-  customerName?: string | null;
-}) {
-  const conflictTitle = input.caseResolve?.conflict?.title || input.resolutionPlan?.headline || 'open case';
-  const conflictSummary = input.caseResolve?.conflict?.summary || '';
-  const rootCause = input.caseResolve?.conflict?.root_cause || '';
-  const steps = Array.isArray(input.resolutionPlan?.steps) ? input.resolutionPlan.steps : [];
-  const lines = [
-    `Resolve case ${input.caseLabel}${input.customerName ? ` (customer: ${input.customerName})` : ''}.`,
-    `Conflict: ${conflictTitle}.`,
-    conflictSummary ? `Summary: ${conflictSummary}` : null,
-    rootCause ? `Root cause: ${rootCause}` : null,
-    '',
-    'Deterministic plan:',
-    ...(steps.length
-      ? steps.map((step: any, index: number) => {
-        const group = step?.group || 'generic';
-        const title = step?.title || step?.label || `Step ${index + 1}`;
-        const explanation = step?.explanation || step?.context || 'Execute the deterministic action for this case.';
-        const action = step?.execution?.kind === 'tool' ? ` Tool: ${step.execution.tool}.` : '';
-        const approval = step?.requiresApproval ? ' Requires explicit approval before execution.' : '';
-        return `${index + 1}. [${group}] ${title}: ${explanation}${action}${approval}`;
-      })
-      : ['1. [generic] Analyse case: inspect the canonical case state and identify the safe resolution path.']),
-    '',
-    'Execute safe steps through registered tools, route sensitive actions to approval, and leave a trace for every state change.',
-  ].filter((line): line is string => line !== null);
-
-  return lines.join('\n');
-}
-
-export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange: (target: NavigateInput) => void; focusCaseId?: string | null }) {
+export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange: (page: Page) => void; focusCaseId?: string | null }) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [graphView, setGraphView] = useState<'tree' | 'timeline' | 'resolve'>('tree');
@@ -153,7 +77,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const [resolveStatusMessage, setResolveStatusMessage] = useState<string | null>(null);
   const [isAiResolving, setIsAiResolving] = useState(false);
   const [expandedStepIds, setExpandedStepIds] = useState<Set<string>>(new Set());
-  const [approvedStepIds, setApprovedStepIds] = useState<Set<string>>(new Set());
 
   // ── Copilot state ────────────────────────────────────────────────
   const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
@@ -175,7 +98,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     setResolveStatusMessage(null);
     setIsAiResolving(false);
     setExpandedStepIds(new Set());
-    setApprovedStepIds(new Set());
   }, [selectedId]);
 
   // Auto-scroll to bottom on new messages
@@ -226,11 +148,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   // ── Fetch case resolve data ─────────────────────────────────────
   const { data: resolveData, loading: resolveLoading } = useApi(
     () => selectedId ? casesApi.resolve(selectedId) : Promise.resolve(null),
-    [selectedId]
-  );
-
-  const { data: serverResolutionPlan, refetch: refetchResolutionPlan } = useApi(
-    () => selectedId ? casesApi.resolutionPlan(selectedId) : Promise.resolve(null),
     [selectedId]
   );
 
@@ -427,22 +344,10 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   }, [selectedId, copilotInput, isCopilotSending, copilotMessages, copilotBrief, impactedBranches]);
 
   // ── Resolve plan + handlers ──────────────────────────────────────
-  const resolutionPlan = useMemo(
-    () => serverResolutionPlan || buildResolutionPlan(caseResolve),
-    [caseResolve, serverResolutionPlan],
-  );
+  const resolutionPlan = useMemo(() => buildResolutionPlan(caseResolve), [caseResolve]);
 
   const toggleStepExpansion = useCallback((stepId: string) => {
     setExpandedStepIds(prev => {
-      const next = new Set(prev);
-      if (next.has(stepId)) next.delete(stepId);
-      else next.add(stepId);
-      return next;
-    });
-  }, []);
-
-  const toggleStepApproval = useCallback((stepId: string) => {
-    setApprovedStepIds(prev => {
       const next = new Set(prev);
       if (next.has(stepId)) next.delete(stepId);
       else next.add(stepId);
@@ -497,15 +402,10 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
         message: error?.message || `Failed to execute "${step.title}".`,
       };
     }
-  }, [onPageChange, selectedId]);
+  }, [onPageChange, selectedCase, selectedId]);
 
   const handleRunDeterministicStep = useCallback(async (step: ResolutionStep) => {
     if (!selectedId || !step?.id || executingStepId !== null) return;
-    if ((step as any).requiresApproval && !approvedStepIds.has(step.id)) {
-      setExpandedStepIds(prev => new Set(prev).add(step.id));
-      setResolveStatusMessage('Review and approve this sensitive action before running it.');
-      return;
-    }
     setExecutingStepId(step.id);
     setResolveStatusMessage(null);
     try {
@@ -517,105 +417,64 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
           return next;
         });
         setResolveStatusMessage(result.message);
-        refetchResolutionPlan();
       }
     } catch (error: any) {
       setResolveStatusMessage(error?.message || `Failed to execute "${step.title}".`);
     } finally {
       setExecutingStepId(null);
     }
-  }, [approvedStepIds, executeRoutedStep, executingStepId, refetchResolutionPlan, selectedId]);
+  }, [executeRoutedStep, executingStepId, selectedId]);
 
   const handleRunAllDeterministicSteps = useCallback(async () => {
-    if (!selectedId || !resolutionPlan.hasSteps || executingStepId !== null) return;
-    const pendingApprovalStep = resolutionPlan.steps.find((step: ResolutionStep) => {
-      const isAlreadyDone = completedStepIds.has(step.id) || step.status === 'completed' || step.status === 'success';
-      return (step as any).requiresApproval && !isAlreadyDone && !approvedStepIds.has(step.id);
-    });
-    if (pendingApprovalStep) {
-      setExpandedStepIds(prev => new Set(prev).add(pendingApprovalStep.id));
-      setResolveStatusMessage(`Review and approve "${pendingApprovalStep.title}" before running all steps.`);
-      return;
-    }
+    if (!resolutionPlan.hasSteps || executingStepId !== null) return;
     setResolveStatusMessage(null);
-    setExecutingStepId('all');
-    try {
-      const result = await casesApi.runResolutionPlan(selectedId, {
-        sessionId: `case-resolution-${selectedId}`,
-      });
-      const executedStepIds = new Set<string>(
-        (result?.trace?.spans || [])
-          .filter((span: any) => span?.result?.ok)
-          .map((span: any) => String(span.stepId).replace(/_/g, ':')),
-      );
-      setCompletedStepIds(prev => {
-        const next = new Set(prev);
-        resolutionPlan.steps.forEach((step: ResolutionStep) => {
-          const normalized = step.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-          if (executedStepIds.has(step.id) || executedStepIds.has(normalized)) next.add(step.id);
+    let anyFailed = false;
+    for (const step of resolutionPlan.steps) {
+      if (completedStepIds.has(step.id)) continue;
+      setExecutingStepId(step.id);
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await executeRoutedStep(step);
+        setCompletedStepIds(prev => {
+          const next = new Set(prev);
+          next.add(step.id);
+          return next;
         });
-        return next;
-      });
-      setResolveStatusMessage(result?.message || 'Deterministic resolution plan executed.');
-      refetchResolutionPlan();
-    } catch (error: any) {
-      setResolveStatusMessage(error?.message || 'Some steps could not be executed automatically. Review the plan.');
-    } finally {
-      setExecutingStepId(null);
+      } catch {
+        anyFailed = true;
+        break;
+      }
     }
-  }, [approvedStepIds, completedStepIds, executingStepId, refetchResolutionPlan, resolutionPlan, selectedId]);
+    setExecutingStepId(null);
+    setResolveStatusMessage(
+      anyFailed
+        ? 'Some steps could not be executed automatically — review the plan.'
+        : 'All deterministic steps executed.'
+    );
+  }, [completedStepIds, executeRoutedStep, executingStepId, resolutionPlan]);
 
   const handleResolveWithAI = useCallback(async () => {
     if (!selectedId) return;
     setIsAiResolving(true);
     setResolveStatusMessage(null);
+    const caseLabel = selectedCase?.orderId || selectedId;
+    const prompt = buildAiResolutionPrompt(caseResolve, {
+      caseLabel,
+      customerName: selectedCase?.customerName,
+    });
     try {
-      const response = await casesApi.resolveWithAI(selectedId, {
-        sessionId: `case-resolution-ai-${selectedId}`,
+      const response = await superAgentApi.command(prompt, {
+        mode: 'operate',
+        autonomyLevel: 'assisted',
       });
-      const executedStepIds = new Set<string>(
-        (response?.trace?.spans || [])
-          .filter((span: any) => span?.result?.ok)
-          .map((span: any) => String(span.stepId).replace(/_/g, ':')),
-      );
-      setCompletedStepIds(prev => {
-        const next = new Set(prev);
-        resolutionPlan.steps.forEach((step: ResolutionStep) => {
-          const normalized = step.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-          if (executedStepIds.has(step.id) || executedStepIds.has(normalized)) next.add(step.id);
-        });
-        return next;
-      });
-      const summary = response?.message || 'AI resolution completed through the Plan Engine.';
+      const summary = response?.summary || response?.response?.summary || 'AI agent has started resolving the case.';
       setResolveStatusMessage(summary);
-      refetchResolutionPlan();
     } catch (error: any) {
       setResolveStatusMessage(error?.message || 'Unable to dispatch the AI resolution agent.');
     } finally {
       setIsAiResolving(false);
     }
-  }, [refetchResolutionPlan, resolutionPlan.steps, selectedId]);
-
-  const handleOpenSuperAgentDraft = useCallback(() => {
-    const caseLabel = selectedCase?.orderId || caseState?.case?.case_number || selectedId || 'selected case';
-    const prompt = buildSuperAgentResolutionDraft({
-      caseResolve,
-      resolutionPlan,
-      caseLabel,
-      customerName: selectedCase?.customerName || caseState?.case?.customer_name || null,
-    });
-
-    onPageChange({
-      page: 'super_agent',
-      entityType: 'case',
-      entityId: selectedId,
-      section: 'command-center',
-      sourceContext: 'case_graph_resolve',
-      runId: `case-resolution-draft-${selectedId || Date.now()}`,
-      draftPrompt: prompt,
-      draftLabel: 'Case Graph resolution',
-    });
-  }, [caseResolve, caseState, onPageChange, resolutionPlan, selectedCase, selectedId]);
+  }, [caseResolve, selectedCase, selectedId]);
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -872,11 +731,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                                 step.status === 'success';
                               const isExecuting = executingStepId === step.id;
                               const isExpanded = expandedStepIds.has(step.id);
-                              const requiresApproval = Boolean((step as any).requiresApproval);
-                              const isApproved = approvedStepIds.has(step.id);
-                              const canRunStep = !isCompleted && !isExecuting && executingStepId === null && (!requiresApproval || isApproved);
-                              const execution = (step as any).execution;
-                              const payloadPreview = approvalPayloadPreview(step);
                               return (
                                 <li
                                   key={step.id}
@@ -907,7 +761,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                                         </span>
                                         {step.requiresApproval && (
                                           <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30">
-                                            {isApproved ? 'Approved' : 'Approval'}
+                                            Approval
                                           </span>
                                         )}
                                       </div>
@@ -919,10 +773,10 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                                           e.stopPropagation();
                                           handleRunDeterministicStep(step);
                                         }}
-                                        disabled={!canRunStep}
+                                        disabled={isCompleted || isExecuting || executingStepId !== null}
                                         className="px-3 py-1 rounded-md text-xs font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                       >
-                                        {isCompleted ? 'Done' : isExecuting ? 'Running…' : requiresApproval && !isApproved ? 'Approve first' : 'Run'}
+                                        {isCompleted ? 'Done' : isExecuting ? 'Running…' : 'Run'}
                                       </button>
                                       <span className={`material-symbols-outlined text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>expand_more</span>
                                     </div>
@@ -943,35 +797,6 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                                           <p className="text-xs text-gray-500 dark:text-gray-400">
                                             {[step.domain, step.source, step.context].filter(Boolean).map(formatStatus).join(' · ')}
                                           </p>
-                                        </div>
-                                      )}
-                                      {requiresApproval && (
-                                        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-amber-900 dark:border-amber-800/50 dark:bg-amber-900/15 dark:text-amber-100">
-                                          <div className="flex items-start gap-2">
-                                            <span className="material-symbols-outlined text-[17px] text-amber-600 dark:text-amber-300 mt-0.5">privacy_tip</span>
-                                            <div className="min-w-0 flex-1">
-                                              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">Approval required before run</div>
-                                              <p className="text-sm font-medium">{approvalActionSummary(step)}</p>
-                                              <div className="mt-2 grid gap-1 text-xs text-amber-800/80 dark:text-amber-100/80">
-                                                <p><span className="font-semibold">Action:</span> {execution?.kind === 'tool' ? execution.tool : execution?.kind || 'approval'}</p>
-                                                {payloadPreview && <p><span className="font-semibold">Payload:</span> {payloadPreview}</p>}
-                                                <p><span className="font-semibold">Policy:</span> this may create an approval request or execute after explicit user approval.</p>
-                                              </div>
-                                              <label className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-amber-900 dark:text-amber-100">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isApproved}
-                                                  onChange={(event) => {
-                                                    event.stopPropagation();
-                                                    toggleStepApproval(step.id);
-                                                  }}
-                                                  onClick={(event) => event.stopPropagation()}
-                                                  className="h-3.5 w-3.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
-                                                />
-                                                I approve this action and understand what will run.
-                                              </label>
-                                            </div>
-                                          </div>
                                         </div>
                                       )}
                                     </div>
@@ -1012,8 +837,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                             {isAiResolving ? 'Dispatching…' : 'Start AI resolution'}
                           </button>
                           <button
-                            onClick={handleOpenSuperAgentDraft}
-                            disabled={!selectedId}
+                            onClick={() => onPageChange('super_agent')}
                             className="px-4 py-2 rounded-lg text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
                           >
                             Open Super Agent

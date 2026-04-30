@@ -11,7 +11,8 @@
  *  5. Compress long sessions into L2 summaries.
  *  6. Persist execution traces.
  *
- * The Plan Engine is now LLM-first and fails closed when no provider is configured.
+ * Shadow mode: when env SUPER_AGENT_LLM_ROUTING is not 'true', planAndExecute
+ * still runs the LLM path and logs it, but returns the caller's chosen response.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -169,10 +170,7 @@ async function loadAgentRuntimeConfig(
     return {
       model: reasoning.model || undefined,
       temperature: typeof reasoning.temperature === 'number' ? reasoning.temperature : undefined,
-      maxOutputTokens:
-        typeof reasoning.maxOutputTokens === 'number' && Number.isFinite(reasoning.maxOutputTokens) && reasoning.maxOutputTokens > 0
-          ? reasoning.maxOutputTokens
-          : undefined,
+      maxOutputTokens: typeof reasoning.maxOutputTokens === 'number' ? reasoning.maxOutputTokens : undefined,
       personaOverride: typeof reasoning.persona === 'string' ? reasoning.persona : undefined,
       safetyInstructions: typeof safety.additionalInstructions === 'string'
         ? safety.additionalInstructions
@@ -361,7 +359,7 @@ export const planEngine = {
     const response = await planEngine.generate(input);
 
     if (response.kind !== 'plan') {
-      // Append assistant clarification/chat/error to session.
+      // Append assistant clarification/chat/error to session
       const session = await sessionRepo.getSession(input.sessionId);
       if (session) {
         const assistantContent =
