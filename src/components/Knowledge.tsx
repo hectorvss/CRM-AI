@@ -5,6 +5,7 @@ import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 import { ActionModal } from './ActionModal';
 import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
+import StyledSelect from './StyledSelect';
 
 type KnowledgeTab = 'library' | 'gaps' | 'test';
 
@@ -1630,16 +1631,16 @@ export default function Knowledge() {
           </div>
           <div>
             <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Agent</label>
-            <select
+            <StyledSelect
               value={testAgentId}
               onChange={(e) => setTestAgentId(e.target.value)}
-              className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-black dark:border-white/10 dark:bg-[#171717] dark:text-white"
+              className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-gray-900 outline-none hover:bg-white dark:border-white/10 dark:bg-[#171717] dark:text-white dark:hover:bg-[#171717]"
             >
               <option value="all">All library access</option>
               {agents.map((agent: any) => (
                 <option key={agent.id} value={agent.id}>{agent.name}</option>
               ))}
-            </select>
+            </StyledSelect>
           </div>
           <div className="flex items-end">
             <MinimalButton onClick={() => void handleRunTest()} disabled={isTestRunning || !testQuery.trim()}>
