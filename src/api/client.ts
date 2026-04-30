@@ -96,6 +96,15 @@ export const casesApi = {
       method: 'POST',
       body: JSON.stringify({ content, draft_reply_id }),
     }),
+  executeResolutionStep: (id: string, stepId: string) =>
+    request<any>(`/cases/${id}/resolution/execute-step`, {
+      method: 'POST',
+      body: JSON.stringify({ stepId }),
+    }),
+  executeAllResolutionSteps: (id: string, dryRun?: boolean) =>
+    request<any>(`/cases/${id}/resolution/execute-all${dryRun ? '?dryRun=true' : ''}`, {
+      method: 'POST',
+    }),
 };
 
 // ── Conversations ─────────────────────────────────────────

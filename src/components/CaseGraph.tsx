@@ -441,6 +441,7 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     });
   }, []);
 
+<<<<<<< Updated upstream
   const toggleStepApproval = useCallback((stepId: string) => {
     setApprovedStepIds(prev => {
       const next = new Set(prev);
@@ -450,13 +451,52 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     });
   }, []);
 
+  /**
+   * Routes a single deterministic step to the right backend action based on
+   * its classified group. For most routes, this dispatches to the backend
+   * endpoints which invoke the Plan Engine executor. For approval and agent
+   * dispatch, we route to the appropriate UI or agent endpoint.
+   */
   const executeRoutedStep = useCallback(async (step: ResolutionStep) => {
-    if (!selectedId) return { ok: false, message: 'No case selected.' };
-    const result = await casesApi.runResolutionStep(selectedId, step.id, {
-      sessionId: `case-resolution-${selectedId}`,
-    });
-    if (result?.action === 'navigate' && result.targetPage === 'approvals') {
+    const route = step.route;
+
+    // Agent dispatch is routed through Super Agent for full autonomy control
+    if (route.kind === 'agent_dispatch') {
+      const caseLabel = selectedCase?.orderId || selectedId || 'this case';
+      const prompt = `Execute this deterministic step for case ${caseLabel}: ${step.title}. ${step.explanation}`;
+      const resp = await superAgentApi.command(prompt, {
+        mode: 'operate',
+        autonomyLevel: 'assisted',
+      });
+      return {
+        ok: true,
+        message: resp?.summary || resp?.response?.summary || `Step "${step.title}" dispatched to the agent.`,
+      };
+    }
+
+    // Approval routes navigate to the approvals queue
+    if (route.kind === 'approval') {
       onPageChange('approvals');
+      return { ok: true, message: 'Opened approvals queue for review.' };
+    }
+
+    // All other routes dispatch to the backend resolution execution endpoint,
+    // which invokes the Plan Engine executor with proper policy, auditing, etc.
+    if (!selectedId) {
+      return { ok: false, message: 'No case selected' };
+    }
+
+    try {
+      const response = await casesApi.executeResolutionStep(selectedId, step.id);
+      return {
+        ok: response.ok,
+        message: response.message || `Step "${step.title}" executed.`,
+      };
+    } catch (error: any) {
+      return {
+        ok: false,
+        message: error?.message || `Failed to execute "${step.title}".`,
+      };
     }
     return {
       ok: result?.ok !== false,

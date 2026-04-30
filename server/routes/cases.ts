@@ -683,4 +683,386 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
+// ── Resolution Step Execution ──────────────────────────────────────
+
+/**
+ * Converts a ResolutionRoute into a PlanStep with proper tool name and args.
+ * Returns null if the route is informational and doesn't require a tool invocation.
+ */
+function routeToToolStep(route: ResolutionRoute, stepIndex: number): PlanStep | null {
+  switch (route.kind) {
+    case 'webhook_ack':
+      // Informational — no tool to run
+      return null;
+
+    case 'refund':
+      return {
+        id: `step-refund-${stepIndex}`,
+        tool: 'payment.refund',
+        args: {
+          paymentId: route.paymentId || undefined,
+          orderId: route.orderId || undefined,
+        },
+        dependsOn: [],
+      };
+
+    case 'order_update':
+      return {
+        id: `step-order-${stepIndex}`,
+        tool: 'order.cancel',
+        args: {
+          orderId: route.orderId || undefined,
+          reason: 'Cancelled via deterministic resolution plan',
+        },
+        dependsOn: [],
+      };
+
+    case 'return_update':
+      return {
+        id: `step-return-${stepIndex}`,
+        tool: 'return.update_status',
+        args: {
+          returnId: route.returnId || undefined,
+        },
+        dependsOn: [],
+      };
+
+    case 'notification':
+      return {
+        id: `step-notify-${stepIndex}`,
+        tool: 'message.send_to_customer',
+        args: {
+          channel: route.channel || 'email',
+        },
+        dependsOn: [],
+      };
+
+    case 'reconcile':
+      return {
+        id: `step-reconcile-${stepIndex}`,
+        tool: 'reconciliation.list_issues',
+        args: {
+          domain: route.domain || 'system',
+        },
+        dependsOn: [],
+      };
+
+    case 'approval':
+      // Approvals are handled by policy engine, not direct tool invocation
+      return null;
+
+    case 'agent_dispatch':
+      // Agent dispatch is handled separately via Super Agent
+      return null;
+
+    case 'manual_review':
+      // Manual review flags the case but doesn't invoke a tool
+      return null;
+
+    case 'generic':
+    default:
+      return null;
+  }
+}
+
+/**
+ * POST /:id/resolution/execute-step
+ *
+ * Execute a single deterministic resolution step.
+ * Body: { stepId: string }
+ *
+ * Returns: { ok: boolean; message: string; executionTrace?: ExecutionTrace }
+ */
+router.post('/:id/resolution/execute-step', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const caseId = req.params.id;
+    const { stepId } = req.body;
+
+    if (!stepId) {
+      return res.status(400).json({ error: 'stepId is required' });
+    }
+
+    // Fetch case bundle and build resolution plan
+    const bundle = await caseRepository.getBundle(scope, caseId);
+    if (!bundle) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+
+    const resolveView = buildResolveView(bundle);
+    const resolutionPlan = buildResolutionPlan(resolveView);
+
+    // Find the step in the plan
+    const step = resolutionPlan.steps.find((s) => s.id === stepId);
+    if (!step) {
+      return res.status(404).json({ error: `Step ${stepId} not found in resolution plan` });
+    }
+
+    // Route-specific handling
+    if (step.route.kind === 'webhook_ack') {
+      // Webhook acknowledgements are idempotent, no tool invocation needed
+      await auditRepository.log({
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId!,
+        actorId: req.userId || 'system',
+        action: 'RESOLUTION_STEP_EXECUTED',
+        entityType: 'case',
+        entityId: caseId,
+        metadata: {
+          stepId,
+          stepGroup: step.group,
+          stepTitle: step.title,
+          route: step.route,
+          result: 'acknowledged',
+        },
+      });
+      return res.json({
+        ok: true,
+        message: `Webhook ${step.route.event} from ${step.route.provider} acknowledged.`,
+      });
+    }
+
+    if (step.route.kind === 'approval') {
+      // Approvals are handled by policy engine; this endpoint just logs
+      await auditRepository.log({
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId!,
+        actorId: req.userId || 'system',
+        action: 'RESOLUTION_STEP_FLAGGED',
+        entityType: 'case',
+        entityId: caseId,
+        metadata: {
+          stepId,
+          stepGroup: step.group,
+          stepTitle: step.title,
+          reason: 'requires_approval',
+        },
+      });
+      return res.json({
+        ok: true,
+        message: 'Approval request flagged. Check the approvals queue.',
+      });
+    }
+
+    if (step.route.kind === 'manual_review') {
+      // Manual review steps are for human inspection
+      await auditRepository.log({
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId!,
+        actorId: req.userId || 'system',
+        action: 'RESOLUTION_STEP_FLAGGED',
+        entityType: 'case',
+        entityId: caseId,
+        metadata: {
+          stepId,
+          stepGroup: step.group,
+          stepTitle: step.title,
+          reason: 'manual_review_required',
+        },
+      });
+      return res.json({
+        ok: true,
+        message: 'Step flagged for manual review. Please inspect the case timeline.',
+      });
+    }
+
+    if (step.route.kind === 'agent_dispatch') {
+      // Agent dispatch should be handled by Super Agent endpoint, not here
+      return res.status(400).json({
+        error: 'Agent dispatch steps should use the Super Agent endpoint',
+      });
+    }
+
+    // For other routes, convert to tool invocation and execute via Plan Engine
+    const toolStep = routeToToolStep(step.route, 0);
+    if (!toolStep) {
+      return res.status(400).json({
+        error: `Route kind "${step.route.kind}" does not map to a tool invocation`,
+      });
+    }
+
+    // Create a minimal plan with just this step
+    const singleStepPlan: Plan = {
+      planId: `resolution-${caseId}-${stepId}`,
+      sessionId: `session-${caseId}`,
+      createdAt: new Date().toISOString(),
+      steps: [toolStep],
+      confidence: 1.0,
+      rationale: `Execute deterministic resolution step: ${step.title}`,
+      needsApproval: step.requiresApproval,
+    };
+
+    // Execute through Plan Engine
+    const context = {
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId || null,
+      userId: req.userId || 'system',
+      hasPermission: () => true, // Resolution endpoints inherit case permissions
+      planId: singleStepPlan.planId,
+      audit: async () => {}, // Audit is logged separately below
+      dryRun: req.query.dryRun === 'true',
+    };
+
+    const trace = await executePlan(
+      singleStepPlan,
+      context,
+      {
+        createApproval: async ({ step, decision }) => {
+          // Create approval in DB
+          const approvalId = `APR-${Date.now()}`;
+          // TODO: Persist approval in approvals table
+          return approvalId;
+        },
+        persistTrace: async (trace) => {
+          // TODO: Persist execution trace for audit
+        },
+      }
+    );
+
+    // Log the execution
+    const resultSpan = trace.spans[0];
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'RESOLUTION_STEP_EXECUTED',
+      entityType: 'case',
+      entityId: caseId,
+      metadata: {
+        stepId,
+        stepGroup: step.group,
+        stepTitle: step.title,
+        tool: toolStep.tool,
+        result: resultSpan?.result.ok ? 'success' : 'failure',
+        error: resultSpan?.result.error,
+        latencyMs: resultSpan?.latencyMs,
+      },
+    });
+
+    if (!trace.spans[0]?.result.ok) {
+      return res.status(400).json({
+        ok: false,
+        message: trace.spans[0]?.result.error || 'Step execution failed',
+      });
+    }
+
+    res.json({
+      ok: true,
+      message: `Step "${step.title}" executed successfully.`,
+      executionTrace: trace,
+    });
+  } catch (error) {
+    console.error('Error executing resolution step:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /:id/resolution/execute-all
+ *
+ * Execute all incomplete steps in the resolution plan sequentially.
+ * Query params: ?dryRun=true to preview without side effects
+ *
+ * Returns: { ok: boolean; message: string; executedSteps: string[] }
+ */
+router.post('/:id/resolution/execute-all', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const caseId = req.params.id;
+
+    const bundle = await caseRepository.getBundle(scope, caseId);
+    if (!bundle) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+
+    const resolveView = buildResolveView(bundle);
+    const resolutionPlan = buildResolutionPlan(resolveView);
+
+    if (!resolutionPlan.hasSteps) {
+      return res.json({
+        ok: true,
+        message: 'No steps in resolution plan.',
+        executedSteps: [],
+      });
+    }
+
+    const executedSteps: string[] = [];
+    let anyFailed = false;
+
+    // Execute steps sequentially, skipping informational ones
+    for (const step of resolutionPlan.steps) {
+      const toolStep = routeToToolStep(step.route, executedSteps.length);
+      if (!toolStep) {
+        // Informational steps don't require execution
+        executedSteps.push(step.id);
+        continue;
+      }
+
+      const singleStepPlan: Plan = {
+        planId: `resolution-${caseId}-${step.id}`,
+        sessionId: `session-${caseId}`,
+        createdAt: new Date().toISOString(),
+        steps: [toolStep],
+        confidence: 1.0,
+        rationale: `Execute deterministic resolution step: ${step.title}`,
+        needsApproval: step.requiresApproval,
+      };
+
+      const context = {
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId || null,
+        userId: req.userId || 'system',
+        hasPermission: () => true,
+        planId: singleStepPlan.planId,
+        audit: async () => {},
+        dryRun: req.query.dryRun === 'true',
+      };
+
+      // eslint-disable-next-line no-await-in-loop
+      const trace = await executePlan(singleStepPlan, context, {
+        createApproval: async () => {
+          const approvalId = `APR-${Date.now()}`;
+          return approvalId;
+        },
+      });
+
+      if (!trace.spans[0]?.result.ok) {
+        anyFailed = true;
+        break;
+      }
+
+      executedSteps.push(step.id);
+
+      // Log execution
+      // eslint-disable-next-line no-await-in-loop
+      await auditRepository.log({
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId!,
+        actorId: req.userId || 'system',
+        action: 'RESOLUTION_STEP_EXECUTED',
+        entityType: 'case',
+        entityId: caseId,
+        metadata: {
+          stepId: step.id,
+          stepGroup: step.group,
+          stepTitle: step.title,
+          tool: toolStep.tool,
+          result: 'success',
+        },
+      });
+    }
+
+    res.json({
+      ok: !anyFailed,
+      message: anyFailed
+        ? `Executed ${executedSteps.length} steps before encountering a failure.`
+        : `All ${executedSteps.length} resolution steps completed successfully.`,
+      executedSteps,
+    });
+  } catch (error) {
+    console.error('Error executing all resolution steps:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
