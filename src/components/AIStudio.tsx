@@ -1431,7 +1431,7 @@ export default function AIStudio() {
                                 {(() => {
                                   const profileMeta = agent.connectionProfile || connectionAgentByName.get(agent.name) || {};
                                   const roleText = profileMeta?.role || agent.category || 'Agent';
-                                  const whatItDoes = (profileMeta?.summary || agent.desc || agent.purpose || 'Operational agent').trim();
+                                  const fallbackDescription = (agent.desc || agent.purpose || roleText || 'Operational agent').trim();
                                   const responsibilities = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
                                   const receivesFrom = Array.isArray(profileMeta?.receivesFrom) ? profileMeta.receivesFrom : [];
                                   const reportsTo = Array.isArray(profileMeta?.reportsTo) ? profileMeta.reportsTo : [];
@@ -1463,7 +1463,7 @@ export default function AIStudio() {
                                       }
                                       return `${action}.`;
                                     })
-                                    : [whatItDoes];
+                                    : [fallbackDescription];
 
                                   return (
                                     <div className="p-6 space-y-5">
@@ -1476,12 +1476,8 @@ export default function AIStudio() {
                                           <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
                                         </div>
 
-                                        <p className="mt-4 max-w-3xl text-[14px] leading-7 text-gray-800 dark:text-gray-200">
-                                          {whatItDoes}
-                                        </p>
-
                                         <div className="mt-5 border-t border-black/5 pt-4 dark:border-white/10">
-                                          <ul className="grid grid-cols-1 gap-x-8 gap-y-2 md:grid-cols-2">
+                                          <ul className="grid grid-cols-1 gap-2">
                                             {detailBullets.map((item: string, index: number) => (
                                               <li key={`${agent.name}-detail-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">
                                                 <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-violet-500/70" />
