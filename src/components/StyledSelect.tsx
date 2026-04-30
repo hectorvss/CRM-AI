@@ -24,6 +24,10 @@ interface StyledSelectProps {
   className?: string;
   disabled?: boolean;
   placeholder?: string;
+  menuClassName?: string;
+  menuWidth?: number | string;
+  columns?: number;
+  wrapLabels?: boolean;
 }
 
 export default function StyledSelect({
@@ -33,6 +37,10 @@ export default function StyledSelect({
   className = '',
   disabled = false,
   placeholder,
+  menuClassName = '',
+  menuWidth,
+  columns = 1,
+  wrapLabels = false,
 }: StyledSelectProps) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
@@ -67,10 +75,10 @@ export default function StyledSelect({
     setMenuStyle({
       position: 'fixed',
       left: rect.left,
-      width: rect.width,
+      width: menuWidth ?? rect.width,
       top: openAbove ? undefined : rect.bottom + 6,
       bottom: openAbove ? Math.max(8, window.innerHeight - rect.top + 6) : undefined,
-      maxHeight,
+      maxHeight: columns > 1 ? undefined : maxHeight,
     });
   };
 
@@ -139,25 +147,32 @@ export default function StyledSelect({
         <div
           ref={menuRef}
           style={menuStyle}
-          className="z-[70] min-w-40 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+          className={`z-[70] min-w-40 rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800 ${columns > 1 ? 'overflow-visible' : 'overflow-y-auto'} ${menuClassName}`.trim()}
         >
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => {
-                onChange({ target: { value: opt.value } });
-                setOpen(false);
-              }}
-              className={`w-full whitespace-nowrap px-4 py-2 text-left text-sm transition-colors ${
-                value === opt.value
-                  ? 'bg-gray-50 font-semibold text-gray-900 dark:bg-gray-700 dark:text-white'
-                  : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+          <div
+            className={columns > 1 ? 'grid gap-1 px-1 py-1' : ''}
+            style={columns > 1 ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}
+          >
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange({ target: { value: opt.value } });
+                  setOpen(false);
+                }}
+                className={`w-full px-4 py-2 text-left text-sm transition-colors ${
+                  wrapLabels ? 'whitespace-normal break-words' : 'whitespace-nowrap'
+                } ${
+                  value === opt.value
+                    ? 'bg-gray-50 font-semibold text-gray-900 dark:bg-gray-700 dark:text-white'
+                    : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           {options.length === 0 ? (
             <div className="px-4 py-2 text-sm text-gray-400">No options</div>
           ) : null}

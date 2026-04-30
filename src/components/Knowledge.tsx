@@ -1635,6 +1635,9 @@ export default function Knowledge() {
               value={testAgentId}
               onChange={(e) => setTestAgentId(e.target.value)}
               className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-gray-900 outline-none hover:bg-white dark:border-white/10 dark:bg-[#171717] dark:text-white dark:hover:bg-[#171717]"
+              menuWidth={460}
+              columns={2}
+              wrapLabels
             >
               <option value="all">All library access</option>
               {agents.map((agent: any) => (
