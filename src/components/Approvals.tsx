@@ -14,7 +14,7 @@ type FocusItem = {
   detail: string;
   kind: string;
 };
-type ApprovalModalAction = 'return' | 'approve' | 'reject' | null;
+type ApprovalModalAction = 'approve' | 'reject' | null;
 
 interface ApprovalsProps {
   onNavigate?: NavigateFn;
@@ -278,29 +278,6 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
   const approvalModalConfig = useMemo(() => {
     if (!selectedApproval || !activeModal) return null;
 
-    if (activeModal === 'return') {
-      return {
-        variant: 'default' as ModalVariant,
-        icon: 'arrow_back',
-        title: 'Return to approvals list',
-        subtitle: 'You will leave this approval detail view and go back to the queue without changing the approval state.',
-        confirmLabel: 'Return to queue',
-        steps: [
-          { text: 'Close this approval detail view', detail: 'The current record remains exactly as it is now.' },
-          { text: 'Keep all approval data intact', detail: 'No decision, note or linked execution state will be changed.' },
-          { text: 'Continue later from the queue', detail: 'You can reopen this approval whenever you are ready to decide.' },
-        ] as ModalStep[],
-        considerations: [
-          { text: 'Returning does not approve or reject the action.' },
-          { text: 'Any note not yet submitted will remain only in this local form until you confirm an actual decision.' },
-        ] as ModalConsideration[],
-        onConfirm: () => {
-          setActiveModal(null);
-          setSelectedId(null);
-        },
-      };
-    }
-
     const isApprove = activeModal === 'approve';
     return {
       variant: isApprove ? 'default' as ModalVariant : 'danger' as ModalVariant,
@@ -533,14 +510,6 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
 
                     <div className="flex flex-col items-start lg:items-end gap-3">
                       <div className="flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setActiveModal('return')}
-                          className="px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm inline-flex items-center gap-2"
-                        >
-                          <span className="material-symbols-outlined text-lg">close</span>
-                          Return
-                        </button>
                         <button
                           type="button"
                           onClick={() => setActiveModal('reject')}
@@ -777,28 +746,8 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                               className="w-full min-h-28 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 outline-none focus:border-gray-400 dark:focus:border-gray-500"
                               placeholder="Add a short note explaining the decision."
                             />
-                            <div className="flex flex-wrap gap-3">
-                              <button
-                                type="button"
-                                onClick={() => setActiveModal('reject')}
-                                disabled={deciding}
-                                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-                              >
-                                <span className="material-symbols-outlined text-[18px]">close</span>
-                                Reject
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setActiveModal('approve')}
-                                disabled={deciding}
-                                className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-200"
-                              >
-                                <span className="material-symbols-outlined text-[18px]">check</span>
-                                Approve
-                              </button>
-                            </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                              The decision updates the approval record, the case history, and the linked execution plan if one exists.
+                              Use the approval controls in the header to confirm or reject this request. The decision will update the approval record, the case history, and the linked execution plan if one exists.
                             </p>
                           </div>
                         )}
