@@ -894,64 +894,49 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
           </div>
         )}
 
-        {/* ── KPI Strip ────────────────────────────────────────────── */}
-        <div className="px-6 pt-5 pb-1">
-          <div className="grid grid-cols-4 gap-4">
-            {[
-              {
-                label: 'Lifetime Value',
-                value: selectedCustomer.ltv,
-                sub: selectedCustomer.plan,
-                icon: 'payments',
-                accent: false,
-              },
-              {
-                label: 'Open Cases',
-                value: String(selectedCustomer.openTickets),
-                sub: selectedCustomer.openTickets === 1 ? '1 active ticket' : `${selectedCustomer.openTickets} active tickets`,
-                icon: 'confirmation_number',
-                accent: selectedCustomer.openTickets > 0,
-                accentColor: 'amber',
-              },
-              {
-                label: 'Next Renewal',
-                value: selectedCustomer.nextRenewal,
-                sub: selectedCustomer.plan,
-                icon: 'autorenew',
-                accent: false,
-              },
-              {
-                label: 'Risk Level',
-                value: churnHigh ? 'Churn Risk' : churn === 'Watchlist' ? 'Watchlist' : 'Healthy',
-                sub: `Fraud risk: ${fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low'}`,
-                icon: 'shield',
-                accent: churnHigh || fraudHigh,
-                accentColor: 'red',
-              },
-            ].map((kpi) => (
-              <section
-                key={kpi.label}
-                className={`rounded-2xl border shadow-card overflow-hidden ${
-                  kpi.accent && kpi.accentColor === 'red'
-                    ? 'border-red-200 dark:border-red-800/40 bg-white dark:bg-card-dark'
-                    : kpi.accent && kpi.accentColor === 'amber'
-                    ? 'border-amber-200 dark:border-amber-800/40 bg-white dark:bg-card-dark'
-                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-card-dark'
-                }`}
-              >
-                <div className="px-5 pt-4 pb-3">
-                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">{kpi.label}</p>
-                  <p className={`text-[17px] font-bold tracking-tight leading-snug ${
-                    kpi.accent && kpi.accentColor === 'red' ? 'text-red-600 dark:text-red-400'
-                    : kpi.accent && kpi.accentColor === 'amber' ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-gray-900 dark:text-white'
-                  }`}>{kpi.value}</p>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{kpi.sub}</p>
-                </div>
-              </section>
-            ))}
-          </div>
-        </div>
+        {/* ── KPI Strip ─────────────────────────────────────────────
+             Layout mirrors the two-column body below it:
+             · 3 left KPIs  → flex-1  (matches left content column)
+             · Risk Level   → w-[340px] flex-shrink-0 (matches sidebar)
+        ──────────────────────────────────────────────────────── */}
+        {(() => {
+          const kpiCard = (kpi: { label: string; value: string; sub: string; accent: boolean; accentColor?: string }) => (
+            <section
+              key={kpi.label}
+              className={`rounded-2xl border shadow-card overflow-hidden h-full ${
+                kpi.accent && kpi.accentColor === 'red'
+                  ? 'border-red-200 dark:border-red-800/40 bg-white dark:bg-card-dark'
+                  : kpi.accent && kpi.accentColor === 'amber'
+                  ? 'border-amber-200 dark:border-amber-800/40 bg-white dark:bg-card-dark'
+                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-card-dark'
+              }`}
+            >
+              <div className="px-5 pt-4 pb-3">
+                <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">{kpi.label}</p>
+                <p className={`text-[17px] font-bold tracking-tight leading-snug ${
+                  kpi.accent && kpi.accentColor === 'red' ? 'text-red-600 dark:text-red-400'
+                  : kpi.accent && kpi.accentColor === 'amber' ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-gray-900 dark:text-white'
+                }`}>{kpi.value}</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{kpi.sub}</p>
+              </div>
+            </section>
+          );
+          return (
+            <div className="px-6 pt-5 pb-1 flex gap-4">
+              {/* Left group — flex-1, matches left column */}
+              <div className="flex-1 grid grid-cols-3 gap-4">
+                {kpiCard({ label: 'Lifetime Value', value: selectedCustomer.ltv, sub: selectedCustomer.plan, accent: false })}
+                {kpiCard({ label: 'Open Cases', value: String(selectedCustomer.openTickets), sub: selectedCustomer.openTickets === 1 ? '1 active ticket' : `${selectedCustomer.openTickets} active tickets`, accent: selectedCustomer.openTickets > 0, accentColor: 'amber' })}
+                {kpiCard({ label: 'Next Renewal', value: selectedCustomer.nextRenewal, sub: selectedCustomer.plan, accent: false })}
+              </div>
+              {/* Right — w-[340px], matches sidebar */}
+              <div className="w-[340px] flex-shrink-0">
+                {kpiCard({ label: 'Risk Level', value: churnHigh ? 'Churn Risk' : churn === 'Watchlist' ? 'Watchlist' : 'Healthy', sub: `Fraud risk: ${fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low'}`, accent: churnHigh || fraudHigh, accentColor: 'red' })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Main Area (two columns) ───────────────────────────────── */}
         <div className="flex gap-4 px-6 pt-4 pb-6 items-start">
