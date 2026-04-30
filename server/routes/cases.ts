@@ -15,11 +15,14 @@ import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 import { planEngine } from '../agents/planEngine/index.js';
+import { executePlan } from '../agents/planEngine/executor.js';
+import type { Plan, PlanStep } from '../agents/planEngine/types.js';
 import {
   buildCaseResolutionPlan,
   buildCaseResolutionPrompt,
   buildPlanFromResolutionSteps,
 } from '../services/caseResolution.js';
+import { buildResolutionPlan, type ResolutionRoute } from '../utils/resolutionPlan.js';
 
 const router = Router();
 const caseRepository = createCaseRepository();
