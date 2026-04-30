@@ -3,12 +3,14 @@ import { Payment, PaymentTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseCopilotPanel from './CaseCopilotPanel';
 import MinimalTimeline from './MinimalTimeline';
 import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
+import { ActionModal } from './ActionModal';
 import { paymentsApi, reconciliationApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
 type PaymentActionView = 'stripe' | 'refund' | 'reconcile' | null;
+type PaymentModal = 'stripe' | 'refund' | 'reconcile' | null;
 
 interface PaymentsProps {
   onNavigate?: NavigateFn;
@@ -41,6 +43,8 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [activeActionView, setActiveActionView] = useState<PaymentActionView>('stripe');
+  const [activeModal, setActiveModal] = useState<PaymentModal>(null);
+  const [modalLoading, setModalLoading] = useState(false);
 
   // Fetch canonical payment contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
@@ -467,27 +471,49 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
                             {selectedPayment.conflictDetected || selectedPayment.context || 'No active discrepancy is blocking this payment. You can still review the gateway, issue a refund or run reconciliation from this panel.'}
                           </p>
                         </div>
-                        {activeActionView === 'stripe' ? (
-                          <>
-                            <MinimalButton onClick={() => handleOpenGateway(selectedPayment)}>Open {selectedPayment.psp}</MinimalButton>
-                            <MinimalButton onClick={() => onNavigate?.('orders', selectedPayment.orderId)} variant="outline">Open related order</MinimalButton>
-                            <MinimalButton onClick={() => selectedPayment.relatedCases[0]?.id && onNavigate?.('inbox', selectedPayment.relatedCases[0].id)} variant="ghost">Open linked case</MinimalButton>
-                          </>
-                        ) : activeActionView === 'refund' ? (
-                          <>
-                            <MinimalButton onClick={() => void handleRefund(selectedPayment)} disabled={refundMutation.loading}>
-                              {refundMutation.loading ? 'Issuing refund...' : 'Confirm refund'}
-                            </MinimalButton>
-                            <MinimalButton onClick={() => setActiveActionView('reconcile')} variant="outline">Review reconciliation first</MinimalButton>
-                          </>
-                        ) : (
-                          <>
-                            <MinimalButton onClick={() => void handleReconcile(selectedPayment)} disabled={reconcileMutation.loading}>
-                              {reconcileMutation.loading ? 'Running reconciliation...' : 'Trigger reconciliation'}
-                            </MinimalButton>
-                            <MinimalButton onClick={() => setActiveActionView('stripe')} variant="outline">Review gateway first</MinimalButton>
-                          </>
-                        )}
+                        <div className="space-y-2">
+                          {activeActionView === 'stripe' ? (
+                            <>
+                              <button onClick={() => setActiveModal('stripe')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm">
+                                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                                Open {selectedPayment.psp}
+                                <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
+                              </button>
+                              <button onClick={() => onNavigate?.('orders', selectedPayment.orderId)} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/30 text-gray-700 dark:text-gray-200 hover:bg-gray-50 px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                                <span className="material-symbols-outlined text-[16px] text-gray-400">receipt_long</span>
+                                Open related order
+                              </button>
+                              <button onClick={() => selectedPayment.relatedCases[0]?.id && onNavigate?.('inbox', selectedPayment.relatedCases[0].id)} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/30 text-gray-700 dark:text-gray-200 hover:bg-gray-50 px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                                <span className="material-symbols-outlined text-[16px] text-gray-400">inbox</span>
+                                Open linked case
+                              </button>
+                            </>
+                          ) : activeActionView === 'refund' ? (
+                            <>
+                              <button onClick={() => setActiveModal('refund')} className="w-full flex items-center gap-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 px-4 py-2.5 text-[13px] font-bold transition-colors">
+                                <span className="material-symbols-outlined text-[16px]">currency_exchange</span>
+                                Issue refund
+                                <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
+                              </button>
+                              <button onClick={() => setActiveActionView('reconcile')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/30 text-gray-700 dark:text-gray-200 hover:bg-gray-50 px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                                <span className="material-symbols-outlined text-[16px] text-gray-400">sync_alt</span>
+                                Review reconciliation first
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => setActiveModal('reconcile')} className="w-full flex items-center gap-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800/40 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-100 px-4 py-2.5 text-[13px] font-bold transition-colors">
+                                <span className="material-symbols-outlined text-[16px]">sync_alt</span>
+                                Trigger reconciliation
+                                <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
+                              </button>
+                              <button onClick={() => setActiveActionView('stripe')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/30 text-gray-700 dark:text-gray-200 hover:bg-gray-50 px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                                <span className="material-symbols-outlined text-[16px] text-gray-400">open_in_new</span>
+                                Review gateway first
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </MinimalCard>
@@ -706,8 +732,153 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
           </div>
         </div>
       </div>
+
+      {/* ── Action Modals ────────────────────────────────────────────── */}
+      {selectedPayment && (
+        <>
+          {/* Open Gateway modal */}
+          <ActionModal
+            open={activeModal === 'stripe'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={() => {
+              setActiveModal(null);
+              handleOpenGateway(selectedPayment);
+            }}
+            loading={modalLoading}
+            variant="default"
+            icon="open_in_new"
+            title={`Open ${selectedPayment.psp} Dashboard`}
+            subtitle={`Navigate to the external gateway for payment ${selectedPayment.paymentId}`}
+            context={[
+              { label: 'Payment ID', value: selectedPayment.paymentId },
+              { label: 'Customer', value: selectedPayment.customerName },
+              { label: 'Amount', value: `${selectedPayment.amount} ${selectedPayment.currency}` },
+              { label: 'PSP Status', value: selectedPayment.systemStates.psp },
+              { label: 'Gateway', value: selectedPayment.psp },
+              { label: 'Risk Level', value: selectedPayment.riskLevel, accent: selectedPayment.riskLevel === 'High' },
+            ]}
+            steps={[
+              {
+                text: `Open ${selectedPayment.psp} in a new tab`,
+                detail: `Direct link to payment ${selectedPayment.paymentId} in the gateway dashboard.`,
+              },
+              {
+                text: 'Review gateway transaction details',
+                detail: 'Verify the PSP status, authorization codes, and any gateway-level notes.',
+              },
+              {
+                text: 'Cross-reference with internal records',
+                detail: 'Compare PSP state with OMS and reconciliation status shown in this workspace.',
+              },
+            ]}
+            considerations={[
+              { text: 'This opens an external site. Ensure you are logged in to your PSP account before proceeding.' },
+              { text: 'Any changes made inside the gateway will not automatically sync back to this CRM. You will need to trigger reconciliation manually.' },
+              { text: 'Do not initiate refunds directly in the gateway — use the "Issue Refund" workflow in this workspace to keep records in sync.' },
+            ]}
+            confirmLabel={`Open ${selectedPayment.psp}`}
+          />
+
+          {/* Issue Refund modal */}
+          <ActionModal
+            open={activeModal === 'refund'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleRefund(selectedPayment);
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="warning"
+            icon="currency_exchange"
+            title={`Issue Refund — ${selectedPayment.amount}`}
+            subtitle={`Initiate a full refund for ${selectedPayment.customerName}`}
+            context={[
+              { label: 'Payment ID', value: selectedPayment.paymentId },
+              { label: 'Customer', value: selectedPayment.customerName },
+              { label: 'Amount to Refund', value: `${selectedPayment.amount} ${selectedPayment.currency}`, accent: true },
+              { label: 'Payment Status', value: selectedPayment.paymentStatus },
+              { label: 'Refund Status', value: selectedPayment.systemStates.refund },
+              { label: 'Approval', value: selectedPayment.approvalStatus },
+            ]}
+            steps={[
+              {
+                text: 'Validate refund eligibility',
+                detail: 'Check that the payment has been captured and is within the refund window for this PSP.',
+              },
+              {
+                text: `Submit refund request to ${selectedPayment.psp}`,
+                detail: `Send a full refund of ${selectedPayment.amount} via the gateway API. This action is immediate.`,
+              },
+              {
+                text: 'Update internal records',
+                detail: 'Mark refund status as "Pending" in the OMS and log the action in the audit trail.',
+              },
+              {
+                text: 'Notify customer (if configured)',
+                detail: 'Trigger a refund confirmation email or notification if the workspace has messaging enabled.',
+              },
+            ]}
+            considerations={[
+              { text: `This refund of ${selectedPayment.amount} is irreversible once submitted to ${selectedPayment.psp}.` },
+              { text: 'Processing times vary: card refunds typically take 5–10 business days to appear on the customer statement.' },
+              { text: 'If a dispute is already open for this payment, issuing a refund may affect the chargeback outcome. Consult your dispute management process first.' },
+              { text: 'Partial refunds are not yet available from this workspace. Use the PSP dashboard for partial amounts.' },
+            ]}
+            confirmLabel="Confirm Refund"
+          />
+
+          {/* Reconcile modal */}
+          <ActionModal
+            open={activeModal === 'reconcile'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleReconcile(selectedPayment);
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="default"
+            icon="sync_alt"
+            title="Trigger Reconciliation"
+            subtitle={`Sync payment ${selectedPayment.paymentId} across all systems`}
+            context={[
+              { label: 'Payment ID', value: selectedPayment.paymentId },
+              { label: 'OMS State', value: selectedPayment.systemStates.oms },
+              { label: 'PSP State', value: selectedPayment.systemStates.psp },
+              { label: 'Refund State', value: selectedPayment.systemStates.refund },
+              { label: 'Reconciliation', value: selectedPayment.reconciliationStatus },
+              { label: 'Dispute', value: selectedPayment.systemStates.dispute },
+            ]}
+            steps={[
+              {
+                text: 'Fetch latest state from PSP',
+                detail: `Query ${selectedPayment.psp} for the current transaction status, authorization, and any gateway-level updates.`,
+              },
+              {
+                text: 'Compare with OMS records',
+                detail: 'Cross-reference PSP data with the OMS order status for discrepancies.',
+              },
+              {
+                text: 'Resolve detected mismatches',
+                detail: 'Apply automated resolution rules for known conflict patterns (e.g. captured in PSP but pending in OMS).',
+              },
+              {
+                text: 'Update reconciliation status',
+                detail: 'Mark this payment as "Reconciled" or flag unresolved conflicts for manual review.',
+              },
+            ]}
+            considerations={[
+              { text: 'Reconciliation may take a few seconds depending on PSP response times. The status will update automatically once complete.' },
+              { text: 'If a conflict is found that cannot be auto-resolved, a manual review task will be created and assigned to your team.' },
+              { text: 'Running reconciliation does not modify the payment status in the PSP — it only updates internal records.' },
+            ]}
+            confirmLabel="Trigger Reconciliation"
+          />
+        </>
+      )}
     </div>
   );
 }
-
-

@@ -5,12 +5,14 @@ import type { CaseHeaderMenuItem } from './CaseHeader';
 import CaseCopilotPanel from './CaseCopilotPanel';
 import MinimalTimeline from './MinimalTimeline';
 import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
+import { ActionModal } from './ActionModal';
 import { casesApi, returnsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
 type ReturnActionView = 'approve' | 'reject' | 'received' | 'refund' | 'block' | null;
+type ReturnModal = 'approve' | 'reject' | 'received' | 'refund' | 'block' | null;
 
 interface ReturnsProps {
   onNavigate?: NavigateFn;
@@ -49,6 +51,8 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [activeActionView, setActiveActionView] = useState<ReturnActionView>('approve');
+  const [activeModal, setActiveModal] = useState<ReturnModal>(null);
+  const [modalLoading, setModalLoading] = useState(false);
 
   const { mutate: updateStatus, loading: statusLoading } = useMutation(
     ({ id, payload }: { id: string; payload: Record<string, any> }) =>
@@ -515,30 +519,43 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                             {selectedReturn.conflictDetected || selectedReturn.context || 'No additional conflict is currently attached to this return. You can still confirm the next return-state writeback from this panel.'}
                           </p>
                         </div>
-                        {activeActionView === 'approve' ? (
-                          <MinimalButton onClick={() => void handleStatusUpdate('approved', 'Approved')} disabled={statusLoading}>
-                            {statusLoading ? 'Updating return...' : 'Confirm approval'}
-                          </MinimalButton>
-                        ) : activeActionView === 'reject' ? (
-                          <MinimalButton onClick={() => void handleStatusUpdate('rejected', 'Rejected')} disabled={statusLoading}>
-                            {statusLoading ? 'Updating return...' : 'Confirm rejection'}
-                          </MinimalButton>
-                        ) : activeActionView === 'received' ? (
-                          <MinimalButton onClick={() => void handleStatusUpdate('received', 'Marked Received')} disabled={statusLoading}>
-                            {statusLoading ? 'Updating return...' : 'Confirm receipt'}
-                          </MinimalButton>
-                        ) : activeActionView === 'refund' ? (
-                          <MinimalButton onClick={() => void handleStatusUpdate('refund_pending', 'Refund Initiated')} disabled={statusLoading}>
-                            {statusLoading ? 'Updating return...' : 'Start refund processing'}
-                          </MinimalButton>
-                        ) : (
-                          <MinimalButton onClick={() => void handleStatusUpdate('blocked', 'Blocked')} disabled={statusLoading}>
-                            {statusLoading ? 'Updating return...' : 'Confirm block'}
-                          </MinimalButton>
-                        )}
-                        <MinimalButton onClick={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('inbox', selectedReturn.relatedCases[0].id)} variant="outline">
-                          Open linked case
-                        </MinimalButton>
+                        <div className="space-y-2.5">
+                          {activeActionView === 'approve' ? (
+                            <button onClick={() => setActiveModal('approve')} className="w-full flex items-center gap-2.5 rounded-xl border border-green-200 dark:border-green-800/40 bg-green-600 dark:bg-green-700 text-white hover:bg-green-700 dark:hover:bg-green-600 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px]">task_alt</span>
+                              Confirm approval
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          ) : activeActionView === 'reject' ? (
+                            <button onClick={() => setActiveModal('reject')} className="w-full flex items-center gap-2.5 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px]">cancel</span>
+                              Confirm rejection
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          ) : activeActionView === 'received' ? (
+                            <button onClick={() => setActiveModal('received')} className="w-full flex items-center gap-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800/40 bg-indigo-600 dark:bg-indigo-700 text-white hover:bg-indigo-700 dark:hover:bg-indigo-600 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px]">warehouse</span>
+                              Confirm receipt
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          ) : activeActionView === 'refund' ? (
+                            <button onClick={() => setActiveModal('refund')} className="w-full flex items-center gap-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 px-4 py-2.5 text-[13px] font-bold transition-colors">
+                              <span className="material-symbols-outlined text-[16px]">payments</span>
+                              Start refund processing
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          ) : (
+                            <button onClick={() => setActiveModal('block')} className="w-full flex items-center gap-2.5 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 hover:bg-red-100 px-4 py-2.5 text-[13px] font-bold transition-colors">
+                              <span className="material-symbols-outlined text-[16px]">block</span>
+                              Block this return
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          )}
+                          <button onClick={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('inbox', selectedReturn.relatedCases[0].id)} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/30 text-gray-700 dark:text-gray-200 hover:bg-gray-50 px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                            <span className="material-symbols-outlined text-[16px] text-gray-400">inbox</span>
+                            Open linked case
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </MinimalCard>
@@ -748,6 +765,245 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
           </div>
         </div>
       </div>
+
+      {/* ── Action Modals ────────────────────────────────────────────── */}
+      {selectedReturn && (
+        <>
+          {/* Approve modal */}
+          <ActionModal
+            open={activeModal === 'approve'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('approved', 'Approved');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="default"
+            icon="task_alt"
+            title="Approve Return"
+            subtitle={`Approve return ${selectedReturn.returnId} for ${selectedReturn.customerName}`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Return Value', value: selectedReturn.returnValue },
+              { label: 'Current Status', value: selectedReturn.returnStatus },
+              { label: 'Approval Status', value: selectedReturn.approvalStatus },
+              { label: 'Risk Level', value: selectedReturn.riskLevel, accent: selectedReturn.riskLevel === 'High' },
+            ]}
+            steps={[
+              {
+                text: 'Set return status to Approved',
+                detail: 'Update the return record in the system and mark the approval flag as confirmed.',
+              },
+              {
+                text: 'Unblock downstream dependencies',
+                detail: 'Allow refund processing, warehouse receipt confirmation, and customer notifications to proceed.',
+              },
+              {
+                text: 'Log action in audit trail',
+                detail: 'Record the approval with your user ID, timestamp, and current return state for compliance.',
+              },
+            ]}
+            considerations={[
+              { text: 'Approving this return authorises the customer for a refund of ' + selectedReturn.returnValue + '. Ensure the return reason and inspection notes are correct before proceeding.' },
+              { text: 'If the item has not yet been received by the warehouse, approval will not automatically trigger the refund. A warehouse receipt confirmation is still required.' },
+              { text: 'High-risk returns should be reviewed against the customer\'s return history before approval.' },
+            ]}
+            confirmLabel="Approve Return"
+          />
+
+          {/* Reject modal */}
+          <ActionModal
+            open={activeModal === 'reject'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('rejected', 'Rejected');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="danger"
+            icon="cancel"
+            title="Reject Return"
+            subtitle={`Reject return ${selectedReturn.returnId} and deny the refund request`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Return Value', value: selectedReturn.returnValue, accent: true },
+              { label: 'Return Reason', value: selectedReturn.returnReason },
+              { label: 'Current Status', value: selectedReturn.returnStatus },
+              { label: 'Risk Level', value: selectedReturn.riskLevel, accent: selectedReturn.riskLevel === 'High' },
+            ]}
+            steps={[
+              {
+                text: 'Set return status to Rejected',
+                detail: 'Update the return record to reflect the denied state across all connected systems.',
+              },
+              {
+                text: 'Block refund and replacement flows',
+                detail: 'Prevent any refund processing or replacement shipment from being triggered automatically.',
+              },
+              {
+                text: 'Log rejection with reason',
+                detail: 'Record the rejection decision in the audit trail. Customer-facing communication must be handled separately.',
+              },
+            ]}
+            considerations={[
+              { text: 'This action is difficult to reverse. The customer will not receive a refund unless the rejection is manually overridden by a supervisor.' },
+              { text: 'Ensure the rejection complies with your return policy and consumer protection laws for the customer\'s country (' + selectedReturn.country + ').' },
+              { text: 'Customer communication after rejection is not automated — you will need to send a rejection notice manually through the messaging workspace.' },
+            ]}
+            confirmLabel="Reject Return"
+          />
+
+          {/* Mark Received modal */}
+          <ActionModal
+            open={activeModal === 'received'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('received', 'Marked Received');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="default"
+            icon="warehouse"
+            title="Mark as Received"
+            subtitle={`Confirm warehouse receipt for return ${selectedReturn.returnId}`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Carrier Status', value: selectedReturn.systemStates.carrier },
+              { label: 'WMS Status', value: selectedReturn.systemStates.wms },
+              { label: 'Inspection Status', value: selectedReturn.inspectionStatus },
+              { label: 'Return Value', value: selectedReturn.returnValue },
+            ]}
+            steps={[
+              {
+                text: 'Mark item as physically received in warehouse',
+                detail: 'Update the WMS record to confirm the item has arrived and is available for inspection.',
+              },
+              {
+                text: 'Trigger inspection workflow (if configured)',
+                detail: 'Notify the QA team that the item is ready for condition assessment before the refund is released.',
+              },
+              {
+                text: 'Update carrier and OMS states',
+                detail: 'Sync the received status back to the carrier tracking record and the OMS order line.',
+              },
+              {
+                text: 'Unlock refund processing',
+                detail: 'Once received, the return can proceed to refund processing if already approved.',
+              },
+            ]}
+            considerations={[
+              { text: 'Only mark as received if the item has physically arrived at your warehouse. Premature confirmation may trigger an incorrect refund.' },
+              { text: 'If inspection is required, the refund will not be released automatically until the inspection is completed and the item condition is confirmed.' },
+              { text: 'Carrier tracking discrepancies should be resolved before confirming receipt to avoid reconciliation issues later.' },
+            ]}
+            confirmLabel="Confirm Receipt"
+          />
+
+          {/* Process Refund modal */}
+          <ActionModal
+            open={activeModal === 'refund'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('refund_pending', 'Refund Initiated');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="warning"
+            icon="payments"
+            title={`Process Refund — ${selectedReturn.returnValue}`}
+            subtitle={`Initiate refund processing for ${selectedReturn.customerName}`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Refund Amount', value: selectedReturn.returnValue, accent: true },
+              { label: 'Refund Status', value: selectedReturn.refundStatus },
+              { label: 'Approval Status', value: selectedReturn.approvalStatus },
+              { label: 'Receipt Status', value: selectedReturn.inspectionStatus },
+            ]}
+            steps={[
+              {
+                text: 'Validate refund prerequisites',
+                detail: 'Confirm the return is approved, the item is received, and no disputes are blocking the refund.',
+              },
+              {
+                text: `Submit refund of ${selectedReturn.returnValue} to payment provider`,
+                detail: `Send the refund request via ${selectedReturn.systemStates.psp}. Processing time depends on the original payment method.`,
+              },
+              {
+                text: 'Update refund status to Pending',
+                detail: 'Mark the return as Refund Pending in the system until the PSP confirms the transaction.',
+              },
+              {
+                text: 'Notify customer (if configured)',
+                detail: 'Send a refund confirmation notification to the customer via their preferred channel.',
+              },
+            ]}
+            considerations={[
+              { text: 'Refund of ' + selectedReturn.returnValue + ' is irreversible once submitted to the payment provider. Double-check the return value before confirming.' },
+              { text: 'Processing times vary by payment method: card refunds typically take 5–10 business days; bank transfers may take longer.' },
+              { text: 'If the original payment has expired or the card was cancelled, the refund may fail and require manual processing through the PSP dashboard.' },
+            ]}
+            confirmLabel="Initiate Refund"
+          />
+
+          {/* Block modal */}
+          <ActionModal
+            open={activeModal === 'block'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('blocked', 'Blocked');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="danger"
+            icon="block"
+            title="Block Return"
+            subtitle={`Halt all processing for return ${selectedReturn.returnId}`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Return Value', value: selectedReturn.returnValue, accent: true },
+              { label: 'Current Status', value: selectedReturn.returnStatus },
+              { label: 'Risk Level', value: selectedReturn.riskLevel, accent: selectedReturn.riskLevel === 'High' },
+              { label: 'Return Reason', value: selectedReturn.returnReason },
+            ]}
+            steps={[
+              {
+                text: 'Set return status to Blocked',
+                detail: 'Immediately halt all active processing pipelines for this return across OMS, WMS, and PSP.',
+              },
+              {
+                text: 'Freeze refund and approval flows',
+                detail: 'Prevent any refund from being issued or approval from advancing until the block is manually lifted.',
+              },
+              {
+                text: 'Flag for manual review',
+                detail: 'Mark the return as requiring supervisor review and add it to the blocked returns queue.',
+              },
+            ]}
+            considerations={[
+              { text: 'Blocking this return will prevent any automated processing from continuing. A supervisor must manually unblock it to resume.' },
+              { text: 'If the customer has already been notified of an approved refund, blocking may create a support escalation.' },
+              { text: 'High-risk blocks should be documented with an internal note explaining the reason for the block for compliance and audit purposes.' },
+              { text: 'Blocking does not cancel any return shipment in transit — coordinate with the carrier separately if needed.' },
+            ]}
+            confirmLabel="Block Return"
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -5,10 +5,13 @@ import type { CaseHeaderMenuItem } from './CaseHeader';
 import CaseCopilotPanel from './CaseCopilotPanel';
 import MinimalTimeline from './MinimalTimeline';
 import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
+import { ActionModal } from './ActionModal';
 import { casesApi, ordersApi, paymentsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
 import type { NavigateFn } from '../types';
+
+type OrderAction = 'open_case' | 'refund' | 'note' | 'cancel' | null;
 
 type RightTab = 'details' | 'copilot';
 
@@ -48,6 +51,9 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [caseActionMsg, setCaseActionMsg] = useState<string | null>(null);
+  const [activeModal, setActiveModal] = useState<OrderAction>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [noteText, setNoteText] = useState('');
 
   const showCaseMsg = (msg: string) => {
     setCaseActionMsg(msg);
@@ -522,11 +528,39 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
                         </p>
                       </div>
                     </div>
-                    <div className="space-y-3">
-                      <MinimalButton onClick={handleApplyToComposer}>Open linked case</MinimalButton>
-                      <MinimalButton onClick={() => void handleStartRefund()} variant="outline">Start refund flow</MinimalButton>
-                      <MinimalButton onClick={() => void handleAddNote()} variant="outline">Add internal note</MinimalButton>
-                      <MinimalButton onClick={() => void handleCancelOrder(selectedOrder.id)} variant="ghost">Cancel order</MinimalButton>
+                    <div className="space-y-2.5">
+                      <button
+                        onClick={() => setActiveModal('open_case')}
+                        className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                        Open linked case
+                        <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveModal('refund')}
+                        className="w-full flex items-center gap-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/40 px-4 py-2.5 text-[13px] font-semibold transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">currency_exchange</span>
+                        Start refund flow
+                        <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
+                      </button>
+                      <button
+                        onClick={() => { setNoteText(''); setActiveModal('note'); }}
+                        className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/30 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 px-4 py-2.5 text-[13px] font-semibold transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[16px] text-gray-400">edit_note</span>
+                        Add internal note
+                        <span className="material-symbols-outlined text-[14px] ml-auto opacity-40">chevron_right</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveModal('cancel')}
+                        className="w-full flex items-center gap-2.5 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/40 px-4 py-2.5 text-[13px] font-semibold transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">cancel</span>
+                        Cancel order
+                        <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
+                      </button>
                     </div>
                   </div>
                 </MinimalCard>
@@ -739,6 +773,160 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
           </div>
         </div>
       </div>
+
+      {/* ── Action Modals ───────────────────────────────────────────── */}
+
+      {/* Open linked case */}
+      <ActionModal
+        open={activeModal === 'open_case'}
+        onClose={() => setActiveModal(null)}
+        loading={modalLoading}
+        variant="default"
+        icon="open_in_new"
+        title="Open Linked Case"
+        subtitle="Navigate to the support case associated with this order"
+        context={selectedOrder ? [
+          { label: 'Order ID', value: selectedOrder.orderId },
+          { label: 'Customer', value: selectedOrder.customerName },
+          { label: 'Case ID', value: selectedOrder.relatedCases[0]?.id ?? 'Not linked' },
+          { label: 'Case status', value: selectedOrder.relatedCases[0]?.status ?? 'N/A' },
+          { label: 'Order status', value: selectedOrder.orderStatus },
+          { label: 'Risk level', value: selectedOrder.riskLevel, accent: selectedOrder.riskLevel === 'High' },
+        ] : []}
+        steps={[
+          { text: 'Open Inbox thread', detail: 'The case conversation will load in the Inbox view with full message history.' },
+          { text: 'Load order context panel', detail: 'This order\'s data (status, timeline, risk) will be pre-loaded in the right panel.' },
+          { text: 'AI copilot activated', detail: 'The copilot will offer context-aware suggestions based on the current case state.' },
+        ]}
+        considerations={[
+          { text: 'No changes will be made to the order or case — this is a read-only navigation.' },
+          { text: `Linked case: ${selectedOrder?.relatedCases[0]?.id ?? 'none found'}. If no case exists, you will land on the Inbox root.` },
+        ]}
+        confirmLabel="Open in Inbox →"
+        onConfirm={() => {
+          setActiveModal(null);
+          handleApplyToComposer();
+        }}
+      />
+
+      {/* Start refund flow */}
+      <ActionModal
+        open={activeModal === 'refund'}
+        onClose={() => setActiveModal(null)}
+        loading={modalLoading}
+        variant="warning"
+        icon="currency_exchange"
+        title="Start Refund Flow"
+        subtitle="Initiate a full or partial refund via the payment gateway"
+        context={selectedOrder ? [
+          { label: 'Order ID', value: selectedOrder.orderId },
+          { label: 'Customer', value: selectedOrder.customerName },
+          { label: 'Order total', value: selectedOrder.total },
+          { label: 'Payment status', value: selectedOrder.paymentStatus },
+          { label: 'Refund status', value: selectedOrder.refundStatus },
+          { label: 'Risk level', value: selectedOrder.riskLevel, accent: selectedOrder.riskLevel === 'High' },
+        ] : []}
+        steps={[
+          { text: 'Locate linked payment', detail: 'The system will identify the captured payment associated with this order via the PSP.' },
+          { text: 'Create refund request', detail: 'A refund request is submitted to the payment gateway. The amount defaults to the full order total unless a partial refund is configured.' },
+          { text: 'PSP processes the refund', detail: 'The payment provider processes the reversal. Typical processing time: 3–5 business days depending on the bank.' },
+          { text: 'Order state updated', detail: 'The order refund status will be updated to "Refund Pending" and then "Refunded" once confirmed by the PSP.' },
+          { text: 'Navigate to Payments', detail: 'You will be redirected to the Payments section to monitor the refund progress in real time.' },
+        ]}
+        considerations={[
+          { text: 'Refunds are irreversible once submitted to the PSP.' },
+          { text: 'If the order has already been partially refunded, a second refund may create a conflict — review the payment history first.' },
+          { text: 'High-risk orders (flagged by the risk engine) may require additional approval before the PSP accepts the refund.' },
+          { text: 'Customer will typically see the refund in 3–5 business days, depending on their bank.' },
+        ]}
+        confirmLabel="Start refund"
+        onConfirm={async () => {
+          setModalLoading(true);
+          await handleStartRefund();
+          setModalLoading(false);
+          setActiveModal(null);
+        }}
+      />
+
+      {/* Add internal note */}
+      <ActionModal
+        open={activeModal === 'note'}
+        onClose={() => setActiveModal(null)}
+        loading={modalLoading}
+        variant="default"
+        icon="edit_note"
+        title="Add Internal Note"
+        subtitle="Attach a timestamped note to the linked support case"
+        context={selectedOrder ? [
+          { label: 'Order ID', value: selectedOrder.orderId },
+          { label: 'Customer', value: selectedOrder.customerName },
+          { label: 'Case ID', value: selectedOrder.relatedCases[0]?.id ?? 'Not linked' },
+          { label: 'Current summary', value: selectedOrder.summary.slice(0, 60) + (selectedOrder.summary.length > 60 ? '…' : '') || 'No summary' },
+        ] : []}
+        steps={[
+          { text: 'Note attached to case timeline', detail: 'The note will appear as an internal event in the case activity feed, visible only to workspace agents.' },
+          { text: 'Case "last updated" timestamp refreshed', detail: 'The case will surface higher in attention queues if it was idle.' },
+          { text: 'Audit log entry created', detail: 'The action is logged in the workspace audit trail with your user ID and timestamp.' },
+        ]}
+        considerations={[
+          { text: 'Notes are permanent and cannot be deleted once added.' },
+          { text: 'Notes are visible to all agents with access to this workspace — do not include sensitive payment data.' },
+          { text: 'If no linked case exists, the note cannot be saved. Use "Open linked case" to create one first.' },
+        ]}
+        noteLabel="Your note"
+        notePlaceholder={`e.g. "Customer confirmed address change — reshipment approved by manager."`}
+        noteValue={noteText}
+        onNoteChange={setNoteText}
+        confirmLabel="Add note"
+        onConfirm={async () => {
+          setModalLoading(true);
+          await handleAddNote();
+          setModalLoading(false);
+          setActiveModal(null);
+        }}
+      />
+
+      {/* Cancel order */}
+      <ActionModal
+        open={activeModal === 'cancel'}
+        onClose={() => setActiveModal(null)}
+        loading={modalLoading}
+        variant="danger"
+        icon="cancel"
+        title="Cancel Order"
+        subtitle="Send a cancellation request for this order across all connected systems"
+        context={selectedOrder ? [
+          { label: 'Order ID', value: selectedOrder.orderId },
+          { label: 'Customer', value: selectedOrder.customerName },
+          { label: 'Order total', value: selectedOrder.total },
+          { label: 'Fulfillment', value: selectedOrder.fulfillmentStatus },
+          { label: 'Payment status', value: selectedOrder.paymentStatus },
+          { label: 'Risk level', value: selectedOrder.riskLevel, accent: selectedOrder.riskLevel === 'High' },
+        ] : []}
+        steps={[
+          { text: 'Cancellation request submitted to OMS', detail: 'The Order Management System receives the cancellation signal and halts any pending fulfillment steps.' },
+          { text: 'Warehouse release signal sent', detail: 'If the order is in "packed" state, the WMS is instructed to return items to stock.' },
+          { text: 'Payment refund triggered (if captured)', detail: 'If the payment has already been captured, an automatic refund is initiated via the PSP.' },
+          { text: 'Carrier label voided', detail: 'If a shipping label was created, the carrier API is called to void it and release the booking.' },
+          { text: 'Customer notification triggered', detail: 'An automated cancellation email/SMS is sent to the customer if notification settings are enabled.' },
+          { text: 'Order status set to "Cancelled"', detail: 'All downstream systems will receive a state sync within the next reconciliation cycle.' },
+        ]}
+        considerations={[
+          { text: 'Cancellation is IRREVERSIBLE. Once confirmed, the order cannot be reinstated — a new order must be created.' },
+          { text: 'If the order is already "Delivered", cancellation is not possible and this action will have no effect on fulfillment.' },
+          { text: 'Pending payment capture may still proceed if the cancellation arrives after the PSP authorization window.' },
+          { text: `Current status is "${selectedOrder?.fulfillmentStatus ?? 'Unknown'}" — verify the order has not yet shipped before confirming.` },
+        ]}
+        confirmLabel="Yes, cancel order"
+        onConfirm={async () => {
+          if (!selectedOrder) return;
+          setModalLoading(true);
+          await handleCancelOrder(selectedOrder.id);
+          setModalLoading(false);
+          setActiveModal(null);
+        }}
+      />
+
     </div>
   );
 }
