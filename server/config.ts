@@ -119,11 +119,11 @@ function buildConfig(): Config {
     console.warn(`DB_PROVIDER=${requestedDbProvider} is no longer supported. Supabase will be used exclusively.`);
   }
 
-  // Gemini is optional for local product demos: when it is missing, the API
-  // still boots and AI routes can return deterministic canonical-state fallbacks.
+  // Gemini is optional at server boot, but LLM-only routes fail closed until
+  // a real provider key is configured.
   const geminiApiKey = optionalEnv('GEMINI_API_KEY', '');
   if (!geminiApiKey) {
-    console.warn('GEMINI_API_KEY is not set. AI endpoints will use safe local fallbacks where available.');
+    console.warn('GEMINI_API_KEY is not set. LLM-only AI endpoints will return LLM_PROVIDER_NOT_CONFIGURED.');
   }
 
   const shopifyDomain = process.env.SHOPIFY_SHOP_DOMAIN;

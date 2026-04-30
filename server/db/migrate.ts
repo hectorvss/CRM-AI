@@ -985,6 +985,54 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       }
     },
   },
+  // ── 2026-04-30-001: super_agent_feedback + super_agent_scheduled_actions ───
+  {
+    version: '2026-04-30-001',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS super_agent_feedback (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          session_id TEXT,
+          run_id TEXT,
+          target_type TEXT,
+          target_id TEXT,
+          tool TEXT,
+          decision TEXT NOT NULL,
+          accepted INTEGER NOT NULL DEFAULT 0,
+          rationale TEXT,
+          metadata TEXT NOT NULL DEFAULT '{}',
+          created_by TEXT,
+          created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+        );
+        CREATE INDEX IF NOT EXISTS idx_super_agent_feedback_scope_time
+          ON super_agent_feedback(tenant_id, workspace_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS super_agent_scheduled_actions (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          due_at TEXT NOT NULL,
+          target_type TEXT,
+          target_id TEXT,
+          payload TEXT NOT NULL DEFAULT '{}',
+          created_by TEXT,
+          session_id TEXT,
+          run_id TEXT,
+          executed_at TEXT,
+          last_error TEXT,
+          created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+          updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+        );
+        CREATE INDEX IF NOT EXISTS idx_super_agent_scheduled_actions_due
+          ON super_agent_scheduled_actions(tenant_id, workspace_id, status, due_at ASC);
+      `);
+    },
+  },
 ];
 
 // ── Runner ─────────────────────────────────────────────────────────────────────

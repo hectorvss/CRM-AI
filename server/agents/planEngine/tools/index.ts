@@ -57,7 +57,17 @@ import {
   integrationCreateCanonicalEventTool,
   integrationUpdateCanonicalEventTool,
 } from './integrations.js';
-import { workflowGetTool, workflowListTool, workflowPublishTool, workflowTriggerTool, workflowFireEventTool, agentListTool } from './workflows.js';
+import {
+  workflowCreateDraftTool,
+  workflowGetTool,
+  workflowListTool,
+  workflowPublishTool,
+  workflowTriggerTool,
+  workflowFireEventTool,
+  workflowUpdateDraftTool,
+  workflowValidateTool,
+  agentListTool,
+} from './workflows.js';
 import {
   reportAgentsTool,
   reportApprovalsTool,
@@ -75,12 +85,25 @@ import {
 } from './agentDelegates.js';
 import { agentRunTool } from './agentRun.js';
 import { reconListIssuesTool, reconResolveIssueTool } from './reconciliation.js';
+import {
+  caseBulkAddNoteTool,
+  caseBulkAssignTool,
+  caseBulkUpdatePriorityTool,
+  caseBulkUpdateStatusTool,
+  orderBulkCancelTool,
+} from './bulk.js';
+import { playbookExecuteTool, playbookGetTool, playbookListTool } from './playbooks.js';
+import { searchGlobalTool } from './search.js';
+import { rootCauseAnalyzeTool } from './analysis.js';
+import { feedbackListTool, feedbackRecordDecisionTool } from './feedback.js';
+import { scheduledActionCancelTool, scheduledActionCreateTool, scheduledActionListTool } from './scheduledActions.js';
 
 export function registerAllTools(): void {
   // Orders
   toolRegistry.register(orderGetTool);
   toolRegistry.register(orderListTool);
   toolRegistry.register(orderCancelTool);
+  toolRegistry.register(orderBulkCancelTool);
 
   // Payments
   toolRegistry.register(paymentGetTool);
@@ -93,6 +116,10 @@ export function registerAllTools(): void {
   toolRegistry.register(caseUpdatePriorityTool);
   toolRegistry.register(caseUpdateAssignmentTool);
   toolRegistry.register(caseAddNoteTool);
+  toolRegistry.register(caseBulkUpdateStatusTool);
+  toolRegistry.register(caseBulkUpdatePriorityTool);
+  toolRegistry.register(caseBulkAssignTool);
+  toolRegistry.register(caseBulkAddNoteTool);
 
   // Returns
   toolRegistry.register(returnGetTool);
@@ -141,6 +168,9 @@ export function registerAllTools(): void {
   // Workflows
   toolRegistry.register(workflowListTool);
   toolRegistry.register(workflowGetTool);
+  toolRegistry.register(workflowCreateDraftTool);
+  toolRegistry.register(workflowUpdateDraftTool);
+  toolRegistry.register(workflowValidateTool);
   toolRegistry.register(workflowPublishTool);
   toolRegistry.register(workflowTriggerTool);
   toolRegistry.register(workflowFireEventTool);
@@ -166,4 +196,24 @@ export function registerAllTools(): void {
   // Reconciliation
   toolRegistry.register(reconListIssuesTool);
   toolRegistry.register(reconResolveIssueTool);
+
+  // Cross-entity search
+  toolRegistry.register(searchGlobalTool);
+
+  // Analysis / explainability helpers
+  toolRegistry.register(rootCauseAnalyzeTool);
+
+  // Playbooks
+  toolRegistry.register(playbookListTool);
+  toolRegistry.register(playbookGetTool);
+  toolRegistry.register(playbookExecuteTool);
+
+  // Feedback loop
+  toolRegistry.register(feedbackRecordDecisionTool);
+  toolRegistry.register(feedbackListTool);
+
+  // Scheduled actions
+  toolRegistry.register(scheduledActionCreateTool);
+  toolRegistry.register(scheduledActionListTool);
+  toolRegistry.register(scheduledActionCancelTool);
 }

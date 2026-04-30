@@ -94,6 +94,293 @@ export const workflowGetTool: ToolSpec<{ workflowId: string }, unknown> = {
   },
 };
 
+function validateWorkflowDraft(nodes: any[] = [], edges: any[] = []) {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const nodeIds = new Set(nodes.map((node) => String(node?.id || '')).filter(Boolean));
+
+  if (nodes.length === 0) errors.push('Workflow must contain at least one node.');
+  if (!nodes.some((node) => node?.type === 'trigger')) warnings.push('Workflow has no trigger node.');
+
+  for (const node of nodes) {
+    if (!node?.id) errors.push('Every node must have an id.');
+    if (!node?.type) errors.push(`Node ${node?.id || 'unknown'} is missing type.`);
+    if (node?.type === 'action' && !node?.key) warnings.push(`Action node ${node.id} should declare a key.`);
+  }
+
+  for (const edge of edges) {
+    if (!edge?.id) errors.push('Every edge must have an id.');
+    if (!nodeIds.has(String(edge?.source || ''))) errors.push(`Edge ${edge?.id || 'unknown'} has an unknown source.`);
+    if (!nodeIds.has(String(edge?.target || ''))) errors.push(`Edge ${edge?.id || 'unknown'} has an unknown target.`);
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+function parseWorkflowArray(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function parseWorkflowObject(value: unknown, fallback: Record<string, any>) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+export const workflowCreateDraftTool: ToolSpec<{
+  name: string;
+  description?: string;
+  nodes?: unknown;
+  edges?: unknown;
+  trigger?: unknown;
+}, unknown> = {
+  name: 'workflow.create_draft',
+  version: '1.0.0',
+  description: 'Create a new workflow draft from natural-language instructions. Use this when the user asks to build a new automation or workflow.',
+  category: 'workflow',
+  sideEffect: 'write',
+  risk: 'medium',
+  idempotent: false,
+  requiredPermission: 'workflows.write',
+  args: s.object({
+    name: s.string({ min: 2, max: 120, description: 'Workflow name' }),
+    description: s.string({ required: false, max: 500, description: 'Workflow description' }),
+    nodes: s.any('Optional array of workflow nodes. If omitted, a trigger node will be created.'),
+    edges: s.any('Optional array of workflow edges.'),
+    trigger: s.any('Optional workflow trigger config.'),
+  }),
+  returns: s.any('{ workflowId, versionId, status, validation, workflow }'),
+  async run({ args, context }) {
+    const scope = workflowScope(context);
+    const workflowId = randomUUID();
+    const versionId = randomUUID();
+    const nodes = Array.isArray(args.nodes)
+      ? args.nodes
+      : [{ id: 'trigger-1', type: 'trigger', key: 'manual.run', label: 'Manual trigger', config: {} }];
+    const edges = Array.isArray(args.edges) ? args.edges : [];
+    const trigger = args.trigger && typeof args.trigger === 'object' ? args.trigger : { type: 'manual.run' };
+    const validation = validateWorkflowDraft(nodes, edges);
+
+    if (context.dryRun) {
+      return {
+        ok: true,
+        value: {
+          workflowId,
+          versionId,
+          status: 'draft',
+          dryRun: true,
+          validation,
+          workflow: { id: workflowId, name: args.name, description: args.description ?? '', nodes, edges, trigger },
+        },
+      };
+    }
+
+    await workflowRepo.createDefinition({
+      id: workflowId,
+      tenantId: scope.tenantId,
+      workspaceId: scope.workspaceId,
+      name: args.name,
+      description: args.description ?? '',
+      currentVersionId: null,
+      createdBy: context.userId ?? 'plan-engine',
+    });
+    await workflowRepo.createVersion({
+      id: versionId,
+      workflowId,
+      versionNumber: 1,
+      status: 'draft',
+      nodes,
+      edges,
+      trigger,
+      tenantId: scope.tenantId,
+    });
+    await workflowRepo.updateDefinition(workflowId, scope.tenantId, scope.workspaceId, {
+      currentVersionId: versionId,
+    });
+
+    await context.audit({
+      action: 'PLAN_ENGINE_WORKFLOW_DRAFT_CREATED',
+      entityType: 'workflow',
+      entityId: workflowId,
+      newValue: { workflowId, versionId, name: args.name, nodes, edges, trigger, validation },
+      metadata: { source: 'plan-engine', planId: context.planId },
+    });
+
+    return {
+      ok: true,
+      value: {
+        workflowId,
+        versionId,
+        status: 'draft',
+        validation,
+        workflow: await enrichWorkflow(
+          await workflowRepo.getDefinition(workflowId, scope.tenantId, scope.workspaceId),
+          scope.tenantId,
+        ),
+      },
+    };
+  },
+};
+
+export const workflowUpdateDraftTool: ToolSpec<{
+  workflowId: string;
+  name?: string;
+  description?: string;
+  nodes?: unknown;
+  edges?: unknown;
+  trigger?: unknown;
+  reason?: string;
+}, unknown> = {
+  name: 'workflow.update_draft',
+  version: '1.0.0',
+  description: 'Update or create the draft version of an existing workflow. Use this to add nodes, connect nodes, change trigger config, or rename a workflow.',
+  category: 'workflow',
+  sideEffect: 'write',
+  risk: 'medium',
+  idempotent: false,
+  requiredPermission: 'workflows.write',
+  args: s.object({
+    workflowId: s.string({ description: 'UUID of the workflow to edit' }),
+    name: s.string({ required: false, max: 120, description: 'Optional new workflow name' }),
+    description: s.string({ required: false, max: 500, description: 'Optional new workflow description' }),
+    nodes: s.any('Optional replacement nodes array'),
+    edges: s.any('Optional replacement edges array'),
+    trigger: s.any('Optional replacement trigger object'),
+    reason: s.string({ required: false, max: 500, description: 'Reason for the audit trail' }),
+  }),
+  returns: s.any('{ workflowId, versionId, status, validation, workflow }'),
+  async run({ args, context }) {
+    const scope = workflowScope(context);
+    const workflow = await workflowRepo.getDefinition(args.workflowId, scope.tenantId, scope.workspaceId);
+    if (!workflow) return { ok: false, error: 'Workflow not found', errorCode: 'NOT_FOUND' };
+
+    const versions = await workflowRepo.listVersions(workflow.id);
+    const currentVersion = workflow.current_version_id
+      ? await workflowRepo.getVersion(workflow.current_version_id)
+      : versions[0];
+    const draftVersion = versions.find((version: any) => String(version.status || '').toLowerCase() === 'draft');
+    const targetVersion = draftVersion || null;
+    const nextVersionId = targetVersion?.id || randomUUID();
+    const nextVersionNumber = targetVersion?.version_number || Math.max(0, ...versions.map((version: any) => Number(version.version_number || 0))) + 1;
+    const baseNodes = parseWorkflowArray(currentVersion?.nodes);
+    const baseEdges = parseWorkflowArray(currentVersion?.edges);
+    const nodes = Array.isArray(args.nodes) ? args.nodes : baseNodes;
+    const edges = Array.isArray(args.edges) ? args.edges : baseEdges;
+    const trigger = args.trigger && typeof args.trigger === 'object'
+      ? args.trigger
+      : parseWorkflowObject(currentVersion?.trigger, { type: 'manual.run' });
+    const validation = validateWorkflowDraft(nodes, edges);
+
+    if (context.dryRun) {
+      return {
+        ok: true,
+        value: {
+          workflowId: workflow.id,
+          versionId: nextVersionId,
+          status: 'draft',
+          dryRun: true,
+          validation,
+          workflow: { ...workflow, name: args.name ?? workflow.name, description: args.description ?? workflow.description, nodes, edges, trigger },
+        },
+      };
+    }
+
+    await workflowRepo.updateDefinition(workflow.id, scope.tenantId, scope.workspaceId, {
+      ...(args.name ? { name: args.name } : {}),
+      ...(args.description !== undefined ? { description: args.description } : {}),
+      currentVersionId: nextVersionId,
+    });
+
+    if (targetVersion) {
+      await workflowRepo.updateVersion(nextVersionId, { nodes, edges, trigger, status: 'draft' });
+    } else {
+      await workflowRepo.createVersion({
+        id: nextVersionId,
+        workflowId: workflow.id,
+        versionNumber: nextVersionNumber,
+        status: 'draft',
+        nodes,
+        edges,
+        trigger,
+        tenantId: scope.tenantId,
+      });
+    }
+
+    await context.audit({
+      action: 'PLAN_ENGINE_WORKFLOW_DRAFT_UPDATED',
+      entityType: 'workflow',
+      entityId: workflow.id,
+      oldValue: { currentVersionId: workflow.current_version_id || null },
+      newValue: { versionId: nextVersionId, name: args.name ?? workflow.name, validation, reason: args.reason ?? null },
+      metadata: { source: 'plan-engine', planId: context.planId },
+    });
+
+    return {
+      ok: true,
+      value: {
+        workflowId: workflow.id,
+        versionId: nextVersionId,
+        status: 'draft',
+        validation,
+        workflow: await enrichWorkflow(
+          await workflowRepo.getDefinition(workflow.id, scope.tenantId, scope.workspaceId),
+          scope.tenantId,
+        ),
+      },
+    };
+  },
+};
+
+export const workflowValidateTool: ToolSpec<{ workflowId?: string; nodes?: unknown; edges?: unknown }, unknown> = {
+  name: 'workflow.validate',
+  version: '1.0.0',
+  description: 'Validate a workflow draft or proposed node/edge graph before publishing or execution.',
+  category: 'workflow',
+  sideEffect: 'read',
+  risk: 'none',
+  idempotent: true,
+  requiredPermission: 'workflows.read',
+  args: s.object({
+    workflowId: s.string({ required: false, description: 'Optional workflow UUID to validate from storage' }),
+    nodes: s.any('Optional nodes array to validate directly'),
+    edges: s.any('Optional edges array to validate directly'),
+  }),
+  returns: s.any('{ valid, errors, warnings }'),
+  async run({ args, context }) {
+    const scope = workflowScope(context);
+    let nodes = Array.isArray(args.nodes) ? args.nodes : [];
+    let edges = Array.isArray(args.edges) ? args.edges : [];
+
+    if (args.workflowId && (!Array.isArray(args.nodes) || !Array.isArray(args.edges))) {
+      const workflow = await workflowRepo.getDefinition(args.workflowId, scope.tenantId, scope.workspaceId);
+      if (!workflow) return { ok: false, error: 'Workflow not found', errorCode: 'NOT_FOUND' };
+      const version = workflow.current_version_id
+        ? await workflowRepo.getVersion(workflow.current_version_id)
+        : await workflowRepo.getLatestVersion(workflow.id);
+      nodes = parseWorkflowArray(version?.nodes);
+      edges = parseWorkflowArray(version?.edges);
+    }
+
+    return { ok: true, value: validateWorkflowDraft(nodes, edges) };
+  },
+};
+
 export const workflowPublishTool: ToolSpec<{ workflowId: string; reason?: string }, unknown> = {
   name: 'workflow.publish',
   version: '1.0.0',

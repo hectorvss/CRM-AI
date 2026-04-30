@@ -20,3 +20,4 @@ export * from './operations.js';
 export * from './integrations.js';
 export * from './ai.js';
 export * from './canonical.js';
+export * from './superAgentOps.js';

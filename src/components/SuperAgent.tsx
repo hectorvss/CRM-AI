@@ -58,6 +58,37 @@ type StreamStep = {
   detail?: string | null;
 };
 
+type AgentTimelineEvent = {
+  id: string;
+  type: 'chat' | 'thinking' | 'tool_started' | 'tool_result' | 'edit' | 'approval_required' | 'blocked' | 'done';
+  label: string;
+  status?: 'running' | 'completed' | 'failed' | 'blocked';
+  detail?: string | null;
+  tool?: string | null;
+};
+
+type ReasoningTrailPayload = {
+  summary: string;
+  intent: string;
+  confidence: number;
+  approvalRequired: boolean;
+  approvalReasons: string[];
+  signals: Array<{ source: string; observation: string; weight: 'low' | 'medium' | 'high' }>;
+  steps: Array<{
+    stepId: string;
+    tool: string;
+    rationale: string;
+    riskLevel: string;
+    outcome: string;
+    observation?: string;
+    durationMs?: number;
+    sideEffectSummary?: string;
+  }>;
+  riskProfile: { distribution: Record<string, number>; maxRisk: string };
+  notes: string[];
+  spokenExplanation: string;
+};
+
 type AssistantPayload = {
   id: string;
   input: string;
@@ -75,6 +106,8 @@ type AssistantPayload = {
   sources?: string[];
   evidence?: string[];
   steps?: StreamStep[];
+  timelineEvents?: AgentTimelineEvent[];
+  reasoningTrail?: ReasoningTrailPayload | null;
   runId?: string | null;
   structuredIntent?: Record<string, any> | null;
   navigationTarget?: NavigationTarget | null;
@@ -191,6 +224,16 @@ function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<s
         detail: step.detail ? String(step.detail) : null,
       })) as StreamStep[]
     : [];
+  const timelineEvents = Array.isArray(payload.timelineEvents)
+    ? payload.timelineEvents.map((event: any, index: number) => ({
+        id: String(event.id || `event-${index}`),
+        type: String(event.type || 'tool_result') as AgentTimelineEvent['type'],
+        label: String(event.label || 'Agent event'),
+        status: event.status === 'running' || event.status === 'failed' || event.status === 'blocked' ? event.status : 'completed',
+        detail: event.detail ? String(event.detail) : null,
+        tool: event.tool ? String(event.tool) : null,
+      })) as AgentTimelineEvent[]
+    : [];
   const actions = Array.isArray(payload.actions)
     ? payload.actions.map((action: any, index: number) => ({
         id: String(action.id || `action-${index}`),
@@ -232,6 +275,8 @@ function normalizeAssistantPayload(payload: Partial<AssistantPayload> & Record<s
     sources: Array.isArray(payload.sources) ? payload.sources.map((item: any) => String(item)) : undefined,
     evidence: Array.isArray(payload.evidence) ? payload.evidence.map((item: any) => String(item)) : undefined,
     steps,
+    timelineEvents,
+    reasoningTrail: payload.reasoningTrail || null,
     runId: payload.runId ?? fallbackRunId ?? null,
     structuredIntent: payload.structuredIntent || null,
     navigationTarget: payload.navigationTarget || null,
@@ -379,24 +424,229 @@ function compactList(items: Array<string | null | undefined>, separator = ' · '
   return items.map((item) => String(item || '').trim()).filter(Boolean).join(separator);
 }
 
+function lineToneClass(tone: 'muted' | 'normal' | 'success' | 'warning' | 'danger' | 'link' = 'normal') {
+  switch (tone) {
+    case 'success':
+      return 'text-emerald-600 dark:text-emerald-400';
+    case 'warning':
+      return 'text-amber-600 dark:text-amber-400';
+    case 'danger':
+      return 'text-red-600 dark:text-red-400';
+    case 'link':
+      return 'text-blue-600 dark:text-blue-400';
+    case 'muted':
+      return 'text-gray-400 dark:text-gray-500';
+    default:
+      return 'text-gray-800 dark:text-gray-100';
+  }
+}
+
+function stepTone(step: StreamStep): 'muted' | 'normal' | 'success' | 'warning' | 'danger' {
+  if (step.status === 'failed') return 'danger';
+  if (step.status === 'running') return 'warning';
+  return 'success';
+}
+
+function eventTone(event: AgentTimelineEvent): 'muted' | 'normal' | 'success' | 'warning' | 'danger' {
+  if (event.status === 'failed' || event.type === 'blocked') return 'danger';
+  if (event.status === 'running' || event.type === 'approval_required') return 'warning';
+  if (event.type === 'done' || event.type === 'tool_result' || event.type === 'edit') return 'success';
+  return 'muted';
+}
+
+function eventLabel(event: AgentTimelineEvent) {
+  switch (event.type) {
+    case 'thinking': return 'Thinking';
+    case 'tool_started': return 'Running';
+    case 'tool_result': return 'Ran';
+    case 'edit': return 'Edited';
+    case 'approval_required': return 'Approval';
+    case 'blocked': return 'Blocked';
+    case 'done': return 'Done';
+    default: return 'Agent';
+  }
+}
+
+function actionTone(action: SuperAgentAction): 'muted' | 'normal' | 'warning' | 'link' {
+  if (action.allowed === false) return 'muted';
+  if (action.type === 'execute' || action.requiresConfirmation) return 'warning';
+  return 'link';
+}
+
+function TranscriptLine({
+  label,
+  children,
+  tone = 'normal',
+}: {
+  label?: string;
+  children: React.ReactNode;
+  key?: React.Key;
+  tone?: 'muted' | 'normal' | 'success' | 'warning' | 'danger' | 'link';
+}) {
+  return (
+    <div className="flex gap-3 text-[15px] leading-7">
+      <div className="w-24 shrink-0 truncate text-right text-[13px] text-gray-400 dark:text-gray-500">{label || ''}</div>
+      <div className={`min-w-0 flex-1 ${lineToneClass(tone)}`}>{children}</div>
+    </div>
+  );
+}
+
+function AgentTranscriptMessage({
+  message,
+  onAction,
+  onReply,
+}: {
+  message: Extract<ConversationMessage, { role: 'assistant' }>;
+  onAction: (action: SuperAgentAction) => void;
+  onReply: (reply: string) => void;
+}) {
+  const payload = message.payload;
+  const isThinking = payload.summary === 'Thinking through your request...' && !payload.narrative;
+  const commandCount = (payload.steps?.length || 0) + payload.agents.length + payload.consultedModules.length;
+  const narrativeLines = (payload.narrative || payload.summary || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const visibleSections = payload.sections.filter((section) => section.items.length > 0);
+  const visibleActions = payload.actions.slice(0, 4);
+  const visibleReplies = payload.suggestedReplies.slice(0, 4);
+
+  return (
+    <div className={message.muted ? 'opacity-60' : ''}>
+      {commandCount > 0 ? (
+        <TranscriptLine label={`Ran ${commandCount}`} tone="muted">
+          commands
+        </TranscriptLine>
+      ) : null}
+
+      {payload.statusLine || payload.runId ? (
+        <TranscriptLine label="Status" tone="muted">
+          <span>{payload.statusLine || 'Ready'}</span>
+          {payload.runId ? <span className="ml-2 text-gray-400">Run {payload.runId.slice(0, 8)}</span> : null}
+        </TranscriptLine>
+      ) : null}
+
+      {isThinking ? (
+        <TranscriptLine label="Thinking" tone="muted">
+          <span className="inline-flex items-center gap-2">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gray-400" />
+            Thinking
+          </span>
+        </TranscriptLine>
+      ) : narrativeLines.length > 0 ? (
+        narrativeLines.map((line, index) => (
+          <TranscriptLine key={`${payload.id}-narrative-${index}`} label={index === 0 ? 'Agent' : ''}>
+            {line}
+          </TranscriptLine>
+        ))
+      ) : null}
+
+      {payload.consultedModules.length > 0 ? (
+        <TranscriptLine label="Read" tone="muted">
+          {payload.consultedModules.map((mod, index) => (
+            <span key={mod}>
+              <span className="font-medium text-gray-600 dark:text-gray-300">{mod}</span>
+              {index < payload.consultedModules.length - 1 ? <span className="text-gray-300">, </span> : null}
+            </span>
+          ))}
+        </TranscriptLine>
+      ) : null}
+
+      {payload.agents.map((agent) => (
+        <TranscriptLine key={`${payload.id}-agent-${agent.slug}`} label="Agent" tone={agent.status === 'blocked' ? 'danger' : agent.status === 'executed' ? 'success' : 'muted'}>
+          <span className="font-medium">{agent.name}</span>
+          <span className="ml-2 text-gray-400">{agent.summary}</span>
+        </TranscriptLine>
+      ))}
+
+      {payload.steps?.map((step) => (
+        <TranscriptLine key={`${payload.id}-step-${step.id}`} label={step.status === 'running' ? 'Running' : step.status === 'failed' ? 'Failed' : 'Ran'} tone={stepTone(step)}>
+          <span className="font-medium">{step.label}</span>
+          {step.detail ? <span className="ml-2 text-gray-400">{step.detail}</span> : null}
+        </TranscriptLine>
+      ))}
+
+      {payload.timelineEvents?.filter((event) => !payload.steps?.some((step) => step.id === event.id)).map((event) => (
+        <TranscriptLine key={`${payload.id}-event-${event.id}`} label={eventLabel(event)} tone={eventTone(event)}>
+          <span className="font-medium">{event.label}</span>
+          {event.detail ? <span className="ml-2 text-gray-400">{event.detail}</span> : null}
+        </TranscriptLine>
+      ))}
+
+      {visibleSections.map((section) => (
+        <div key={`${payload.id}-section-${section.title}`}>
+          <TranscriptLine label={section.title} tone="muted">
+            {section.items[0]}
+          </TranscriptLine>
+          {section.items.slice(1, 6).map((item, index) => (
+            <TranscriptLine key={`${payload.id}-${section.title}-${index}`} label="">
+              {item}
+            </TranscriptLine>
+          ))}
+        </div>
+      ))}
+
+      {payload.evidence?.slice(0, 4).map((item, index) => (
+        <TranscriptLine key={`${payload.id}-evidence-${index}`} label={index === 0 ? 'Evidence' : ''} tone="muted">
+          {item}
+        </TranscriptLine>
+      ))}
+
+      {visibleActions.length > 0 ? (
+        <TranscriptLine label="Actions">
+          <div className="flex flex-wrap gap-2 pt-0.5">
+            {visibleActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                onClick={() => onAction(action)}
+                disabled={action.allowed === false}
+                className={`rounded-md px-2 py-1 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${lineToneClass(actionTone(action))} hover:bg-gray-100 dark:hover:bg-gray-800`}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </TranscriptLine>
+      ) : null}
+
+      {visibleReplies.length > 0 ? (
+        <TranscriptLine label="Try" tone="muted">
+          <div className="flex flex-wrap gap-2 pt-0.5">
+            {visibleReplies.map((reply) => (
+              <button
+                key={`${payload.id}-${reply}`}
+                type="button"
+                onClick={() => onReply(reply)}
+                className="rounded-md px-2 py-1 text-[13px] text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              >
+                {reply}
+              </button>
+            ))}
+          </div>
+        </TranscriptLine>
+      ) : null}
+    </div>
+  );
+}
+
 // ── Thinking Indicator Component ──────────────────────────────────────────
 
 function ThinkingIndicator() {
   return (
-    <div className="flex gap-1">
-      <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" />
-      <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.2s' }} />
-      <div className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0.4s' }} />
-    </div>
+    <span className="h-px w-10 origin-left animate-pulse rounded-full bg-gray-300 dark:bg-gray-600" />
   );
 }
 
 function ThinkingCard() {
   return (
-    <div className="max-w-2xl rounded-lg bg-gray-50 p-4 border border-gray-100 dark:bg-gray-900 dark:border-gray-800">
-      <div className="flex items-center gap-2">
-        <ThinkingIndicator />
-        <span className="text-sm text-gray-600 dark:text-gray-400">Thinking...</span>
+    <div className="max-w-4xl">
+      <div className="flex gap-3 text-[15px] leading-7">
+        <span className="w-24 shrink-0 text-right text-[13px] text-gray-400 dark:text-gray-500">Thinking</span>
+        <span className="inline-flex min-w-0 flex-1 items-center gap-2 text-gray-400 dark:text-gray-500">
+          <ThinkingIndicator />
+          Thinking
+        </span>
       </div>
     </div>
   );
@@ -429,11 +679,9 @@ function StreamingStepsComponent({ steps }: { steps: StreamStep[] }) {
   if (!steps || steps.length === 0) return null;
 
   return (
-    <div className="space-y-1.5 pt-2 border-t border-gray-200 dark:border-gray-700">
-      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Execution steps</p>
-      <div className="space-y-1">
+    <div className="space-y-1">
         {steps.map((step) => (
-          <div key={step.id} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+          <TranscriptLine key={step.id} label={step.status === 'running' ? 'Running' : step.status === 'failed' ? 'Failed' : 'Ran'} tone={stepTone(step)}>
             {step.status === 'completed' && (
               <span className="text-emerald-500 font-semibold">✓</span>
             )}
@@ -443,10 +691,10 @@ function StreamingStepsComponent({ steps }: { steps: StreamStep[] }) {
             {step.status === 'failed' && (
               <span className="text-red-500 font-semibold">✗</span>
             )}
-            <span className="truncate">{step.label}</span>
-          </div>
+            <span className="font-medium">{step.label}</span>
+            {step.detail ? <span className="ml-2 text-gray-400">{step.detail}</span> : null}
+          </TranscriptLine>
         ))}
-      </div>
     </div>
   );
 }
@@ -1008,9 +1256,9 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             {/* Messages */}
             {messages.map((msg) =>
               msg.role === 'user' ? (
-                <div key={msg.id} className="flex justify-end items-end gap-2">
-                  <span className="text-[12px] text-gray-500 dark:text-gray-400">You</span>
-                  <div className="max-w-lg rounded-lg bg-gray-100 px-4 py-3 text-sm leading-6 text-gray-900 dark:bg-gray-800 dark:text-white">
+                <div key={msg.id} className="flex gap-3 text-[15px] leading-7">
+                  <span className="w-24 shrink-0 text-right text-[13px] text-gray-400 dark:text-gray-500">You</span>
+                  <div className="min-w-0 flex-1 font-medium text-gray-900 dark:text-white">
                     {msg.text}
                   </div>
                 </div>
@@ -1020,40 +1268,97 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                   {msg.payload.summary === 'Thinking through your request...' && !msg.payload.narrative ? (
                     <ThinkingCard />
                   ) : (
-                    <div className="max-w-2xl rounded-lg bg-white p-4 shadow-sm border border-gray-100 dark:bg-gray-900 dark:border-gray-800 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
-                        <span className="font-medium text-gray-700 dark:text-gray-300">Assistant</span>
+                    <div className="max-w-4xl space-y-2">
+                      <div className="flex gap-3 text-[13px] leading-6 text-gray-400 dark:text-gray-500">
+                        <span className="w-24 shrink-0 text-right">Agent</span>
+                        <div className="min-w-0 flex-1">
                         {msg.payload.statusLine ? <span>{msg.payload.statusLine}</span> : null}
                         {msg.payload.runId ? <span>Run {msg.payload.runId.slice(0, 8)}</span> : null}
+                        </div>
                       </div>
 
                       {msg.payload.narrative ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-7 text-gray-900 dark:text-white">
+                        <div className="space-y-2 text-[15px] leading-7 text-gray-900 dark:text-white">
                           {msg.payload.narrative.split('\n').map((line: string, idx: number) => (
-                            <p key={idx} className="mb-2">{line}</p>
+                            <TranscriptLine key={idx} label={idx === 0 ? 'Reply' : ''}>{line}</TranscriptLine>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-[15px] leading-7 text-gray-900 dark:text-white">{msg.payload.summary}</p>
+                        <TranscriptLine label="Reply">{msg.payload.summary}</TranscriptLine>
                       )}
+
+                      {msg.payload.reasoningTrail ? (
+                        <div className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950/70">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                              Why this path
+                            </div>
+                            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                              Confidence {Math.round((msg.payload.reasoningTrail.confidence || 0) * 100)}%
+                            </div>
+                          </div>
+                          <div className="mt-2 text-[14px] leading-6 text-gray-900 dark:text-white">
+                            {msg.payload.reasoningTrail.summary}
+                          </div>
+                          <div className="mt-3 space-y-1 text-[13px] leading-5 text-gray-600 dark:text-gray-400">
+                            <div><span className="font-medium text-gray-800 dark:text-gray-200">Intent:</span> {msg.payload.reasoningTrail.intent}</div>
+                            {msg.payload.reasoningTrail.approvalRequired ? (
+                              <div><span className="font-medium text-gray-800 dark:text-gray-200">Approval:</span> required before the sensitive step runs</div>
+                            ) : null}
+                            {msg.payload.reasoningTrail.approvalReasons?.length ? (
+                              <div className="space-y-1">
+                                <div className="font-medium text-gray-800 dark:text-gray-200">Approval reasons</div>
+                                {msg.payload.reasoningTrail.approvalReasons.slice(0, 3).map((reason, index) => (
+                                  <div key={`${msg.id}-approval-${index}`} className="pl-3 text-gray-500 dark:text-gray-400">
+                                    • {reason}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                            {msg.payload.reasoningTrail.signals?.length ? (
+                              <div className="space-y-1">
+                                <div className="font-medium text-gray-800 dark:text-gray-200">Signals</div>
+                                {msg.payload.reasoningTrail.signals.slice(0, 4).map((signal, index) => (
+                                  <div key={`${msg.id}-signal-${index}`} className="pl-3 text-gray-500 dark:text-gray-400">
+                                    • {signal.source}: {signal.observation}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                            {msg.payload.reasoningTrail.notes?.length ? (
+                              <div className="space-y-1">
+                                <div className="font-medium text-gray-800 dark:text-gray-200">Notes</div>
+                                {msg.payload.reasoningTrail.notes.slice(0, 3).map((note, index) => (
+                                  <div key={`${msg.id}-note-${index}`} className="pl-3 text-gray-500 dark:text-gray-400">
+                                    • {note}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
 
                       {compactList([
                         msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
                         msg.payload.steps?.length ? `Steps: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
                       ], ' · ') ? (
-                        <p className="text-[12px] leading-6 text-gray-500 dark:text-gray-400">
+                        <TranscriptLine label="Used" tone="muted">
                           {compactList([
                             msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
                             msg.payload.steps?.length ? `Steps: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
                           ], ' · ')}
-                        </p>
+                        </TranscriptLine>
                       ) : null}
 
                       {/* Agent Cards */}
                       {msg.payload.agents.length > 0 ? (
-                        <div className="flex flex-wrap gap-2 pt-2">
+                        <div className="space-y-1">
                           {msg.payload.agents.map((agent) => (
-                            <AgentCardComponent key={agent.slug} agent={agent} />
+                            <TranscriptLine key={agent.slug} label="Agent" tone={agent.status === 'blocked' ? 'danger' : agent.status === 'executed' ? 'success' : 'muted'}>
+                              <span className="font-medium">{agent.name}</span>
+                              <span className="ml-2 text-gray-400">{agent.summary}</span>
+                            </TranscriptLine>
                           ))}
                         </div>
                       ) : null}
@@ -1063,44 +1368,61 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         <StreamingStepsComponent steps={msg.payload.steps} />
                       ) : null}
 
+                      {msg.payload.timelineEvents && msg.payload.timelineEvents.length > 0 ? (
+                        <div className="space-y-1">
+                          {msg.payload.timelineEvents
+                            .filter((event) => !msg.payload.steps?.some((step) => step.id === event.id))
+                            .map((event) => (
+                              <TranscriptLine key={`${msg.id}-${event.id}`} label={eventLabel(event)} tone={eventTone(event)}>
+                                <span className="font-medium">{event.label}</span>
+                                {event.detail ? <span className="ml-2 text-gray-400">{event.detail}</span> : null}
+                              </TranscriptLine>
+                            ))}
+                        </div>
+                      ) : null}
+
                       {msg.payload.actions.length > 0 ? (
-                        <div className="flex flex-wrap gap-2 pt-2">
+                        <TranscriptLine label="Actions">
+                        <div className="flex flex-wrap gap-2">
                           {msg.payload.actions.slice(0, 2).map((action) => (
                             <button
                               key={action.id}
                               type="button"
                               onClick={() => handleAction(action)}
                               disabled={action.allowed === false}
-                              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${
+                              className={`rounded-md px-2 py-1 text-[13px] font-medium transition-colors disabled:opacity-40 ${
                                 action.type === 'execute'
-                                  ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50'
-                                  : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+                                  ? 'text-amber-600 hover:bg-gray-100 dark:text-amber-400 dark:hover:bg-gray-800'
+                                  : 'text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-800'
                               }`}
                             >
                               {action.label}
                             </button>
                           ))}
                         </div>
+                        </TranscriptLine>
                       ) : null}
 
                       {msg.payload.suggestedReplies.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
+                        <TranscriptLine label="Try" tone="muted">
+                        <div className="flex flex-wrap gap-2">
                           {msg.payload.suggestedReplies.slice(0, 3).map((reply) => (
                             <button
                               key={`${msg.id}-${reply}`}
                               type="button"
                               onClick={() => void sendPrompt(reply)}
-                              className="rounded-full border border-gray-200 px-3 py-1 text-[11px] text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                              className="rounded-md px-2 py-1 text-[13px] text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
                             >
                               {reply}
                             </button>
                           ))}
                         </div>
+                        </TranscriptLine>
                       ) : null}
 
                       {/* Interoperability Chips */}
                       {(msg.payload.consultedModules?.length ?? 0) > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-3 opacity-60">
+                        <div className="hidden">
                           {msg.payload.consultedModules.map((mod) => {
                             const meta = MODULE_ICONS[mod.toLowerCase()] || MODULE_ICONS.system;
                             return (

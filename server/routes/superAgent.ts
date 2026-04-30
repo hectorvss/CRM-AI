@@ -24,6 +24,7 @@ import type {
 } from '../agents/superAgent/intent.js';
 import { parseCommandIntent as parseSuperAgentCommandIntent } from '../agents/superAgent/intent.js';
 import type { Plan } from '../agents/planEngine/types.js';
+import { buildReasoningTrail, type ReasoningTrail } from '../agents/planEngine/explainability.js';
 
 const router = Router();
 
@@ -111,6 +112,15 @@ type StreamStep = {
   detail?: string | null;
 };
 
+type AgentTimelineEvent = {
+  id: string;
+  type: 'chat' | 'thinking' | 'tool_started' | 'tool_result' | 'edit' | 'approval_required' | 'blocked' | 'done';
+  label: string;
+  status?: 'running' | 'completed' | 'failed' | 'blocked';
+  detail?: string | null;
+  tool?: string | null;
+};
+
 function getScope(req: MultiTenantRequest): CommandScope {
   return {
     tenantId: req.tenantId!,
@@ -175,6 +185,11 @@ function describeConflict(conflict: any) {
 function describeExecutionNextStep(resolve: any) {
   const firstStep = Array.isArray(resolve?.execution?.steps) ? resolve.execution.steps[0] : null;
   return firstStep?.label || resolve?.execution?.status || 'No execution step returned.';
+}
+
+function isWriteToolName(tool?: string | null) {
+  if (!tool) return false;
+  return /(?:\.update|\.create|\.cancel|\.refund|\.assign|\.decide|\.publish|\.trigger|\.fire_event|\.execute|\.add_|\.bulk_)/.test(tool);
 }
 
 function flattenPermissions(req: MultiTenantRequest) {
@@ -1734,6 +1749,8 @@ function createResponse(input: {
   sources?: string[];
   evidence?: string[];
   steps?: StreamStep[];
+  timelineEvents?: AgentTimelineEvent[];
+  reasoningTrail?: ReasoningTrail | null;
   runId?: string | null;
   structuredIntent?: StructuredCommand | null;
   navigationTarget?: NavigationTarget | null;
@@ -1755,6 +1772,8 @@ function createResponse(input: {
     sources: input.sources || input.consultedModules || [],
     evidence: input.evidence || [],
     steps: input.steps || [],
+    timelineEvents: input.timelineEvents || [],
+    reasoningTrail: input.reasoningTrail || null,
     runId: input.runId || null,
     structuredIntent: input.structuredIntent || null,
     navigationTarget: input.navigationTarget || null,
@@ -1779,6 +1798,7 @@ async function buildResponseFromPlanOutcome(
   const summary =
     trace?.summary
     || response?.plan?.rationale
+    || response?.message
     || response?.question
     || response?.error
     || 'Super Agent completed the requested operation.';
@@ -1786,7 +1806,8 @@ async function buildResponseFromPlanOutcome(
   // Status line â€” mode-aware
   const traceStatus = trace?.status;
   const statusLine =
-    response?.kind === 'clarification' ? 'Clarification required'
+    response?.kind === 'chat' ? 'Chat'
+    : response?.kind === 'clarification' ? 'Clarification required'
     : traceStatus === 'pending_approval' ? 'Awaiting approval'
     : traceStatus === 'rejected_by_policy' ? 'Blocked by policy'
     : traceStatus === 'failed' ? 'Execution failed'
@@ -1810,6 +1831,57 @@ async function buildResponseFromPlanOutcome(
   const contextPanel = buildPlanContextPanelFromTrace(trace, navigationTarget);
   const evidence = derivePlanEvidenceFromTrace(trace);
   const facts = derivePlanFactsFromTrace(trace);
+  const timelineEvents: AgentTimelineEvent[] = [
+    {
+      id: `${runId}-thinking`,
+      type: response?.kind === 'plan' ? 'thinking' : 'chat',
+      label: response?.kind === 'plan' ? 'Understood the request and selected tools' : 'Composed response',
+      status: 'completed',
+      detail: response?.kind || null,
+    },
+    ...(Array.isArray(trace?.spans)
+      ? trace.spans.flatMap((span: any) => {
+          const tool = String(span.tool || '');
+          const startedAt = {
+            id: `${runId}-${span.stepId || tool}-start`,
+            type: 'tool_started' as const,
+            label: `Running ${tool || 'tool'}`,
+            status: 'running' as const,
+            detail: span.dryRun ? 'Dry run' : null,
+            tool,
+          };
+          const resultEvent = {
+            id: `${runId}-${span.stepId || tool}`,
+            type: span.result?.ok ? (isWriteToolName(tool) ? 'edit' as const : 'tool_result' as const) : 'blocked' as const,
+            label: tool || 'tool',
+            status: span.result?.ok ? 'completed' as const : 'failed' as const,
+            detail: span.result?.ok
+              ? (span.result?.value ? toText(span.result.value).slice(0, 180) : 'Completed')
+              : span.result?.error || 'Failed',
+            tool,
+          };
+          return [startedAt, resultEvent];
+        })
+      : []),
+    ...(Array.isArray(trace?.approvalIds) && trace.approvalIds.length
+      ? trace.approvalIds.map((approvalId: string) => ({
+          id: `${runId}-approval-${approvalId}`,
+          type: 'approval_required' as const,
+          label: 'Approval required',
+          status: 'blocked' as const,
+          detail: approvalId,
+          tool: null,
+        }))
+      : []),
+    {
+      id: `${runId}-done`,
+      type: traceStatus === 'pending_approval' ? 'approval_required' : traceStatus === 'failed' ? 'blocked' : 'done',
+      label: statusLine,
+      status: traceStatus === 'failed' ? 'failed' : traceStatus === 'pending_approval' ? 'blocked' : 'completed',
+      detail: summary,
+      tool: null,
+    },
+  ];
 
   // â”€â”€ Item 3 (formerly missing): Entity-specific actions from trace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Find the primary span that matches the navigation target entity and extract
@@ -1853,7 +1925,9 @@ async function buildResponseFromPlanOutcome(
 
   // â”€â”€ Item 1: Conversational narrative via LLM (with deterministic fallback) â”€â”€
   let narrative: string;
-  if (response?.kind === 'clarification') {
+  if (response?.kind === 'chat') {
+    narrative = response.message;
+  } else if (response?.kind === 'clarification') {
     narrative = response.question;
   } else if (response?.kind === 'error') {
     narrative = `I couldn't complete that â€” ${response.error || 'unknown error'}.`;
@@ -1878,15 +1952,8 @@ async function buildResponseFromPlanOutcome(
         narrative = summary;
       }
     } catch (err) {
-      logger.debug('composeNarrative skipped â€” using summary fallback', { error: String(err) });
-      // Deterministic fallback by mode
-      if (mode === 'operate' && response.plan?.needsApproval) {
-        narrative = `I prepared the action but it needs your confirmation. ${summary}`;
-      } else if (mode === 'operate') {
-        narrative = `Done. ${summary}`;
-      } else {
-        narrative = summary;
-      }
+      logger.warn('composeNarrative failed for SuperAgent response', { error: String(err) });
+      throw err;
     }
   } else {
     narrative = summary;
@@ -1933,6 +2000,13 @@ async function buildResponseFromPlanOutcome(
     status: traceStatus,
   });
 
+  const reasoningTrail = buildReasoningTrail({
+    userMessage: input,
+    plan: response?.kind === 'plan' ? response.plan : null,
+    trace,
+    narrative,
+  });
+
   return createResponse({
     input,
     summary,
@@ -1942,10 +2016,20 @@ async function buildResponseFromPlanOutcome(
       ? [
           { title: 'Plan', items: (response.plan?.steps ?? []).map((step: any) => `${step.tool} · ${step.rationale || 'No rationale'}`) },
           { title: 'Execution', items: [trace?.summary || 'Execution completed.'] },
+          {
+            title: 'Why this path',
+            items: [
+              reasoningTrail.summary,
+              ...reasoningTrail.signals.slice(0, 4).map((signal) => `${signal.source}: ${signal.observation}`),
+              ...reasoningTrail.approvalReasons.slice(0, 3),
+            ].filter(Boolean),
+          },
         ]
-      : response?.kind === 'clarification'
-        ? [{ title: 'Clarification', items: [response.question] }]
-        : [{ title: 'Execution', items: [response?.error || 'Unknown LLM error'] }],
+      : response?.kind === 'chat'
+        ? []
+        : response?.kind === 'clarification'
+          ? [{ title: 'Clarification', items: [response.question] }]
+          : [{ title: 'Execution', items: [response?.error || 'Unknown LLM error'] }],
     actions: finalActions,
     contextPanel,
     agents: [],
@@ -1963,6 +2047,8 @@ async function buildResponseFromPlanOutcome(
           detail: span.result?.error || null,
         }))
       : [],
+    timelineEvents,
+    reasoningTrail,
     runId,
     structuredIntent: response?.kind === 'plan' ? response.plan : null,
     navigationTarget,
@@ -3301,7 +3387,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       step: { id: 'parse', label: 'Normalizing command intent', status: 'running' },
     });
 
-    const useLlmFirst = process.env.SUPER_AGENT_LEGACY_ROUTING !== 'true';
+    const useLlmFirst = true;
     if (useLlmFirst) {
       try {
         const { response: llmResponse, trace } = await planEngine.planAndExecute(
@@ -3316,6 +3402,21 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           },
           { dryRun: mode !== 'operate' },
         );
+
+        if (llmResponse.kind === 'error') {
+          emitSuperAgentEvent(scope, 'run_failed', {
+            runId,
+            error: llmResponse.error,
+            code: 'LLM_RESPONSE_INVALID',
+          });
+          return res.status(502).json({
+            ok: false,
+            code: 'LLM_RESPONSE_INVALID',
+            error: 'LLM_RESPONSE_INVALID',
+            message: llmResponse.error,
+            sessionId,
+          });
+        }
 
         const finalResponse = await buildResponseFromPlanOutcome(req, input, runId, mode, llmResponse, trace);
 
@@ -3380,7 +3481,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
         }
 
         const chunks = splitIntoChunks([
-          finalResponse.summary,
+          finalResponse.narrative || finalResponse.summary,
           ...(Array.isArray(finalResponse.facts) ? finalResponse.facts.slice(0, 3) : []),
           ...(Array.isArray(finalResponse.conflicts) ? finalResponse.conflicts.slice(0, 2) : []),
         ].filter(Boolean).join(' '));
@@ -3425,9 +3526,21 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           response: finalResponse,
         });
       } catch (llmError) {
-        logger.warn('LLM-first command path failed, falling back to legacy routing', {
+        const code = llmError instanceof PlanEngineLLMError ? llmError.code : 'LLM_PROVIDER_FAILED';
+        const status = llmError instanceof PlanEngineLLMError ? llmError.status : 502;
+        const message = llmError instanceof Error ? llmError.message : String(llmError);
+        logger.warn('LLM-only command path failed', {
           runId,
-          error: llmError instanceof Error ? llmError.message : String(llmError),
+          code,
+          error: message,
+        });
+        emitSuperAgentEvent(scope, 'run_failed', { runId, code, error: message });
+        return res.status(status).json({
+          ok: false,
+          code,
+          error: code,
+          message,
+          sessionId,
         });
       }
     }
@@ -3531,7 +3644,7 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
     }
 
     const chunks = splitIntoChunks([
-      finalResponse.summary,
+      finalResponse.narrative || finalResponse.summary,
       ...(Array.isArray(finalResponse.facts) ? finalResponse.facts.slice(0, 3) : []),
       ...(Array.isArray(finalResponse.conflicts) ? finalResponse.conflicts.slice(0, 2) : []),
     ].filter(Boolean).join(' '));
@@ -3814,7 +3927,7 @@ router.post('/execute', async (req: MultiTenantRequest, res) => {
 //   Returns the tool catalog visible to the caller.
 
 import { planEngine } from '../agents/planEngine/index.js';
-import { getPlanEngineLLMProvider } from '../agents/planEngine/llm.js';
+import { PlanEngineLLMError, getPlanEngineLLMProvider } from '../agents/planEngine/llm.js';
 
 router.post('/plan', async (req: MultiTenantRequest, res) => {
   try {
@@ -3844,6 +3957,16 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
       { dryRun: dryRun === true },
     );
 
+    if (response.kind === 'error') {
+      return res.status(502).json({
+        ok: false,
+        code: 'LLM_RESPONSE_INVALID',
+        error: 'LLM_RESPONSE_INVALID',
+        message: response.error,
+        sessionId: effectiveSessionId,
+      });
+    }
+
     const plannedResponse = await buildResponseFromPlanOutcome(req, userMessage.trim(), effectiveSessionId, 'investigate', response, trace);
     if (plannedResponse.navigationTarget) {
       void planEngine.rememberTarget(effectiveSessionId, plannedResponse.navigationTarget);
@@ -3857,8 +3980,13 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
     });
   } catch (error) {
     console.error('Plan Engine error:', error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Internal server error',
+    const code = error instanceof PlanEngineLLMError ? error.code : 'LLM_PROVIDER_FAILED';
+    const status = error instanceof PlanEngineLLMError ? error.status : 502;
+    return res.status(status).json({
+      ok: false,
+      code,
+      error: code,
+      message: error instanceof Error ? error.message : 'Internal server error',
     });
   }
 });

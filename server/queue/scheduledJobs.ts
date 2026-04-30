@@ -19,6 +19,8 @@ import { JobType }        from './types.js';
 import { logger }         from '../utils/logger.js';
 import { requireScope }    from '../lib/scope.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
+import { createAuditRepository } from '../data/index.js';
+import { createSuperAgentOpsRepository } from '../data/superAgentOps.js';
 import { fireWorkflowEvent, recoverPendingEvents, pruneEventLog } from '../lib/workflowEventBus.js';
 import { pruneExpiredSessions } from '../agents/planEngine/sessionRepository.js';
 
@@ -26,6 +28,7 @@ let slaIntervalId:              ReturnType<typeof setInterval> | null = null;
 let reconcileIntervalId:        ReturnType<typeof setInterval> | null = null;
 let workflowDelayIntervalId:    ReturnType<typeof setInterval> | null = null;
 let scheduleSweeperIntervalId:  ReturnType<typeof setInterval> | null = null;
+let superAgentScheduleIntervalId: ReturnType<typeof setInterval> | null = null;
 let orphanSweeperIntervalId:    ReturnType<typeof setInterval> | null = null;
 let sessionPruneIntervalId:     ReturnType<typeof setInterval> | null = null;
 let eventBusRecoveryIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -42,12 +45,14 @@ const SESSION_PRUNE_INTERVAL_MS      = 30 * 60 * 1_000;   // 30 minutes
 const EVENT_BUS_RECOVERY_INTERVAL_MS =  5 * 60 * 1_000;   // 5 minutes — retry stuck events
 const EVENT_LOG_PRUNE_INTERVAL_MS    = 60 * 60 * 1_000;   // 1 hour — remove old executed rows
 const CHURN_RISK_SCAN_INTERVAL_MS    = 24 * 60 * 60 * 1_000; // 24 hours (daily)
+const SUPER_AGENT_SCHEDULE_INTERVAL_MS =  1 * 60 * 1_000;   // 1 minute â€” due reminders / delayed actions
 
 export function startScheduledJobs(): void {
   logger.info('Starting scheduled job intervals', {
     slaIntervalMin:            SLA_INTERVAL_MS / 60_000,
     reconcileIntervalMin:      RECONCILE_INTERVAL_MS / 60_000,
     workflowDelayIntervalMin:  WORKFLOW_DELAY_INTERVAL_MS / 60_000,
+    superAgentScheduleIntervalMin: SUPER_AGENT_SCHEDULE_INTERVAL_MS / 60_000,
   });
 
   const scope = bootstrapScope();
@@ -81,6 +86,12 @@ export function startScheduledJobs(): void {
       logger.warn('Workflow schedule sweep failed', { error: String(err?.message ?? err) }),
     );
   }, SCHEDULE_SWEEPER_INTERVAL_MS);
+
+  superAgentScheduleIntervalId = setInterval(() => {
+    void sweepSuperAgentScheduledActions(scope.tenantId, scope.workspaceId).catch((err) =>
+      logger.warn('Super Agent scheduled action sweep failed', { error: String(err?.message ?? err) }),
+    );
+  }, SUPER_AGENT_SCHEDULE_INTERVAL_MS);
 
   // Orphaned run sweeper: mark workflow_runs stuck in 'running' > 30 min as failed
   orphanSweeperIntervalId = setInterval(() => {
@@ -259,6 +270,7 @@ export function stopScheduledJobs(): void {
   if (reconcileIntervalId)         clearInterval(reconcileIntervalId);
   if (workflowDelayIntervalId)     clearInterval(workflowDelayIntervalId);
   if (scheduleSweeperIntervalId)   clearInterval(scheduleSweeperIntervalId);
+  if (superAgentScheduleIntervalId) clearInterval(superAgentScheduleIntervalId);
   if (orphanSweeperIntervalId)     clearInterval(orphanSweeperIntervalId);
   if (sessionPruneIntervalId)      clearInterval(sessionPruneIntervalId);
   if (eventBusRecoveryIntervalId)  clearInterval(eventBusRecoveryIntervalId);
@@ -268,11 +280,77 @@ export function stopScheduledJobs(): void {
   reconcileIntervalId        = null;
   workflowDelayIntervalId    = null;
   scheduleSweeperIntervalId  = null;
+  superAgentScheduleIntervalId = null;
   orphanSweeperIntervalId    = null;
   sessionPruneIntervalId     = null;
   eventBusRecoveryIntervalId = null;
   eventLogPruneIntervalId    = null;
   logger.info('Scheduled job intervals stopped');
+}
+
+/**
+ * Super Agent scheduled actions.
+ * - reminders become audit-visible events once due
+ * - delayed workflow triggers are fired through the workflow event bus
+ * - delayed queue jobs are enqueued once due
+ */
+async function sweepSuperAgentScheduledActions(tenantId: string, workspaceId: string): Promise<void> {
+  const opsRepo = createSuperAgentOpsRepository();
+  const auditRepo = createAuditRepository();
+  const due = await opsRepo.claimDueScheduledActions({ tenantId, workspaceId }, new Date().toISOString(), 25);
+  if (!due.length) return;
+
+  logger.info(`Super Agent schedule sweep: processing ${due.length} due action(s)`);
+
+  for (const action of due) {
+    try {
+      const payload = (action.payload || {}) as Record<string, any>;
+
+      if (payload.workflowId) {
+        fireWorkflowEvent({ tenantId, workspaceId }, 'trigger.schedule', {
+          workflowId: payload.workflowId,
+          scheduledActionId: action.id,
+          title: action.title,
+          dueAt: action.due_at,
+        });
+      } else if (payload.dispatchJobType) {
+        await enqueueDelayed(
+          String(payload.dispatchJobType) as any,
+          (payload.dispatchPayload || {}) as any,
+          0,
+          { tenantId, workspaceId, priority: 9, traceId: `super-agent-schedule-${action.id}` },
+        );
+      }
+
+      await auditRepo.log({
+        tenantId,
+        workspaceId,
+        actorId: action.created_by || 'system',
+        action: 'SUPER_AGENT_SCHEDULED_ACTION_DUE',
+        entityType: action.target_type || 'super_agent',
+        entityId: action.target_id || action.id,
+        newValue: {
+          id: action.id,
+          title: action.title,
+          kind: action.kind,
+          dueAt: action.due_at,
+          dispatched: Boolean(payload.workflowId || payload.dispatchJobType),
+        },
+        metadata: {
+          source: 'scheduled-jobs',
+          workflowId: payload.workflowId ?? null,
+          dispatchJobType: payload.dispatchJobType ?? null,
+        },
+      });
+
+      await opsRepo.completeScheduledAction({ tenantId, workspaceId }, action.id, { executedAt: new Date().toISOString() });
+      logger.info(`Scheduled action ${action.id} completed`, { kind: action.kind, title: action.title });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await opsRepo.failScheduledAction({ tenantId, workspaceId }, action.id, message);
+      logger.warn(`Scheduled action ${action.id} failed`, { error: message });
+    }
+  }
 }
 
 /**

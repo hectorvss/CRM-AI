@@ -359,12 +359,16 @@ export const planEngine = {
     const response = await planEngine.generate(input);
 
     if (response.kind !== 'plan') {
-      // Append assistant clarification/error to session
+      // Append assistant clarification/chat/error to session.
       const session = await sessionRepo.getSession(input.sessionId);
       if (session) {
+        const assistantContent =
+          response.kind === 'clarification' ? response.question
+          : response.kind === 'chat' ? response.message
+          : response.error;
         session.turns.push({
           role: 'assistant',
-          content: response.kind === 'clarification' ? response.question : response.error,
+          content: assistantContent,
           createdAt: new Date().toISOString(),
         });
         await sessionRepo.saveSession(session);
