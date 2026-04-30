@@ -10,6 +10,7 @@ import ReasoningView from './ReasoningView';
 import SafetyView from './SafetyView';
 import { MinimalButton, MinimalCard, MinimalPill, MinimalProgressBar } from './MinimalCategoryShell';
 import { connectionCategories } from '../connectionsData';
+import AgentNetworkGraph from './AgentNetworkGraph';
 
 type AIStudioTab = 'Overview' | 'Agents' | 'Connections' | 'Permissions' | 'Knowledge' | 'Reasoning' | 'Safety';
 
@@ -1425,112 +1426,22 @@ export default function AIStudio() {
                                   <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
                                     <div className="flex items-center justify-between gap-3">
                                       <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Mental roadmap</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Agent network</p>
                                         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                          How this agent fits into the wider SaaS flow.
+                                          Real connections this agent has with the rest of the system.
                                         </p>
                                       </div>
                                       <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
                                     </div>
-                                    {(() => {
-                                      const roadmap = agentRoadmapData(agent);
-                                      const inbound = roadmap.receivesFrom;
-                                      const outbound = roadmap.reportsTo;
-                                      const tools = roadmap.uses;
-                                      const writes = roadmap.writesTo;
-                                      const blockers = roadmap.blockedBy;
-                                      const steps = roadmap.steps;
-                                      return (
-                                        <div className="relative mt-5 overflow-x-auto rounded-[18px] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#171717]">
-                                          <div className="pointer-events-none absolute inset-0 opacity-[0.2] [background-image:radial-gradient(circle,#d1d5db_1px,transparent_1px)] [background-size:18px_18px] dark:opacity-[0.12]" />
-                                          <div className="relative min-w-[1100px]">
-                                            <div className="mb-5 grid grid-cols-[270px_1fr_270px] gap-8">
-                                              <div className="space-y-2">
-                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Receives from</p>
-                                                {inbound.map((item: string) => (
-                                                  <div key={item} className="relative rounded-lg border border-black/10 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#202020] dark:text-gray-300">
-                                                    {item}
-                                                    <span className="absolute -right-[33px] top-1/2 h-px w-8 bg-gray-300 dark:bg-gray-700" />
-                                                  </div>
-                                                ))}
-                                              </div>
-
-                                              <div className="flex flex-col items-center justify-center">
-                                                <div className="w-[260px] rounded-xl border border-violet-300 bg-white px-4 py-4 text-center shadow-sm ring-1 ring-violet-500/20 dark:border-violet-500/40 dark:bg-[#202020]">
-                                                  <span className={`material-symbols-outlined text-[24px] ${agent.iconColor}`}>{agent.icon}</span>
-                                                  <h4 className="mt-2 text-sm font-bold text-gray-950 dark:text-white">{agent.name}</h4>
-                                                  <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">{roadmap.role}</p>
-                                                </div>
-                                                <div className="mt-4 rounded-full border border-black/10 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-[#202020] dark:text-gray-400">
-                                                  {roadmap.summary}
-                                                </div>
-                                              </div>
-
-                                              <div className="space-y-2">
-                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Reports to</p>
-                                                {outbound.map((item: string) => (
-                                                  <div key={item} className="relative rounded-lg border border-black/10 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#202020] dark:text-gray-300">
-                                                    <span className="absolute -left-[33px] top-1/2 h-px w-8 bg-gray-300 dark:bg-gray-700" />
-                                                    {item}
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-3 gap-4">
-                                              <div className="rounded-xl border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1d1d1d]">
-                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Uses</p>
-                                                <div className="mt-3 flex flex-wrap gap-2">
-                                                  {tools.map((item: string) => (
-                                                    <span key={item} className="rounded-md border border-black/10 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-[#242424] dark:text-gray-300">{item}</span>
-                                                  ))}
-                                                </div>
-                                              </div>
-                                              <div className="rounded-xl border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1d1d1d]">
-                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Writes to</p>
-                                                <div className="mt-3 flex flex-wrap gap-2">
-                                                  {writes.map((item: string) => (
-                                                    <span key={item} className="rounded-md border border-black/10 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-[#242424] dark:text-gray-300">{item}</span>
-                                                  ))}
-                                                </div>
-                                              </div>
-                                              <div className="rounded-xl border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1d1d1d]">
-                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Blocked by</p>
-                                                <div className="mt-3 flex flex-wrap gap-2">
-                                                  {blockers.map((item: string) => (
-                                                    <span key={item} className="rounded-md border border-black/10 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-[#242424] dark:text-gray-300">{item}</span>
-                                                  ))}
-                                                </div>
-                                              </div>
-                                            </div>
-
-                                            <div className="mt-4 rounded-xl border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1d1d1d]">
-                                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Execution path</p>
-                                              <div className="mt-3 flex min-w-max items-start">
-                                                {steps.map((step: any, index: number) => (
-                                                  <React.Fragment key={`${step.num}-${step.title}`}>
-                                                    <div className="w-[190px] rounded-lg border border-black/10 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#242424]">
-                                                      <div className="mb-2 flex items-center justify-between">
-                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Step {step.num ?? index + 1}</span>
-                                                        <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500 dark:bg-white/[0.06]">{step.mode}</span>
-                                                      </div>
-                                                      <p className="text-[12px] font-bold text-gray-950 dark:text-white">{step.title}</p>
-                                                      <p className="mt-1 text-[10px] leading-snug text-gray-500 dark:text-gray-400">{step.desc}</p>
-                                                    </div>
-                                                    {index < steps.length - 1 ? (
-                                                      <div className="relative flex h-[82px] w-10 flex-none items-center justify-center">
-                                                        <div className="h-px w-full bg-gray-300 dark:bg-gray-700" />
-                                                        <div className="absolute right-0 h-2 w-2 rotate-45 border-r border-t border-gray-300 dark:border-gray-700" />
-                                                      </div>
-                                                    ) : null}
-                                                  </React.Fragment>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
+                                    <AgentNetworkGraph
+                                      agent={{
+                                        name: agent.name,
+                                        icon: agent.icon,
+                                        iconColor: agent.iconColor,
+                                        active: agent.active,
+                                      }}
+                                      roadmap={agentRoadmapData(agent)}
+                                    />
                                   </div>
                                 </div>
                               </motion.div>
