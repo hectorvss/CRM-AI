@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { customersApi, paymentsApi, policyApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
+import { MinimalCard } from './MinimalCategoryShell';
 import type { NavigateFn, Page } from '../types';
 
 type CustomerTab = 'all_activity' | 'conversations' | 'orders' | 'system_logs';
@@ -803,297 +804,177 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     }
     if (!selectedCustomer) return null;
 
+    const churn = selectedCustomer?.risk || 'Healthy';
+    const fraud = (selectedCustomer as any)?.fraudRisk || 'low';
+    const churnHigh = churn === 'Churn Risk';
+    const fraudHigh = fraud === 'high' || fraud === 'critical';
+    const recon = selectedCustomer.reconciliation;
+    const hasConflict = recon && (recon.status === 'Conflict' || recon.status === 'Warning' || recon.status === 'Blocked');
+
     return (
-      <div className="flex-1 flex flex-col h-full min-w-0 bg-[#F8F9FA] dark:bg-background-dark overflow-hidden">
-        <header className="flex-shrink-0 px-8 py-6 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-card-dark flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 font-medium">
-              <button onClick={() => setSelectedCustomerId(null)} className="hover:text-gray-900 dark:hover:text-white transition-colors">Customers</button>
-              <span className="material-symbols-outlined text-sm mx-1">chevron_right</span>
-              <span className="text-gray-900 dark:text-white">{selectedCustomer.name}</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
-              {selectedCustomer.name}
-              <span className={`px-2.5 py-1 rounded text-xs font-semibold border ${
-                selectedCustomer.segment === 'VIP Enterprise' 
-                  ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300 border-purple-100 dark:border-purple-800/30' 
-                  : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border-blue-100 dark:border-blue-800/30'
+      <div className="flex-1 flex flex-col h-full min-w-0 bg-[#fbfbfa] dark:bg-[#121212] overflow-hidden">
+        {/* ── Header ───────────────────────────────────────────────── */}
+        <header className="flex-shrink-0 px-7 py-5 border-b border-black/5 dark:border-white/10 bg-white dark:bg-[#171717] flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSelectedCustomerId(null)}
+              className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+              Customers
+            </button>
+            <span className="text-gray-300 dark:text-gray-600">/</span>
+            <div className="flex items-center gap-3">
+              <img
+                alt={selectedCustomer.name}
+                className="w-8 h-8 rounded-full object-cover border border-black/5 dark:border-white/10"
+                src={selectedCustomer.avatar}
+                referrerPolicy="no-referrer"
+              />
+              <span className="text-[15px] font-semibold text-gray-950 dark:text-white">{selectedCustomer.name}</span>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                selectedCustomer.segment === 'VIP Enterprise'
+                  ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
+                  : 'bg-black/5 text-gray-600 dark:bg-white/10 dark:text-gray-300'
               }`}>
                 {selectedCustomer.segment}
               </span>
-            </h1>
+            </div>
           </div>
-          <div className="relative flex items-center gap-3">
+          <div className="relative flex items-center gap-2">
             <button
-              onClick={() => setCustomerActionsOpen((value) => !value)}
-              className="px-4 py-2 text-sm font-semibold bg-white/90 dark:bg-card-dark/90 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-lg shadow-card flex items-center gap-2 hover:bg-white dark:hover:bg-gray-800 transition-colors"
+              onClick={() => setCustomerActionsOpen((v) => !v)}
+              className="rounded-full px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5"
             >
               <span className="material-symbols-outlined text-[18px]">more_horiz</span>
               More
             </button>
             <button
               onClick={() => openCustomerCase('inbox')}
-              className="px-4 py-2 text-sm font-semibold bg-gray-900 dark:bg-white text-white dark:text-black rounded-lg shadow-card flex items-center gap-2 hover:opacity-90 transition-opacity"
+              className="rounded-full px-5 py-2 text-sm font-semibold bg-black text-white dark:bg-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 transition-opacity flex items-center gap-1.5"
             >
               <span className="material-symbols-outlined text-[18px]">open_in_new</span>
               Open in Inbox
             </button>
             {customerActionsOpen && (
-              <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-card-dark shadow-2xl z-20 p-2">
-                <button
-                  onClick={() => openCustomerCase('case_graph')}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-                >
-                  <span className="material-symbols-outlined text-[18px]">timeline</span>
-                  View analysis
-                </button>
-                <button
-                  onClick={() => handleCreateApproval()}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-                >
-                  <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
-                  Create approval
-                </button>
-                <button
-                  onClick={() => handleStartRefund()}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
-                >
-                  <span className="material-symbols-outlined text-[18px]">currency_exchange</span>
-                  Start refund
-                </button>
+              <div className="absolute right-0 top-full mt-2 w-52 rounded-[16px] border border-black/5 dark:border-white/10 bg-white dark:bg-[#1b1b1b] shadow-2xl z-20 p-1.5">
+                {[
+                  { icon: 'timeline', label: 'View analysis', action: () => openCustomerCase('case_graph') },
+                  { icon: 'assignment_turned_in', label: 'Create approval', action: handleCreateApproval },
+                  { icon: 'currency_exchange', label: 'Start refund', action: handleStartRefund },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => { item.action(); setCustomerActionsOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-200 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px] text-gray-400">{item.icon}</span>
+                    {item.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
         </header>
 
         {actionMessage && (
-          <div className="px-6 pt-4">
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-card dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
-              <div className="flex items-start gap-3">
-                <span className="material-symbols-outlined text-lg mt-0.5">info</span>
-                <div className="min-w-0">
-                  <div className="font-semibold">Customer action status</div>
-                  <div className="text-xs opacity-90">{actionMessage}</div>
-                </div>
+          <div className="px-6 pt-4 flex-shrink-0">
+            <div className="rounded-[16px] border border-blue-100 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 flex items-start gap-3">
+              <span className="material-symbols-outlined text-lg mt-0.5">info</span>
+              <div>
+                <div className="font-semibold text-[13px]">Action status</div>
+                <div className="text-xs opacity-80 mt-0.5">{actionMessage}</div>
               </div>
             </div>
           </div>
         )}
 
-        <div className="flex-1 flex gap-6 p-6 overflow-hidden min-h-0">
-          {/* Left Sidebar */}
-          <div className="w-80 flex-shrink-0 flex flex-col gap-4 overflow-y-auto custom-scrollbar pr-1 pb-4">
-            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
-              <div className="flex items-start gap-4 mb-4">
-                <img alt={selectedCustomer.name} className="w-12 h-12 rounded-full object-cover border border-gray-100 dark:border-gray-800" src={selectedCustomer.avatar} referrerPolicy="no-referrer" />
-                <div>
-                  <h2 className="font-bold text-gray-900 dark:text-white text-base">{selectedCustomer.name}</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedCustomer.email}</p>
-                  <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mt-1">{selectedCustomer.role} at {selectedCustomer.company}</p>
-                </div>
-              </div>
-              <div className="space-y-3 pt-3 border-t border-gray-100 dark:border-gray-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">location_on</span> {selectedCustomer.location}</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{selectedCustomer.timezone}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px]">calendar_today</span> Customer since</span>
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedCustomer.since}</span>
-                </div>
-              </div>
-              <div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Linked Profiles</span>
-                  <span className="text-[10px] text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded border border-green-100 dark:border-green-800/30">98% Match Confidence</span>
-                </div>
-                <div className="flex gap-2">
-                  {selectedCustomer.sources.map((source, i) => (
-                    <button key={i} className="flex items-center justify-center w-8 h-8 rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 shadow-card hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" title={`${source.name}: id_...`}>
-                      <img alt={source.name} className="w-4 h-4 object-contain" src={source.icon} referrerPolicy="no-referrer" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-3">Plan & Spend</h3>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide mb-1">Current Plan</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">{selectedCustomer.plan}</p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide mb-1">Lifetime Value</p>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">{selectedCustomer.ltv}</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-500 dark:text-gray-400">Next renewal</span>
-                <span className="font-medium text-gray-700 dark:text-gray-300">{selectedCustomer.nextRenewal}</span>
-              </div>
-            </div>
-
-            {selectedCustomer.reconciliation && (
-              <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                    <span className="material-symbols-outlined text-lg text-gray-400">sync_alt</span>
-                    Reconciliation Center
-                  </h3>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
-                    selectedCustomer.reconciliation.status === 'Conflict' ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 border-red-100 dark:border-red-800/30' :
-                    selectedCustomer.reconciliation.status === 'Warning' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-100 dark:border-amber-800/30' :
-                    selectedCustomer.reconciliation.status === 'Blocked' ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400 border-purple-100 dark:border-purple-800/30' :
-                    'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30'
+        {/* ── KPI Strip ────────────────────────────────────────────── */}
+        <div className="flex-shrink-0 px-6 pt-5 pb-1">
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              {
+                icon: 'payments',
+                label: 'Lifetime Value',
+                value: selectedCustomer.ltv,
+                sub: selectedCustomer.plan,
+              },
+              {
+                icon: 'confirmation_number',
+                label: 'Open Cases',
+                value: String(selectedCustomer.openTickets),
+                sub: 'active tickets',
+                alert: selectedCustomer.openTickets > 0,
+              },
+              {
+                icon: 'autorenew',
+                label: 'Next Renewal',
+                value: selectedCustomer.nextRenewal,
+                sub: selectedCustomer.plan,
+              },
+              {
+                icon: 'health_and_safety',
+                label: 'Risk Level',
+                value: churn,
+                sub: `Fraud ${fraudHigh ? 'High' : 'Low'}`,
+                alert: churnHigh || fraudHigh,
+              },
+            ].map((kpi) => (
+              <div
+                key={kpi.label}
+                className={`rounded-[20px] border p-4 ${
+                  kpi.alert
+                    ? 'border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/10'
+                    : 'border-black/5 dark:border-white/10 bg-white dark:bg-[#171717]'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-full ${
+                    kpi.alert ? 'bg-red-100 dark:bg-red-900/30' : 'bg-black/5 dark:bg-white/5'
                   }`}>
-                    {selectedCustomer.reconciliation.status}
-                  </span>
-                </div>
-
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-4 pb-3 border-b border-gray-100 dark:border-gray-800">
-                  {selectedCustomer.reconciliation.status === 'Healthy' ? (
-                    <p>All connected customer states are aligned across Billing, Payments, Support, Orders, Returns, and CRM.</p>
-                  ) : (
-                    <p>Conflict &middot; {selectedCustomer.reconciliation.mismatches} mismatches</p>
-                  )}
-                  <p className="mt-1">Last reconciliation run {selectedCustomer.reconciliation.lastChecked}.</p>
-                </div>
-
-                {selectedCustomer.reconciliation.domains.length > 0 && (
-                  <div className="space-y-4">
-                    {selectedCustomer.reconciliation.domains.map((domain, idx) => (
-                      <div key={idx} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="text-xs font-bold text-gray-900 dark:text-white">{domain.domain}</h4>
-                          {domain.severity && (
-                            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                              domain.severity === 'High' ? 'text-red-600 bg-red-100/50' :
-                              domain.severity === 'Medium' ? 'text-amber-600 bg-amber-100/50' :
-                              'text-blue-600 bg-blue-100/50'
-                            }`}>
-                              {domain.severity}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="space-y-1.5 mb-3">
-                          {domain.systems.map((sys, sIdx) => (
-                            <div key={sIdx} className="flex justify-between text-xs">
-                              <span className="text-gray-500 dark:text-gray-400">{sys.name}:</span>
-                              <span className="font-medium text-gray-900 dark:text-white">{sys.value}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="space-y-1 mb-3 text-[11px]">
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Source of truth:</span>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">{domain.sourceOfTruth}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Writeback:</span>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">{domain.writebackStatus}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Open for:</span>
-                            <span className="font-medium text-gray-700 dark:text-gray-300">{domain.age}</span>
-                          </div>
-                        </div>
-
-                        <div className="mb-3 p-2 bg-white dark:bg-card-dark rounded border border-gray-100 dark:border-gray-700 text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed">
-                          {domain.context}
-                        </div>
-
-                        <button className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md text-xs font-medium text-gray-900 dark:text-white transition-colors shadow-sm">
-                          {domain.actionType === 'resolve' && <span className="material-symbols-outlined text-[14px]">check_circle</span>}
-                          {domain.actionType === 'retry' && <span className="material-symbols-outlined text-[14px]">sync</span>}
-                          {domain.actionType === 'approval' && <span className="material-symbols-outlined text-[14px]">gavel</span>}
-                          {domain.actionType === 'workflow' && <span className="material-symbols-outlined text-[14px]">account_tree</span>}
-                          {domain.actionType === 'log' && <span className="material-symbols-outlined text-[14px]">receipt_long</span>}
-                          {domain.action}
-                        </button>
-                      </div>
-                    ))}
+                    <span className={`material-symbols-outlined text-[16px] ${kpi.alert ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>{kpi.icon}</span>
                   </div>
-                )}
+                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{kpi.label}</span>
+                </div>
+                <p className={`text-[17px] font-bold tracking-tight ${kpi.alert ? 'text-red-700 dark:text-red-400' : 'text-gray-950 dark:text-white'}`}>{kpi.value}</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{kpi.sub}</p>
               </div>
-            )}
-
-            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                  <span className="material-symbols-outlined text-lg text-gray-400">shopping_bag</span>
-                  Orders ({selectedCustomer.orders.length})
-                </h3>
-                <a className="text-xs text-blue-600 dark:text-blue-400 font-medium hover:underline" href="#">View all</a>
-              </div>
-              <div className="space-y-3">
-                {selectedCustomer.orders.slice(0, 2).map((order) => (
-                  <div key={order.id} className="flex items-center justify-between p-2.5 rounded bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-900 dark:text-white">{order.id}</p>
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">{order.date} • {order.total}</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
-                      order.status === 'Processing' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-100 dark:border-amber-800/30' :
-                      'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30'
-                    }`}>
-                      {order.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-3">Quick Actions</h3>
-              <div className="space-y-2">
-                <button
-                  onClick={handleCreateApproval}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px] text-gray-500">assignment_turned_in</span> Create Approval</span>
-                  <span className="material-symbols-outlined text-[16px] text-gray-400">arrow_forward</span>
-                </button>
-                <button
-                  onClick={handleStartRefund}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-800/30 transition-colors hover:bg-red-100 dark:hover:bg-red-900/20"
-                >
-                  <span className="flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">currency_exchange</span> Start Refund</span>
-                  <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                </button>
-              </div>
-            </div>
+            ))}
           </div>
+        </div>
 
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col gap-4 overflow-hidden min-w-[400px]">
-            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/10 dark:to-purple-900/10 rounded-xl border border-indigo-100 dark:border-indigo-800/30 shadow-card p-5 flex-shrink-0 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                <span className="material-symbols-outlined text-6xl">smart_toy</span>
-              </div>
-              <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-xl">auto_awesome</span>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-base">AI Executive Summary</h3>
-                  <span className="text-[10px] bg-white/50 dark:bg-black/20 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-200/50 dark:border-indigo-700/50 font-medium">From canonical state</span>
+        {/* ── Main Area (two columns) ───────────────────────────────── */}
+        <div className="flex-1 flex gap-4 p-6 pt-4 overflow-hidden min-h-0">
+
+          {/* ── Left: AI Summary + Activity Feed ─────────────────── */}
+          <div className="flex-1 flex flex-col gap-4 overflow-hidden min-w-0">
+
+            {/* AI Executive Summary */}
+            <div className="flex-shrink-0 overflow-hidden rounded-[24px] border border-black/5 dark:border-white/10 bg-white dark:bg-[#171717]">
+              <div className="flex items-center gap-3 border-b border-black/5 dark:border-white/10 px-5 py-4">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/20">
+                  <span className="material-symbols-outlined text-[18px] text-violet-600 dark:text-violet-400">auto_awesome</span>
                 </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-950 dark:text-white">AI Executive Summary</h3>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">From canonical state</p>
+                </div>
+              </div>
+              <div className="px-5 py-4">
                 {(selectedCustomer as any).aiExecutiveSummary ? (
                   <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{(selectedCustomer as any).aiExecutiveSummary}</p>
                 ) : (
                   <p className="text-sm text-gray-400 dark:text-gray-500 italic">No AI summary available for this customer yet.</p>
                 )}
                 {((selectedCustomer as any).aiRecommendations?.length > 0) && (
-                  <div className="mt-3 space-y-1.5 pt-3 border-t border-indigo-100/60 dark:border-indigo-800/30">
-                    <p className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">Recommended Actions</p>
+                  <div className="mt-4 space-y-2 pt-4 border-t border-black/5 dark:border-white/10">
+                    <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider">Recommended Actions</p>
                     {(selectedCustomer as any).aiRecommendations.map((rec: any, i: number) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      <div key={i} className="flex items-start gap-2.5 rounded-[14px] bg-black/[0.02] dark:bg-white/[0.03] px-3 py-2.5">
+                        <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                           rec.priority === 'high' ? 'bg-red-500' : rec.priority === 'medium' ? 'bg-amber-500' : 'bg-green-500'
-                        }`}></span>
-                        <p className="text-xs text-gray-700 dark:text-gray-300 leading-snug"><span className="font-medium">{rec.action}</span> — {rec.reason}</p>
+                        }`} />
+                        <p className="text-xs text-gray-700 dark:text-gray-300 leading-snug"><span className="font-semibold">{rec.action}</span> — {rec.reason}</p>
                       </div>
                     ))}
                   </div>
@@ -1101,15 +982,16 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
               </div>
             </div>
 
-            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card flex flex-col flex-1 overflow-hidden">
-              <div className="flex items-center border-b border-gray-100 dark:border-gray-800 px-4 pt-3 overflow-x-auto no-scrollbar flex-shrink-0">
+            {/* Activity / Tabs */}
+            <div className="flex-1 overflow-hidden rounded-[24px] border border-black/5 dark:border-white/10 bg-white dark:bg-[#171717] flex flex-col">
+              <div className="flex items-center border-b border-black/5 dark:border-white/10 px-5 pt-4 overflow-x-auto no-scrollbar flex-shrink-0">
                 {(['all_activity', 'conversations', 'orders', 'system_logs'] as CustomerTab[]).map(tab => (
-                  <button 
+                  <button
                     key={tab}
                     onClick={() => setActiveProfileTab(tab)}
-                    className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-all border-b-2 ${
-                      activeProfileTab === tab 
-                        ? 'text-gray-900 dark:text-white border-gray-900 dark:border-white font-semibold' 
+                    className={`pb-3 mr-5 text-[14px] font-semibold whitespace-nowrap transition-all border-b-2 ${
+                      activeProfileTab === tab
+                        ? 'text-gray-950 dark:text-white border-gray-950 dark:border-white'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border-transparent'
                     }`}
                   >
@@ -1130,21 +1012,21 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                     return 'bg-blue-500';
                   };
                   return (
-                    <div className="relative border-l border-gray-200 dark:border-gray-700 ml-3 space-y-6 pb-4">
+                    <div className="relative border-l border-black/10 dark:border-white/10 ml-3 space-y-5 pb-4">
                       {events.map((event: any) => (
                         <div key={event.id} className="relative pl-6">
-                          <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full ${dotColor(event.type, event.level)} bg-opacity-20 border-2 border-white dark:border-card-dark flex items-center justify-center`}>
+                          <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full ${dotColor(event.type, event.level)} bg-opacity-20 border-2 border-white dark:border-[#171717] flex items-center justify-center`}>
                             <div className={`w-2 h-2 rounded-full ${dotColor(event.type, event.level)}`}></div>
                           </div>
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500">
                               {new Date(event.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </p>
-                            <span className="text-[10px] font-medium text-gray-400">{event.source || event.system || ''}</span>
+                            <span className="text-[10px] font-medium text-gray-400 bg-black/[0.03] dark:bg-white/[0.05] px-1.5 py-0.5 rounded-full">{event.source || event.system || ''}</span>
                           </div>
-                          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-100 dark:border-gray-700">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">{event.title}</p>
-                            <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{event.content}</p>
+                          <div className="rounded-[16px] border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-3.5">
+                            <p className="text-[13px] font-semibold text-gray-950 dark:text-white mb-1">{event.title}</p>
+                            <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed">{event.content}</p>
                           </div>
                         </div>
                       ))}
@@ -1157,22 +1039,23 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   return (
                     <div className="space-y-4">
                       {cases.map((c) => (
-                        <div key={c.id} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700 hover:bg-white dark:hover:bg-card-dark transition-colors group cursor-pointer shadow-card" onClick={() => onNavigate?.('inbox', c.id)}>
+                        <div key={c.id} className="rounded-[18px] border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors group cursor-pointer p-4" onClick={() => onNavigate?.('inbox', c.id)}>
                           <div className="flex items-start justify-between mb-2">
                             <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">{c.caseNumber || c.case_number || c.id}</span>
-                                <h4 className="text-sm font-bold text-gray-900 dark:text-white">{c.type || 'Case'}</h4>
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[11px] font-semibold text-violet-600 dark:text-violet-400">{c.caseNumber || c.case_number || c.id}</span>
+                                <h4 className="text-[13px] font-semibold text-gray-950 dark:text-white">{c.type || 'Case'}</h4>
                               </div>
                             </div>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
-                              c.status === 'open' || c.status === 'escalated' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-100 dark:border-amber-800/30' :
-                              'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30'
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              c.status === 'open' || c.status === 'escalated'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                             }`}>{c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : 'Open'}</span>
                           </div>
-                          <div className="flex gap-2 mt-2">
-                            <span className="material-symbols-outlined text-indigo-500 text-[16px] flex-shrink-0 mt-0.5">open_in_new</span>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Click to open in Inbox</p>
+                          <div className="flex gap-1.5 items-center mt-1">
+                            <span className="material-symbols-outlined text-violet-400 text-[14px]">open_in_new</span>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500">Open in Inbox</p>
                           </div>
                         </div>
                       ))}
@@ -1180,29 +1063,30 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   );
                 })()}
                 {activeProfileTab === 'orders' && (
-                  <div className="overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg">
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-left text-sm">
-                      <thead className="bg-gray-50 dark:bg-gray-800/50">
+                  <div className="overflow-hidden rounded-[18px] border border-black/5 dark:border-white/10">
+                    <table className="min-w-full divide-y divide-black/5 dark:divide-white/10 text-left text-sm">
+                      <thead className="bg-black/[0.02] dark:bg-white/[0.02]">
                         <tr>
-                          <th className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-300" scope="col">Order</th>
-                          <th className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-300" scope="col">Date</th>
-                          <th className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-300" scope="col">Total</th>
-                          <th className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-300" scope="col">Status</th>
+                          <th className="px-4 py-3 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" scope="col">Order</th>
+                          <th className="px-4 py-3 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" scope="col">Date</th>
+                          <th className="px-4 py-3 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" scope="col">Total</th>
+                          <th className="px-4 py-3 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" scope="col">Status</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-card-dark">
+                      <tbody className="divide-y divide-black/5 dark:divide-white/10">
                         {selectedCustomer.orders.map(order => (
-                          <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                            <td className="px-4 py-3 font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                              <span className="material-symbols-outlined text-[16px] text-gray-400">chevron_right</span>
+                          <tr key={order.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
+                            <td className="px-4 py-3.5 font-semibold text-[13px] text-gray-950 dark:text-white flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[15px] text-gray-300 dark:text-gray-600">receipt</span>
                               {order.id}
                             </td>
-                            <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{order.date}</td>
-                            <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">{order.total}</td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${
-                                order.status === 'Processing' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-100 dark:border-amber-800/30' :
-                                'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30'
+                            <td className="px-4 py-3.5 text-[12px] text-gray-500 dark:text-gray-400">{order.date}</td>
+                            <td className="px-4 py-3.5 text-[13px] font-semibold text-gray-950 dark:text-white">{order.total}</td>
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                order.status === 'Processing'
+                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                  : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                               }`}>
                                 {order.status}
                               </span>
@@ -1241,51 +1125,158 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
             </div>
           </div>
 
-          {/* Right Sidebar */}
-          <div className="w-72 flex-shrink-0 flex flex-col gap-4 overflow-y-auto custom-scrollbar pl-1 pb-4">
-            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-3">Risk Profile</h3>
+          {/* ── Right: Identity + Health + Actions ─────────────────── */}
+          <div className="w-[280px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto custom-scrollbar pb-4">
+
+            {/* Identity card */}
+            <MinimalCard title="Identity" icon="person">
               <div className="space-y-3">
-                {(() => {
-                  const churn = selectedCustomer?.risk || 'Healthy';
-                  const fraud = (selectedCustomer as any)?.fraudRisk || 'low';
-                  const churnHigh = churn === 'Churn Risk';
-                  const fraudHigh = fraud === 'high' || fraud === 'critical';
-                  return (
-                    <>
-                      <div className={`flex items-center justify-between p-2 rounded border ${churnHigh ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800/30' : 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30'}`}>
-                        <span className={`text-xs font-medium flex items-center gap-1.5 ${churnHigh ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${churnHigh ? 'bg-red-500' : 'bg-green-500'}`}></span> Churn Risk
-                        </span>
-                        <span className={`text-xs font-bold ${churnHigh ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{churnHigh ? 'High' : churn === 'Watchlist' ? 'Medium' : 'Low'}</span>
-                      </div>
-                      <div className={`flex items-center justify-between p-2 rounded border ${fraudHigh ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800/30' : 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30'}`}>
-                        <span className={`text-xs font-medium flex items-center gap-1.5 ${fraudHigh ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${fraudHigh ? 'bg-red-500' : 'bg-green-500'}`}></span> Fraud Risk
-                        </span>
-                        <span className={`text-xs font-bold ${fraudHigh ? 'text-red-700 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low'}</span>
-                      </div>
-                    </>
-                  );
-                })()}
+                <div className="flex items-center gap-3">
+                  <img
+                    alt={selectedCustomer.name}
+                    className="w-10 h-10 rounded-full object-cover border border-black/5 dark:border-white/10 flex-shrink-0"
+                    src={selectedCustomer.avatar}
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-950 dark:text-white truncate">{selectedCustomer.name}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{selectedCustomer.email}</p>
+                  </div>
+                </div>
+                <div className="space-y-1.5 pt-2 border-t border-black/5 dark:border-white/10">
+                  {[
+                    { icon: 'work', label: selectedCustomer.role + ' · ' + selectedCustomer.company },
+                    { icon: 'location_on', label: selectedCustomer.location + ' · ' + selectedCustomer.timezone },
+                    { icon: 'calendar_today', label: 'Customer since ' + selectedCustomer.since },
+                  ].map((row) => (
+                    <div key={row.icon} className="flex items-start gap-2">
+                      <span className="material-symbols-outlined text-[14px] text-gray-400 mt-0.5 flex-shrink-0">{row.icon}</span>
+                      <span className="text-[12px] text-gray-600 dark:text-gray-300 leading-snug">{row.label}</span>
+                    </div>
+                  ))}
+                </div>
+                {selectedCustomer.sources.length > 0 && (
+                  <div className="pt-2 border-t border-black/5 dark:border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Linked Profiles</span>
+                      <span className="text-[10px] text-green-600 dark:text-green-400 font-medium">98% match</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedCustomer.sources.map((source, i) => (
+                        <div
+                          key={i}
+                          title={source.name}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.03]"
+                        >
+                          <img alt={source.name} className="w-3.5 h-3.5 object-contain" src={source.icon} referrerPolicy="no-referrer" />
+                          <span className="text-[11px] text-gray-600 dark:text-gray-300 font-medium">{source.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-            <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card p-5">
-              <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-3 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-indigo-500 text-sm">lightbulb</span> Next Actions
-              </h3>
+            </MinimalCard>
+
+            {/* Health & Risk card */}
+            <MinimalCard title="Health & Risk" icon="shield">
               <div className="space-y-2">
-                {((selectedCustomer as any)?.aiRecommendations?.length > 0)
-                  ? (selectedCustomer as any).aiRecommendations.map((rec: any, i: number) => (
-                    <button key={i} className="w-full text-left p-3 rounded-lg border border-indigo-100 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-900/10 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors">{rec.action}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{rec.reason}</p>
-                    </button>
-                  ))
-                  : <p className="text-xs text-gray-400 dark:text-gray-500 italic">No recommendations yet.</p>
-                }
+                {[
+                  {
+                    label: 'Churn Risk',
+                    value: churnHigh ? 'High' : churn === 'Watchlist' ? 'Medium' : 'Low',
+                    alert: churnHigh,
+                    medium: churn === 'Watchlist',
+                  },
+                  {
+                    label: 'Fraud Risk',
+                    value: fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low',
+                    alert: fraudHigh,
+                    medium: fraud === 'medium',
+                  },
+                ].map((row) => (
+                  <div
+                    key={row.label}
+                    className={`flex items-center justify-between rounded-[14px] px-3 py-2.5 ${
+                      row.alert
+                        ? 'bg-red-50 dark:bg-red-950/20'
+                        : row.medium
+                        ? 'bg-amber-50 dark:bg-amber-950/20'
+                        : 'bg-green-50 dark:bg-green-950/20'
+                    }`}
+                  >
+                    <span className={`text-[12px] font-medium flex items-center gap-2 ${
+                      row.alert ? 'text-red-800 dark:text-red-300' : row.medium ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        row.alert ? 'bg-red-500' : row.medium ? 'bg-amber-500' : 'bg-green-500'
+                      }`} />
+                      {row.label}
+                    </span>
+                    <span className={`text-[11px] font-bold ${
+                      row.alert ? 'text-red-700 dark:text-red-400' : row.medium ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400'
+                    }`}>{row.value}</span>
+                  </div>
+                ))}
               </div>
-            </div>
+            </MinimalCard>
+
+            {/* Reconciliation — only if not healthy */}
+            {hasConflict && recon && (
+              <MinimalCard
+                title="Reconciliation"
+                icon="sync_alt"
+                action={
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    recon.status === 'Conflict' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                    recon.status === 'Warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                  }`}>{recon.status}</span>
+                }
+              >
+                <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-3">
+                  {recon.mismatches} mismatch{recon.mismatches !== 1 ? 'es' : ''} · Last run {recon.lastChecked}
+                </p>
+                <div className="space-y-2">
+                  {recon.domains.slice(0, 3).map((domain, idx) => (
+                    <div key={idx} className="rounded-[14px] border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[12px] font-semibold text-gray-900 dark:text-white truncate">{domain.domain}</p>
+                        {domain.severity && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            domain.severity === 'High' ? 'bg-red-100 text-red-600' :
+                            domain.severity === 'Medium' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
+                          }`}>{domain.severity}</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">{domain.context}</p>
+                    </div>
+                  ))}
+                </div>
+              </MinimalCard>
+            )}
+
+            {/* Quick Actions */}
+            <MinimalCard title="Quick Actions" icon="bolt">
+              <div className="space-y-2">
+                {[
+                  { icon: 'timeline', label: 'View Analysis', action: () => openCustomerCase('case_graph'), tone: 'neutral' as const },
+                  { icon: 'assignment_turned_in', label: 'Create Approval', action: handleCreateApproval, tone: 'neutral' as const },
+                  { icon: 'currency_exchange', label: 'Start Refund', action: handleStartRefund, tone: 'neutral' as const },
+                ].map((btn) => (
+                  <button
+                    key={btn.label}
+                    onClick={btn.action}
+                    className="w-full flex items-center gap-2.5 rounded-[14px] border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] px-3 py-2.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-gray-400">{btn.icon}</span>
+                    {btn.label}
+                    <span className="material-symbols-outlined text-[14px] text-gray-300 dark:text-gray-600 ml-auto">arrow_forward</span>
+                  </button>
+                ))}
+              </div>
+            </MinimalCard>
+
           </div>
         </div>
       </div>
@@ -1302,8 +1293,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
   }
 
   return (
-    <div className="customers-category flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
-      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
+    <div className="customers-category flex-1 flex flex-col h-full min-w-0 bg-[#fbfbfa] dark:bg-[#121212] p-2 pl-0">
+      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-[#171717] overflow-hidden rounded-[28px] border border-black/5 dark:border-white/10 shadow-none">
         <AnimatePresence mode="wait">
           {selectedCustomerId ? (
             <motion.div
