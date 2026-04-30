@@ -531,17 +531,17 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
                     <div className="space-y-2.5">
                       <button
                         onClick={() => setActiveModal('open_case')}
-                        className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm"
+                        className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors shadow-sm"
                       >
-                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                        <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">open_in_new</span>
                         Open linked case
                         <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
                       </button>
                       <button
                         onClick={() => setActiveModal('refund')}
-                        className="w-full flex items-center gap-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/40 px-4 py-2.5 text-[13px] font-semibold transition-colors"
+                        className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors"
                       >
-                        <span className="material-symbols-outlined text-[16px]">currency_exchange</span>
+                        <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">currency_exchange</span>
                         Start refund flow
                         <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
                       </button>
@@ -555,9 +555,9 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
                       </button>
                       <button
                         onClick={() => setActiveModal('cancel')}
-                        className="w-full flex items-center gap-2.5 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/40 px-4 py-2.5 text-[13px] font-semibold transition-colors"
+                        className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors"
                       >
-                        <span className="material-symbols-outlined text-[16px]">cancel</span>
+                        <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">cancel</span>
                         Cancel order
                         <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
                       </button>

@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { customersApi, paymentsApi, policyApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
-import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
+
 import type { NavigateFn, Page } from '../types';
 
-type CustomerTab = 'overview' | 'all_activity' | 'conversations' | 'orders' | 'system_logs' | 'reconciliation';
+type CustomerTab = 'all_activity' | 'conversations' | 'orders' | 'system_logs';
 
 interface CustomersProps {
   onNavigate?: NavigateFn;
@@ -146,7 +146,7 @@ const neutralDotClass = 'mr-1.5 h-1.5 w-1.5 rounded-full bg-gray-400';
 
 export default function Customers({ onNavigate, focusCustomerId }: CustomersProps) {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [activeProfileTab, setActiveProfileTab] = useState<CustomerTab>('overview');
+  const [activeProfileTab, setActiveProfileTab] = useState<CustomerTab>('all_activity');
   const [searchQuery, setSearchQuery] = useState('');
   const [segmentFilter, setSegmentFilter] = useState<'all' | 'vip' | 'standard'>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -793,6 +793,11 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     </div>
   );
 
+  // Shared card style matching Settings/Upgrade components exactly
+  const cardCls = 'bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden';
+  const cardHeaderCls = 'px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between';
+  const cardTitleCls = 'text-sm font-semibold text-gray-900 dark:text-white';
+
   const renderProfileView = () => {
     if (isSelectedCustomerLoading) {
       return (
@@ -804,586 +809,493 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     }
     if (!selectedCustomer) return null;
 
-    const recommendations = (selectedCustomer as any).aiRecommendations || [];
-    const churnLevel =
-      selectedCustomer.risk === 'Churn Risk'
-        ? 'High'
-        : selectedCustomer.risk === 'Watchlist'
-          ? 'Medium'
-          : 'Low';
-    const fraudLevel =
-      (selectedCustomer as any).fraudRisk === 'high' || (selectedCustomer as any).fraudRisk === 'critical'
-        ? 'High'
-        : (selectedCustomer as any).fraudRisk === 'medium'
-          ? 'Medium'
-          : 'Low';
-    const activityEvents = Array.isArray(apiActivity) ? apiActivity.filter((event: any) => event.type !== 'system_log') : [];
-    const systemLogs = Array.isArray(apiActivity) ? apiActivity.filter((event: any) => event.type === 'system_log') : [];
-    const profileTabs: Array<{ id: CustomerTab; label: string }> = [
-      { id: 'overview', label: 'Overview' },
-      { id: 'all_activity', label: 'All Activity' },
-      { id: 'conversations', label: 'Conversations' },
-      { id: 'orders', label: 'Orders' },
-      { id: 'reconciliation', label: 'Reconciliation' },
-      { id: 'system_logs', label: 'System Logs' },
-    ];
-    const handleReconciliationAction = (actionType: string) => {
-      if (actionType === 'approval') {
-        handleCreateApproval();
-        return;
-      }
-      if (actionType === 'workflow') {
-        openCustomerCase('case_graph');
-        return;
-      }
-      if (actionType === 'log') {
-        setActiveProfileTab('system_logs');
-        return;
-      }
-      setActionMessage('Reconciliation action prepared. Review the linked systems and continue from the relevant operational screen.');
-    };
-    const dotColor = (type: string, level: string) => {
-      if (level === 'error') return 'bg-red-500';
-      if (level === 'warning') return 'bg-amber-500';
-      if (type === 'ai_summary') return 'bg-violet-500';
-      if (type === 'agent_note') return 'bg-slate-500';
-      if (type === 'payment') return 'bg-emerald-500';
-      return 'bg-sky-500';
-    };
+    const churn = selectedCustomer?.risk || 'Healthy';
+    const fraud = (selectedCustomer as any)?.fraudRisk || 'low';
+    const churnHigh = churn === 'Churn Risk';
+    const fraudHigh = fraud === 'high' || fraud === 'critical';
+    const recon = selectedCustomer.reconciliation;
+    const hasConflict = recon && (recon.status === 'Conflict' || recon.status === 'Warning' || recon.status === 'Blocked');
 
     return (
-      <div className="flex-1 flex flex-col h-full min-w-0 bg-[#fbfbfa] dark:bg-background-dark overflow-hidden">
-        <header className="flex-shrink-0 border-b border-black/5 bg-white px-8 py-6 dark:border-white/10 dark:bg-[#171717]">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
-                <button onClick={() => setSelectedCustomerId(null)} className="transition-colors hover:text-gray-950 dark:hover:text-white">Customers</button>
-                <span className="material-symbols-outlined text-sm">chevron_right</span>
-                <span className="truncate text-gray-900 dark:text-white">{selectedCustomer.name}</span>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
-                <h1 className="text-[30px] font-semibold tracking-tight text-gray-950 dark:text-white">{selectedCustomer.name}</h1>
-                <MinimalPill tone="active">{selectedCustomer.segment}</MinimalPill>
-                <MinimalPill>{selectedCustomer.company}</MinimalPill>
-              </div>
-              <p className="mt-2 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
-                Unified customer workspace with lifecycle, conversations, revenue exposure, linked identities and reconciliation status.
-              </p>
+      <div className="flex-1 flex flex-col min-w-0 bg-[#fbfbfa] dark:bg-[#121212] overflow-y-auto custom-scrollbar">
+        {/* ── Header ───────────────────────────────────────────────── */}
+        <header className="sticky top-0 z-10 flex-shrink-0 px-7 py-5 border-b border-black/5 dark:border-white/10 bg-white dark:bg-[#171717] flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSelectedCustomerId(null)}
+              className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+              Customers
+            </button>
+            <span className="text-gray-300 dark:text-gray-600">/</span>
+            <div className="flex items-center gap-3">
+              <img
+                alt={selectedCustomer.name}
+                className="w-8 h-8 rounded-full object-cover border border-black/5 dark:border-white/10"
+                src={selectedCustomer.avatar}
+                referrerPolicy="no-referrer"
+              />
+              <span className="text-[15px] font-semibold text-gray-950 dark:text-white">{selectedCustomer.name}</span>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                selectedCustomer.segment === 'VIP Enterprise'
+                  ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
+                  : 'bg-black/5 text-gray-600 dark:bg-white/10 dark:text-gray-300'
+              }`}>
+                {selectedCustomer.segment}
+              </span>
             </div>
-
-            <div className="relative flex items-center gap-2">
-              <MinimalButton onClick={() => setCustomerActionsOpen((value) => !value)} variant="outline">
-                <span className="material-symbols-outlined mr-1 text-[18px]">more_horiz</span>
-                More
-              </MinimalButton>
-              <MinimalButton onClick={() => openCustomerCase('inbox')}>
-                <span className="material-symbols-outlined mr-1 text-[18px]">open_in_new</span>
-                Open in Inbox
-              </MinimalButton>
-              {customerActionsOpen ? (
-                <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-[20px] border border-black/5 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-[#171717]">
+          </div>
+          <div className="relative flex items-center gap-2">
+            <button
+              onClick={() => setCustomerActionsOpen((v) => !v)}
+              className="rounded-full px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[18px]">more_horiz</span>
+              More
+            </button>
+            <button
+              onClick={() => openCustomerCase('inbox')}
+              className="rounded-full px-5 py-2 text-sm font-semibold bg-black text-white dark:bg-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 transition-opacity flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+              Open in Inbox
+            </button>
+            {customerActionsOpen && (
+              <div className="absolute right-0 top-full mt-2 w-52 rounded-[16px] border border-black/5 dark:border-white/10 bg-white dark:bg-[#1b1b1b] shadow-2xl z-20 p-1.5">
+                {[
+                  { icon: 'timeline', label: 'View analysis', action: () => openCustomerCase('case_graph') },
+                  { icon: 'assignment_turned_in', label: 'Create approval', action: handleCreateApproval },
+                  { icon: 'currency_exchange', label: 'Start refund', action: handleStartRefund },
+                ].map((item) => (
                   <button
-                    onClick={() => openCustomerCase('case_graph')}
-                    className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-black/[0.04] hover:text-gray-950 dark:text-gray-200 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                    key={item.label}
+                    onClick={() => { item.action(); setCustomerActionsOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-200 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                   >
-                    <span className="material-symbols-outlined text-[18px]">timeline</span>
-                    View analysis
+                    <span className="material-symbols-outlined text-[18px] text-gray-400">{item.icon}</span>
+                    {item.label}
                   </button>
-                  <button
-                    onClick={handleCreateApproval}
-                    className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-black/[0.04] hover:text-gray-950 dark:text-gray-200 dark:hover:bg-white/[0.06] dark:hover:text-white"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">assignment_turned_in</span>
-                    Create approval
-                  </button>
-                  <button
-                    onClick={handleStartRefund}
-                    className="flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-black/[0.04] hover:text-gray-950 dark:text-gray-200 dark:hover:bg-white/[0.06] dark:hover:text-white"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">currency_exchange</span>
-                    Start refund
-                  </button>
-                </div>
-              ) : null}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </header>
 
-        {actionMessage ? (
-          <div className="px-6 pt-5">
-            <div className="rounded-[22px] border border-violet-200/70 bg-violet-50/80 px-5 py-4 text-sm text-violet-900 dark:border-violet-800/30 dark:bg-violet-950/20 dark:text-violet-100">
-              <div className="flex items-start gap-3">
-                <span className="material-symbols-outlined mt-0.5 text-[18px]">info</span>
-                <div>
-                  <div className="font-semibold">Customer action status</div>
-                  <div className="mt-1 text-xs text-violet-700/90 dark:text-violet-200/90">{actionMessage}</div>
-                </div>
+        {actionMessage && (
+          <div className="px-6 pt-4">
+            <div className="rounded-[16px] border border-blue-100 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 flex items-start gap-3">
+              <span className="material-symbols-outlined text-lg mt-0.5">info</span>
+              <div>
+                <div className="font-semibold text-[13px]">Action status</div>
+                <div className="text-xs opacity-80 mt-0.5">{actionMessage}</div>
               </div>
             </div>
           </div>
-        ) : null}
+        )}
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-6 pt-5">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.9fr)_360px]">
-            <div className="space-y-4">
-              <MinimalCard
-                title="Customer overview"
-                subtitle="Identity, lifecycle, support load and revenue context in one place."
-                icon="person"
-                action={<MinimalPill tone="active">{selectedCustomer.role}</MinimalPill>}
-              >
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-                  <div className="flex items-start gap-4">
-                    <img
-                      alt={selectedCustomer.name}
-                      className="h-16 w-16 rounded-full border border-black/5 object-cover dark:border-white/10"
-                      src={selectedCustomer.avatar}
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{selectedCustomer.name}</h2>
-                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{selectedCustomer.email}</p>
-                      <div className="mt-3 grid gap-2 text-sm text-gray-700 dark:text-gray-300 sm:grid-cols-2">
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Company</div>
-                          <div className="mt-1 font-medium text-gray-950 dark:text-white">{selectedCustomer.company}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Timezone</div>
-                          <div className="mt-1 font-medium text-gray-950 dark:text-white">{selectedCustomer.timezone}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Location</div>
-                          <div className="mt-1 font-medium text-gray-950 dark:text-white">{selectedCustomer.location}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Customer since</div>
-                          <div className="mt-1 font-medium text-gray-950 dark:text-white">{selectedCustomer.since}</div>
-                        </div>
-                      </div>
-                    </div>
+        {/* ── Unified 4-col grid: KPIs + body ──────────────────────────
+             grid-cols-4 + gap-4 is shared by both rows so the sidebar
+             column (col-span-1) is always pixel-perfect with the KPI
+             cards above it.
+        ──────────────────────────────────────────────────────────── */}
+        <div className="px-6 pt-5 pb-6 grid grid-cols-4 gap-4">
+
+          {/* ── Row 1: 4 identical KPI cards ───────────────────────── */}
+          {[
+            { label: 'Lifetime Value', value: selectedCustomer.ltv, sub: selectedCustomer.plan, accent: false, accentColor: undefined as string | undefined },
+            { label: 'Open Cases', value: String(selectedCustomer.openTickets), sub: selectedCustomer.openTickets === 1 ? '1 active ticket' : `${selectedCustomer.openTickets} active tickets`, accent: selectedCustomer.openTickets > 0, accentColor: 'amber' as string | undefined },
+            { label: 'Next Renewal', value: selectedCustomer.nextRenewal, sub: selectedCustomer.plan, accent: false, accentColor: undefined as string | undefined },
+            { label: 'Risk Level', value: churnHigh ? 'Churn Risk' : churn === 'Watchlist' ? 'Watchlist' : 'Healthy', sub: `Fraud risk: ${fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low'}`, accent: churnHigh || fraudHigh, accentColor: 'red' as string | undefined },
+          ].map((kpi) => (
+            <section
+              key={kpi.label}
+              className={`rounded-2xl border shadow-card overflow-hidden ${
+                kpi.accent && kpi.accentColor === 'red'
+                  ? 'border-red-200 dark:border-red-800/40 bg-white dark:bg-card-dark'
+                  : kpi.accent && kpi.accentColor === 'amber'
+                  ? 'border-amber-200 dark:border-amber-800/40 bg-white dark:bg-card-dark'
+                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-card-dark'
+              }`}
+            >
+              <div className="px-5 pt-4 pb-3">
+                <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">{kpi.label}</p>
+                <p className={`text-[17px] font-bold tracking-tight leading-snug ${
+                  kpi.accent && kpi.accentColor === 'red' ? 'text-red-600 dark:text-red-400'
+                  : kpi.accent && kpi.accentColor === 'amber' ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-gray-900 dark:text-white'
+                }`}>{kpi.value}</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{kpi.sub}</p>
+              </div>
+            </section>
+          ))}
+
+          {/* ── Row 2, col-span-3: AI Summary + Activity ────────────── */}
+          <div className="col-span-3 flex flex-col gap-4 min-w-0">
+
+            {/* AI Executive Summary */}
+            <section className={cardCls}>
+              <div className={cardHeaderCls}>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/20">
+                    <span className="material-symbols-outlined text-[17px] text-indigo-600 dark:text-indigo-400">auto_awesome</span>
                   </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {[
-                      { label: 'Open conversations', value: `${selectedCustomer.openTickets}`, meta: 'Active support threads' },
-                      { label: 'Revenue at stake', value: selectedCustomer.ltv, meta: `${selectedCustomer.plan} plan` },
-                      { label: 'Orders tracked', value: `${selectedCustomer.orders.length}`, meta: 'Across linked systems' },
-                      { label: 'Next renewal', value: selectedCustomer.nextRenewal, meta: 'Commercial lifecycle' },
-                    ].map((item) => (
-                      <div key={item.label} className="rounded-[20px] border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{item.label}</div>
-                        <div className="mt-3 text-lg font-semibold text-gray-950 dark:text-white">{item.value}</div>
-                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.meta}</div>
-                      </div>
-                    ))}
+                  <div>
+                    <h3 className={cardTitleCls}>AI Executive Summary</h3>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500">From canonical state</p>
                   </div>
                 </div>
-              </MinimalCard>
-
-              <MinimalCard title="AI executive summary" subtitle="Canonical summary and recommended next moves." icon="auto_awesome">
-                <div className="rounded-[22px] border border-violet-200/70 bg-violet-50/70 p-5 dark:border-violet-800/30 dark:bg-violet-950/20">
-                  <p className="text-sm leading-7 text-gray-700 dark:text-gray-300">
-                    {(selectedCustomer as any).aiExecutiveSummary || 'No AI summary available for this customer yet.'}
-                  </p>
-                  <div className="mt-5 grid gap-3 md:grid-cols-2">
-                    {(recommendations.length > 0 ? recommendations : [{ action: 'No recommendations yet', priority: 'low', reason: 'The agent has not produced operational guidance for this customer yet.' }]).map((rec: any, index: number) => (
-                      <div key={`${rec.action}-${index}`} className="rounded-[18px] border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-black/20">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-gray-950 dark:text-white">{rec.action}</div>
-                          <MinimalPill tone={rec.priority === 'high' ? 'active' : 'neutral'}>{rec.priority || 'info'}</MinimalPill>
-                        </div>
-                        <p className="mt-2 text-xs leading-6 text-gray-600 dark:text-gray-400">{rec.reason}</p>
+                <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800/30">Live</span>
+              </div>
+              <div className="p-5">
+                {(selectedCustomer as any).aiExecutiveSummary ? (
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{(selectedCustomer as any).aiExecutiveSummary}</p>
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic">No AI summary available for this customer yet.</p>
+                )}
+                {((selectedCustomer as any).aiRecommendations?.length > 0) && (
+                  <div className="mt-4 space-y-2 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Recommended Actions</p>
+                    {(selectedCustomer as any).aiRecommendations.map((rec: any, i: number) => (
+                      <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
+                          rec.priority === 'high' ? 'bg-red-500' : rec.priority === 'medium' ? 'bg-amber-500' : 'bg-green-500'
+                        }`} />
+                        <p className="text-xs text-gray-700 dark:text-gray-300 leading-snug"><span className="font-semibold">{rec.action}</span> — {rec.reason}</p>
                       </div>
                     ))}
                   </div>
-                </div>
-              </MinimalCard>
+                )}
+              </div>
+            </section>
 
-              <MinimalCard
-                title="Customer workspace"
-                subtitle="Dive into activity, linked cases, orders and reconciliation from one shared workspace."
-                icon="dashboard"
-                action={
-                  <div className="flex flex-wrap gap-2">
-                    {profileTabs.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setActiveProfileTab(tab.id)}
-                        className={[
-                          'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors',
-                          activeProfileTab === tab.id
-                            ? 'bg-black text-white dark:bg-white dark:text-black'
-                            : 'text-gray-600 hover:bg-black/[0.05] hover:text-gray-950 dark:text-gray-300 dark:hover:bg-white/[0.06] dark:hover:text-white',
-                        ].join(' ')}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                }
-              >
-                {activeProfileTab === 'overview' ? (
-                  <div className="space-y-5">
-                    <div className="grid gap-4 xl:grid-cols-2">
-                      <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-gray-950 dark:text-white">Identity graph</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">Linked customer footprints and confidence.</div>
-                          </div>
-                          <MinimalPill>98% confidence</MinimalPill>
-                        </div>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                          {selectedCustomer.sources.map((source, index) => (
-                            <div key={`${source.name}-${index}`} className="flex items-center gap-3 rounded-[18px] border border-black/5 bg-white p-3 dark:border-white/10 dark:bg-[#171717]">
-                              <img alt={source.name} className="h-9 w-9 rounded-full border border-black/5 object-contain p-2 dark:border-white/10" src={source.icon} referrerPolicy="no-referrer" />
-                              <div className="min-w-0">
-                                <div className="text-sm font-medium text-gray-950 dark:text-white">{source.name}</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">Linked identity available</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
-                        <div className="text-sm font-semibold text-gray-950 dark:text-white">Operational signals</div>
-                        <div className="mt-4 space-y-3">
-                          {[
-                            { label: 'Primary issue', value: selectedCustomer.topIssue, meta: 'Most recent canonical conflict' },
-                            { label: 'AI resolved', value: `${selectedCustomer.aiImpact.resolved}`, meta: 'Customer-facing cases resolved automatically' },
-                            { label: 'Escalations', value: `${selectedCustomer.aiImpact.escalated || 0}`, meta: 'Cases requiring deeper review' },
-                            { label: 'Approvals', value: `${selectedCustomer.aiImpact.approvals || 0}`, meta: 'Human approval interventions' },
-                          ].map((item) => (
-                            <div key={item.label} className="flex items-start justify-between gap-4 rounded-[18px] border border-black/5 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#171717]">
-                              <div>
-                                <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{item.label}</div>
-                                <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">{item.meta}</div>
-                              </div>
-                              <div className="text-right text-sm font-semibold text-gray-950 dark:text-white">{item.value}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 xl:grid-cols-2">
-                      <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-gray-950 dark:text-white">Latest conversations</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">Recent customer-facing threads linked to this profile.</div>
-                          </div>
-                          <MinimalButton onClick={() => setActiveProfileTab('conversations')} variant="ghost">Open tab</MinimalButton>
-                        </div>
-                        <div className="mt-4 space-y-3">
-                          {(selectedCustomer.recentCases || []).slice(0, 3).map((customerCase) => (
-                            <button
-                              key={customerCase.id}
-                              type="button"
-                              onClick={() => onNavigate?.('inbox', customerCase.id)}
-                              className="w-full rounded-[18px] border border-black/5 bg-white px-4 py-3 text-left transition-colors hover:bg-black/[0.02] dark:border-white/10 dark:bg-[#171717] dark:hover:bg-white/[0.04]"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="text-sm font-semibold text-gray-950 dark:text-white">{customerCase.type || 'Case'}</div>
-                                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{customerCase.caseNumber || customerCase.case_number || customerCase.id}</div>
-                                </div>
-                                <MinimalPill>{customerCase.status || 'open'}</MinimalPill>
-                              </div>
-                            </button>
-                          ))}
-                          {(selectedCustomer.recentCases || []).length === 0 ? (
-                            <div className="rounded-[18px] border border-dashed border-black/10 px-4 py-6 text-center text-sm text-gray-400 dark:border-white/10 dark:text-gray-500">
-                              No linked conversations yet.
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-gray-950 dark:text-white">Commercial footprint</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">Orders, plan exposure and renewal timing.</div>
-                          </div>
-                          <MinimalButton onClick={() => setActiveProfileTab('orders')} variant="ghost">Open tab</MinimalButton>
-                        </div>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Plan</div>
-                            <div className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">{selectedCustomer.plan}</div>
-                          </div>
-                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Lifetime value</div>
-                            <div className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">{selectedCustomer.ltv}</div>
-                          </div>
-                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Renewal</div>
-                            <div className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">{selectedCustomer.nextRenewal}</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {activeProfileTab === 'all_activity' ? (
-                  activityEvents.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">No activity recorded yet.</p>
-                  ) : (
-                    <div className="relative ml-3 space-y-6 border-l border-black/10 pb-4 dark:border-white/10">
-                      {activityEvents.map((event: any) => (
+            {/* Activity / Tabs */}
+            <section className={`flex flex-col ${cardCls}`}>
+              <div className="px-5 pt-4 border-b border-gray-100 dark:border-gray-800 flex items-end gap-0 overflow-x-auto no-scrollbar">
+                {(['all_activity', 'conversations', 'orders', 'system_logs'] as CustomerTab[]).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveProfileTab(tab)}
+                    className={`pb-3.5 mr-7 text-sm font-semibold whitespace-nowrap transition-all border-b-2 ${
+                      activeProfileTab === tab
+                        ? 'text-gray-900 dark:text-white border-gray-900 dark:border-white'
+                        : 'text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border-transparent'
+                    }`}
+                  >
+                    {tab.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                  </button>
+                ))}
+              </div>
+              <div className="p-5">
+                {activeProfileTab === 'all_activity' && (() => {
+                  const events = Array.isArray(apiActivity) ? apiActivity.filter((e: any) => e.type !== 'system_log') : [];
+                  if (events.length === 0) return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No activity recorded yet.</p>;
+                  const dotColor = (type: string, level: string) => {
+                    if (level === 'error')   return 'bg-red-500';
+                    if (level === 'warning') return 'bg-amber-500';
+                    if (type === 'ai_summary') return 'bg-indigo-500';
+                    if (type === 'agent_note') return 'bg-purple-500';
+                    if (type === 'payment')   return 'bg-green-500';
+                    return 'bg-blue-500';
+                  };
+                  return (
+                    <div className="relative border-l border-black/10 dark:border-white/10 ml-3 space-y-5 pb-4">
+                      {events.map((event: any) => (
                         <div key={event.id} className="relative pl-6">
-                          <div className={`absolute -left-[7px] top-2 h-3 w-3 rounded-full ${dotColor(event.type, event.level)}`} />
-                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                          <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full ${dotColor(event.type, event.level)} bg-opacity-20 border-2 border-white dark:border-[#171717] flex items-center justify-center`}>
+                            <div className={`w-2 h-2 rounded-full ${dotColor(event.type, event.level)}`}></div>
+                          </div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500">
                               {new Date(event.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </p>
-                            <MinimalPill>{event.source || event.system || 'canonical'}</MinimalPill>
+                            <span className="text-[10px] font-medium text-gray-400 bg-black/[0.03] dark:bg-white/[0.05] px-1.5 py-0.5 rounded-full">{event.source || event.system || ''}</span>
                           </div>
-                          <div className="rounded-[20px] border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                            <p className="text-sm font-semibold text-gray-950 dark:text-white">{event.title}</p>
-                            <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-400">{event.content}</p>
+                          <div className="rounded-[16px] border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-3.5">
+                            <p className="text-[13px] font-semibold text-gray-950 dark:text-white mb-1">{event.title}</p>
+                            <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed">{event.content}</p>
                           </div>
                         </div>
                       ))}
                     </div>
-                  )
-                ) : null}
-
-                {activeProfileTab === 'conversations' ? (
-                  (selectedCustomer.recentCases || []).length === 0 ? (
-                    <p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">No linked conversations found.</p>
-                  ) : (
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      {(selectedCustomer.recentCases || []).map((customerCase) => (
-                        <button
-                          key={customerCase.id}
-                          type="button"
-                          onClick={() => onNavigate?.('inbox', customerCase.id)}
-                          className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 text-left transition-colors hover:bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                                {customerCase.caseNumber || customerCase.case_number || customerCase.id}
-                              </div>
-                              <div className="mt-2 text-base font-semibold text-gray-950 dark:text-white">{customerCase.type || 'Case'}</div>
-                            </div>
-                            <MinimalPill tone="active">{customerCase.status || 'open'}</MinimalPill>
-                          </div>
-                          <div className="mt-4 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                            <span className="material-symbols-outlined text-[15px]">open_in_new</span>
-                            Open in Inbox with full thread and actions
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )
-                ) : null}
-
-                {activeProfileTab === 'orders' ? (
-                  selectedCustomer.orders.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">No orders linked to this customer yet.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {selectedCustomer.orders.map((order) => (
-                        <button
-                          key={order.id}
-                          type="button"
-                          onClick={() => onNavigate?.('orders', order.id)}
-                          className="w-full rounded-[22px] border border-black/5 bg-black/[0.02] px-5 py-4 text-left transition-colors hover:bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                              <div className="text-sm font-semibold text-gray-950 dark:text-white">{order.id}</div>
-                              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{order.date} • {order.total}</div>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <MinimalPill>{order.status}</MinimalPill>
-                              <MinimalPill tone="subtle">{selectedCustomer.topIssue}</MinimalPill>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )
-                ) : null}
-
-                {activeProfileTab === 'reconciliation' ? (
-                  selectedCustomer.reconciliation ? (
+                  );
+                })()}
+                {activeProfileTab === 'conversations' && (() => {
+                  const cases = selectedCustomer?.recentCases || [];
+                  if (cases.length === 0) return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No linked conversations found.</p>;
+                  return (
                     <div className="space-y-4">
-                      <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-gray-950 dark:text-white">Canonical reconciliation status</div>
-                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              Last checked {selectedCustomer.reconciliation.lastChecked}. {selectedCustomer.reconciliation.mismatches} mismatches remain open.
-                            </div>
-                          </div>
-                          <MinimalPill tone="active">{selectedCustomer.reconciliation.status}</MinimalPill>
-                        </div>
-                      </div>
-
-                      {selectedCustomer.reconciliation.domains.map((domain, index) => (
-                        <div key={`${domain.domain}-${index}`} className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
+                      {cases.map((c) => (
+                        <div key={c.id} className="rounded-[18px] border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors group cursor-pointer p-4" onClick={() => onNavigate?.('inbox', c.id)}>
+                          <div className="flex items-start justify-between mb-2">
                             <div>
-                              <div className="text-sm font-semibold text-gray-950 dark:text-white">{domain.domain}</div>
-                              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{domain.context}</div>
-                            </div>
-                            {domain.severity ? <MinimalPill tone="active">{domain.severity}</MinimalPill> : null}
-                          </div>
-                          <div className="mt-4 grid gap-3 md:grid-cols-2">
-                            <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
-                              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">System states</div>
-                              <div className="mt-3 space-y-2">
-                                {domain.systems.map((system, systemIndex) => (
-                                  <div key={`${system.name}-${systemIndex}`} className="flex items-center justify-between gap-3 text-sm">
-                                    <span className="text-gray-500 dark:text-gray-400">{system.name}</span>
-                                    <span className="font-medium text-gray-950 dark:text-white">{system.value}</span>
-                                  </div>
-                                ))}
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[11px] font-semibold text-violet-600 dark:text-violet-400">{c.caseNumber || c.case_number || c.id}</span>
+                                <h4 className="text-[13px] font-semibold text-gray-950 dark:text-white">{c.type || 'Case'}</h4>
                               </div>
                             </div>
-                            <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
-                              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Governance</div>
-                              <div className="mt-3 space-y-2 text-sm">
-                                <div className="flex items-center justify-between gap-3">
-                                  <span className="text-gray-500 dark:text-gray-400">Source of truth</span>
-                                  <span className="font-medium text-gray-950 dark:text-white">{domain.sourceOfTruth}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-3">
-                                  <span className="text-gray-500 dark:text-gray-400">Writeback</span>
-                                  <span className="font-medium text-gray-950 dark:text-white">{domain.writebackStatus}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-3">
-                                  <span className="text-gray-500 dark:text-gray-400">Open for</span>
-                                  <span className="font-medium text-gray-950 dark:text-white">{domain.age}</span>
-                                </div>
-                              </div>
-                            </div>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              c.status === 'open' || c.status === 'escalated'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            }`}>{c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : 'Open'}</span>
                           </div>
-                          <div className="mt-4">
-                            <MinimalButton onClick={() => handleReconciliationAction(domain.actionType)} variant="outline">
-                              {domain.action}
-                            </MinimalButton>
+                          <div className="flex gap-1.5 items-center mt-1">
+                            <span className="material-symbols-outlined text-violet-400 text-[14px]">open_in_new</span>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500">Open in Inbox</p>
                           </div>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">No reconciliation data is available for this customer.</p>
-                  )
-                ) : null}
-
-                {activeProfileTab === 'system_logs' ? (
-                  systemLogs.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">No system logs recorded yet.</p>
-                  ) : (
-                    <div className="space-y-2 font-mono text-[11px]">
-                      {systemLogs.map((log: any) => (
-                        <div key={log.id} className="grid gap-3 rounded-[18px] border border-black/5 bg-black/[0.02] p-4 md:grid-cols-[120px_90px_120px_minmax(0,1fr)] dark:border-white/10 dark:bg-white/[0.03]">
-                          <div className="text-gray-400 dark:text-gray-500">
+                  );
+                })()}
+                {activeProfileTab === 'orders' && (
+                  <div className="overflow-hidden rounded-[18px] border border-black/5 dark:border-white/10">
+                    <table className="min-w-full divide-y divide-black/5 dark:divide-white/10 text-left text-sm">
+                      <thead className="bg-black/[0.02] dark:bg-white/[0.02]">
+                        <tr>
+                          <th className="px-4 py-3 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" scope="col">Order</th>
+                          <th className="px-4 py-3 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" scope="col">Date</th>
+                          <th className="px-4 py-3 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" scope="col">Total</th>
+                          <th className="px-4 py-3 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" scope="col">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-black/5 dark:divide-white/10">
+                        {selectedCustomer.orders.map(order => (
+                          <tr key={order.id} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
+                            <td className="px-4 py-3.5 font-semibold text-[13px] text-gray-950 dark:text-white flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[15px] text-gray-300 dark:text-gray-600">receipt</span>
+                              {order.id}
+                            </td>
+                            <td className="px-4 py-3.5 text-[12px] text-gray-500 dark:text-gray-400">{order.date}</td>
+                            <td className="px-4 py-3.5 text-[13px] font-semibold text-gray-950 dark:text-white">{order.total}</td>
+                            <td className="px-4 py-3.5">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                order.status === 'Processing'
+                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                  : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              }`}>
+                                {order.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {activeProfileTab === 'system_logs' && (() => {
+                  const logs = Array.isArray(apiActivity) ? apiActivity.filter((e: any) => e.type === 'system_log') : [];
+                  if (logs.length === 0) return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No system logs recorded yet.</p>;
+                  return (
+                    <div className="font-mono text-[11px] md:text-xs space-y-1">
+                      {logs.map((log: any) => (
+                        <div key={log.id} className="flex items-start gap-4 p-2 md:p-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                          <div className="w-28 flex-shrink-0 text-gray-400 dark:text-gray-500 text-[10px]">
                             {new Date(log.occurred_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                           </div>
-                          <div className="font-semibold text-gray-700 dark:text-gray-300">{(log.level || 'info').toUpperCase()}</div>
-                          <div className="text-gray-500 dark:text-gray-400">{log.system || log.source || 'system'}</div>
-                          <div className="break-all text-gray-800 dark:text-gray-300">{log.content}</div>
+                          <div className="w-16 flex-shrink-0">
+                            <span className={`px-1.5 py-0.5 rounded font-medium ${
+                              log.level === 'error'   ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' :
+                              log.level === 'warning' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' :
+                              'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400'
+                            }`}>{(log.level || 'info').toUpperCase()}</span>
+                          </div>
+                          <div className="w-28 flex-shrink-0 text-gray-500 dark:text-gray-400">{log.system || log.source || 'system'}</div>
+                          <div className="flex-1 text-gray-800 dark:text-gray-300 break-all">{log.content}</div>
                         </div>
                       ))}
                     </div>
-                  )
-                ) : null}
-              </MinimalCard>
-            </div>
+                  );
+                })()}
+              </div>
+            </section>
+          </div>
 
-            <div className="space-y-4">
-              <MinimalCard title="Risk profile" subtitle="Churn, fraud and operational attention levels." icon="health_and_safety">
-                <div className="space-y-3">
+          {/* ── Row 2, col-span-1: Right sidebar ────────────────────── */}
+          <div className="col-span-1 flex flex-col gap-3">
+
+            {/* Identity card */}
+            <section className={cardCls}>
+              <div className={cardHeaderCls}>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                    <span className="material-symbols-outlined text-[15px] text-gray-500 dark:text-gray-400">person</span>
+                  </div>
+                  <h3 className={cardTitleCls}>Identity</h3>
+                </div>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <img
+                    alt={selectedCustomer.name}
+                    className="w-11 h-11 rounded-full object-cover border border-gray-200 dark:border-gray-700 shadow-card flex-shrink-0"
+                    src={selectedCustomer.avatar}
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{selectedCustomer.name}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{selectedCustomer.email}</p>
+                  </div>
+                </div>
+                <div className="space-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
                   {[
-                    { label: 'Churn risk', value: churnLevel, high: churnLevel === 'High' },
-                    { label: 'Fraud risk', value: fraudLevel, high: fraudLevel === 'High' },
-                  ].map((riskItem) => (
-                    <div key={riskItem.label} className="flex items-center justify-between rounded-[18px] border border-black/5 bg-black/[0.02] px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
-                      <div className="flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-200">
-                        <span className={`h-2 w-2 rounded-full ${riskItem.high ? 'bg-red-500' : 'bg-emerald-500'}`} />
-                        {riskItem.label}
-                      </div>
-                      <div className="text-sm font-semibold text-gray-950 dark:text-white">{riskItem.value}</div>
+                    { icon: 'work', label: selectedCustomer.role + ' · ' + selectedCustomer.company },
+                    { icon: 'location_on', label: selectedCustomer.location + ' · ' + selectedCustomer.timezone },
+                    { icon: 'calendar_today', label: 'Customer since ' + selectedCustomer.since },
+                  ].map((row) => (
+                    <div key={row.icon} className="flex items-start gap-2">
+                      <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0">{row.icon}</span>
+                      <span className="text-[12px] text-gray-600 dark:text-gray-300 leading-snug">{row.label}</span>
                     </div>
                   ))}
                 </div>
-              </MinimalCard>
-
-              <MinimalCard title="Next actions" subtitle="Operational entry points for the customer owner." icon="bolt">
-                <div className="space-y-3">
-                  <MinimalButton onClick={handleCreateApproval} variant="outline">Create approval</MinimalButton>
-                  <MinimalButton onClick={handleStartRefund} variant="outline">Start refund</MinimalButton>
-                  <MinimalButton onClick={() => openCustomerCase('case_graph')} variant="ghost">Open case analysis</MinimalButton>
-                  <MinimalButton onClick={() => setActiveProfileTab('reconciliation')} variant="ghost">Review reconciliation</MinimalButton>
-                </div>
-              </MinimalCard>
-
-              <MinimalCard title="Linked identities" subtitle="Connected customer records and source systems." icon="hub">
-                <div className="space-y-3">
-                  {selectedCustomer.sources.map((source, index) => (
-                    <div key={`${source.name}-${index}`} className="flex items-center gap-3 rounded-[18px] border border-black/5 bg-black/[0.02] px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
-                      <img alt={source.name} className="h-10 w-10 rounded-full border border-black/5 object-contain p-2 dark:border-white/10" src={source.icon} referrerPolicy="no-referrer" />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-gray-950 dark:text-white">{source.name}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">Canonical profile mapped to this source.</div>
-                      </div>
+                {selectedCustomer.sources.length > 0 && (
+                  <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Linked Profiles</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">98% match</span>
                     </div>
-                  ))}
-                </div>
-              </MinimalCard>
-
-              <MinimalCard title="Revenue and plan" subtitle="Commercial context used by support and AI operations." icon="workspace_premium">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[18px] border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Current plan</div>
-                    <div className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">{selectedCustomer.plan}</div>
-                  </div>
-                  <div className="rounded-[18px] border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Lifetime value</div>
-                    <div className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">{selectedCustomer.ltv}</div>
-                  </div>
-                  <div className="rounded-[18px] border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03] sm:col-span-2">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Next renewal</div>
-                    <div className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">{selectedCustomer.nextRenewal}</div>
-                  </div>
-                </div>
-              </MinimalCard>
-
-              {selectedCustomer.reconciliation ? (
-                <MinimalCard title="Reconciliation snapshot" subtitle="Fast view of the cross-system consistency state." icon="sync_alt">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-[18px] border border-black/5 bg-black/[0.02] px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
-                      <div>
-                        <div className="text-sm font-medium text-gray-950 dark:text-white">{selectedCustomer.reconciliation.status}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{selectedCustomer.reconciliation.mismatches} mismatches across connected domains</div>
-                      </div>
-                      <MinimalButton onClick={() => setActiveProfileTab('reconciliation')} variant="ghost">Details</MinimalButton>
-                    </div>
-                    {selectedCustomer.reconciliation.domains.slice(0, 2).map((domain, index) => (
-                      <div key={`${domain.domain}-snapshot-${index}`} className="rounded-[18px] border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-medium text-gray-950 dark:text-white">{domain.domain}</div>
-                          {domain.severity ? <MinimalPill>{domain.severity}</MinimalPill> : null}
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedCustomer.sources.map((source, i) => (
+                        <div
+                          key={i}
+                          title={source.name}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+                        >
+                          <img alt={source.name} className="w-3.5 h-3.5 object-contain" src={source.icon} referrerPolicy="no-referrer" />
+                          <span className="text-[11px] text-gray-600 dark:text-gray-300 font-medium">{source.name}</span>
                         </div>
-                        <div className="mt-2 text-xs leading-6 text-gray-500 dark:text-gray-400">{domain.context}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Health & Risk card */}
+            <section className={cardCls}>
+              <div className={cardHeaderCls}>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                    <span className="material-symbols-outlined text-[15px] text-gray-500 dark:text-gray-400">shield</span>
+                  </div>
+                  <h3 className={cardTitleCls}>Health & Risk</h3>
+                </div>
+              </div>
+              <div className="p-5 space-y-2">
+                {[
+                  {
+                    label: 'Churn Risk',
+                    value: churnHigh ? 'High' : churn === 'Watchlist' ? 'Medium' : 'Low',
+                    alert: churnHigh,
+                    medium: churn === 'Watchlist',
+                  },
+                  {
+                    label: 'Fraud Risk',
+                    value: fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low',
+                    alert: fraudHigh,
+                    medium: fraud === 'medium',
+                  },
+                ].map((row) => (
+                  <div
+                    key={row.label}
+                    className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${
+                      row.alert
+                        ? 'bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30'
+                        : row.medium
+                        ? 'bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30'
+                        : 'bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30'
+                    }`}
+                  >
+                    <span className={`text-[12px] font-medium flex items-center gap-2 ${
+                      row.alert ? 'text-red-800 dark:text-red-300' : row.medium ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-800 dark:text-emerald-300'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        row.alert ? 'bg-red-500' : row.medium ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`} />
+                      {row.label}
+                    </span>
+                    <span className={`text-[11px] font-bold ${
+                      row.alert ? 'text-red-700 dark:text-red-400' : row.medium ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'
+                    }`}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Reconciliation — only if not healthy */}
+            {hasConflict && recon && (
+              <section className={cardCls}>
+                <div className={cardHeaderCls}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                      <span className="material-symbols-outlined text-[15px] text-gray-500 dark:text-gray-400">sync_alt</span>
+                    </div>
+                    <h3 className={cardTitleCls}>Reconciliation</h3>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    recon.status === 'Conflict' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                    recon.status === 'Warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
+                  }`}>{recon.status}</span>
+                </div>
+                <div className="p-5">
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-3">
+                    {recon.mismatches} mismatch{recon.mismatches !== 1 ? 'es' : ''} · Last run {recon.lastChecked}
+                  </p>
+                  <div className="space-y-2">
+                    {recon.domains.slice(0, 3).map((domain, idx) => (
+                      <div key={idx} className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[12px] font-semibold text-gray-900 dark:text-white truncate">{domain.domain}</p>
+                          {domain.severity && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                              domain.severity === 'High' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
+                              domain.severity === 'Medium' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' :
+                              'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                            }`}>{domain.severity}</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">{domain.context}</p>
                       </div>
                     ))}
                   </div>
-                </MinimalCard>
-              ) : null}
-            </div>
-          </div>
-        </div>
+                </div>
+              </section>
+            )}
+
+            {/* Quick Actions */}
+            <section className={cardCls}>
+              <div className={cardHeaderCls}>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                    <span className="material-symbols-outlined text-[15px] text-gray-500 dark:text-gray-400">bolt</span>
+                  </div>
+                  <h3 className={cardTitleCls}>Quick Actions</h3>
+                </div>
+              </div>
+              <div className="p-4 space-y-1.5">
+                {[
+                  { icon: 'timeline', label: 'View Analysis', action: () => openCustomerCase('case_graph') },
+                  { icon: 'assignment_turned_in', label: 'Create Approval', action: handleCreateApproval },
+                  { icon: 'currency_exchange', label: 'Start Refund', action: handleStartRefund },
+                ].map((btn) => (
+                  <button
+                    key={btn.label}
+                    onClick={btn.action}
+                    className="w-full flex items-center gap-2.5 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800/30 hover:bg-gray-50 dark:hover:bg-gray-700/50 px-3 py-2.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200 transition-colors shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-gray-400 dark:text-gray-500">{btn.icon}</span>
+                    {btn.label}
+                    <span className="material-symbols-outlined text-[14px] text-gray-300 dark:text-gray-600 ml-auto">chevron_right</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+          </div>{/* end right sidebar col-span-1 */}
+        </div>{/* end unified grid */}
       </div>
     );
   };
@@ -1398,8 +1310,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
   }
 
   return (
-    <div className="customers-category flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
-      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
+    <div className="customers-category flex-1 flex flex-col h-full min-w-0 bg-[#fbfbfa] dark:bg-[#121212] p-2 pl-0">
+      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-[#171717] overflow-hidden rounded-[28px] border border-black/5 dark:border-white/10 shadow-none">
         <AnimatePresence mode="wait">
           {selectedCustomerId ? (
             <motion.div

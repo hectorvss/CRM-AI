@@ -474,8 +474,8 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
                         <div className="space-y-2">
                           {activeActionView === 'stripe' ? (
                             <>
-                              <button onClick={() => setActiveModal('stripe')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-100 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm">
-                                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                              <button onClick={() => setActiveModal('stripe')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors shadow-sm">
+                                <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">open_in_new</span>
                                 Open {selectedPayment.psp}
                                 <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
                               </button>
@@ -490,8 +490,8 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
                             </>
                           ) : activeActionView === 'refund' ? (
                             <>
-                              <button onClick={() => setActiveModal('refund')} className="w-full flex items-center gap-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 px-4 py-2.5 text-[13px] font-bold transition-colors">
-                                <span className="material-symbols-outlined text-[16px]">currency_exchange</span>
+                              <button onClick={() => setActiveModal('refund')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                                <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">currency_exchange</span>
                                 Issue refund
                                 <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
                               </button>
@@ -502,8 +502,8 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
                             </>
                           ) : (
                             <>
-                              <button onClick={() => setActiveModal('reconcile')} className="w-full flex items-center gap-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800/40 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-800 dark:text-indigo-300 hover:bg-indigo-100 px-4 py-2.5 text-[13px] font-bold transition-colors">
-                                <span className="material-symbols-outlined text-[16px]">sync_alt</span>
+                              <button onClick={() => setActiveModal('reconcile')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                                <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">sync_alt</span>
                                 Trigger reconciliation
                                 <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
                               </button>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { NavigateInput, Page } from '../types';
 import TreeGraph from './TreeGraph';
-import { casesApi, aiApi } from '../api/client';
+import { casesApi, aiApi, superAgentApi } from '../api/client';
 import { buildResolutionPlan, type ResolutionStep } from '../utils/resolutionPlan';
 import { useApi } from '../api/hooks';
 import type { GraphBranch } from './TreeGraph';

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { approvalsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
+import { ActionModal, type ModalConsideration, type ModalContextItem, type ModalStep, type ModalVariant } from './ActionModal';
 import LoadingState from './LoadingState';
 import type { NavigateFn } from '../types';
 
@@ -13,6 +14,7 @@ type FocusItem = {
   detail: string;
   kind: string;
 };
+type ApprovalModalAction = 'return' | 'approve' | 'reject' | null;
 
 interface ApprovalsProps {
   onNavigate?: NavigateFn;
@@ -153,6 +155,24 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function LoadingPanel({
+  label,
+  description,
+}: {
+  label: string;
+  description: string;
+}) {
+  return (
+    <div className="min-h-[220px] rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-5 py-6 dark:border-gray-700 dark:bg-gray-800/30">
+      <div className="flex h-full min-h-[172px] flex-col items-center justify-center text-center">
+        <span className="mb-4 h-8 w-8 rounded-full border-2 border-gray-300 border-t-gray-700 dark:border-gray-600 dark:border-t-gray-200 animate-spin" />
+        <p className="text-sm font-semibold text-gray-900 dark:text-white">{label}</p>
+        <p className="mt-1 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ApprovalStatus>('pending');
@@ -160,6 +180,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
   const [decisionNote, setDecisionNote] = useState('');
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [focusedItem, setFocusedItem] = useState<FocusItem | null>(null);
+  const [activeModal, setActiveModal] = useState<ApprovalModalAction>(null);
 
   const requestRef = useRef<HTMLDivElement | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
@@ -247,6 +268,85 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
   const approvalSummary = extractSummary(selectedApproval || normalizeApproval({}));
   const approvalAmount = selectedApproval?.action_payload?.amount || selectedApproval?.action_payload?.refund_amount || selectedApproval?.action_payload?.goodwill_credit_amount || null;
   const selectedStatus = selectedApproval?.status || 'pending';
+  const approvalContextItems: ModalContextItem[] = selectedApproval ? [
+    { label: 'Action', value: titleCase(selectedApproval.action_type || 'Approval') },
+    { label: 'Case', value: caseNumber },
+    { label: 'Customer', value: customerName },
+    { label: 'Risk', value: titleCase(selectedApproval.risk_level || 'Unknown'), accent: (selectedApproval.risk_level || '').toLowerCase() === 'high' },
+  ] : [];
+
+  const approvalModalConfig = useMemo(() => {
+    if (!selectedApproval || !activeModal) return null;
+
+    if (activeModal === 'return') {
+      return {
+        variant: 'default' as ModalVariant,
+        icon: 'arrow_back',
+        title: 'Return to approvals list',
+        subtitle: 'You will leave this approval detail view and go back to the queue without changing the approval state.',
+        confirmLabel: 'Return to queue',
+        steps: [
+          { text: 'Close this approval detail view', detail: 'The current record remains exactly as it is now.' },
+          { text: 'Keep all approval data intact', detail: 'No decision, note or linked execution state will be changed.' },
+          { text: 'Continue later from the queue', detail: 'You can reopen this approval whenever you are ready to decide.' },
+        ] as ModalStep[],
+        considerations: [
+          { text: 'Returning does not approve or reject the action.' },
+          { text: 'Any note not yet submitted will remain only in this local form until you confirm an actual decision.' },
+        ] as ModalConsideration[],
+        onConfirm: () => {
+          setActiveModal(null);
+          setSelectedId(null);
+        },
+      };
+    }
+
+    const isApprove = activeModal === 'approve';
+    return {
+      variant: isApprove ? 'default' as ModalVariant : 'danger' as ModalVariant,
+      icon: isApprove ? 'check' : 'close',
+      title: isApprove ? 'Approve this request' : 'Reject this request',
+      subtitle: isApprove
+        ? 'Confirm the approval path and propagate the decision to the approval record, case history and linked execution plan.'
+        : 'Reject the request and record a clear denial path for the approval record, case history and linked workflow.',
+      confirmLabel: isApprove ? 'Approve request' : 'Reject request',
+      steps: [
+        {
+          text: isApprove ? 'Persist the approval decision' : 'Persist the rejection decision',
+          detail: isApprove
+            ? 'The approval record will move to an approved state and the backend will unlock the linked next step.'
+            : 'The approval record will move to a rejected state and the blocked action path will remain denied.',
+        },
+        {
+          text: 'Update the case history',
+          detail: 'The audit trail and decision note will be attached to the case timeline for later review.',
+        },
+        {
+          text: isApprove ? 'Resume the linked execution plan if it exists' : 'Stop the linked execution plan from continuing automatically',
+          detail: isApprove
+            ? 'Any pending execution plan can continue once this human decision is confirmed.'
+            : 'Downstream writebacks stay halted so operators can reassess the case safely.',
+        },
+      ] as ModalStep[],
+      considerations: isApprove
+        ? [
+            { text: 'Make sure the policy reason and the evidence shown on this screen still match the intended outcome.' },
+            { text: 'Approval can resume backend writebacks and linked operational automations.' },
+          ] as ModalConsideration[]
+        : [
+            { text: 'Rejecting keeps the sensitive action blocked and may require a manual follow-up with the customer or operations team.' },
+            { text: 'Use the note field to explain the rejection clearly for the audit trail.' },
+          ] as ModalConsideration[],
+      noteLabel: 'Decision note',
+      notePlaceholder: isApprove
+        ? 'Explain why this request is safe to approve.'
+        : 'Explain why this request should be rejected.',
+      onConfirm: async () => {
+        await handleDecision(isApprove ? 'approved' : 'rejected');
+        setActiveModal(null);
+      },
+    };
+  }, [activeModal, caseNumber, customerName, selectedApproval, selectedStatus]);
 
   const focusArtifact = (item: FocusItem, ref?: React.RefObject<HTMLDivElement>) => {
     setFocusedItem(item);
@@ -435,7 +535,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                       <div className="flex flex-wrap gap-3">
                         <button
                           type="button"
-                          onClick={() => setSelectedId(null)}
+                          onClick={() => setActiveModal('return')}
                           className="px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm inline-flex items-center gap-2"
                         >
                           <span className="material-symbols-outlined text-lg">close</span>
@@ -443,7 +543,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         </button>
                         <button
                           type="button"
-                          onClick={() => void handleDecision('rejected')}
+                          onClick={() => setActiveModal('reject')}
                           disabled={deciding || selectedStatus !== 'pending'}
                           className="px-5 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -452,7 +552,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         </button>
                         <button
                           type="button"
-                          onClick={() => void handleDecision('approved')}
+                          onClick={() => setActiveModal('approve')}
                           disabled={deciding || selectedStatus !== 'pending'}
                           className="px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-black text-sm font-semibold rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors shadow-lg shadow-gray-200 dark:shadow-none inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -546,7 +646,12 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         )}
                       >
                         <div className="space-y-3">
-                          {selectedMessages.length ? selectedMessages.map((message: any) => (
+                          {contextLoading ? (
+                            <LoadingPanel
+                              label="Loading conversation"
+                              description="Gathering messages, participants and the latest context so this card lands directly in its final shape."
+                            />
+                          ) : selectedMessages.length ? selectedMessages.map((message: any) => (
                             <button
                               key={message.id}
                               type="button"
@@ -603,7 +708,12 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         )}
                       >
                         <div className="space-y-4">
-                          {timeline.length ? timeline.map((entry: any) => (
+                          {contextLoading ? (
+                            <LoadingPanel
+                              label="Loading timeline"
+                              description="Collecting the latest case events and approval-linked state transitions before rendering the timeline."
+                            />
+                          ) : timeline.length ? timeline.map((entry: any) => (
                             <button
                               key={entry.id}
                               type="button"
@@ -670,7 +780,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                             <div className="flex flex-wrap gap-3">
                               <button
                                 type="button"
-                                onClick={() => void handleDecision('rejected')}
+                                onClick={() => setActiveModal('reject')}
                                 disabled={deciding}
                                 className="inline-flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
                               >
@@ -679,7 +789,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                               </button>
                               <button
                                 type="button"
-                                onClick={() => void handleDecision('approved')}
+                                onClick={() => setActiveModal('approve')}
                                 disabled={deciding}
                                 className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-200"
                               >
@@ -908,6 +1018,27 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                     </div>
                   </div>
                 </div>
+
+                {approvalModalConfig ? (
+                  <ActionModal
+                    open={Boolean(activeModal)}
+                    onClose={() => setActiveModal(null)}
+                    onConfirm={() => { void approvalModalConfig.onConfirm(); }}
+                    loading={deciding}
+                    variant={approvalModalConfig.variant}
+                    icon={approvalModalConfig.icon}
+                    title={approvalModalConfig.title}
+                    subtitle={approvalModalConfig.subtitle}
+                    context={approvalContextItems}
+                    steps={approvalModalConfig.steps}
+                    considerations={approvalModalConfig.considerations}
+                    confirmLabel={approvalModalConfig.confirmLabel}
+                    noteLabel={approvalModalConfig.noteLabel}
+                    notePlaceholder={approvalModalConfig.notePlaceholder}
+                    noteValue={activeModal === 'approve' || activeModal === 'reject' ? decisionNote : undefined}
+                    onNoteChange={activeModal === 'approve' || activeModal === 'reject' ? setDecisionNote : undefined}
+                  />
+                ) : null}
               </motion.div>
             </AnimatePresence>
           )}

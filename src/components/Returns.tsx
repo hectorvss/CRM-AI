@@ -521,32 +521,32 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                         </div>
                         <div className="space-y-2.5">
                           {activeActionView === 'approve' ? (
-                            <button onClick={() => setActiveModal('approve')} className="w-full flex items-center gap-2.5 rounded-xl border border-green-200 dark:border-green-800/40 bg-green-600 dark:bg-green-700 text-white hover:bg-green-700 dark:hover:bg-green-600 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm">
-                              <span className="material-symbols-outlined text-[16px]">task_alt</span>
+                            <button onClick={() => setActiveModal('approve')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">task_alt</span>
                               Confirm approval
                               <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
                             </button>
                           ) : activeActionView === 'reject' ? (
-                            <button onClick={() => setActiveModal('reject')} className="w-full flex items-center gap-2.5 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm">
-                              <span className="material-symbols-outlined text-[16px]">cancel</span>
+                            <button onClick={() => setActiveModal('reject')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">cancel</span>
                               Confirm rejection
                               <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
                             </button>
                           ) : activeActionView === 'received' ? (
-                            <button onClick={() => setActiveModal('received')} className="w-full flex items-center gap-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800/40 bg-indigo-600 dark:bg-indigo-700 text-white hover:bg-indigo-700 dark:hover:bg-indigo-600 px-4 py-2.5 text-[13px] font-bold transition-colors shadow-sm">
-                              <span className="material-symbols-outlined text-[16px]">warehouse</span>
+                            <button onClick={() => setActiveModal('received')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">warehouse</span>
                               Confirm receipt
                               <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
                             </button>
                           ) : activeActionView === 'refund' ? (
-                            <button onClick={() => setActiveModal('refund')} className="w-full flex items-center gap-2.5 rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 px-4 py-2.5 text-[13px] font-bold transition-colors">
-                              <span className="material-symbols-outlined text-[16px]">payments</span>
+                            <button onClick={() => setActiveModal('refund')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">payments</span>
                               Start refund processing
                               <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
                             </button>
                           ) : (
-                            <button onClick={() => setActiveModal('block')} className="w-full flex items-center gap-2.5 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400 hover:bg-red-100 px-4 py-2.5 text-[13px] font-bold transition-colors">
-                              <span className="material-symbols-outlined text-[16px]">block</span>
+                            <button onClick={() => setActiveModal('block')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">block</span>
                               Block this return
                               <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
                             </button>
