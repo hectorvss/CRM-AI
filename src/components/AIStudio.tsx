@@ -1433,11 +1433,37 @@ export default function AIStudio() {
                                   const roleText = profileMeta?.role || agent.category || 'Agent';
                                   const whatItDoes = (profileMeta?.summary || agent.desc || agent.purpose || 'Operational agent').trim();
                                   const responsibilities = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
-                                  const summaryParts = [
-                                    Array.isArray(profileMeta?.receivesFrom) && profileMeta.receivesFrom.length ? `Reads from ${profileMeta.receivesFrom.length} sources` : null,
-                                    Array.isArray(profileMeta?.reportsTo) && profileMeta.reportsTo.length ? `reports to ${profileMeta.reportsTo.length} agents` : null,
-                                    Array.isArray(profileMeta?.steps) && profileMeta.steps.length ? `${profileMeta.steps.length} execution steps` : null,
-                                  ].filter(Boolean);
+                                  const receivesFrom = Array.isArray(profileMeta?.receivesFrom) ? profileMeta.receivesFrom : [];
+                                  const reportsTo = Array.isArray(profileMeta?.reportsTo) ? profileMeta.reportsTo : [];
+                                  const writesTo = Array.isArray(profileMeta?.writesTo) ? profileMeta.writesTo : [];
+                                  const blockedBy = Array.isArray(profileMeta?.blockedBy) ? profileMeta.blockedBy : [];
+                                  const uses = Array.isArray(profileMeta?.uses) ? profileMeta.uses : [];
+                                  const joinShort = (items: string[], limit = 2) => items.slice(0, limit).join(' and ');
+                                  const normalizeSentence = (text: string) => {
+                                    const sentence = text.trim().replace(/\.$/, '');
+                                    return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+                                  };
+                                  const detailBullets = responsibilities.length
+                                    ? responsibilities.slice(0, 3).map((item: string, index: number) => {
+                                      const action = normalizeSentence(item);
+                                      if (index === 0 && writesTo.length) {
+                                        return `${action}. This matters because it produces ${joinShort(writesTo)} that downstream modules can trust.`;
+                                      }
+                                      if (index === 1 && reportsTo.length) {
+                                        return `${action}. This keeps ${joinShort(reportsTo)} aligned with the same operational state.`;
+                                      }
+                                      if (index === 2 && blockedBy.length) {
+                                        return `${action}. This helps prevent blockers such as ${joinShort(blockedBy)} before work moves forward.`;
+                                      }
+                                      if (uses.length) {
+                                        return `${action}. It uses ${joinShort(uses)} so the decision is grounded in the configured runtime context.`;
+                                      }
+                                      if (receivesFrom.length) {
+                                        return `${action}. It turns signals from ${joinShort(receivesFrom)} into usable agent context.`;
+                                      }
+                                      return `${action}.`;
+                                    })
+                                    : [whatItDoes];
 
                                   return (
                                     <div className="p-6 space-y-5">
@@ -1454,25 +1480,16 @@ export default function AIStudio() {
                                           {whatItDoes}
                                         </p>
 
-                                        {summaryParts.length > 0 && (
-                                          <p className="mt-5 text-[13px] font-medium text-gray-700 dark:text-gray-300">
-                                            {summaryParts.join(' · ')}
-                                          </p>
-                                        )}
-
-                                        {responsibilities.length > 0 && (
-                                          <div className="mt-5 border-t border-black/5 pt-4 dark:border-white/10">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Core responsibilities</p>
-                                            <ul className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 md:grid-cols-2">
-                                              {responsibilities.map((item, index) => (
-                                                <li key={`${agent.name}-resp-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">
-                                                  <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-violet-500/70" />
-                                                  <span>{item}</span>
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          </div>
-                                        )}
+                                        <div className="mt-5 border-t border-black/5 pt-4 dark:border-white/10">
+                                          <ul className="grid grid-cols-1 gap-x-8 gap-y-2 md:grid-cols-2">
+                                            {detailBullets.map((item: string, index: number) => (
+                                              <li key={`${agent.name}-detail-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">
+                                                <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-violet-500/70" />
+                                                <span>{item}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
                                       </div>
                                     </div>
                                   );
