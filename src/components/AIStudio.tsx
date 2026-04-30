@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { aiApi, agentsApi, connectorsApi, operationsApi, reportsApi, workspacesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
@@ -731,7 +731,7 @@ export default function AIStudio() {
       },
     });
     setSavingCostControls(false);
-    setOverviewMessage(`Daily cap updated to €${nextDailyCap}.`);
+    setOverviewMessage(`Daily cap updated to â‚¬${nextDailyCap}.`);
   };
 
   const handleToggleAgent = async (agent: any) => {
@@ -940,7 +940,7 @@ export default function AIStudio() {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Limit</p>
-                          <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">€{costControls.dailyCap}</p>
+                          <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">â‚¬{costControls.dailyCap}</p>
                         </div>
                         <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Runtime stop</p>
@@ -958,8 +958,8 @@ export default function AIStudio() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(-5)} disabled={savingCostControls}>- €5</MinimalButton>
-                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(5)} disabled={savingCostControls}>+ €5</MinimalButton>
+                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(-5)} disabled={savingCostControls}>- â‚¬5</MinimalButton>
+                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(5)} disabled={savingCostControls}>+ â‚¬5</MinimalButton>
                         <MinimalButton variant="ghost" onClick={() => setActiveTab('Safety')}>Open safety</MinimalButton>
                       </div>
                     </div>
@@ -989,7 +989,7 @@ export default function AIStudio() {
                         </span>
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {safeNumber(run.cost_credits).toFixed(2)} cr · {safeNumber(run.tokens_used).toLocaleString()} tok
+                        {safeNumber(run.cost_credits).toFixed(2)} cr Â· {safeNumber(run.tokens_used).toLocaleString()} tok
                       </div>
                     </div>
                   ))}
@@ -1160,7 +1160,7 @@ export default function AIStudio() {
                     </button>
                   </div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-bold text-gray-900 dark:text-white">Daily cap: <span className="font-normal text-gray-500">€20.00</span></p>
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">Daily cap: <span className="font-normal text-gray-500">â‚¬20.00</span></p>
                     <span className="text-[10px] font-bold text-gray-400">35% used</span>
                   </div>
                   <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 overflow-hidden">
@@ -1384,160 +1384,99 @@ export default function AIStudio() {
                                 className="overflow-hidden border-t border-gray-50 dark:border-gray-800"
                               >
                                 {(() => {
-                                  // ── Parse purpose into mandate / does / doesn't ──
-                                  const purposeText: string = agent.purpose || '';
-                                  const sentences = purposeText
-                                    .split(/(?<=\.)\s+/)
-                                    .map((s: string) => s.trim().replace(/\.$/, ''))
-                                    .filter(Boolean);
-                                  const mandate = sentences[0] || agent.desc || '';
-                                  const remaining = sentences.slice(1);
-                                  const doesNotItems = remaining
-                                    .filter((s: string) => /^Does\s*NOT\b/i.test(s) || /^Does\s*not\b/i.test(s))
-                                    .map((s: string) => s.replace(/^Does\s*NOT\s*/i, '').replace(/^Does\s*not\s*/i, ''));
-
-                                  // Prefer the richer `does` array from connectionsData when available
                                   const profileMeta = agent.connectionProfile || connectionAgentByName.get(agent.name) || {};
-                                  const profileDoes: string[] = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
-                                  const parsedDoes = remaining.filter((s: string) => !/^Does\s*NOT\b/i.test(s) && !/^Does\s*not\b/i.test(s));
-                                  const doesItems: string[] = profileDoes.length > 0 ? profileDoes : parsedDoes;
-
-                                  const ioInput = agent.ioLogic?.input || 'Canonical event';
-                                  const ioOutput = agent.ioLogic?.output || 'Routing decision';
+                                  const roleText = profileMeta?.role || agent.category || 'Agent';
+                                  const whatItDoes = (profileMeta?.summary || agent.desc || agent.purpose || 'Operational agent').trim();
+                                  const responsibilities = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
+                                  const blockedBy = Array.isArray(profileMeta?.blockedBy) ? profileMeta.blockedBy : [];
+                                  const receivesFrom = Array.isArray(profileMeta?.receivesFrom) ? profileMeta.receivesFrom : [];
+                                  const uses = Array.isArray(profileMeta?.uses) ? profileMeta.uses : [];
+                                  const writesTo = Array.isArray(profileMeta?.writesTo) ? profileMeta.writesTo : [];
 
                                   return (
                                     <div className="p-6 space-y-5">
-                                      {/* Mandate strip — minimalist */}
-                                      <div className="rounded-xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-800 dark:bg-[#171717]">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Primary mandate</p>
-                                        <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white leading-snug">
-                                          {mandate}
+                                      <div className="rounded-[22px] border border-black/5 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-white/10 dark:bg-[#171717]">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-400">What it does</p>
+                                            <p className="mt-1 text-[12px] font-medium text-gray-500 dark:text-gray-400">{roleText}</p>
+                                          </div>
+                                          <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
+                                        </div>
+
+                                        <p className="mt-4 max-w-3xl text-[14px] leading-7 text-gray-800 dark:text-gray-200">
+                                          {whatItDoes}
                                         </p>
-                                      </div>
 
-                                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                                        {/* ── WHAT IT DOES ── */}
-                                        <div className="rounded-xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-[#171717]">
-                                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">What it does</p>
-
-                                          {/* Detailed paragraph */}
-                                          <p className="text-[13px] text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                                            {profileMeta?.role || mandate}
-                                          </p>
-
-                                          {/* Responsibilities list */}
-                                          {doesItems.length > 0 && (
-                                            <div className="mb-4">
-                                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Responsibilities</p>
-                                              <ul className="space-y-1.5">
-                                                {doesItems.map((item: string, i: number) => (
-                                                  <li key={i} className="flex items-start gap-2 text-[12px] text-gray-700 dark:text-gray-300 leading-snug">
-                                                    <span className="mt-[7px] flex h-1 w-1 flex-none rounded-full bg-gray-400" />
+                                        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                          <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Core responsibilities</p>
+                                            {responsibilities.length > 0 ? (
+                                              <ul className="mt-3 space-y-2">
+                                                {responsibilities.map((item, index) => (
+                                                  <li key={`${agent.name}-resp-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">
+                                                    <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-violet-500/70" />
                                                     <span>{item}</span>
                                                   </li>
                                                 ))}
                                               </ul>
-                                            </div>
-                                          )}
+                                            ) : (
+                                              <p className="mt-3 text-[13px] leading-6 text-gray-600 dark:text-gray-400">{whatItDoes}</p>
+                                            )}
+                                          </div>
 
-                                          {/* Boundaries */}
-                                          {doesNotItems.length > 0 && (
-                                            <div className="border-t border-gray-100 dark:border-gray-800 pt-3 mt-3">
-                                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Boundaries · does not</p>
-                                              <ul className="space-y-1.5">
-                                                {doesNotItems.map((item: string, i: number) => (
-                                                  <li key={i} className="flex items-start gap-2 text-[11px] text-gray-500 dark:text-gray-500 leading-snug">
-                                                    <span className="mt-[7px] flex h-1 w-1 flex-none rounded-full bg-gray-300 dark:bg-gray-600" />
-                                                    <span>{item}</span>
-                                                  </li>
+                                          {receivesFrom.length > 0 && (
+                                            <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                                              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Receives signals from</p>
+                                              <div className="mt-3 flex flex-wrap gap-2">
+                                                {receivesFrom.map((item) => (
+                                                  <span key={`${agent.name}-receive-${item}`} className="rounded-full border border-black/5 bg-white px-3 py-1 text-[12px] text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
+                                                    {item}
+                                                  </span>
                                                 ))}
-                                              </ul>
+                                              </div>
                                             </div>
                                           )}
 
-                                          {/* Footnote summary */}
-                                          {profileMeta?.summary && (
-                                            <p className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-400 dark:text-gray-500">
-                                              {profileMeta.summary}
-                                            </p>
+                                          {uses.length > 0 && (
+                                            <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                                              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Uses</p>
+                                              <div className="mt-3 flex flex-wrap gap-2">
+                                                {uses.map((item) => (
+                                                  <span key={`${agent.name}-use-${item}`} className="rounded-full border border-black/5 bg-white px-3 py-1 text-[12px] text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
+                                                    {item}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {writesTo.length > 0 && (
+                                            <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                                              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Writes outcomes to</p>
+                                              <div className="mt-3 flex flex-wrap gap-2">
+                                                {writesTo.map((item) => (
+                                                  <span key={`${agent.name}-write-${item}`} className="rounded-full border border-black/5 bg-white px-3 py-1 text-[12px] text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
+                                                    {item}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            </div>
                                           )}
                                         </div>
 
-                                        {/* ── TRIGGERS ── */}
-                                        <div className="rounded-xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-[#171717]">
-                                          <div className="flex items-center justify-between mb-3">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Triggers</p>
-                                            <span className="text-[10px] font-medium text-gray-400">{agent.triggers.length} event{agent.triggers.length !== 1 ? 's' : ''}</span>
-                                          </div>
-                                          <div className="space-y-2">
-                                            {agent.triggers.map((trigger: string, i: number) => (
-                                              <div key={i} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/20">
-                                                <div className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-[#1f1f1f] dark:text-gray-400">
-                                                  <span className="text-[10px] font-semibold">{i + 1}</span>
-                                                </div>
-                                                <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300 leading-snug">
-                                                  {trigger}
-                                                </p>
-                                              </div>
-                                            ))}
-                                          </div>
-                                          <p className="mt-4 text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">
-                                            Any of these events fires the agent automatically through the runtime orchestrator.
-                                          </p>
-                                        </div>
-
-                                        {/* ── DEPENDENCIES ── */}
-                                        <div className="rounded-xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-[#171717]">
-                                          <div className="flex items-center justify-between mb-3">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Dependencies</p>
-                                            <span className="text-[10px] font-medium text-gray-400">{agent.dependencies.length} link{agent.dependencies.length !== 1 ? 's' : ''}</span>
-                                          </div>
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                            {agent.dependencies.map((dep: string) => {
-                                              const linked = connectionAgentByName.get(dep);
-                                              const role = linked?.role || 'External link / module';
-                                              return (
-                                                <div key={dep} className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/20">
-                                                  <p className="text-[11px] font-semibold text-gray-800 dark:text-gray-200 truncate">{dep}</p>
-                                                  <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-snug">
-                                                    {role}
-                                                  </p>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-
-                                        {/* ── I/O LOGIC ── */}
-                                        <div className="rounded-xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-[#171717]">
-                                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">I/O Logic</p>
-                                          <div className="space-y-3">
-                                            <div>
-                                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Input</p>
-                                              <div className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/20">
-                                                <p className="font-mono text-[11px] font-semibold text-gray-800 dark:text-gray-200">{ioInput}</p>
-                                                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 leading-snug">
-                                                  Structured payload received from upstream agent or runtime event bus.
-                                                </p>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-center gap-2">
-                                              <span className="text-[9px] font-semibold uppercase tracking-widest text-gray-400">Deterministic transform</span>
-                                              <span className="material-symbols-outlined text-[14px] text-gray-400">arrow_downward</span>
-                                            </div>
-
-                                            <div>
-                                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Output</p>
-                                              <div className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/20">
-                                                <p className="font-mono text-[11px] font-semibold text-gray-800 dark:text-gray-200">{ioOutput}</p>
-                                                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 leading-snug">
-                                                  Result handed off to downstream agents, written to the canonical state, or surfaced to the operator.
-                                                </p>
-                                              </div>
+                                        {blockedBy.length > 0 && (
+                                          <div className="mt-4 rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Blocked by</p>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                              {blockedBy.map((item) => (
+                                                <span key={`${agent.name}-blocked-${item}`} className="rounded-full border border-black/5 bg-white px-3 py-1 text-[12px] text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
+                                                  {item}
+                                                </span>
+                                              ))}
                                             </div>
                                           </div>
-                                        </div>
+                                        )}
                                       </div>
                                     </div>
                                   );
@@ -1616,3 +1555,4 @@ export default function AIStudio() {
     </div>
   );
 }
+
