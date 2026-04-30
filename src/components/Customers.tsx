@@ -817,9 +817,9 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     const hasConflict = recon && (recon.status === 'Conflict' || recon.status === 'Warning' || recon.status === 'Blocked');
 
     return (
-      <div className="flex-1 flex flex-col h-full min-w-0 bg-[#fbfbfa] dark:bg-[#121212] overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#fbfbfa] dark:bg-[#121212] overflow-y-auto custom-scrollbar">
         {/* ── Header ───────────────────────────────────────────────── */}
-        <header className="flex-shrink-0 px-7 py-5 border-b border-black/5 dark:border-white/10 bg-white dark:bg-[#171717] flex items-center justify-between">
+        <header className="sticky top-0 z-10 flex-shrink-0 px-7 py-5 border-b border-black/5 dark:border-white/10 bg-white dark:bg-[#171717] flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSelectedCustomerId(null)}
@@ -883,7 +883,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
         </header>
 
         {actionMessage && (
-          <div className="px-6 pt-4 flex-shrink-0">
+          <div className="px-6 pt-4">
             <div className="rounded-[16px] border border-blue-100 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 flex items-start gap-3">
               <span className="material-symbols-outlined text-lg mt-0.5">info</span>
               <div>
@@ -895,7 +895,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
         )}
 
         {/* ── KPI Strip ────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 px-6 pt-5 pb-1">
+        <div className="px-6 pt-5 pb-1">
           <div className="grid grid-cols-4 gap-4">
             {[
               {
@@ -954,13 +954,13 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
         </div>
 
         {/* ── Main Area (two columns) ───────────────────────────────── */}
-        <div className="flex-1 flex gap-4 p-6 pt-4 overflow-hidden min-h-0">
+        <div className="flex gap-4 px-6 pt-4 pb-6 items-start">
 
           {/* ── Left: AI Summary + Activity Feed ─────────────────── */}
-          <div className="flex-1 flex flex-col gap-4 overflow-hidden min-w-0">
+          <div className="flex-1 flex flex-col gap-4 min-w-0">
 
             {/* AI Executive Summary */}
-            <section className={`flex-shrink-0 ${cardCls}`}>
+            <section className={cardCls}>
               <div className={cardHeaderCls}>
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/20">
@@ -996,23 +996,23 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
             </section>
 
             {/* Activity / Tabs */}
-            <section className={`flex-1 overflow-hidden flex flex-col ${cardCls}`}>
-              <div className={`${cardHeaderCls} overflow-x-auto no-scrollbar`}>
+            <section className={`flex flex-col ${cardCls}`}>
+              <div className="px-5 pt-4 border-b border-gray-100 dark:border-gray-800 flex items-end gap-0 overflow-x-auto no-scrollbar">
                 {(['all_activity', 'conversations', 'orders', 'system_logs'] as CustomerTab[]).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveProfileTab(tab)}
-                    className={`pb-4 mr-6 text-sm font-semibold whitespace-nowrap transition-all border-b-2 ${
+                    className={`pb-3.5 mr-7 text-sm font-semibold whitespace-nowrap transition-all border-b-2 ${
                       activeProfileTab === tab
                         ? 'text-gray-900 dark:text-white border-gray-900 dark:border-white'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border-transparent'
+                        : 'text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border-transparent'
                     }`}
                   >
                     {tab.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </button>
                 ))}
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-5">
+              <div className="p-5">
                 {activeProfileTab === 'all_activity' && (() => {
                   const events = Array.isArray(apiActivity) ? apiActivity.filter((e: any) => e.type !== 'system_log') : [];
                   if (events.length === 0) return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No activity recorded yet.</p>;
@@ -1139,8 +1139,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
           </div>
 
           {/* ── Right: Identity + Health + Actions ─────────────────── */}
-          <div className="w-[280px] flex-shrink-0 overflow-y-auto custom-scrollbar min-h-0">
-          <div className="flex flex-col gap-3 pb-4">
+          <div className="w-[340px] flex-shrink-0 flex flex-col gap-3">
 
             {/* Identity card */}
             <section className={cardCls}>
@@ -1321,8 +1320,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
               </div>
             </section>
 
-          </div>{/* end inner flex-col */}
-          </div>{/* end scrollable sidebar */}
+          </div>{/* end right sidebar */}
         </div>
       </div>
     );
