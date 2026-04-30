@@ -11,7 +11,8 @@ import {
   AgentPermissionConfig,
 } from '../agentPermissionsConfig';
 import { cloneJson, ensureArray, ensureBoolean, ensureNumber, ensureRecord, mergeProfile, mergeRecord } from './aiStudioProfileUtils';
-import { MinimalButton, MinimalPill } from './MinimalCategoryShell';
+import { MinimalPill } from './MinimalCategoryShell';
+import PolicyActionsBar, { type PolicyActionConfig } from './PolicyActionsBar';
 import StyledSelect from './StyledSelect';
 
 type PermissionProfileState = AgentPermissionConfig & {
@@ -213,6 +214,90 @@ export default function PermissionsView() {
     Blocked: profile.applicableCategories.reduce((acc, cat) => acc + cat.actions.filter(a => (profile.actionPermissions[a] || 'Blocked') === 'Blocked').length, 0),
   } : { Allowed: 0, Conditional: 0, Approval: 0, Blocked: 0 };
 
+  const policyActions = useMemo<PolicyActionConfig[]>(() => ([
+    {
+      key: 'reset' as const,
+      label: 'Reset',
+      icon: 'restart_alt',
+      variant: 'warning' as const,
+      title: 'Reset permission draft',
+      subtitle: 'Discard draft edits and return to the last published permission profile.',
+      confirmLabel: 'Reset draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Allowed', value: String(permissionCounts.Allowed) },
+        { label: 'Approval', value: String(permissionCounts.Approval) },
+      ],
+      steps: [
+        { text: 'Discard the current draft changes', detail: 'Any unsaved action, tool or approval edits will be lost.' },
+        { text: 'Reload the last published permissions', detail: 'The UI will reflect the runtime profile already in production.' },
+        { text: 'Refresh the permissions catalog', detail: 'Counts, filters and toggles will be recomputed from the published state.' },
+      ],
+      considerations: [
+        { text: 'This only affects the draft version, not the live runtime profile.' },
+        { text: 'Use this when the draft drifted from the intended policy.' },
+      ],
+      onConfirm: handleRollback,
+      loading: rollbackDraft.loading,
+      disabled: !selectedApiAgent,
+      buttonVariant: 'ghost',
+    },
+    {
+      key: 'save' as const,
+      label: 'Save draft',
+      icon: 'save',
+      variant: 'default' as const,
+      title: 'Save permission draft',
+      subtitle: 'Persist the current permission profile as a draft without publishing it.',
+      confirmLabel: 'Save draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Blocked', value: String(permissionCounts.Blocked) },
+        { label: 'Conditional', value: String(permissionCounts.Conditional) },
+      ],
+      steps: [
+        { text: 'Persist the edited profile as a draft', detail: 'The changes remain reviewable before publication.' },
+        { text: 'Keep the runtime untouched', detail: 'Published permissions will continue to govern execution until publish is chosen.' },
+        { text: 'Refresh the agent policy bundle', detail: 'The local agent summary and the draft snapshot stay aligned.' },
+      ],
+      considerations: [
+        { text: 'Saving does not change the live permission behavior yet.' },
+        { text: 'The draft remains editable after saving.' },
+      ],
+      onConfirm: () => saveAndRefresh(false),
+      loading: saveDraft.loading,
+      disabled: !selectedApiAgent || !profile,
+      buttonVariant: 'outline',
+    },
+    {
+      key: 'publish' as const,
+      label: 'Publish changes',
+      icon: 'rocket_launch',
+      variant: 'default' as const,
+      title: 'Publish permission changes',
+      subtitle: 'Push the current permission profile to the runtime and make it effective.',
+      confirmLabel: 'Publish now',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Live access', value: String(permissionCounts.Allowed) },
+        { label: 'Approval gates', value: String(permissionCounts.Approval) },
+      ],
+      steps: [
+        { text: 'Persist the draft to the backend', detail: 'The updated permission profile becomes the published source of truth.' },
+        { text: 'Activate the new permission profile in runtime', detail: 'Agent evaluation and tool access will use the new configuration.' },
+        { text: 'Refresh dependent AI Studio views', detail: 'Other tabs will read the same published policy snapshot.' },
+      ],
+      considerations: [
+        { text: 'Publishing affects live behavior immediately after the backend refresh.' },
+        { text: 'Double-check approval and tool access before confirming.' },
+      ],
+      onConfirm: () => saveAndRefresh(true),
+      loading: saveDraft.loading || publishDraft.loading,
+      disabled: !selectedApiAgent || !profile,
+      buttonVariant: 'solid',
+    },
+  ]), [permissionCounts.Allowed, permissionCounts.Approval, permissionCounts.Blocked, permissionCounts.Conditional, profile, publishDraft.loading, rollbackDraft.loading, saveDraft.loading, selectedAgent, selectedApiAgent]);
+
   return (
     <motion.div key="permissions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex gap-6 h-full">
       <div className="w-80 flex-shrink-0 flex flex-col h-full overflow-hidden border-r border-gray-200 dark:border-gray-800 pr-4">
@@ -287,9 +372,7 @@ export default function PermissionsView() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <MinimalButton variant="ghost" onClick={handleRollback}>Reset</MinimalButton>
-                  <MinimalButton variant="outline" onClick={() => saveAndRefresh(false)} disabled={saveDraft.loading}>Save draft</MinimalButton>
-                  <MinimalButton onClick={() => saveAndRefresh(true)} disabled={saveDraft.loading || publishDraft.loading}>Publish changes</MinimalButton>
+                  <PolicyActionsBar actions={policyActions} />
                 </div>
               </div>
             </div>

@@ -2,7 +2,7 @@
  * StyledSelect.tsx
  *
  * Drop-in replacement for native <select> that mimics the inbox-style
- * dropdown menu (white card · shadow-lg · rounded-xl · py-1 · hover bg).
+ * dropdown menu.
  *
  * Same API as <select>:
  *   <StyledSelect value={x} onChange={(e) => setX(e.target.value)} className="...">
@@ -14,7 +14,8 @@
  * existing handlers (`e.target.value`) keep working without modification.
  */
 
-import React, { ReactNode, useEffect, useRef, useState } from 'react';
+import React, { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface StyledSelectProps {
   value: string;
@@ -34,9 +35,11 @@ export default function StyledSelect({
   placeholder,
 }: StyledSelectProps) {
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Extract <option> children into [{ value, label }]
   const options: { value: string; label: string }[] = [];
   React.Children.forEach(children, (child) => {
     if (!React.isValidElement(child)) return;
@@ -51,11 +54,41 @@ export default function StyledSelect({
   const selected = options.find((o) => o.value === value);
   const displayLabel = selected?.label ?? placeholder ?? options[0]?.label ?? '';
 
-  // Close on outside click
+  const updateMenuPosition = () => {
+    const trigger = triggerRef.current;
+    if (!trigger || typeof window === 'undefined') return;
+
+    const rect = trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const openAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(160, Math.min(280, (openAbove ? spaceAbove : spaceBelow) - 12));
+
+    setMenuStyle({
+      position: 'fixed',
+      left: rect.left,
+      width: rect.width,
+      top: openAbove ? undefined : rect.bottom + 6,
+      bottom: openAbove ? Math.max(8, window.innerHeight - rect.top + 6) : undefined,
+      maxHeight,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updateMenuPosition();
+  }, [open, options.length, value, placeholder]);
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        wrapperRef.current
+        && !wrapperRef.current.contains(target)
+        && menuRef.current
+        && !menuRef.current.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -63,7 +96,6 @@ export default function StyledSelect({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Close on Escape
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
@@ -71,8 +103,17 @@ export default function StyledSelect({
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // Pass through whatever className the caller used; we only enforce the
-  // structural classes needed for the trigger button to behave correctly.
+  useEffect(() => {
+    if (!open) return;
+    const onMove = () => updateMenuPosition();
+    window.addEventListener('resize', onMove);
+    window.addEventListener('scroll', onMove, true);
+    return () => {
+      window.removeEventListener('resize', onMove);
+      window.removeEventListener('scroll', onMove, true);
+    };
+  }, [open]);
+
   const triggerClass = className && className.trim().length > 0
     ? `${className} inline-flex items-center justify-between gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`
     : 'inline-flex items-center justify-between gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
@@ -80,6 +121,7 @@ export default function StyledSelect({
   return (
     <div ref={wrapperRef} className="relative inline-block">
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
@@ -93,8 +135,12 @@ export default function StyledSelect({
         </span>
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-1 z-50 min-w-full max-h-72 overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+      {open && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={menuStyle}
+          className="z-[70] min-w-40 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+        >
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -103,19 +149,20 @@ export default function StyledSelect({
                 onChange({ target: { value: opt.value } });
                 setOpen(false);
               }}
-              className={`w-full text-left px-4 py-2 text-sm transition-colors whitespace-nowrap ${
+              className={`w-full whitespace-nowrap px-4 py-2 text-left text-sm transition-colors ${
                 value === opt.value
-                  ? 'bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white font-semibold'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  ? 'bg-gray-50 font-semibold text-gray-900 dark:bg-gray-700 dark:text-white'
+                  : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'
               }`}
             >
               {opt.label}
             </button>
           ))}
-          {options.length === 0 && (
+          {options.length === 0 ? (
             <div className="px-4 py-2 text-sm text-gray-400">No options</div>
-          )}
-        </div>
+          ) : null}
+        </div>,
+        document.body,
       )}
     </div>
   );

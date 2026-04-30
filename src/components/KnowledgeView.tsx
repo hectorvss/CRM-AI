@@ -4,7 +4,7 @@ import { connectionCategories } from '../connectionsData';
 import { agentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import { cloneJson, ensureArray, ensureBoolean, mergeProfile } from './aiStudioProfileUtils';
-import { MinimalButton } from './MinimalCategoryShell';
+import PolicyActionsBar, { type PolicyActionConfig } from './PolicyActionsBar';
 import StyledSelect from './StyledSelect';
 
 type AccessLevel = 'No access' | 'Metadata only' | 'Read summaries only' | 'Read raw documents' | 'Read + extract' | 'Approval required';
@@ -149,6 +149,88 @@ export default function KnowledgeView() {
   const sensitiveCount = useMemo(() => Object.values(profile.sensitive_rules).filter(v => v && v !== 'Hidden completely').length, [profile]);
   const blockedCount = useMemo(() => Object.values(profile.field_visibility).filter(v => v === 'Hidden' || v === 'Approval required').length, [profile]);
 
+  const policyActions: PolicyActionConfig[] = [
+    {
+      key: 'reset' as const,
+      label: 'Reset',
+      icon: 'restart_alt',
+      variant: 'warning' as const,
+      title: 'Reset knowledge draft',
+      subtitle: 'Discard the pending knowledge access changes and restore the last published profile.',
+      confirmLabel: 'Reset draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Sources enabled', value: String(sourceEnabledCount) },
+        { label: 'Sensitive blocks', value: String(blockedCount) },
+      ],
+      steps: [
+        { text: 'Discard the current knowledge edits', detail: 'Any uncommitted source access or field visibility changes will be lost.' },
+        { text: 'Reload the published knowledge profile', detail: 'The runtime configuration stays untouched until you publish new changes.' },
+        { text: 'Refresh the visible knowledge catalog', detail: 'Counts and selector values are recomputed from the published state.' },
+      ],
+      considerations: [
+        { text: 'This only resets the draft version of the knowledge profile.' },
+        { text: 'Use it when the configured data perimeter no longer matches the intended scope.' },
+      ],
+      onConfirm: handleRollback,
+      buttonVariant: 'ghost',
+    },
+    {
+      key: 'save' as const,
+      label: 'Save draft',
+      icon: 'save',
+      variant: 'default' as const,
+      title: 'Save knowledge draft',
+      subtitle: 'Persist the current knowledge access configuration without publishing it.',
+      confirmLabel: 'Save draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Restricted', value: String(restrictedCount) },
+        { label: 'Sensitive', value: String(sensitiveCount) },
+      ],
+      steps: [
+        { text: 'Store the edited knowledge profile as a draft', detail: 'The current access perimeter remains reviewable before publish.' },
+        { text: 'Keep the runtime profile stable', detail: 'Agent retrieval behavior remains based on the last published version.' },
+        { text: 'Refresh the draft snapshot', detail: 'The sidebar and selectors stay in sync with the saved draft.' },
+      ],
+      considerations: [
+        { text: 'Saving does not change the live knowledge availability yet.' },
+        { text: 'The draft can be further refined before publishing.' },
+      ],
+      onConfirm: () => saveAndRefresh(false),
+      loading: saveDraft.loading,
+      disabled: !selectedApiAgent || !profile,
+      buttonVariant: 'outline',
+    },
+    {
+      key: 'publish' as const,
+      label: 'Publish changes',
+      icon: 'rocket_launch',
+      variant: 'default' as const,
+      title: 'Publish knowledge changes',
+      subtitle: 'Push the current knowledge access rules to runtime.',
+      confirmLabel: 'Publish now',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Sources enabled', value: String(sourceEnabledCount) },
+        { label: 'Blocked fields', value: String(blockedCount) },
+      ],
+      steps: [
+        { text: 'Persist the draft as the new published knowledge profile', detail: 'The backend becomes the source of truth for retrieval and masking.' },
+        { text: 'Activate the new access perimeter', detail: 'Live retrieval and field visibility logic will use the published profile.' },
+        { text: 'Refresh dependent AI Studio views', detail: 'Other sub-tabs will see the same published knowledge state.' },
+      ],
+      considerations: [
+        { text: 'Publishing affects live knowledge access immediately after the refresh.' },
+        { text: 'Double-check blocked data types and source access before confirming.' },
+      ],
+      onConfirm: () => saveAndRefresh(true),
+      loading: saveDraft.loading || publishDraft.loading,
+      disabled: !selectedApiAgent || !profile,
+      buttonVariant: 'solid',
+    },
+  ];
+
   return (
     <motion.div key="knowledge" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex gap-6 h-full">
       <div className="w-80 flex-shrink-0 flex flex-col h-full overflow-hidden border-r border-gray-200 dark:border-gray-800 pr-4">
@@ -165,7 +247,7 @@ export default function KnowledgeView() {
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4"><div className={`w-14 h-14 rounded-2xl ${currentAgent.iconColor} flex items-center justify-center shadow-inner`}><span className="material-symbols-outlined text-2xl">{currentAgent.icon}</span></div><div><h2 className="text-xl font-bold text-gray-900 dark:text-white">{currentAgent.name}</h2><p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{currentAgent.role || 'Agent role description'}</p><div className="flex items-center gap-2 mt-3"><span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700">{currentAgent.active ? 'Live' : 'Draft'}</span><span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-md text-xs font-medium border border-indigo-100 dark:border-indigo-800/50">System Agent</span></div></div></div>
-                <div className="flex items-center gap-3"><MinimalButton variant="ghost" onClick={handleRollback}>Reset</MinimalButton><MinimalButton variant="outline" onClick={() => saveAndRefresh(false)} disabled={saveDraft.loading}>Save draft</MinimalButton><MinimalButton onClick={() => saveAndRefresh(true)} disabled={saveDraft.loading || publishDraft.loading}>Publish changes</MinimalButton></div>
+                <PolicyActionsBar actions={policyActions} />
               </div>
             </div>
 
