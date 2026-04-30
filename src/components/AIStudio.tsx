@@ -412,6 +412,7 @@ export default function AIStudio() {
           agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => ({
             id: a.id,
             slug: a.slug,
+            category: a.category,
             name: a.name,
             desc: a.description || a.slug,
             icon: a.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
@@ -702,6 +703,43 @@ export default function AIStudio() {
     };
   };
 
+  const agentFlowNodes = (agent: any) => {
+    const roadmap = agentRoadmap(agent);
+    return [
+      {
+        id: 'input',
+        icon: 'input',
+        title: roadmap.inputs[0] || agent.ioLogic?.input || 'Canonical event',
+        subtitle: 'Trigger',
+      },
+      {
+        id: 'agent',
+        icon: agent.icon || 'smart_toy',
+        title: agent.name,
+        subtitle: agent.active ? 'Runtime enabled' : 'Runtime paused',
+        active: true,
+      },
+      {
+        id: 'policy',
+        icon: 'policy',
+        title: roadmap.downstream[0] || roadmap.upstream[0] || 'Policy context',
+        subtitle: 'Guardrail',
+      },
+      {
+        id: 'tool',
+        icon: 'construction',
+        title: agent.ioLogic?.output || 'Operational output',
+        subtitle: 'Handoff',
+      },
+      {
+        id: 'audit',
+        icon: 'fact_check',
+        title: 'Audit trail',
+        subtitle: 'Observed result',
+      },
+    ];
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
@@ -842,9 +880,9 @@ export default function AIStudio() {
                               type="button"
                               onClick={() => setPendingAgentToggle({ agent, nextActive: !agent.active })}
                               disabled={pendingAgentId === agent.id}
-                              className={`relative inline-flex h-8 w-14 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
                             >
-                              <span className={`absolute h-6 w-6 rounded-full bg-white transition-all ${agent.active ? 'right-1' : 'left-1'}`} />
+                              <span className={`absolute h-4 w-4 rounded-full bg-white transition-all ${agent.active ? 'right-1' : 'left-1'}`} />
                             </button>
                           )}
                         </div>
@@ -1276,9 +1314,9 @@ export default function AIStudio() {
                                     setPendingAgentToggle({ agent, nextActive: !agent.active });
                                   }}
                                   disabled={pendingAgentId === agent.id}
-                                  className={`relative inline-flex h-8 w-14 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
                                 >
-                                  <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${agent.active ? 'right-1' : 'left-1'}`}></div>
+                                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${agent.active ? 'right-1' : 'left-1'}`}></div>
                                 </button>
                               )}
                               <span className={`material-symbols-outlined text-gray-400 transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
@@ -1345,47 +1383,35 @@ export default function AIStudio() {
                                       <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
                                     </div>
                                     {(() => {
-                                      const roadmap = agentRoadmap(agent);
+                                      const nodes = agentFlowNodes(agent);
                                       return (
-                                        <div className="mt-4 grid gap-4 lg:grid-cols-4">
-                                          <div>
-                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Receives</p>
-                                            <div className="space-y-1.5">
-                                              {roadmap.inputs.slice(0, 3).map((item: string) => (
-                                                <div key={item} className="rounded-xl border border-black/5 bg-white px-3 py-2 text-xs text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
-                                                  {item}
+                                        <div className="relative mt-5 overflow-hidden rounded-[18px] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#171717]">
+                                          <div className="absolute inset-0 opacity-[0.35] [background-image:radial-gradient(circle,#d1d5db_1px,transparent_1px)] [background-size:18px_18px] dark:opacity-[0.16]" />
+                                          <svg className="pointer-events-none absolute left-0 top-0 h-full w-full text-gray-300 dark:text-gray-700" aria-hidden="true">
+                                            <path d="M 132 58 C 185 58, 198 118, 250 118" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                                            <path d="M 410 118 C 462 118, 476 58, 528 58" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                                            <path d="M 690 58 C 742 58, 756 118, 808 118" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                                            <path d="M 970 118 C 1022 118, 1036 58, 1088 58" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                                          </svg>
+                                          <div className="relative grid gap-4 lg:grid-cols-5">
+                                            {nodes.map((node, index) => (
+                                              <div
+                                                key={node.id}
+                                                className={`min-h-[92px] rounded-[14px] border bg-white px-4 py-3 shadow-sm dark:bg-[#1f1f1f] ${
+                                                  node.active
+                                                    ? 'border-violet-200 ring-1 ring-violet-500/30 dark:border-violet-500/30'
+                                                    : 'border-black/10 dark:border-white/10'
+                                                } ${index % 2 === 1 ? 'lg:mt-14' : ''}`}
+                                              >
+                                                <div className="mb-3 flex items-center justify-between gap-3">
+                                                  <span className={`material-symbols-outlined text-[18px] ${node.active ? 'text-violet-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                    {node.icon}
+                                                  </span>
+                                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">{node.subtitle}</span>
                                                 </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          <div>
-                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Core handoff</p>
-                                            <div className="rounded-xl border border-black/5 bg-white px-3 py-3 text-xs text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
-                                              {agent.ioLogic?.output || 'Routing decision'}
-                                            </div>
-                                            <div className="mt-2 rounded-xl border border-black/5 bg-white px-3 py-2 text-xs text-gray-500 dark:border-white/10 dark:bg-[#171717] dark:text-gray-400">
-                                              {agent.ioLogic?.input || 'Canonical event'}
-                                            </div>
-                                          </div>
-                                          <div>
-                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Connects to</p>
-                                            <div className="space-y-1.5">
-                                              {roadmap.downstream.slice(0, 3).map((item: string) => (
-                                                <div key={item} className="rounded-xl border border-black/5 bg-white px-3 py-2 text-xs text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
-                                                  {item}
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          <div>
-                                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Systems / tools</p>
-                                            <div className="space-y-1.5">
-                                              {roadmap.upstream.slice(0, 3).map((item: string) => (
-                                                <div key={item} className="rounded-xl border border-black/5 bg-white px-3 py-2 text-xs text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
-                                                  {item}
-                                                </div>
-                                              ))}
-                                            </div>
+                                                <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-950 dark:text-white">{node.title}</p>
+                                              </div>
+                                            ))}
                                           </div>
                                         </div>
                                       );
