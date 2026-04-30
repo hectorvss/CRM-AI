@@ -767,7 +767,7 @@ export default function AIStudio() {
       },
     });
     setSavingCostControls(false);
-    setOverviewMessage(`Daily cap updated to â‚¬${nextDailyCap}.`);
+    setOverviewMessage(`Daily cap updated to €${nextDailyCap}.`);
   };
 
   const handleToggleAgent = async (agent: any) => {
@@ -985,7 +985,7 @@ export default function AIStudio() {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Limit</p>
-                          <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">â‚¬{costControls.dailyCap}</p>
+                          <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">€{costControls.dailyCap}</p>
                         </div>
                         <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
                           <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Runtime stop</p>
@@ -1003,8 +1003,8 @@ export default function AIStudio() {
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(-5)} disabled={savingCostControls}>- â‚¬5</MinimalButton>
-                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(5)} disabled={savingCostControls}>+ â‚¬5</MinimalButton>
+                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(-5)} disabled={savingCostControls}>- €5</MinimalButton>
+                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(5)} disabled={savingCostControls}>+ €5</MinimalButton>
                         <MinimalButton variant="ghost" onClick={() => setActiveTab('Safety')}>Open safety</MinimalButton>
                       </div>
                     </div>
@@ -1034,7 +1034,7 @@ export default function AIStudio() {
                         </span>
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
-                        {safeNumber(run.cost_credits).toFixed(2)} cr Â· {safeNumber(run.tokens_used).toLocaleString()} tok
+                        {safeNumber(run.cost_credits).toFixed(2)} cr · {safeNumber(run.tokens_used).toLocaleString()} tok
                       </div>
                     </div>
                   ))}
@@ -1205,7 +1205,7 @@ export default function AIStudio() {
                     </button>
                   </div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-bold text-gray-900 dark:text-white">Daily cap: <span className="font-normal text-gray-500">â‚¬20.00</span></p>
+                    <p className="text-xs font-bold text-gray-900 dark:text-white">Daily cap: <span className="font-normal text-gray-500">€20.00</span></p>
                     <span className="text-[10px] font-bold text-gray-400">35% used</span>
                   </div>
                   <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 overflow-hidden">
@@ -1433,10 +1433,11 @@ export default function AIStudio() {
                                   const roleText = profileMeta?.role || agent.category || 'Agent';
                                   const whatItDoes = (profileMeta?.summary || agent.desc || agent.purpose || 'Operational agent').trim();
                                   const responsibilities = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
-                                  const blockedBy = Array.isArray(profileMeta?.blockedBy) ? profileMeta.blockedBy : [];
-                                  const receivesFrom = Array.isArray(profileMeta?.receivesFrom) ? profileMeta.receivesFrom : [];
-                                  const uses = Array.isArray(profileMeta?.uses) ? profileMeta.uses : [];
-                                  const writesTo = Array.isArray(profileMeta?.writesTo) ? profileMeta.writesTo : [];
+                                  const summaryParts = [
+                                    Array.isArray(profileMeta?.receivesFrom) && profileMeta.receivesFrom.length ? `Reads from ${profileMeta.receivesFrom.length} sources` : null,
+                                    Array.isArray(profileMeta?.reportsTo) && profileMeta.reportsTo.length ? `reports to ${profileMeta.reportsTo.length} agents` : null,
+                                    Array.isArray(profileMeta?.steps) && profileMeta.steps.length ? `${profileMeta.steps.length} execution steps` : null,
+                                  ].filter(Boolean);
 
                                   return (
                                     <div className="p-6 space-y-5">
@@ -1453,73 +1454,23 @@ export default function AIStudio() {
                                           {whatItDoes}
                                         </p>
 
-                                        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                          <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                                        {summaryParts.length > 0 && (
+                                          <p className="mt-5 text-[13px] font-medium text-gray-700 dark:text-gray-300">
+                                            {summaryParts.join(' · ')}
+                                          </p>
+                                        )}
+
+                                        {responsibilities.length > 0 && (
+                                          <div className="mt-5 border-t border-black/5 pt-4 dark:border-white/10">
                                             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Core responsibilities</p>
-                                            {responsibilities.length > 0 ? (
-                                              <ul className="mt-3 space-y-2">
-                                                {responsibilities.map((item, index) => (
-                                                  <li key={`${agent.name}-resp-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">
-                                                    <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-violet-500/70" />
-                                                    <span>{item}</span>
-                                                  </li>
-                                                ))}
-                                              </ul>
-                                            ) : (
-                                              <p className="mt-3 text-[13px] leading-6 text-gray-600 dark:text-gray-400">{whatItDoes}</p>
-                                            )}
-                                          </div>
-
-                                          {receivesFrom.length > 0 && (
-                                            <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                                              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Receives signals from</p>
-                                              <div className="mt-3 flex flex-wrap gap-2">
-                                                {receivesFrom.map((item) => (
-                                                  <span key={`${agent.name}-receive-${item}`} className="rounded-full border border-black/5 bg-white px-3 py-1 text-[12px] text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
-                                                    {item}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {uses.length > 0 && (
-                                            <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                                              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Uses</p>
-                                              <div className="mt-3 flex flex-wrap gap-2">
-                                                {uses.map((item) => (
-                                                  <span key={`${agent.name}-use-${item}`} className="rounded-full border border-black/5 bg-white px-3 py-1 text-[12px] text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
-                                                    {item}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {writesTo.length > 0 && (
-                                            <div className="rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                                              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Writes outcomes to</p>
-                                              <div className="mt-3 flex flex-wrap gap-2">
-                                                {writesTo.map((item) => (
-                                                  <span key={`${agent.name}-write-${item}`} className="rounded-full border border-black/5 bg-white px-3 py-1 text-[12px] text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
-                                                    {item}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {blockedBy.length > 0 && (
-                                          <div className="mt-4 rounded-2xl border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                                            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">Blocked by</p>
-                                            <div className="mt-3 flex flex-wrap gap-2">
-                                              {blockedBy.map((item) => (
-                                                <span key={`${agent.name}-blocked-${item}`} className="rounded-full border border-black/5 bg-white px-3 py-1 text-[12px] text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#171717] dark:text-gray-300">
-                                                  {item}
-                                                </span>
+                                            <ul className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 md:grid-cols-2">
+                                              {responsibilities.map((item, index) => (
+                                                <li key={`${agent.name}-resp-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">
+                                                  <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-violet-500/70" />
+                                                  <span>{item}</span>
+                                                </li>
                                               ))}
-                                            </div>
+                                            </ul>
                                           </div>
                                         )}
                                       </div>
