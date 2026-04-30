@@ -1,15 +1,72 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { aiApi, agentsApi } from '../api/client';
+import { aiApi, agentsApi, connectorsApi, operationsApi, reportsApi, workspacesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
-import { connectionCategories } from '../connectionsData';
 import ConnectionsView from './ConnectionsView';
 import PermissionsView from './PermissionsView';
 import KnowledgeView from './KnowledgeView';
 import ReasoningView from './ReasoningView';
 import SafetyView from './SafetyView';
+import { MinimalButton, MinimalCard, MinimalPill, MinimalProgressBar } from './MinimalCategoryShell';
 
 type AIStudioTab = 'Overview' | 'Agents' | 'Connections' | 'Permissions' | 'Knowledge' | 'Reasoning' | 'Safety';
+
+function parseSettings(settings: any) {
+  if (!settings) return {};
+  if (typeof settings === 'string') {
+    try {
+      return JSON.parse(settings);
+    } catch {
+      return {};
+    }
+  }
+  return settings;
+}
+
+function trendTone(value?: string | null) {
+  if (value === 'up') return 'text-emerald-600';
+  if (value === 'down') return 'text-rose-600';
+  return 'text-gray-400';
+}
+
+function statusPill(status?: string | null) {
+  const normalized = String(status || 'unknown').toLowerCase();
+  if (['completed', 'connected', 'healthy', 'active', 'approved'].includes(normalized)) return 'bg-black/[0.04] text-gray-900 dark:bg-white/[0.08] dark:text-white';
+  if (['failed', 'error', 'disconnected', 'blocked'].includes(normalized)) return 'bg-black/[0.04] text-gray-700 dark:bg-white/[0.08] dark:text-gray-200';
+  return 'bg-black/[0.03] text-gray-600 dark:bg-white/[0.05] dark:text-gray-300';
+}
+
+function formatCompactDate(value?: string | null) {
+  if (!value) return 'N/A';
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function toPercent(value: number) {
+  return `${Math.round(value)}%`;
+}
+
+function safeNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeConnectorStatus(connector: any) {
+  const raw = String(
+    connector?.status ||
+      connector?.health ||
+      connector?.sync_status ||
+      (connector?.is_enabled ? 'connected' : 'disabled'),
+  ).toLowerCase();
+
+  if (['connected', 'healthy', 'active', 'ok', 'enabled'].includes(raw)) return 'connected';
+  if (['error', 'failed', 'degraded', 'blocked'].includes(raw)) return 'attention';
+  return 'disabled';
+}
 
 const originalCategories = [
   {
@@ -314,13 +371,20 @@ export default function AIStudio() {
   const [activeTab, setActiveTab] = useState<AIStudioTab>('Overview');
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
-  const [selectedConnection, setSelectedConnection] = useState<string>('Supervisor');
-  const [expandedConnection, setExpandedConnection] = useState<string | null>(null);
-  const [configTab, setConfigTab] = useState<'Overview' | 'Configure' | 'Test' | 'Logs'>('Configure');
   const [agentSearch, setAgentSearch] = useState('');
   const [agentListFilter, setAgentListFilter] = useState<'All' | 'Needs setup' | 'Enabled' | 'Disabled'>('All');
+  const [overviewMessage, setOverviewMessage] = useState<string>('');
+  const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
+  const [savingCostControls, setSavingCostControls] = useState(false);
 
   const { data: studioData, refetch: refetchStudio } = useApi(aiApi.studio);
+  const { data: workspace, refetch: refetchWorkspace } = useApi(workspacesApi.currentContext, [], null);
+  const { data: reportOverview } = useApi(() => reportsApi.overview('7d'), [], null);
+  const { data: reportApprovals } = useApi(() => reportsApi.approvals('7d'), [], null);
+  const { data: reportCosts } = useApi(() => reportsApi.costs('7d'), [], null);
+  const { data: operationsOverview } = useApi(operationsApi.overview, [], null);
+  const { data: recentRuns, refetch: refetchRuns } = useApi(operationsApi.agentRuns, [], []);
+  const { data: connectors } = useApi(connectorsApi.list, [], []);
   const apiAgents = useMemo(() => {
     const raw = studioData?.agents ?? studioData?.data ?? [];
     return Array.isArray(raw) ? raw : [];
@@ -428,6 +492,93 @@ export default function AIStudio() {
     rollout_policy: policyDraft?.bundle?.rollout_policy || { rollout_percentage: runtimeSummary.rollout },
   }), [activeAgentData, policyDraft?.bundle, runtimeSummary.rollout]);
 
+  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace?.settings]);
+  const aiStudioSettings = useMemo(() => parseSettings(workspaceSettings?.aiStudio), [workspaceSettings]);
+  const costControls = useMemo(() => ({
+    dailyCap: safeNumber(aiStudioSettings?.costControls?.dailyCap, 20),
+    hardStopEnabled: Boolean(aiStudioSettings?.costControls?.hardStopEnabled),
+    rolloutPercentage: safeNumber(aiStudioSettings?.rolloutPercentage, 10),
+  }), [aiStudioSettings]);
+
+  const costSummary = reportCosts?.summary || {};
+  const overviewKpis = reportOverview?.kpis || [];
+  const approvalsFunnel = reportApprovals?.funnel || [];
+  const approvalsRates = reportApprovals?.rates || {};
+  const pendingApprovals = safeNumber(approvalsFunnel.find((item: any) => item.label === 'Pending')?.val);
+  const deflectionRate = safeNumber(overviewKpis.find((item: any) => item.id === 'auto_resolution')?.value);
+  const escalationRate = Math.max(0, Math.min(100, 100 - safeNumber(approvalsRates.approvalRate, 100)));
+  const toolErrors = safeNumber(operationsOverview?.agent_failures_last_24h);
+  const totalCreditsUsed = safeNumber(costSummary.creditsUsed);
+  const totalCreditsAdded = Math.max(safeNumber(costSummary.creditsAdded), 1);
+  const dailyCapUsage = Math.min(100, Math.round((totalCreditsUsed / Math.max(costControls.dailyCap, 1)) * 100));
+
+  const connectorList = Array.isArray(connectors) ? connectors : [];
+  const connectedConnectors = connectorList.filter((connector: any) => normalizeConnectorStatus(connector) === 'connected').length;
+  const availableConnectors = connectorList.length;
+  const recentRunsList = Array.isArray(recentRuns) ? recentRuns : [];
+
+  const goLiveChecklist = useMemo(() => {
+    const items = [
+      {
+        label: 'LLM provider configured',
+        completed: Boolean(studioData?.modelConfig?.apiKeyConfigured),
+        actionLabel: 'Open Safety',
+        onClick: () => setActiveTab('Safety'),
+      },
+      {
+        label: 'Core agents active',
+        completed: safeNumber(studioData?.agents?.active) > 0,
+        actionLabel: 'Open Agents',
+        onClick: () => setActiveTab('Agents'),
+      },
+      {
+        label: 'At least one connector online',
+        completed: connectedConnectors > 0,
+        actionLabel: 'Open Connections',
+        onClick: () => setActiveTab('Connections'),
+      },
+      {
+        label: 'Knowledge imported',
+        completed: safeNumber(studioData?.knowledge?.publishedArticles) > 0,
+        actionLabel: 'Open Knowledge',
+        onClick: () => setActiveTab('Knowledge'),
+      },
+      {
+        label: 'Policy runtime enabled',
+        completed: Boolean(studioData?.planEngine?.enabled),
+        actionLabel: 'Open Permissions',
+        onClick: () => setActiveTab('Permissions'),
+      },
+      {
+        label: 'Recent agent runs observed',
+        completed: recentRunsList.length > 0,
+        actionLabel: 'View runs',
+        onClick: () => setActiveTab('Agents'),
+      },
+      {
+        label: 'Cost controls configured',
+        completed: costControls.dailyCap > 0,
+        actionLabel: 'Review controls',
+        onClick: () => setActiveTab('Overview'),
+      },
+    ];
+    return items;
+  }, [
+    connectedConnectors,
+    costControls.dailyCap,
+    recentRunsList.length,
+    studioData?.agents?.active,
+    studioData?.knowledge?.publishedArticles,
+    studioData?.modelConfig?.apiKeyConfigured,
+    studioData?.planEngine?.enabled,
+  ]);
+
+  const completedChecklist = goLiveChecklist.filter((item) => item.completed).length;
+  const topAgents = useMemo(
+    () => mappedCategories.flatMap((category) => category.agents).slice(0, 5),
+    [mappedCategories],
+  );
+
   const handleSaveDraft = async () => {
     if (!selectedAgentId) return;
     await updateDraft.mutate({
@@ -455,14 +606,86 @@ export default function AIStudio() {
     refetchStudio();
   };
 
+  const persistAiStudioSettings = async (nextAiStudioSettings: Record<string, any>) => {
+    if (!workspace?.id) return;
+    await workspacesApi.update(workspace.id, {
+      settings: {
+        ...workspaceSettings,
+        aiStudio: nextAiStudioSettings,
+      },
+    });
+    refetchWorkspace();
+  };
+
+  const handleEmergencyStop = async () => {
+    const stoppableAgents = mappedCategories
+      .flatMap((category) => category.agents)
+      .filter((agent: any) => agent.id && agent.active && !agent.locked);
+
+    await Promise.all(
+      stoppableAgents.map((agent: any) =>
+        updateAgentConfig.mutate({
+          id: agent.id,
+          body: { isActive: false },
+        }),
+      ),
+    );
+    setOverviewMessage(`Stopped ${stoppableAgents.length} editable agents.`);
+    refetchStudio();
+    refetchEffective();
+    refetchRuns();
+  };
+
+  const handleDeployRollout = async (percentage: number) => {
+    await persistAiStudioSettings({
+      ...aiStudioSettings,
+      rolloutPercentage: percentage,
+      costControls: costControls,
+    });
+    setOverviewMessage(`Rollout target updated to ${percentage}%.`);
+  };
+
+  const handleCostControlToggle = async () => {
+    setSavingCostControls(true);
+    await persistAiStudioSettings({
+      ...aiStudioSettings,
+      rolloutPercentage: costControls.rolloutPercentage,
+      costControls: {
+        ...costControls,
+        hardStopEnabled: !costControls.hardStopEnabled,
+      },
+    });
+    setSavingCostControls(false);
+    setOverviewMessage(`Hard stop ${!costControls.hardStopEnabled ? 'enabled' : 'disabled'}.`);
+  };
+
+  const handleDailyCapChange = async (delta: number) => {
+    setSavingCostControls(true);
+    const nextDailyCap = Math.max(5, costControls.dailyCap + delta);
+    await persistAiStudioSettings({
+      ...aiStudioSettings,
+      rolloutPercentage: costControls.rolloutPercentage,
+      costControls: {
+        ...costControls,
+        dailyCap: nextDailyCap,
+      },
+    });
+    setSavingCostControls(false);
+    setOverviewMessage(`Daily cap updated to €${nextDailyCap}.`);
+  };
+
   const handleToggleAgent = async (agent: any) => {
     if (!agent?.id || agent.locked) return;
+    setPendingAgentId(agent.id);
     await updateAgentConfig.mutate({
       id: agent.id,
       body: { isActive: !agent.active },
     });
+    setOverviewMessage(`${agent.name} ${agent.active ? 'disabled' : 'enabled'}.`);
     refetchStudio();
     refetchEffective();
+    refetchRuns();
+    setPendingAgentId(null);
   };
 
   return (
@@ -475,18 +698,13 @@ export default function AIStudio() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-semibold text-gray-900 dark:text-white">AI Studio</h1>
-                <div className="bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded-full flex items-center gap-1.5 border border-orange-100 dark:border-orange-800/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                  <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wider">Limited rollout (10%)</span>
-                </div>
+                <MinimalPill tone="active">Limited rollout ({costControls.rolloutPercentage}%)</MinimalPill>
               </div>
               <p className="text-xs text-gray-500 mt-0.5">Prebuilt AI agents for support</p>
             </div>
             <div className="flex items-center gap-4">
-              <button className="text-sm font-bold text-red-600 hover:text-red-700 transition-colors">Emergency stop</button>
-              <button className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg text-sm font-bold hover:opacity-90 transition-opacity shadow-sm">
-                Deploy to 25%
-              </button>
+              <MinimalButton variant="ghost" onClick={handleEmergencyStop}>Emergency stop</MinimalButton>
+              <MinimalButton onClick={() => handleDeployRollout(25)}>Deploy to 25%</MinimalButton>
               <div className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full text-[11px] font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
                 Ecommerce Support preset
               </div>
@@ -519,8 +737,180 @@ export default function AIStudio() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="grid grid-cols-1 xl:grid-cols-12 gap-6"
+              className="space-y-6"
             >
+              {overviewMessage ? (
+                <div className="rounded-[22px] border border-black/5 bg-black/[0.02] px-5 py-4 text-sm text-gray-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-200">
+                  {overviewMessage}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  {
+                    label: 'Deflection Rate',
+                    value: toPercent(deflectionRate),
+                    detail: `${safeNumber(costSummary.autoResolvedCases).toLocaleString()} auto-resolved in the last 7 days`,
+                  },
+                  {
+                    label: 'Escalation Rate',
+                    value: toPercent(escalationRate),
+                    detail: `${safeNumber(approvalsRates.avgDecisionHours, 0).toFixed(1)}h average approval decision`,
+                  },
+                  {
+                    label: 'Pending Approvals',
+                    value: pendingApprovals.toLocaleString(),
+                    detail: pendingApprovals > 0 ? 'Needs operator attention' : 'No pending queues',
+                  },
+                  {
+                    label: 'Tool Errors',
+                    value: toolErrors.toLocaleString(),
+                    detail: 'Last 24h execution failures',
+                  },
+                ].map((kpi) => (
+                  <div key={kpi.label}>
+                    <MinimalCard title={kpi.label} subtitle={kpi.detail}>
+                      <div className="text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">{kpi.value}</div>
+                    </MinimalCard>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_1fr]">
+                <MinimalCard
+                  title="Go live checklist"
+                  subtitle="Operational readiness based on the current workspace, connectors and runtime."
+                  icon="task_alt"
+                  action={<MinimalPill tone="active">{completedChecklist}/{goLiveChecklist.length} complete</MinimalPill>}
+                >
+                  <div className="space-y-5">
+                    <MinimalProgressBar label="Readiness" value={completedChecklist} max={goLiveChecklist.length} />
+                    <div className="space-y-3">
+                      {goLiveChecklist.map((item) => (
+                        <div key={item.label} className="flex items-center justify-between gap-4 rounded-[20px] border border-black/5 px-4 py-4 dark:border-white/10">
+                          <div className="flex items-center gap-3">
+                            <div className={`flex h-8 w-8 items-center justify-center rounded-full border ${item.completed ? 'border-violet-200 bg-violet-500 text-white dark:border-violet-500/30' : 'border-black/10 text-gray-400 dark:border-white/10 dark:text-gray-500'}`}>
+                              <span className="material-symbols-outlined text-[16px]">{item.completed ? 'check' : 'schedule'}</span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-950 dark:text-white">{item.label}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{item.completed ? 'Ready' : 'Still needs setup'}</p>
+                            </div>
+                          </div>
+                          <MinimalButton variant={item.completed ? 'ghost' : 'outline'} onClick={item.onClick}>
+                            {item.actionLabel}
+                          </MinimalButton>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </MinimalCard>
+
+                <div className="space-y-6">
+                  <MinimalCard
+                    title="Agent status"
+                    subtitle="Live activation state for the agents currently loaded in this workspace."
+                    icon="memory"
+                    action={<MinimalButton variant="ghost" onClick={() => setActiveTab('Agents')}>Open agents</MinimalButton>}
+                  >
+                    <div className="space-y-4">
+                      {topAgents.map((agent: any) => (
+                        <div key={agent.id || agent.name} className="flex items-center justify-between gap-4 rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-950 dark:text-white">{agent.name}</p>
+                            <p className="truncate text-xs text-gray-500 dark:text-gray-400">{agent.desc}</p>
+                          </div>
+                          {agent.locked ? (
+                            <MinimalPill tone="neutral">Locked</MinimalPill>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAgent(agent)}
+                              disabled={pendingAgentId === agent.id}
+                              className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
+                            >
+                              <span className={`absolute h-5 w-5 rounded-full bg-white transition-all ${agent.active ? 'right-1' : 'left-1'}`} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </MinimalCard>
+
+                  <MinimalCard
+                    title="Cost controls"
+                    subtitle="Persistent runtime limits shared with the workspace settings."
+                    icon="tune"
+                    action={<MinimalPill tone="neutral">{dailyCapUsage}% used</MinimalPill>}
+                  >
+                    <div className="space-y-5">
+                      <MinimalProgressBar label="Daily cap" value={totalCreditsUsed} max={Math.max(costControls.dailyCap, totalCreditsUsed, 1)} suffix="credits" />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Limit</p>
+                          <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">€{costControls.dailyCap}</p>
+                        </div>
+                        <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Runtime stop</p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-950 dark:text-white">{costControls.hardStopEnabled ? 'Enabled' : 'Disabled'}</span>
+                            <button
+                              type="button"
+                              onClick={handleCostControlToggle}
+                              disabled={savingCostControls}
+                              className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${costControls.hardStopEnabled ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${savingCostControls ? 'opacity-50' : ''}`}
+                            >
+                              <span className={`absolute h-5 w-5 rounded-full bg-white transition-all ${costControls.hardStopEnabled ? 'right-1' : 'left-1'}`} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(-5)} disabled={savingCostControls}>- €5</MinimalButton>
+                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(5)} disabled={savingCostControls}>+ €5</MinimalButton>
+                        <MinimalButton variant="ghost" onClick={() => setActiveTab('Safety')}>Open safety</MinimalButton>
+                      </div>
+                    </div>
+                  </MinimalCard>
+                </div>
+              </div>
+
+              <MinimalCard
+                title="Recent runs"
+                subtitle="Latest agent executions pulled from live operations."
+                icon="history"
+                action={<MinimalButton variant="ghost" onClick={() => setActiveTab('Agents')}>View agents</MinimalButton>}
+              >
+                <div className="space-y-3">
+                  {recentRunsList.slice(0, 6).map((run: any) => (
+                    <div key={run.id} className="grid gap-3 rounded-[20px] border border-black/5 px-4 py-4 md:grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr] md:items-center dark:border-white/10">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-950 dark:text-white">{run.agent_name || run.agent_slug || 'Agent run'}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{run.trace_id || run.case_id || run.id}</p>
+                      </div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300">
+                        {run.started_at ? formatCompactDate(run.started_at) : 'Waiting for timestamp'}
+                      </div>
+                      <div>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusPill(run.outcome_status)}`}>
+                          {String(run.outcome_status || 'unknown').replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {safeNumber(run.cost_credits).toFixed(2)} cr · {safeNumber(run.tokens_used).toLocaleString()} tok
+                      </div>
+                    </div>
+                  ))}
+                  {!recentRunsList.length ? (
+                    <div className="rounded-[20px] border border-dashed border-black/10 px-4 py-8 text-center text-sm text-gray-500 dark:border-white/10 dark:text-gray-400">
+                      No recent runs yet. As soon as the runtime starts executing agents, they will appear here.
+                    </div>
+                  ) : null}
+                </div>
+              </MinimalCard>
+
+              {false && (
+                <>
               {/* Left Column */}
               <div className="xl:col-span-8 space-y-6">
                 {/* Checklist Card */}
@@ -689,6 +1079,8 @@ export default function AIStudio() {
                   </p>
                 </div>
               </div>
+                </>
+              )}
             </motion.div>
           ) : activeTab === 'Connections' ? (
             <ConnectionsView />
@@ -862,15 +1254,17 @@ export default function AIStudio() {
                                   <span className="text-[10px] font-bold uppercase tracking-wider">Locked ON</span>
                                 </div>
                               ) : (
-                                <div
+                                <button
+                                  type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleToggleAgent(agent);
                                   }}
-                                  className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                                  disabled={pendingAgentId === agent.id}
+                                  className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
                                 >
                                   <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${agent.active ? 'right-0.5' : 'left-0.5'}`}></div>
-                                </div>
+                                </button>
                               )}
                               <span className={`material-symbols-outlined text-gray-400 transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
                             </div>

@@ -11,6 +11,7 @@ import {
   AgentPermissionConfig,
 } from '../agentPermissionsConfig';
 import { cloneJson, ensureArray, ensureBoolean, ensureNumber, ensureRecord, mergeProfile, mergeRecord } from './aiStudioProfileUtils';
+import { MinimalButton, MinimalPill } from './MinimalCategoryShell';
 
 type PermissionProfileState = AgentPermissionConfig & {
   actionPermissions: Record<string, PermissionState>;
@@ -57,6 +58,7 @@ export default function PermissionsView() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [showFullCatalog, setShowFullCatalog] = useState(false);
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState('');
 
   const { data: apiAgents, refetch } = useApi(agentsApi.list, [], []);
   const saveDraft = useMutation((payload: { id: string; body: Record<string, any> }) => agentsApi.updatePolicyDraft(payload.id, payload.body));
@@ -108,6 +110,7 @@ export default function PermissionsView() {
     setNewRuleName('');
     setShowNewRuleForm(false);
     refetchRules();
+    setStatusMessage('Policy rule created and synced with the live catalog.');
   };
 
   const allActionCategories = Array.from(new Set(Object.values(agentPermissionsConfig).flatMap(config => config.applicableCategories)));
@@ -191,6 +194,7 @@ export default function PermissionsView() {
     if (publish) await publishDraft.mutate(selectedApiAgent.id);
     refetch();
     refetchBundle();
+    setStatusMessage(publish ? 'Permission profile published to the runtime.' : 'Permission draft saved.');
   };
 
   const handleRollback = async () => {
@@ -198,6 +202,7 @@ export default function PermissionsView() {
     await rollbackDraft.mutate(selectedApiAgent.id);
     refetch();
     refetchBundle();
+    setStatusMessage('Permission draft reset to the last published version.');
   };
 
   const permissionCounts = profile ? {
@@ -245,7 +250,7 @@ export default function PermissionsView() {
                             <span className="text-[10px] font-bold uppercase tracking-wider">Locked ON</span>
                           </div>
                         ) : (
-                          <div className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                        <div className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
                             <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${agent.active ? 'right-0.5' : 'left-0.5'}`}></div>
                           </div>
                         )}
@@ -281,18 +286,26 @@ export default function PermissionsView() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={handleRollback} className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Reset</button>
-                  <button onClick={() => saveAndRefresh(false)} className="px-4 py-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl transition-colors">Save draft</button>
-                  <button onClick={() => saveAndRefresh(true)} className="px-4 py-2 text-sm font-bold text-white bg-black dark:bg-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200 rounded-xl transition-colors shadow-sm">Publish changes</button>
+                  <MinimalButton variant="ghost" onClick={handleRollback}>Reset</MinimalButton>
+                  <MinimalButton variant="outline" onClick={() => saveAndRefresh(false)} disabled={saveDraft.loading}>Save draft</MinimalButton>
+                  <MinimalButton onClick={() => saveAndRefresh(true)} disabled={saveDraft.loading || publishDraft.loading}>Publish changes</MinimalButton>
                 </div>
               </div>
             </div>
 
-            <div className="bg-blue-50/50 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/30 p-4 px-6 flex items-start gap-3">
-              <span className="material-symbols-outlined text-blue-500 mt-0.5">info</span>
+            {statusMessage ? (
+              <div className="border-b border-black/5 px-6 py-4 dark:border-white/10">
+                <div className="rounded-[18px] border border-black/5 bg-white px-4 py-3 text-sm text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200">
+                  {statusMessage}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="border-b border-black/5 p-4 px-6 flex items-start gap-3 dark:border-white/10">
+              <span className="material-symbols-outlined text-violet-500 mt-0.5">info</span>
               <div>
-                <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider mb-1">Effective Access Summary</h4>
-                <ul className="text-sm text-blue-800 dark:text-blue-400/80 space-y-1 list-disc list-inside">
+                <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-1">Effective Access Summary</h4>
+                <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-disc list-inside">
                   {ensureArray<string>(profile.effectiveAccessSummary).map((summary, idx) => <li key={idx}>{summary}</li>)}
                 </ul>
               </div>
@@ -301,12 +314,12 @@ export default function PermissionsView() {
             <div className="p-8 space-y-12">
               {conflictMessages.length > 0 && (
                 <section>
-                  <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-xl p-4 flex items-start gap-3">
-                    <span className="material-symbols-outlined text-amber-500 mt-0.5">warning</span>
+                  <div className="bg-white dark:bg-[#171717] border border-black/5 dark:border-white/10 rounded-xl p-4 flex items-start gap-3">
+                    <span className="material-symbols-outlined text-violet-500 mt-0.5">warning</span>
                     <div>
-                      <h4 className="text-sm font-bold text-amber-900 dark:text-amber-300 mb-2">Configuration Conflicts Detected</h4>
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-2">Configuration Conflicts Detected</h4>
                       <ul className="space-y-1">
-                        {conflictMessages.map((conflict, idx) => <li key={idx} className="text-xs text-amber-800 dark:text-amber-400/80 flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-amber-500"></span>{conflict}</li>)}
+                        {conflictMessages.map((conflict, idx) => <li key={idx} className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-violet-500"></span>{conflict}</li>)}
                       </ul>
                     </div>
                   </div>
@@ -316,10 +329,10 @@ export default function PermissionsView() {
               <section>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Permission Overview</h3>
                 <div className="grid grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl border border-green-200 bg-green-50 dark:bg-green-900/10 dark:border-green-900/30"><div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-2"><span className="material-symbols-outlined text-sm">check_circle</span><span className="text-xs font-bold uppercase tracking-wider">Allowed</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Allowed}</p></div>
-                  <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900/30"><div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 mb-2"><span className="material-symbols-outlined text-sm">rule</span><span className="text-xs font-bold uppercase tracking-wider">Conditional</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Conditional}</p></div>
-                  <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/10 dark:border-indigo-900/30"><div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 mb-2"><span className="material-symbols-outlined text-sm">gavel</span><span className="text-xs font-bold uppercase tracking-wider">Approval Req.</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Approval}</p></div>
-                  <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900/30"><div className="flex items-center gap-2 text-red-700 dark:text-red-400 mb-2"><span className="material-symbols-outlined text-sm">block</span><span className="text-xs font-bold uppercase tracking-wider">Blocked</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Blocked}</p></div>
+                  <div className="p-4 rounded-xl border border-black/5 bg-white dark:bg-[#171717] dark:border-white/10"><div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2"><span className="material-symbols-outlined text-sm">check_circle</span><span className="text-xs font-bold uppercase tracking-wider">Allowed</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Allowed}</p></div>
+                  <div className="p-4 rounded-xl border border-black/5 bg-white dark:bg-[#171717] dark:border-white/10"><div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2"><span className="material-symbols-outlined text-sm">rule</span><span className="text-xs font-bold uppercase tracking-wider">Conditional</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Conditional}</p></div>
+                  <div className="p-4 rounded-xl border border-black/5 bg-white dark:bg-[#171717] dark:border-white/10"><div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2"><span className="material-symbols-outlined text-sm">gavel</span><span className="text-xs font-bold uppercase tracking-wider">Approval Req.</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Approval}</p></div>
+                  <div className="p-4 rounded-xl border border-black/5 bg-white dark:bg-[#171717] dark:border-white/10"><div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2"><span className="material-symbols-outlined text-sm">block</span><span className="text-xs font-bold uppercase tracking-wider">Blocked</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Blocked}</p></div>
                 </div>
               </section>
 
@@ -443,7 +456,7 @@ export default function PermissionsView() {
                     return (
                       <div key={idx} className={`border rounded-xl p-4 flex items-center justify-between bg-white dark:bg-card-dark ${isMain ? 'border-indigo-200 dark:border-indigo-800/50' : 'border-gray-200 dark:border-gray-800'}`}>
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isMain ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isMain ? 'bg-black/5 dark:bg-white/5 text-gray-700 dark:text-gray-200' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
                             <span className="material-symbols-outlined text-sm">api</span>
                           </div>
                           <div>
@@ -500,8 +513,8 @@ export default function PermissionsView() {
                       </div>
                     </div>
                   )}
-                  <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-xl p-6">
-                    <p className="text-sm text-red-800 dark:text-red-300 mb-4">Global policies. These actions are strictly prohibited across the entire system.</p>
+                  <div className="bg-white dark:bg-[#171717] border border-black/5 dark:border-white/10 rounded-xl p-6">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Global policies. These actions are strictly prohibited across the entire system.</p>
                     <div className="space-y-2">
                       {profile.globalHardBlocks.map((block, idx) => (
                         <div key={idx} className="flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg border border-red-100 dark:border-red-900/20 shadow-sm opacity-80">
@@ -552,7 +565,7 @@ export default function PermissionsView() {
                         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Automatic Escalation</label>
                         <button type="button" onClick={() => setProfile(prev => prev ? { ...prev, automaticEscalation: !prev.automaticEscalation } : prev)} className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
                           <span className="text-sm text-gray-700 dark:text-gray-300">Escalate if no response</span>
-                          <div className={`w-10 h-5 rounded-full relative cursor-pointer ${profile.automaticEscalation ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                          <div className={`w-10 h-5 rounded-full relative cursor-pointer ${profile.automaticEscalation ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
                             <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full ${profile.automaticEscalation ? 'right-0.5' : 'left-0.5'}`}></div>
                           </div>
                         </button>
@@ -568,7 +581,7 @@ export default function PermissionsView() {
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-indigo-500">policy</span>
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white">Live Policy Rules</h3>
-                    <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-full text-[10px] font-bold border border-indigo-200 dark:border-indigo-800">
+                    <span className="px-2 py-0.5 bg-white dark:bg-[#171717] text-gray-700 dark:text-gray-200 rounded-full text-[10px] font-bold border border-black/10 dark:border-white/10">
                       {dbRules.filter((r: any) => r.is_active).length} active
                     </span>
                   </div>
@@ -587,9 +600,9 @@ export default function PermissionsView() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="mb-4 p-4 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-800/30 rounded-xl space-y-3"
+                      className="mb-4 p-4 bg-white dark:bg-[#171717] border border-black/5 dark:border-white/10 rounded-xl space-y-3"
                     >
-                      <h4 className="text-xs font-bold text-indigo-800 dark:text-indigo-300 uppercase tracking-wider">New Policy Rule</h4>
+                      <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">New Policy Rule</h4>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Rule name</label>
@@ -617,7 +630,7 @@ export default function PermissionsView() {
                         <button
                           onClick={handleCreateRule}
                           disabled={!newRuleName.trim() || createRule.loading}
-                          className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg transition-colors"
+                          className="px-4 py-2 text-sm font-bold text-white bg-black hover:bg-black/90 disabled:opacity-50 rounded-lg transition-colors"
                         >
                           {createRule.loading ? 'Creating…' : 'Create rule'}
                         </button>
@@ -672,7 +685,7 @@ export default function PermissionsView() {
                                 await toggleRule.mutate({ id: rule.id, is_active: !rule.is_active });
                                 refetchRules();
                               }}
-                              className={`w-10 h-5 rounded-full relative transition-colors ${rule.is_active ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                              className={`w-10 h-5 rounded-full relative transition-colors ${rule.is_active ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'}`}
                             >
                               <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${rule.is_active ? 'right-0.5' : 'left-0.5'}`}></div>
                             </button>
