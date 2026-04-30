@@ -2464,25 +2464,6 @@ function WorkflowList(props: {
               <button key={filter} onClick={() => props.setActiveFilter(filter)} className={`py-3 text-sm border-b-2 ${props.activeFilter === filter ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white' : 'border-transparent font-medium text-gray-500'}`}>{filter}</button>
             ))}
           </div>
-          <div className="grid gap-3 border-t border-gray-100 px-6 py-4 md:grid-cols-2 xl:grid-cols-4 dark:border-gray-800">
-            {props.filters.filter((filter) => filter !== 'All').map((filter) => {
-              const meta = WORKFLOW_CATEGORY_META[filter] ?? { subtitle: 'Operational workflows grouped by domain.', icon: 'grid_view' };
-              const active = props.activeFilter === filter;
-              return (
-                <button
-                  key={filter}
-                  onClick={() => props.setActiveFilter(filter)}
-                  className={`rounded-2xl border px-4 py-4 text-left transition ${active ? 'border-black bg-gray-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-lg text-gray-700">{meta.icon}</span>
-                    <div className="text-sm font-semibold text-gray-900">{filter}</div>
-                  </div>
-                  <div className="mt-2 text-xs leading-relaxed text-gray-500">{meta.subtitle}</div>
-                </button>
-              );
-            })}
-          </div>
         </div>
       </div>
       {props.error && <div className="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{props.error}</div>}
