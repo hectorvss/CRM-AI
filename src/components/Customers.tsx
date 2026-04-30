@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { customersApi, paymentsApi, policyApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
-import { MinimalCard } from './MinimalCategoryShell';
+
 import type { NavigateFn, Page } from '../types';
 
 type CustomerTab = 'all_activity' | 'conversations' | 'orders' | 'system_logs';
@@ -793,6 +793,11 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     </div>
   );
 
+  // Shared card style matching Settings/Upgrade components exactly
+  const cardCls = 'bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden';
+  const cardHeaderCls = 'px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between';
+  const cardTitleCls = 'text-sm font-semibold text-gray-900 dark:text-white';
+
   const renderProfileView = () => {
     if (isSelectedCustomerLoading) {
       return (
@@ -891,54 +896,59 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
 
         {/* ── KPI Strip ────────────────────────────────────────────── */}
         <div className="flex-shrink-0 px-6 pt-5 pb-1">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-4 gap-4">
             {[
               {
-                icon: 'payments',
                 label: 'Lifetime Value',
                 value: selectedCustomer.ltv,
                 sub: selectedCustomer.plan,
+                icon: 'payments',
+                accent: false,
               },
               {
-                icon: 'confirmation_number',
                 label: 'Open Cases',
                 value: String(selectedCustomer.openTickets),
-                sub: 'active tickets',
-                alert: selectedCustomer.openTickets > 0,
+                sub: selectedCustomer.openTickets === 1 ? '1 active ticket' : `${selectedCustomer.openTickets} active tickets`,
+                icon: 'confirmation_number',
+                accent: selectedCustomer.openTickets > 0,
+                accentColor: 'amber',
               },
               {
-                icon: 'autorenew',
                 label: 'Next Renewal',
                 value: selectedCustomer.nextRenewal,
                 sub: selectedCustomer.plan,
+                icon: 'autorenew',
+                accent: false,
               },
               {
-                icon: 'health_and_safety',
                 label: 'Risk Level',
-                value: churn,
-                sub: `Fraud ${fraudHigh ? 'High' : 'Low'}`,
-                alert: churnHigh || fraudHigh,
+                value: churnHigh ? 'Churn Risk' : churn === 'Watchlist' ? 'Watchlist' : 'Healthy',
+                sub: `Fraud risk: ${fraudHigh ? 'High' : fraud === 'medium' ? 'Medium' : 'Low'}`,
+                icon: 'shield',
+                accent: churnHigh || fraudHigh,
+                accentColor: 'red',
               },
             ].map((kpi) => (
-              <div
+              <section
                 key={kpi.label}
-                className={`rounded-[20px] border p-4 ${
-                  kpi.alert
-                    ? 'border-red-100 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/10'
-                    : 'border-black/5 dark:border-white/10 bg-white dark:bg-[#171717]'
+                className={`rounded-2xl border shadow-card overflow-hidden ${
+                  kpi.accent && kpi.accentColor === 'red'
+                    ? 'border-red-200 dark:border-red-800/40 bg-white dark:bg-card-dark'
+                    : kpi.accent && kpi.accentColor === 'amber'
+                    ? 'border-amber-200 dark:border-amber-800/40 bg-white dark:bg-card-dark'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-card-dark'
                 }`}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`flex h-7 w-7 items-center justify-center rounded-full ${
-                    kpi.alert ? 'bg-red-100 dark:bg-red-900/30' : 'bg-black/5 dark:bg-white/5'
-                  }`}>
-                    <span className={`material-symbols-outlined text-[16px] ${kpi.alert ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>{kpi.icon}</span>
-                  </div>
-                  <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{kpi.label}</span>
+                <div className="px-5 pt-4 pb-3">
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{kpi.label}</p>
+                  <p className={`text-2xl font-bold tracking-tight ${
+                    kpi.accent && kpi.accentColor === 'red' ? 'text-red-600 dark:text-red-400'
+                    : kpi.accent && kpi.accentColor === 'amber' ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-gray-900 dark:text-white'
+                  }`}>{kpi.value}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{kpi.sub}</p>
                 </div>
-                <p className={`text-[17px] font-bold tracking-tight ${kpi.alert ? 'text-red-700 dark:text-red-400' : 'text-gray-950 dark:text-white'}`}>{kpi.value}</p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{kpi.sub}</p>
-              </div>
+              </section>
             ))}
           </div>
         </div>
@@ -950,28 +960,31 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
           <div className="flex-1 flex flex-col gap-4 overflow-hidden min-w-0">
 
             {/* AI Executive Summary */}
-            <div className="flex-shrink-0 overflow-hidden rounded-[24px] border border-black/5 dark:border-white/10 bg-white dark:bg-[#171717]">
-              <div className="flex items-center gap-3 border-b border-black/5 dark:border-white/10 px-5 py-4">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/20">
-                  <span className="material-symbols-outlined text-[18px] text-violet-600 dark:text-violet-400">auto_awesome</span>
+            <section className={`flex-shrink-0 ${cardCls}`}>
+              <div className={cardHeaderCls}>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/20">
+                    <span className="material-symbols-outlined text-[17px] text-indigo-600 dark:text-indigo-400">auto_awesome</span>
+                  </div>
+                  <div>
+                    <h3 className={cardTitleCls}>AI Executive Summary</h3>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500">From canonical state</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-950 dark:text-white">AI Executive Summary</h3>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500">From canonical state</p>
-                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800/30">Live</span>
               </div>
-              <div className="px-5 py-4">
+              <div className="p-5">
                 {(selectedCustomer as any).aiExecutiveSummary ? (
                   <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{(selectedCustomer as any).aiExecutiveSummary}</p>
                 ) : (
-                  <p className="text-sm text-gray-400 dark:text-gray-500 italic">No AI summary available for this customer yet.</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic">No AI summary available for this customer yet.</p>
                 )}
                 {((selectedCustomer as any).aiRecommendations?.length > 0) && (
-                  <div className="mt-4 space-y-2 pt-4 border-t border-black/5 dark:border-white/10">
-                    <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider">Recommended Actions</p>
+                  <div className="mt-4 space-y-2 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Recommended Actions</p>
                     {(selectedCustomer as any).aiRecommendations.map((rec: any, i: number) => (
-                      <div key={i} className="flex items-start gap-2.5 rounded-[14px] bg-black/[0.02] dark:bg-white/[0.03] px-3 py-2.5">
-                        <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
                           rec.priority === 'high' ? 'bg-red-500' : rec.priority === 'medium' ? 'bg-amber-500' : 'bg-green-500'
                         }`} />
                         <p className="text-xs text-gray-700 dark:text-gray-300 leading-snug"><span className="font-semibold">{rec.action}</span> — {rec.reason}</p>
@@ -980,18 +993,18 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   </div>
                 )}
               </div>
-            </div>
+            </section>
 
             {/* Activity / Tabs */}
-            <div className="flex-1 overflow-hidden rounded-[24px] border border-black/5 dark:border-white/10 bg-white dark:bg-[#171717] flex flex-col">
-              <div className="flex items-center border-b border-black/5 dark:border-white/10 px-5 pt-4 overflow-x-auto no-scrollbar flex-shrink-0">
+            <section className={`flex-1 overflow-hidden flex flex-col ${cardCls}`}>
+              <div className={`${cardHeaderCls} overflow-x-auto no-scrollbar`}>
                 {(['all_activity', 'conversations', 'orders', 'system_logs'] as CustomerTab[]).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveProfileTab(tab)}
-                    className={`pb-3 mr-5 text-[14px] font-semibold whitespace-nowrap transition-all border-b-2 ${
+                    className={`pb-4 mr-6 text-sm font-semibold whitespace-nowrap transition-all border-b-2 ${
                       activeProfileTab === tab
-                        ? 'text-gray-950 dark:text-white border-gray-950 dark:border-white'
+                        ? 'text-gray-900 dark:text-white border-gray-900 dark:border-white'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border-transparent'
                     }`}
                   >
@@ -1122,51 +1135,59 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   );
                 })()}
               </div>
-            </div>
+            </section>
           </div>
 
           {/* ── Right: Identity + Health + Actions ─────────────────── */}
-          <div className="w-[280px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto custom-scrollbar pb-4">
+          <div className="w-[280px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto custom-scrollbar min-h-0 pb-4">
 
             {/* Identity card */}
-            <MinimalCard title="Identity" icon="person">
-              <div className="space-y-3">
+            <section className={cardCls}>
+              <div className={cardHeaderCls}>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                    <span className="material-symbols-outlined text-[15px] text-gray-500 dark:text-gray-400">person</span>
+                  </div>
+                  <h3 className={cardTitleCls}>Identity</h3>
+                </div>
+              </div>
+              <div className="p-5 space-y-4">
                 <div className="flex items-center gap-3">
                   <img
                     alt={selectedCustomer.name}
-                    className="w-10 h-10 rounded-full object-cover border border-black/5 dark:border-white/10 flex-shrink-0"
+                    className="w-11 h-11 rounded-full object-cover border border-gray-200 dark:border-gray-700 shadow-card flex-shrink-0"
                     src={selectedCustomer.avatar}
                     referrerPolicy="no-referrer"
                   />
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-950 dark:text-white truncate">{selectedCustomer.name}</p>
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{selectedCustomer.email}</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{selectedCustomer.name}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{selectedCustomer.email}</p>
                   </div>
                 </div>
-                <div className="space-y-1.5 pt-2 border-t border-black/5 dark:border-white/10">
+                <div className="space-y-2 pt-3 border-t border-gray-100 dark:border-gray-800">
                   {[
                     { icon: 'work', label: selectedCustomer.role + ' · ' + selectedCustomer.company },
                     { icon: 'location_on', label: selectedCustomer.location + ' · ' + selectedCustomer.timezone },
                     { icon: 'calendar_today', label: 'Customer since ' + selectedCustomer.since },
                   ].map((row) => (
                     <div key={row.icon} className="flex items-start gap-2">
-                      <span className="material-symbols-outlined text-[14px] text-gray-400 mt-0.5 flex-shrink-0">{row.icon}</span>
+                      <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0">{row.icon}</span>
                       <span className="text-[12px] text-gray-600 dark:text-gray-300 leading-snug">{row.label}</span>
                     </div>
                   ))}
                 </div>
                 {selectedCustomer.sources.length > 0 && (
-                  <div className="pt-2 border-t border-black/5 dark:border-white/10">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Linked Profiles</span>
-                      <span className="text-[10px] text-green-600 dark:text-green-400 font-medium">98% match</span>
+                  <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Linked Profiles</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">98% match</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {selectedCustomer.sources.map((source, i) => (
                         <div
                           key={i}
                           title={source.name}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.03]"
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
                         >
                           <img alt={source.name} className="w-3.5 h-3.5 object-contain" src={source.icon} referrerPolicy="no-referrer" />
                           <span className="text-[11px] text-gray-600 dark:text-gray-300 font-medium">{source.name}</span>
@@ -1176,11 +1197,19 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   </div>
                 )}
               </div>
-            </MinimalCard>
+            </section>
 
             {/* Health & Risk card */}
-            <MinimalCard title="Health & Risk" icon="shield">
-              <div className="space-y-2">
+            <section className={cardCls}>
+              <div className={cardHeaderCls}>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                    <span className="material-symbols-outlined text-[15px] text-gray-500 dark:text-gray-400">shield</span>
+                  </div>
+                  <h3 className={cardTitleCls}>Health & Risk</h3>
+                </div>
+              </div>
+              <div className="p-5 space-y-2">
                 {[
                   {
                     label: 'Churn Risk',
@@ -1197,85 +1226,99 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                 ].map((row) => (
                   <div
                     key={row.label}
-                    className={`flex items-center justify-between rounded-[14px] px-3 py-2.5 ${
+                    className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${
                       row.alert
-                        ? 'bg-red-50 dark:bg-red-950/20'
+                        ? 'bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30'
                         : row.medium
-                        ? 'bg-amber-50 dark:bg-amber-950/20'
-                        : 'bg-green-50 dark:bg-green-950/20'
+                        ? 'bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30'
+                        : 'bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30'
                     }`}
                   >
                     <span className={`text-[12px] font-medium flex items-center gap-2 ${
-                      row.alert ? 'text-red-800 dark:text-red-300' : row.medium ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'
+                      row.alert ? 'text-red-800 dark:text-red-300' : row.medium ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-800 dark:text-emerald-300'
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        row.alert ? 'bg-red-500' : row.medium ? 'bg-amber-500' : 'bg-green-500'
+                        row.alert ? 'bg-red-500' : row.medium ? 'bg-amber-500' : 'bg-emerald-500'
                       }`} />
                       {row.label}
                     </span>
                     <span className={`text-[11px] font-bold ${
-                      row.alert ? 'text-red-700 dark:text-red-400' : row.medium ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400'
+                      row.alert ? 'text-red-700 dark:text-red-400' : row.medium ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'
                     }`}>{row.value}</span>
                   </div>
                 ))}
               </div>
-            </MinimalCard>
+            </section>
 
             {/* Reconciliation — only if not healthy */}
             {hasConflict && recon && (
-              <MinimalCard
-                title="Reconciliation"
-                icon="sync_alt"
-                action={
+              <section className={cardCls}>
+                <div className={cardHeaderCls}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                      <span className="material-symbols-outlined text-[15px] text-gray-500 dark:text-gray-400">sync_alt</span>
+                    </div>
+                    <h3 className={cardTitleCls}>Reconciliation</h3>
+                  </div>
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                     recon.status === 'Conflict' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
                     recon.status === 'Warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
                     'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
                   }`}>{recon.status}</span>
-                }
-              >
-                <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-3">
-                  {recon.mismatches} mismatch{recon.mismatches !== 1 ? 'es' : ''} · Last run {recon.lastChecked}
-                </p>
-                <div className="space-y-2">
-                  {recon.domains.slice(0, 3).map((domain, idx) => (
-                    <div key={idx} className="rounded-[14px] border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-[12px] font-semibold text-gray-900 dark:text-white truncate">{domain.domain}</p>
-                        {domain.severity && (
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                            domain.severity === 'High' ? 'bg-red-100 text-red-600' :
-                            domain.severity === 'Medium' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
-                          }`}>{domain.severity}</span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">{domain.context}</p>
-                    </div>
-                  ))}
                 </div>
-              </MinimalCard>
+                <div className="p-5">
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-3">
+                    {recon.mismatches} mismatch{recon.mismatches !== 1 ? 'es' : ''} · Last run {recon.lastChecked}
+                  </p>
+                  <div className="space-y-2">
+                    {recon.domains.slice(0, 3).map((domain, idx) => (
+                      <div key={idx} className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[12px] font-semibold text-gray-900 dark:text-white truncate">{domain.domain}</p>
+                          {domain.severity && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                              domain.severity === 'High' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
+                              domain.severity === 'Medium' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' :
+                              'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                            }`}>{domain.severity}</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">{domain.context}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
             )}
 
             {/* Quick Actions */}
-            <MinimalCard title="Quick Actions" icon="bolt">
-              <div className="space-y-2">
+            <section className={cardCls}>
+              <div className={cardHeaderCls}>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+                    <span className="material-symbols-outlined text-[15px] text-gray-500 dark:text-gray-400">bolt</span>
+                  </div>
+                  <h3 className={cardTitleCls}>Quick Actions</h3>
+                </div>
+              </div>
+              <div className="p-4 space-y-1.5">
                 {[
-                  { icon: 'timeline', label: 'View Analysis', action: () => openCustomerCase('case_graph'), tone: 'neutral' as const },
-                  { icon: 'assignment_turned_in', label: 'Create Approval', action: handleCreateApproval, tone: 'neutral' as const },
-                  { icon: 'currency_exchange', label: 'Start Refund', action: handleStartRefund, tone: 'neutral' as const },
+                  { icon: 'timeline', label: 'View Analysis', action: () => openCustomerCase('case_graph') },
+                  { icon: 'assignment_turned_in', label: 'Create Approval', action: handleCreateApproval },
+                  { icon: 'currency_exchange', label: 'Start Refund', action: handleStartRefund },
                 ].map((btn) => (
                   <button
                     key={btn.label}
                     onClick={btn.action}
-                    className="w-full flex items-center gap-2.5 rounded-[14px] border border-black/5 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:bg-black/[0.05] dark:hover:bg-white/[0.05] px-3 py-2.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200 transition-colors"
+                    className="w-full flex items-center gap-2.5 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800/30 hover:bg-gray-50 dark:hover:bg-gray-700/50 px-3 py-2.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200 transition-colors shadow-sm"
                   >
-                    <span className="material-symbols-outlined text-[16px] text-gray-400">{btn.icon}</span>
+                    <span className="material-symbols-outlined text-[16px] text-gray-400 dark:text-gray-500">{btn.icon}</span>
                     {btn.label}
-                    <span className="material-symbols-outlined text-[14px] text-gray-300 dark:text-gray-600 ml-auto">arrow_forward</span>
+                    <span className="material-symbols-outlined text-[14px] text-gray-300 dark:text-gray-600 ml-auto">chevron_right</span>
                   </button>
                 ))}
               </div>
-            </MinimalCard>
+            </section>
 
           </div>
         </div>
