@@ -3,6 +3,8 @@ import { Order, OrderTab } from '../types';
 import CaseHeader from './CaseHeader';
 import type { CaseHeaderMenuItem } from './CaseHeader';
 import CaseCopilotPanel from './CaseCopilotPanel';
+import MinimalTimeline from './MinimalTimeline';
+import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
 import { casesApi, ordersApi, paymentsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
@@ -31,6 +33,11 @@ const formatRelativeLabel = (value?: string | null) => {
 
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
+
+const truncateLabel = (value?: string | null, max = 54) => {
+  if (!value) return 'No action needed';
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+};
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 
@@ -433,7 +440,7 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
                   fulfillmentStatus={selectedOrder.fulfillmentStatus}
                   refundStatus={selectedOrder.refundStatus}
                   approvalStatus={selectedOrder.approvalStatus}
-                  recommendedAction={selectedOrder.recommendedNextAction || 'No action needed'}
+                  recommendedAction={truncateLabel(selectedOrder.recommendedNextAction)}
                   conflictDetected={selectedOrder.conflictDetected}
                   onResolve={selectedOrder.relatedCases[0]?.id ? () => handleResolveCase(selectedOrder.relatedCases[0].id) : undefined}
                   onSnooze={selectedOrder.relatedCases[0]?.id ? () => handleSnoozeCase(selectedOrder.relatedCases[0].id) : undefined}
@@ -489,48 +496,42 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
                   </div>
                 </div>
 
-                {/* Timeline */}
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Order Timeline</h3>
-                  <div className="space-y-4">
-                    {selectedOrder.timeline.map((event, idx) => {
-                      const getEventIcon = (content: string) => {
-                        const c = content.toLowerCase();
-                        if (c.includes('created')) return 'add_shopping_cart';
-                        if (c.includes('payment captured')) return 'payments';
-                        if (c.includes('payment failed')) return 'error';
-                        if (c.includes('packed')) return 'inventory_2';
-                        if (c.includes('label created')) return 'label';
-                        if (c.includes('delivered')) return 'local_shipping';
-                        if (c.includes('refund requested')) return 'undo';
-                        if (c.includes('refund processed')) return 'account_balance_wallet';
-                        if (c.includes('pending bank')) return 'hourglass_empty';
-                        if (c.includes('cancellation')) return 'cancel';
-                        if (c.includes('return received')) return 'warehouse';
-                        return 'circle';
-                      };
-
-                      return (
-                        <div key={event.id} className="flex gap-4 relative">
-                          {idx !== selectedOrder.timeline.length - 1 && (
-                            <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
-                          )}
-                          <div className={`w-6 h-6 rounded-full border-2 border-white dark:border-gray-900 z-10 flex items-center justify-center ${
-                            idx === selectedOrder.timeline.length - 1 ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-400'
-                          }`}>
-                            <span className="material-symbols-outlined text-[14px]">{getEventIcon(event.content)}</span>
-                          </div>
-                          <div className="flex-1 pb-4">
-                            <div className="flex justify-between items-start">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">{event.content}</p>
-                              <span className="text-xs text-gray-400">{event.time}</span>
-                            </div>
-                          </div>
+                <MinimalCard
+                  title="Operational workspace"
+                  subtitle="Use the same action surface for the common order paths before moving to Inbox or Payments."
+                  icon="dashboard_customize"
+                  action={<MinimalPill tone="active">{selectedOrder.orderStatus}</MinimalPill>}
+                >
+                  <div className="grid gap-6 lg:grid-cols-[1.2fr,0.8fr]">
+                    <div className="space-y-4">
+                      <div className="rounded-[20px] border border-black/5 bg-[#fbfbfa] p-4 dark:border-white/10 dark:bg-[#151515]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Current state</p>
+                        <p className="mt-3 text-sm font-medium leading-6 text-gray-900 dark:text-white">
+                          {selectedOrder.summary || 'This order is stable and ready for the next operational handoff.'}
+                        </p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <MinimalPill>{selectedOrder.paymentStatus}</MinimalPill>
+                          <MinimalPill>{selectedOrder.fulfillmentStatus}</MinimalPill>
+                          <MinimalPill>{selectedOrder.approvalStatus}</MinimalPill>
                         </div>
-                      );
-                    })}
+                      </div>
+                      <div className="rounded-[20px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Next handoff</p>
+                        <p className="mt-3 text-sm font-medium leading-6 text-gray-900 dark:text-white">
+                          {selectedOrder.recommendedNextAction || 'No blocking action is pending right now. You can continue from Inbox or Payments if the customer asks for a change.'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <MinimalButton onClick={handleApplyToComposer}>Open linked case</MinimalButton>
+                      <MinimalButton onClick={() => void handleStartRefund()} variant="outline">Start refund flow</MinimalButton>
+                      <MinimalButton onClick={() => void handleAddNote()} variant="outline">Add internal note</MinimalButton>
+                      <MinimalButton onClick={() => void handleCancelOrder(selectedOrder.id)} variant="ghost">Cancel order</MinimalButton>
+                    </div>
                   </div>
-                </div>
+                </MinimalCard>
+
+                <MinimalTimeline title="Order Timeline" events={selectedOrder.timeline} />
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center px-8 py-12">

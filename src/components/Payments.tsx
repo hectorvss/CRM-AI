@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Payment, PaymentTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseCopilotPanel from './CaseCopilotPanel';
+import MinimalTimeline from './MinimalTimeline';
+import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
 import { paymentsApi, reconciliationApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
+type PaymentActionView = 'stripe' | 'refund' | 'reconcile' | null;
 
 interface PaymentsProps {
   onNavigate?: NavigateFn;
@@ -37,6 +40,7 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [activeActionView, setActiveActionView] = useState<PaymentActionView>('stripe');
 
   // Fetch canonical payment contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
@@ -142,6 +146,23 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
     }
   }, [activeTab, focusEntityId, selectedId]);
 
+  useEffect(() => {
+    setActiveActionView('stripe');
+  }, [selectedId]);
+
+  const getPaymentGatewayUrl = (payment: Payment) => {
+    const id = payment.paymentId;
+    const psp = (payment.psp || '').toLowerCase();
+    if (psp.includes('stripe')) return `https://dashboard.stripe.com/payments/${id}`;
+    if (psp.includes('paypal')) return `https://www.paypal.com/activity/payment/${id}`;
+    if (psp.includes('braintree')) return `https://www.braintreegateway.com/merchants/transactions/${id}`;
+    return `https://dashboard.stripe.com/payments/${id}`;
+  };
+
+  const handleOpenGateway = (payment: Payment) => {
+    window.open(getPaymentGatewayUrl(payment), '_blank', 'noopener,noreferrer');
+  };
+
   const handleRefund = async (payment: Payment) => {
     setActionMessage(null);
     const numericAmount = Number(payment.amount.replace(/[^0-9.]/g, ''));
@@ -158,6 +179,17 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
 
     setActionMessage(result.message || 'Refund request persisted.');
     refetch();
+  };
+
+  const handleReconcile = async (payment: Payment) => {
+    setActionMessage(null);
+    try {
+      await reconcileMutation.mutate(payment.id);
+      setActionMessage('Reconciliation process triggered successfully.');
+      refetch();
+    } catch {
+      setActionMessage('Failed to trigger reconciliation.');
+    }
   };
 
   if (isInitialPaymentsLoading) {
@@ -289,47 +321,24 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
                     <p className="text-gray-500 text-sm">Order {selectedPayment.orderId} · {selectedPayment.customerName} · {selectedPayment.date}</p>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <button
-                      onClick={() => {
-                        const id = selectedPayment.paymentId;
-                        const psp = (selectedPayment.psp || '').toLowerCase();
-                        let url = '';
-                        if (psp.includes('stripe')) {
-                          url = `https://dashboard.stripe.com/payments/${id}`;
-                        } else if (psp.includes('paypal')) {
-                          url = `https://www.paypal.com/activity/payment/${id}`;
-                        } else if (psp.includes('braintree')) {
-                          url = `https://www.braintreegateway.com/merchants/transactions/${id}`;
-                        } else {
-                          url = `https://dashboard.stripe.com/payments/${id}`;
-                        }
-                        window.open(url, '_blank', 'noopener,noreferrer');
-                      }}
-                      className="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      View in {selectedPayment.psp}
-                    </button>
-                    <button 
-                      onClick={() => handleRefund(selectedPayment)}
-                      disabled={refundMutation.loading}
-                      className="px-4 py-2 text-sm font-bold text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                      {refundMutation.loading ? 'Issuing...' : 'Issue Refund'}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!selectedPayment) return;
-                        try {
-                          await reconcileMutation.mutate(selectedPayment.id);
-                          setActionMessage('Reconciliation process triggered successfully.');
-                        } catch {
-                          setActionMessage('Failed to trigger reconciliation.');
-                        }
-                      }}
-                      disabled={reconcileMutation.loading}
-                      className="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {reconcileMutation.loading ? 'Processing…' : 'Reconcile'}
-                    </button>
+                    {[
+                      { id: 'stripe', label: `View in ${selectedPayment.psp}` },
+                      { id: 'refund', label: 'Issue refund' },
+                      { id: 'reconcile', label: 'Reconcile' },
+                    ].map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        onClick={() => setActiveActionView(action.id as PaymentActionView)}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                          activeActionView === action.id
+                            ? 'bg-black text-white dark:bg-white dark:text-black'
+                            : 'border border-black/10 bg-white text-gray-700 hover:bg-black/[0.03] dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
                     {!isRightSidebarOpen && (
                       <button 
                         onClick={() => setIsRightSidebarOpen(true)}
@@ -405,53 +414,86 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
                   </div>
                 </div>
 
-                {/* Timeline */}
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Payment Timeline</h3>
-                  <div className="space-y-4">
-                    {selectedPayment.timeline.map((event, idx) => {
-                      const getEventIcon = (content: string) => {
-                        const c = content.toLowerCase();
-                        if (c.includes('authorized')) return 'lock';
-                        if (c.includes('captured')) return 'payments';
-                        if (c.includes('refund requested')) return 'undo';
-                        if (c.includes('execution started')) return 'play_arrow';
-                        if (c.includes('failed')) return 'error';
-                        if (c.includes('created')) return 'add_shopping_cart';
-                        if (c.includes('transfer initiated')) return 'account_balance';
-                        if (c.includes('funds received')) return 'savings';
-                        if (c.includes('delivered')) return 'local_shipping';
-                        if (c.includes('dispute opened')) return 'gavel';
-                        if (c.includes('cancelled')) return 'cancel';
-                        if (c.includes('refund triggered')) return 'bolt';
-                        if (c.includes('refund succeeded')) return 'check_circle';
-                        return 'circle';
-                      };
-
-                      return (
-                        <div key={event.id} className="flex gap-4 relative">
-                          {idx !== selectedPayment.timeline.length - 1 && (
-                            <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
-                          )}
-                          <div className={`w-6 h-6 rounded-md border-2 border-white dark:border-gray-900 z-10 flex items-center justify-center ${
-                            idx === selectedPayment.timeline.length - 1 ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-400'
-                          }`}>
-                            <span className="material-symbols-outlined text-[14px]">{getEventIcon(event.content)}</span>
+                {activeActionView ? (
+                  <MinimalCard
+                    title={activeActionView === 'stripe' ? 'Gateway workspace' : activeActionView === 'refund' ? 'Refund workspace' : 'Reconciliation workspace'}
+                    subtitle={
+                      activeActionView === 'stripe'
+                        ? 'Review the gateway path and the internal dependencies before leaving the Payments workspace.'
+                        : activeActionView === 'refund'
+                          ? 'Inspect the refund path, what state it will touch, and what still needs human attention before writing back.'
+                          : 'Inspect mismatch signals, expected writebacks and next operational checks before triggering reconciliation.'
+                    }
+                    icon={activeActionView === 'stripe' ? 'open_in_new' : activeActionView === 'refund' ? 'payments' : 'rule'}
+                    action={<MinimalPill tone="active">{activeActionView === 'stripe' ? selectedPayment.psp : activeActionView === 'refund' ? selectedPayment.refundStatus : selectedPayment.reconciliationStatus}</MinimalPill>}
+                  >
+                    <div className="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+                      <div className="space-y-4">
+                        <div className="rounded-[20px] border border-black/5 bg-[#fbfbfa] p-4 dark:border-white/10 dark:bg-[#151515]">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">What this action covers</p>
+                          <p className="mt-3 text-sm font-medium leading-6 text-gray-900 dark:text-white">
+                            {activeActionView === 'stripe'
+                              ? `Open the ${selectedPayment.psp} source of truth for ${selectedPayment.paymentId}, while keeping the linked order and case visible from this workspace.`
+                              : activeActionView === 'refund'
+                                ? `Prepare a refund for ${selectedPayment.amount} ${selectedPayment.currency}, reviewing approval and risk posture before sending the writeback.`
+                                : 'Trigger the reconciliation worker only after checking that the PSP, OMS and refund states still disagree or need a fresh sync.'}
+                          </p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Primary state</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedPayment.paymentStatus}</p>
                           </div>
-                          <div className="flex-1 pb-4">
-                            <div className="flex justify-between items-start">
-                              <div className="flex flex-col">
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">{event.content}</p>
-                                <span className="text-[10px] text-gray-400 uppercase tracking-wider">{event.system}</span>
-                              </div>
-                              <span className="text-xs text-gray-400">{event.time}</span>
-                            </div>
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Approval</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedPayment.approvalStatus}</p>
+                          </div>
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Risk</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedPayment.riskLevel} Risk</p>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        <div className="flex flex-wrap gap-2">
+                          <MinimalPill>{selectedPayment.paymentMethod}</MinimalPill>
+                          <MinimalPill>{selectedPayment.systemStates.psp}</MinimalPill>
+                          <MinimalPill>{selectedPayment.systemStates.oms}</MinimalPill>
+                          <MinimalPill>{selectedPayment.recommendedNextAction || 'No blocker detected'}</MinimalPill>
+                        </div>
+                      </div>
+                      <div className="space-y-3 rounded-[22px] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#171717]">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Operator notes</p>
+                          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                            {selectedPayment.conflictDetected || selectedPayment.context || 'No active discrepancy is blocking this payment. You can still review the gateway, issue a refund or run reconciliation from this panel.'}
+                          </p>
+                        </div>
+                        {activeActionView === 'stripe' ? (
+                          <>
+                            <MinimalButton onClick={() => handleOpenGateway(selectedPayment)}>Open {selectedPayment.psp}</MinimalButton>
+                            <MinimalButton onClick={() => onNavigate?.('orders', selectedPayment.orderId)} variant="outline">Open related order</MinimalButton>
+                            <MinimalButton onClick={() => selectedPayment.relatedCases[0]?.id && onNavigate?.('inbox', selectedPayment.relatedCases[0].id)} variant="ghost">Open linked case</MinimalButton>
+                          </>
+                        ) : activeActionView === 'refund' ? (
+                          <>
+                            <MinimalButton onClick={() => void handleRefund(selectedPayment)} disabled={refundMutation.loading}>
+                              {refundMutation.loading ? 'Issuing refund...' : 'Confirm refund'}
+                            </MinimalButton>
+                            <MinimalButton onClick={() => setActiveActionView('reconcile')} variant="outline">Review reconciliation first</MinimalButton>
+                          </>
+                        ) : (
+                          <>
+                            <MinimalButton onClick={() => void handleReconcile(selectedPayment)} disabled={reconcileMutation.loading}>
+                              {reconcileMutation.loading ? 'Running reconciliation...' : 'Trigger reconciliation'}
+                            </MinimalButton>
+                            <MinimalButton onClick={() => setActiveActionView('stripe')} variant="outline">Review gateway first</MinimalButton>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </MinimalCard>
+                ) : null}
+
+                <MinimalTimeline title="Payment Timeline" events={selectedPayment.timeline} />
               </div>
             )}
             {!selectedPayment && (
@@ -667,4 +709,5 @@ export default function Payments({ onNavigate, focusEntityId, focusSection }: Pa
     </div>
   );
 }
+
 

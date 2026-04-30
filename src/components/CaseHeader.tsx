@@ -124,8 +124,8 @@ export default function CaseHeader({
         </div>
       </div>
 
-      <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm p-4 mb-4 flex justify-between items-center">
-        <div className="flex gap-8 min-w-0">
+      <div className="mb-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-card-dark">
+        <div className="grid min-w-0 grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3 xl:flex xl:flex-nowrap xl:gap-8">
           <div>
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Order</div>
             <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{orderStatus}</div>
@@ -147,9 +147,9 @@ export default function CaseHeader({
             <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{approvalStatus}</div>
           </div>
         </div>
-        <div className="text-right min-w-0 max-w-xs">
+        <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Recommended Action</div>
-          <div className="text-sm font-bold text-secondary truncate" title={recommendedAction}>{recommendedAction}</div>
+          <div className="text-sm font-bold text-secondary" title={recommendedAction}>{recommendedAction}</div>
         </div>
       </div>
 

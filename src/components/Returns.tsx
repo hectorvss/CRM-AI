@@ -3,11 +3,14 @@ import { Return, ReturnTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseHeader from './CaseHeader';
 import type { CaseHeaderMenuItem } from './CaseHeader';
 import CaseCopilotPanel from './CaseCopilotPanel';
+import MinimalTimeline from './MinimalTimeline';
+import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
 import { casesApi, returnsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
+type ReturnActionView = 'approve' | 'reject' | 'received' | 'refund' | 'block' | null;
 
 interface ReturnsProps {
   onNavigate?: NavigateFn;
@@ -31,6 +34,11 @@ const formatRelativeLabel = (value?: string | null) => {
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
+const truncateLabel = (value?: string | null, max = 54) => {
+  if (!value) return 'No action needed';
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+};
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 
 export default function Returns({ onNavigate, focusEntityId, focusSection }: ReturnsProps) {
@@ -40,6 +48,7 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [activeActionView, setActiveActionView] = useState<ReturnActionView>('approve');
 
   const { mutate: updateStatus, loading: statusLoading } = useMutation(
     ({ id, payload }: { id: string; payload: Record<string, any> }) =>
@@ -192,6 +201,10 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
     }
   }, [activeTab, focusEntityId, selectedId]);
 
+  useEffect(() => {
+    setActiveActionView('approve');
+  }, [selectedId]);
+
   if (isInitialReturnsLoading) {
     return (
       <LoadingState
@@ -331,7 +344,7 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                   fulfillmentStatus={selectedReturn.systemStates.wms}
                   refundStatus={selectedReturn.refundStatus}
                   approvalStatus={selectedReturn.approvalStatus}
-                  recommendedAction={selectedReturn.recommendedNextAction || 'No action needed'}
+                  recommendedAction={truncateLabel(selectedReturn.recommendedNextAction)}
                   conflictDetected={selectedReturn.conflictDetected}
                   onResolve={selectedReturn.relatedCases[0]?.id ? () => handleResolveCase(selectedReturn.relatedCases[0].id) : undefined}
                   onSnooze={selectedReturn.relatedCases[0]?.id ? () => handleSnoozeCase(selectedReturn.relatedCases[0].id) : undefined}
@@ -343,46 +356,26 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
 
                 {/* Action Bar */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => handleStatusUpdate('approved', 'Approved')}
-                    disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-md hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleStatusUpdate('rejected', 'Rejected')}
-                    disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 rounded-xl text-sm font-bold shadow-card hover:bg-red-50 dark:hover:bg-red-900/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">cancel</span>
-                    Reject
-                  </button>
-                  <button
-                    onClick={() => handleStatusUpdate('received', 'Marked Received')}
-                    disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-xl text-sm font-bold shadow-card hover:bg-gray-50 dark:hover:bg-gray-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">warehouse</span>
-                    Mark Received
-                  </button>
-                  <button
-                    onClick={() => handleStatusUpdate('refund_pending', 'Refund Initiated')}
-                    disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-xl text-sm font-bold shadow-card hover:bg-gray-50 dark:hover:bg-gray-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">payments</span>
-                    Process Refund
-                  </button>
-                  <button
-                    onClick={() => handleStatusUpdate('blocked', 'Blocked')}
-                    disabled={statusLoading}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 rounded-xl text-sm font-bold shadow-card hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">block</span>
-                    Block
-                  </button>
+                  {[
+                    { id: 'approve', label: 'Approve' },
+                    { id: 'reject', label: 'Reject' },
+                    { id: 'received', label: 'Mark received' },
+                    { id: 'refund', label: 'Process refund' },
+                    { id: 'block', label: 'Block' },
+                  ].map((action) => (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => setActiveActionView(action.id as ReturnActionView)}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                        activeActionView === action.id
+                          ? 'bg-black text-white dark:bg-white dark:text-black'
+                          : 'border border-black/10 bg-white text-gray-700 hover:bg-black/[0.03] dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
                 </div>
 
                 {caseActionMsg && (
@@ -451,47 +444,107 @@ export default function Returns({ onNavigate, focusEntityId, focusSection }: Ret
                   </div>
                 </div>
 
-                {/* Timeline */}
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Return Timeline</h3>
-                  <div className="space-y-4">
-                    {selectedReturn.timeline.map((event, idx) => {
-                      const getEventIcon = (content: string) => {
-                        const c = content.toLowerCase();
-                        if (c.includes('requested')) return 'assignment_return';
-                        if (c.includes('policy')) return 'verified';
-                        if (c.includes('approved')) return 'check_circle';
-                        if (c.includes('label created')) return 'label';
-                        if (c.includes('dropped off')) return 'local_shipping';
-                        if (c.includes('in transit')) return 'pending_actions';
-                        if (c.includes('received')) return 'warehouse';
-                        if (c.includes('blocked')) return 'block';
-                        if (c.includes('inspection')) return 'fact_check';
-                        if (c.includes('approval')) return 'approval';
-                        return 'circle';
-                      };
-
-                      return (
-                        <div key={event.id} className="flex gap-4 relative">
-                          {idx !== selectedReturn.timeline.length - 1 && (
-                            <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
-                          )}
-                          <div className={`w-6 h-6 rounded-md border-2 border-white dark:border-gray-900 z-10 flex items-center justify-center ${
-                            idx === selectedReturn.timeline.length - 1 ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-400'
-                          }`}>
-                            <span className="material-symbols-outlined text-[14px]">{getEventIcon(event.content)}</span>
+                {activeActionView ? (
+                  <MinimalCard
+                    title={
+                      activeActionView === 'approve'
+                        ? 'Approval workspace'
+                        : activeActionView === 'reject'
+                          ? 'Rejection workspace'
+                          : activeActionView === 'received'
+                            ? 'Warehouse receipt workspace'
+                            : activeActionView === 'refund'
+                              ? 'Refund workspace'
+                              : 'Blocking workspace'
+                    }
+                    subtitle="Review the current return posture, understand the outcome, and then confirm the operational writeback from the same surface."
+                    icon={
+                      activeActionView === 'approve'
+                        ? 'task_alt'
+                        : activeActionView === 'reject'
+                          ? 'cancel'
+                          : activeActionView === 'received'
+                            ? 'warehouse'
+                            : activeActionView === 'refund'
+                              ? 'payments'
+                              : 'block'
+                    }
+                    action={<MinimalPill tone="active">{selectedReturn.returnStatus}</MinimalPill>}
+                  >
+                    <div className="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+                      <div className="space-y-4">
+                        <div className="rounded-[20px] border border-black/5 bg-[#fbfbfa] p-4 dark:border-white/10 dark:bg-[#151515]">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">What changes now</p>
+                          <p className="mt-3 text-sm font-medium leading-6 text-gray-900 dark:text-white">
+                            {activeActionView === 'approve'
+                              ? 'Approve the current return path so the replacement and courtesy-credit flow can continue with the expected writeback.'
+                              : activeActionView === 'reject'
+                                ? 'Reject the return path and leave a clear denied state for the downstream teams handling customer communications and policy follow-up.'
+                                : activeActionView === 'received'
+                                  ? 'Mark the item as physically received so warehouse and refund dependencies can move out of transit assumptions.'
+                                  : activeActionView === 'refund'
+                                    ? `Move this return into refund processing for ${selectedReturn.returnValue}, preserving the approval and risk trail.`
+                                    : 'Block the return path when you need to halt progression and surface the record as requiring manual intervention.'}
+                          </p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Approval</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedReturn.approvalStatus}</p>
                           </div>
-                          <div className="flex-1 pb-4">
-                            <div className="flex justify-between items-start">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">{event.content}</p>
-                              <span className="text-xs text-gray-400">{event.time}</span>
-                            </div>
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Refund</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedReturn.refundStatus}</p>
+                          </div>
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Risk</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedReturn.riskLevel} Risk</p>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        <div className="flex flex-wrap gap-2">
+                          <MinimalPill>{selectedReturn.method}</MinimalPill>
+                          <MinimalPill>{selectedReturn.systemStates.wms}</MinimalPill>
+                          <MinimalPill>{selectedReturn.systemStates.carrier}</MinimalPill>
+                          <MinimalPill>{selectedReturn.recommendedNextAction || 'No blocker detected'}</MinimalPill>
+                        </div>
+                      </div>
+                      <div className="space-y-3 rounded-[22px] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#171717]">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Operator notes</p>
+                          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                            {selectedReturn.conflictDetected || selectedReturn.context || 'No additional conflict is currently attached to this return. You can still confirm the next return-state writeback from this panel.'}
+                          </p>
+                        </div>
+                        {activeActionView === 'approve' ? (
+                          <MinimalButton onClick={() => void handleStatusUpdate('approved', 'Approved')} disabled={statusLoading}>
+                            {statusLoading ? 'Updating return...' : 'Confirm approval'}
+                          </MinimalButton>
+                        ) : activeActionView === 'reject' ? (
+                          <MinimalButton onClick={() => void handleStatusUpdate('rejected', 'Rejected')} disabled={statusLoading}>
+                            {statusLoading ? 'Updating return...' : 'Confirm rejection'}
+                          </MinimalButton>
+                        ) : activeActionView === 'received' ? (
+                          <MinimalButton onClick={() => void handleStatusUpdate('received', 'Marked Received')} disabled={statusLoading}>
+                            {statusLoading ? 'Updating return...' : 'Confirm receipt'}
+                          </MinimalButton>
+                        ) : activeActionView === 'refund' ? (
+                          <MinimalButton onClick={() => void handleStatusUpdate('refund_pending', 'Refund Initiated')} disabled={statusLoading}>
+                            {statusLoading ? 'Updating return...' : 'Start refund processing'}
+                          </MinimalButton>
+                        ) : (
+                          <MinimalButton onClick={() => void handleStatusUpdate('blocked', 'Blocked')} disabled={statusLoading}>
+                            {statusLoading ? 'Updating return...' : 'Confirm block'}
+                          </MinimalButton>
+                        )}
+                        <MinimalButton onClick={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('inbox', selectedReturn.relatedCases[0].id)} variant="outline">
+                          Open linked case
+                        </MinimalButton>
+                      </div>
+                    </div>
+                  </MinimalCard>
+                ) : null}
+
+                <MinimalTimeline title="Return Timeline" events={selectedReturn.timeline} />
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center px-8 py-12">
