@@ -377,9 +377,11 @@ export default function AIStudio() {
   const [overviewMessage, setOverviewMessage] = useState<string>('');
   const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
   const [pendingAgentToggle, setPendingAgentToggle] = useState<any | null>(null);
+  const [agentActiveOverrides, setAgentActiveOverrides] = useState<Record<string, boolean>>({});
   const [savingCostControls, setSavingCostControls] = useState(false);
 
   const { data: studioData, refetch: refetchStudio } = useApi(aiApi.studio);
+  const { data: agentCatalog, refetch: refetchAgentCatalog } = useApi(agentsApi.list, [], []);
   const { data: workspace, refetch: refetchWorkspace } = useApi(workspacesApi.currentContext, [], null);
   const { data: reportOverview } = useApi(() => reportsApi.overview('7d'), [], null);
   const { data: reportApprovals } = useApi(() => reportsApi.approvals('7d'), [], null);
@@ -388,9 +390,15 @@ export default function AIStudio() {
   const { data: recentRuns, refetch: refetchRuns } = useApi(operationsApi.agentRuns, [], []);
   const { data: connectors } = useApi(connectorsApi.list, [], []);
   const apiAgents = useMemo(() => {
-    const raw = studioData?.agents ?? studioData?.data ?? [];
+    const raw = Array.isArray(agentCatalog)
+      ? agentCatalog
+      : Array.isArray(studioData?.agents?.list)
+        ? studioData.agents.list
+        : Array.isArray(studioData?.agents)
+          ? studioData.agents
+          : studioData?.data ?? [];
     return Array.isArray(raw) ? raw : [];
-  }, [studioData]);
+  }, [agentCatalog, studioData]);
 
   const CATEGORY_ICONS: Record<string, string> = {
     orchestration: 'supervisor_account', ingest: 'input', resolution: 'build',
@@ -417,7 +425,7 @@ export default function AIStudio() {
             desc: a.description || a.slug,
             icon: a.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
             iconColor: a.iconColor || CATEGORY_COLORS[a.category] || 'text-indigo-600',
-            active: !!a.is_active,
+            active: a.id && agentActiveOverrides[a.id] !== undefined ? agentActiveOverrides[a.id] : !!a.is_active,
             locked: !!a.is_locked,
             purpose: a.purpose || a.reasoning_profile?.systemInstruction || a.description || a.slug,
             triggers: a.triggers?.length ? a.triggers : ['System defined triggers'],
@@ -430,7 +438,7 @@ export default function AIStudio() {
           }))
         }))
       : originalCategories
-  ), [apiAgents]);
+  ), [agentActiveOverrides, apiAgents]);
 
   const activeAgentData = useMemo(
     () => mappedCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || mappedCategories[0]?.agents?.[0],
@@ -634,6 +642,12 @@ export default function AIStudio() {
       ),
     );
     setOverviewMessage(`Stopped ${stoppableAgents.length} editable agents.`);
+    setAgentActiveOverrides((current) => {
+      const next = { ...current };
+      stoppableAgents.forEach((agent: any) => { next[agent.id] = false; });
+      return next;
+    });
+    refetchAgentCatalog();
     refetchStudio();
     refetchEffective();
     refetchRuns();
@@ -669,23 +683,32 @@ export default function AIStudio() {
   };
 
   const handleToggleAgent = async (agent: any) => {
-    if (!agent?.id || agent.locked) return;
+    if (!agent?.id || agent.locked) return false;
+    const nextActive = !agent.active;
     setPendingAgentId(agent.id);
-    await updateAgentConfig.mutate({
+    const result = await updateAgentConfig.mutate({
       id: agent.id,
-      body: { isActive: !agent.active },
+      body: { isActive: nextActive },
     });
-    setOverviewMessage(`${agent.name} ${agent.active ? 'disabled' : 'enabled'}.`);
+    if (!result) {
+      setOverviewMessage(`Could not ${nextActive ? 'enable' : 'disable'} ${agent.name}. Check permissions or agent configuration.`);
+      setPendingAgentId(null);
+      return false;
+    }
+    setAgentActiveOverrides((current) => ({ ...current, [agent.id]: nextActive }));
+    setOverviewMessage(`${agent.name} ${nextActive ? 'enabled' : 'disabled'}.`);
+    refetchAgentCatalog();
     refetchStudio();
     refetchEffective();
     refetchRuns();
     setPendingAgentId(null);
+    return true;
   };
 
   const confirmAgentToggle = async () => {
     if (!pendingAgentToggle?.agent) return;
-    await handleToggleAgent(pendingAgentToggle.agent);
-    setPendingAgentToggle(null);
+    const changed = await handleToggleAgent(pendingAgentToggle.agent);
+    if (changed) setPendingAgentToggle(null);
   };
 
   const agentRoadmap = (agent: any) => {
@@ -709,8 +732,8 @@ export default function AIStudio() {
       {
         id: 'input',
         icon: 'input',
-        title: roadmap.inputs[0] || agent.ioLogic?.input || 'Canonical event',
-        subtitle: 'Trigger',
+        title: 'Intake signal',
+        subtitle: roadmap.inputs[0] || agent.ioLogic?.input || 'Canonical event',
       },
       {
         id: 'agent',
@@ -722,20 +745,20 @@ export default function AIStudio() {
       {
         id: 'policy',
         icon: 'policy',
-        title: roadmap.downstream[0] || roadmap.upstream[0] || 'Policy context',
-        subtitle: 'Guardrail',
+        title: 'Policy check',
+        subtitle: roadmap.downstream[0] || roadmap.upstream[0] || 'Guardrails',
       },
       {
         id: 'tool',
         icon: 'construction',
-        title: agent.ioLogic?.output || 'Operational output',
-        subtitle: 'Handoff',
+        title: 'Tool handoff',
+        subtitle: agent.ioLogic?.output || 'Operational output',
       },
       {
         id: 'audit',
         icon: 'fact_check',
         title: 'Audit trail',
-        subtitle: 'Observed result',
+        subtitle: 'Trace and outcome',
       },
     ];
   };
@@ -878,6 +901,7 @@ export default function AIStudio() {
                           ) : (
                             <button
                               type="button"
+                              aria-label={`${agent.active ? 'Disable' : 'Enable'} ${agent.name}`}
                               onClick={() => setPendingAgentToggle({ agent, nextActive: !agent.active })}
                               disabled={pendingAgentId === agent.id}
                               className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
@@ -1309,6 +1333,7 @@ export default function AIStudio() {
                               ) : (
                                 <button
                                   type="button"
+                                  aria-label={`${agent.active ? 'Disable' : 'Enable'} ${agent.name}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setPendingAgentToggle({ agent, nextActive: !agent.active });
@@ -1319,7 +1344,18 @@ export default function AIStudio() {
                                   <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${agent.active ? 'right-1' : 'left-1'}`}></div>
                                 </button>
                               )}
-                              <span className={`material-symbols-outlined text-gray-400 transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
+                              <button
+                                type="button"
+                                aria-label={`${expandedAgent === agent.name ? 'Collapse' : 'Expand'} ${agent.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedAgent(agent.name);
+                                  setExpandedAgent(expandedAgent === agent.name ? null : agent.name);
+                                }}
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/5 dark:hover:text-gray-200"
+                              >
+                                <span className={`material-symbols-outlined text-[18px] transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
+                              </button>
                             </div>
                           </div>
                           
@@ -1385,33 +1421,51 @@ export default function AIStudio() {
                                     {(() => {
                                       const nodes = agentFlowNodes(agent);
                                       return (
-                                        <div className="relative mt-5 overflow-hidden rounded-[18px] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#171717]">
-                                          <div className="absolute inset-0 opacity-[0.35] [background-image:radial-gradient(circle,#d1d5db_1px,transparent_1px)] [background-size:18px_18px] dark:opacity-[0.16]" />
-                                          <svg className="pointer-events-none absolute left-0 top-0 h-full w-full text-gray-300 dark:text-gray-700" aria-hidden="true">
-                                            <path d="M 132 58 C 185 58, 198 118, 250 118" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                                            <path d="M 410 118 C 462 118, 476 58, 528 58" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                                            <path d="M 690 58 C 742 58, 756 118, 808 118" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                                            <path d="M 970 118 C 1022 118, 1036 58, 1088 58" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                                          </svg>
-                                          <div className="relative grid gap-4 lg:grid-cols-5">
+                                        <div className="relative mt-5 overflow-x-auto rounded-[18px] border border-black/5 bg-white px-5 py-6 dark:border-white/10 dark:bg-[#171717]">
+                                          <div className="pointer-events-none absolute inset-0 opacity-[0.22] [background-image:radial-gradient(circle,#d1d5db_1px,transparent_1px)] [background-size:16px_16px] dark:opacity-[0.12]" />
+                                          <div className="relative flex min-w-[780px] items-start">
                                             {nodes.map((node, index) => (
-                                              <div
-                                                key={node.id}
-                                                className={`min-h-[92px] rounded-[14px] border bg-white px-4 py-3 shadow-sm dark:bg-[#1f1f1f] ${
-                                                  node.active
-                                                    ? 'border-violet-200 ring-1 ring-violet-500/30 dark:border-violet-500/30'
-                                                    : 'border-black/10 dark:border-white/10'
-                                                } ${index % 2 === 1 ? 'lg:mt-14' : ''}`}
-                                              >
-                                                <div className="mb-3 flex items-center justify-between gap-3">
-                                                  <span className={`material-symbols-outlined text-[18px] ${node.active ? 'text-violet-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                                    {node.icon}
-                                                  </span>
-                                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">{node.subtitle}</span>
+                                              <React.Fragment key={node.id}>
+                                                <div className="relative flex w-[148px] flex-col items-center">
+                                                  <div
+                                                    className={`w-full rounded-lg border bg-white px-3 py-2 shadow-sm dark:bg-[#1f1f1f] ${
+                                                      node.active
+                                                        ? 'border-violet-300 ring-1 ring-violet-500/25 dark:border-violet-500/40'
+                                                        : 'border-black/10 dark:border-white/10'
+                                                    }`}
+                                                  >
+                                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                                      <span className={`material-symbols-outlined text-[17px] ${node.active ? 'text-violet-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                        {node.icon}
+                                                      </span>
+                                                      <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">{index + 1}</span>
+                                                    </div>
+                                                    <p className="truncate text-[12px] font-bold leading-snug text-gray-950 dark:text-white">{node.title}</p>
+                                                    <p className="mt-1 line-clamp-2 min-h-[28px] text-[10px] leading-snug text-gray-500 dark:text-gray-400">{node.subtitle}</p>
+                                                  </div>
                                                 </div>
-                                                <p className="line-clamp-2 text-sm font-semibold leading-snug text-gray-950 dark:text-white">{node.title}</p>
-                                              </div>
+                                                {index < nodes.length - 1 ? (
+                                                  <div className="relative flex h-[74px] w-12 flex-none items-center justify-center">
+                                                    <div className="h-px w-full bg-gray-300 dark:bg-gray-700" />
+                                                    <div className="absolute right-0 h-2 w-2 rotate-45 border-r border-t border-gray-300 dark:border-gray-700" />
+                                                  </div>
+                                                ) : null}
+                                              </React.Fragment>
                                             ))}
+                                          </div>
+                                          <div className="relative mt-5 grid gap-3 border-t border-black/5 pt-4 md:grid-cols-3 dark:border-white/10">
+                                            <div>
+                                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Role</p>
+                                              <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{agent.desc}</p>
+                                            </div>
+                                            <div>
+                                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Decision</p>
+                                              <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{agent.ioLogic?.input || 'Canonical event'} to {agent.ioLogic?.output || 'operational output'}.</p>
+                                            </div>
+                                            <div>
+                                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Dependencies</p>
+                                              <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{agent.dependencies.slice(0, 3).join(', ') || 'Runtime context'}.</p>
+                                            </div>
                                           </div>
                                         </div>
                                       );
