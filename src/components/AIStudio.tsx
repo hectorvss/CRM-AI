@@ -379,6 +379,7 @@ export default function AIStudio() {
   const [overviewMessage, setOverviewMessage] = useState<string>('');
   const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
   const [pendingAgentToggle, setPendingAgentToggle] = useState<any | null>(null);
+  const [pendingWorkspaceAction, setPendingWorkspaceAction] = useState<'enable_all' | 'emergency_stop' | null>(null);
   const [agentActiveOverrides, setAgentActiveOverrides] = useState<Record<string, boolean>>({});
   const [stableAgentCatalog, setStableAgentCatalog] = useState<any[]>([]);
   const [savingCostControls, setSavingCostControls] = useState(false);
@@ -705,6 +706,41 @@ export default function AIStudio() {
     refetchRuns();
   };
 
+  const handleEnableAllAgents = async () => {
+    const editableAgents = mappedCategories
+      .flatMap((category) => category.agents)
+      .filter((agent: any) => agent.id && !agent.locked && !agent.active);
+
+    await Promise.all(
+      editableAgents.map((agent: any) =>
+        updateAgentConfig.mutate({
+          id: agent.id,
+          body: { isActive: true },
+        }),
+      ),
+    );
+    setOverviewMessage(`Enabled ${editableAgents.length} editable agents.`);
+    setAgentActiveOverrides((current) => {
+      const next = { ...current };
+      editableAgents.forEach((agent: any) => { next[agent.id] = true; });
+      return next;
+    });
+    refetchAgentCatalog();
+    refetchStudio();
+    refetchEffective();
+    refetchRuns();
+  };
+
+  const confirmWorkspaceAction = async () => {
+    if (pendingWorkspaceAction === 'enable_all') {
+      await handleEnableAllAgents();
+    }
+    if (pendingWorkspaceAction === 'emergency_stop') {
+      await handleEmergencyStop();
+    }
+    setPendingWorkspaceAction(null);
+  };
+
   const handleCostControlToggle = async () => {
     setSavingCostControls(true);
     await persistAiStudioSettings({
@@ -794,7 +830,16 @@ export default function AIStudio() {
             <div className="flex items-center gap-4">
               <button
                 type="button"
-                onClick={handleEmergencyStop}
+                onClick={() => setPendingWorkspaceAction('enable_all')}
+                disabled={!mappedCategories.some((category) => category.agents.some((agent: any) => agent.id && !agent.locked && !agent.active))}
+                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/5"
+              >
+                Enable all agents
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingWorkspaceAction('emergency_stop')}
+                disabled={!mappedCategories.some((category) => category.agents.some((agent: any) => agent.id && agent.active && !agent.locked))}
                 className="inline-flex items-center justify-center rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Emergency stop
@@ -1517,6 +1562,44 @@ export default function AIStudio() {
         </AnimatePresence>
       </div>
       </div>
+      <ActionModal
+        open={Boolean(pendingWorkspaceAction)}
+        onClose={() => setPendingWorkspaceAction(null)}
+        loading={false}
+        variant={pendingWorkspaceAction === 'emergency_stop' ? 'danger' : 'warning'}
+        icon={pendingWorkspaceAction === 'emergency_stop' ? 'emergency' : 'toggle_on'}
+        title={pendingWorkspaceAction === 'emergency_stop' ? 'Emergency stop' : 'Enable all agents'}
+        subtitle={pendingWorkspaceAction === 'emergency_stop'
+          ? 'This will stop every editable active agent and prevent new tasks from being routed to them.'
+          : 'This will enable every editable disabled agent so the runtime can route new tasks to them.'}
+        context={pendingWorkspaceAction ? [
+          { label: 'Scope', value: 'Workspace agents' },
+          { label: 'Editable agents', value: pendingWorkspaceAction === 'emergency_stop'
+            ? String(mappedCategories.flatMap((category) => category.agents).filter((agent: any) => agent.id && agent.active && !agent.locked).length)
+            : String(mappedCategories.flatMap((category) => category.agents).filter((agent: any) => agent.id && !agent.locked && !agent.active).length)
+          },
+          { label: 'Current mode', value: pendingWorkspaceAction === 'emergency_stop' ? 'Live to paused' : 'Paused to live' },
+        ] : []}
+        steps={pendingWorkspaceAction === 'emergency_stop' ? [
+          { text: 'Active editable agents are stopped', detail: 'Only unlocked agents currently active will be paused.' },
+          { text: 'Routing is refreshed', detail: 'The runtime map is reloaded so the dashboard reflects the new state.' },
+          { text: 'No configuration is deleted', detail: 'Agent bundles stay intact; only execution state changes.' },
+        ] : [
+          { text: 'Disabled editable agents are activated', detail: 'Only unlocked agents currently paused will be enabled.' },
+          { text: 'Routing becomes available again', detail: 'The runtime can start sending work to those agents.' },
+          { text: 'Live state is synced back to the UI', detail: 'The agent list refreshes to show the new status.' },
+        ]}
+        considerations={pendingWorkspaceAction === 'emergency_stop' ? [
+          { text: 'This will immediately halt routing to live editable agents.' },
+          { text: 'Locked agents are not affected.' },
+        ] : [
+          { text: 'This can expose newly enabled agents to live traffic right away.' },
+          { text: 'If an agent is not fully configured it may still fail on missing tools or connectors.' },
+        ]}
+        confirmLabel={pendingWorkspaceAction === 'emergency_stop' ? 'Stop all agents' : 'Enable all agents'}
+        onConfirm={confirmWorkspaceAction}
+      />
+
       <ActionModal
         open={Boolean(pendingAgentToggle?.agent)}
         onClose={() => setPendingAgentToggle(null)}
