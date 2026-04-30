@@ -1430,8 +1430,7 @@ export default function AIStudio() {
                               >
                                 {(() => {
                                   const profileMeta = agent.connectionProfile || connectionAgentByName.get(agent.name) || {};
-                                  const roleText = profileMeta?.role || agent.category || 'Agent';
-                                  const fallbackDescription = (agent.desc || agent.purpose || roleText || 'Operational agent').trim();
+                                  const fallbackDescription = (agent.desc || agent.purpose || agent.category || 'Operational agent').trim();
                                   const responsibilities = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
                                   const receivesFrom = Array.isArray(profileMeta?.receivesFrom) ? profileMeta.receivesFrom : [];
                                   const reportsTo = Array.isArray(profileMeta?.reportsTo) ? profileMeta.reportsTo : [];
@@ -1471,12 +1470,11 @@ export default function AIStudio() {
                                         <div className="flex items-center justify-between gap-3">
                                           <div>
                                             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-400">What it does</p>
-                                            <p className="mt-1 text-[12px] font-medium text-gray-500 dark:text-gray-400">{roleText}</p>
                                           </div>
                                           <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
                                         </div>
 
-                                        <div className="mt-5 border-t border-black/5 pt-4 dark:border-white/10">
+                                        <div className="mt-4">
                                           <ul className="grid grid-cols-1 gap-2">
                                             {detailBullets.map((item: string, index: number) => (
                                               <li key={`${agent.name}-detail-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">

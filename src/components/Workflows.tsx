@@ -130,6 +130,13 @@ interface NodeSpec {
   description?: string;
 }
 
+type WorkflowActionDialogState =
+  | { kind: 'rename'; value: string }
+  | { kind: 'description'; value: string }
+  | { kind: 'move'; value: string }
+  | { kind: 'import_url'; value: string }
+  | { kind: 'archive' };
+
 interface WorkflowDiagnostic {
   nodeId: string | null;
   severity: 'error' | 'warning' | 'info';
@@ -166,7 +173,11 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'case.updated', label: 'Case updated', category: 'Trigger', icon: 'published_with_changes', description: 'Starts when a case changes.' },
   { type: 'trigger', key: 'customer.updated', label: 'Customer updated', category: 'Trigger', icon: 'manage_accounts', description: 'Starts when customer data changes.' },
   { type: 'trigger', key: 'sla.breached', label: 'SLA breached', category: 'Trigger', icon: 'timer_off', description: 'Starts when a case breaches SLA.' },
+  { type: 'trigger', key: 'payment.failed', label: 'Payment failed', category: 'Trigger', icon: 'payments', description: 'Starts when a payment fails and needs review.' },
   { type: 'trigger', key: 'payment.dispute.created', label: 'Payment dispute created', category: 'Trigger', icon: 'report', description: 'Starts when a payment dispute appears.' },
+  { type: 'trigger', key: 'return.created', label: 'Return created', category: 'Trigger', icon: 'keyboard_return', description: 'Starts when a return is opened.' },
+  { type: 'trigger', key: 'approval.decided', label: 'Approval decided', category: 'Trigger', icon: 'task_alt', description: 'Starts when an approval is approved or rejected.' },
+  { type: 'trigger', key: 'webhook.received', label: 'Webhook received', category: 'Trigger', icon: 'webhook', requiresConfig: true, description: 'Starts from an inbound external webhook.' },
   { type: 'trigger', key: 'shipment.updated', label: 'Shipment updated', category: 'Trigger', icon: 'local_shipping', description: 'Starts when shipment status changes.' },
   { type: 'trigger', key: 'manual.run', label: 'Manual run', category: 'Trigger', icon: 'play_arrow', description: 'Starts when a user runs it.' },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Flow', icon: 'alt_route', requiresConfig: true, description: 'Branch based on a numeric amount.' },
@@ -242,7 +253,7 @@ const TEMPLATES = [
   {
     id: 'refund_guarded',
     label: 'Guarded refund',
-    category: 'Refunds',
+    category: 'Payments & risk',
     description: 'Evaluate policy, route high-value refunds to approval, and execute safe refunds.',
     nodes: [
       { type: 'trigger', key: 'message.received', label: 'Refund request', position: { x: 100, y: 240 } },
@@ -261,7 +272,7 @@ const TEMPLATES = [
   {
     id: 'packing_guard',
     label: 'Damaged shipment guard',
-    category: 'Orders',
+    category: 'Orders & fulfillment',
     description: 'Detect damaged shipment cases, search policy, and create a guided internal note.',
     nodes: [
       { type: 'trigger', key: 'order.updated', label: 'Order updated', position: { x: 120, y: 260 } },
@@ -272,7 +283,7 @@ const TEMPLATES = [
   {
     id: 'payment_dispute',
     label: 'Payment dispute review',
-    category: 'Payments',
+    category: 'Payments & risk',
     description: 'Pause risky payment disputes, call PSP connector, and ask finance approval.',
     nodes: [
       { type: 'trigger', key: 'payment.failed', label: 'Payment failed', position: { x: 100, y: 260 } },
@@ -284,7 +295,7 @@ const TEMPLATES = [
   {
     id: 'flow_orchestration',
     label: 'Flow orchestration',
-    category: 'Flow',
+    category: 'Orchestration & data',
     description: 'Filter, branch, wait, merge and hand off to reusable workflows.',
     nodes: [
       { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 100, y: 260 } },
@@ -309,7 +320,7 @@ const TEMPLATES = [
   {
     id: 'vip_escalation',
     label: 'VIP escalation',
-    category: 'Cases',
+    category: 'Support operations',
     description: 'Detect VIP cases, assign to senior support, and create a clear note.',
     nodes: [
       { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 100, y: 260 } },
@@ -321,7 +332,7 @@ const TEMPLATES = [
   {
     id: 'sla_breach',
     label: 'SLA breach',
-    category: 'Operations',
+    category: 'Support operations',
     description: 'Delay, evaluate SLA policy, and escalate stale cases.',
     nodes: [
       { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 100, y: 260 } },
@@ -333,7 +344,7 @@ const TEMPLATES = [
   {
     id: 'return_inspection',
     label: 'Return inspection',
-    category: 'Returns',
+    category: 'Returns & recovery',
     description: 'Create return, search inspection policy, and route high-value returns.',
     nodes: [
       { type: 'trigger', key: 'return.created', label: 'Return created', position: { x: 100, y: 260 } },
@@ -345,7 +356,7 @@ const TEMPLATES = [
   {
     id: 'fraud_risk_review',
     label: 'Fraud risk review',
-    category: 'Risk',
+    category: 'Payments & risk',
     description: 'Run risk agent, branch by confidence, and block unsafe automation.',
     nodes: [
       { type: 'trigger', key: 'order.updated', label: 'Order updated', position: { x: 100, y: 260 } },
@@ -357,7 +368,7 @@ const TEMPLATES = [
   {
     id: 'agent_triage',
     label: 'Auto-triage with agent',
-    category: 'Agents',
+    category: 'AI & knowledge',
     description: 'Run a specialist agent, check confidence, and escalate when needed.',
     nodes: [
       { type: 'trigger', key: 'case.created', label: 'Case created', position: { x: 110, y: 260 } },
@@ -687,6 +698,121 @@ const CATEGORY_META: Record<string, { title: string; subtitle: string; icon: str
   Trigger: { title: 'Trigger', subtitle: 'Start workflows from events or manual runs.', icon: 'play_circle' },
 };
 
+const WORKFLOW_CATEGORY_ORDER = [
+  'Support operations',
+  'Orders & fulfillment',
+  'Payments & risk',
+  'Returns & recovery',
+  'Approvals & governance',
+  'AI & knowledge',
+  'Integrations & sync',
+  'Orchestration & data',
+] as const;
+
+const WORKFLOW_CATEGORY_META: Record<string, { subtitle: string; icon: string }> = {
+  'Support operations': { subtitle: 'Customer cases, inbox triage, SLA handling, and outbound replies.', icon: 'support_agent' },
+  'Orders & fulfillment': { subtitle: 'Order updates, shipment states, warehouse holds, and fulfillment controls.', icon: 'shopping_bag' },
+  'Payments & risk': { subtitle: 'Refunds, disputes, PSP checks, fraud controls, and finance automation.', icon: 'payments' },
+  'Returns & recovery': { subtitle: 'Return approvals, inspections, exchanges, and recovery journeys.', icon: 'assignment_return' },
+  'Approvals & governance': { subtitle: 'Human review, policy gates, approvals, and operational guardrails.', icon: 'gpp_good' },
+  'AI & knowledge': { subtitle: 'Reasoning, summaries, drafting, retrieval, and agent-assisted workflows.', icon: 'auto_awesome' },
+  'Integrations & sync': { subtitle: 'Connectors, HTTP calls, webhook ingestion, and downstream sync.', icon: 'hub' },
+  'Orchestration & data': { subtitle: 'Branching, loops, scheduling, delays, and payload shaping.', icon: 'account_tree' },
+};
+
+const WORKFLOW_CATEGORY_ALIASES: Record<string, string> = {
+  refunds: 'Payments & risk',
+  refund: 'Payments & risk',
+  payments: 'Payments & risk',
+  payment: 'Payments & risk',
+  risk: 'Payments & risk',
+  returns: 'Returns & recovery',
+  return: 'Returns & recovery',
+  orders: 'Orders & fulfillment',
+  order: 'Orders & fulfillment',
+  operations: 'Support operations',
+  cases: 'Support operations',
+  case: 'Support operations',
+  inbox: 'Support operations',
+  approvals: 'Approvals & governance',
+  approval: 'Approvals & governance',
+  governance: 'Approvals & governance',
+  agents: 'AI & knowledge',
+  ai: 'AI & knowledge',
+  knowledge: 'AI & knowledge',
+  flow: 'Orchestration & data',
+  orchestration: 'Orchestration & data',
+  general: 'Orchestration & data',
+  integration: 'Integrations & sync',
+  integrations: 'Integrations & sync',
+  sync: 'Integrations & sync',
+};
+
+function normalizeWorkflowCategory(value?: string | null) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (WORKFLOW_CATEGORY_META[raw]) return raw;
+  return WORKFLOW_CATEGORY_ALIASES[raw.toLowerCase()] ?? raw;
+}
+
+function scoreWorkflowCategory(keys: string[], triggerType: string, description: string) {
+  const score: Record<string, number> = Object.fromEntries(WORKFLOW_CATEGORY_ORDER.map((category) => [category, 0]));
+  const add = (category: string, amount: number) => { score[category] = (score[category] ?? 0) + amount; };
+
+  for (const key of keys) {
+    if (key.startsWith('payment.') || key.includes('dispute') || key.includes('refund')) add('Payments & risk', 4);
+    if (key.startsWith('return.')) add('Returns & recovery', 4);
+    if (key.startsWith('order.') || key.startsWith('shipment.')) add('Orders & fulfillment', 4);
+    if (key.startsWith('approval.') || key.startsWith('policy.') || key.startsWith('core.')) add('Approvals & governance', 3);
+    if (key.startsWith('agent.') || key.startsWith('ai.') || key.startsWith('knowledge.')) add('AI & knowledge', 3);
+    if (key.startsWith('connector.') || key === 'data.http_request' || key === 'webhook.received') add('Integrations & sync', 4);
+    if (key.startsWith('case.') || key === 'message.received' || key === 'case.created' || key === 'case.updated' || key === 'customer.updated' || key === 'sla.breached' || key.startsWith('notification.')) add('Support operations', 3);
+    if (key.startsWith('flow.') || key.startsWith('data.') || key === 'delay' || key === 'retry' || key === 'stop' || key === 'manual.run' || key === 'trigger.schedule') add('Orchestration & data', 2);
+  }
+
+  if (triggerType === 'payment.failed' || triggerType === 'payment.dispute.created') add('Payments & risk', 4);
+  if (triggerType === 'return.created') add('Returns & recovery', 4);
+  if (triggerType === 'order.updated' || triggerType === 'shipment.updated') add('Orders & fulfillment', 4);
+  if (triggerType === 'approval.decided') add('Approvals & governance', 4);
+  if (triggerType === 'webhook.received') add('Integrations & sync', 4);
+
+  const normalizedDescription = description.toLowerCase();
+  if (/\brefund|chargeback|dispute|psp|fraud\b/.test(normalizedDescription)) add('Payments & risk', 2);
+  if (/\breturn|replacement|inspection|restock\b/.test(normalizedDescription)) add('Returns & recovery', 2);
+  if (/\border|shipment|warehouse|fulfillment\b/.test(normalizedDescription)) add('Orders & fulfillment', 2);
+  if (/\bapproval|policy|review|escalat/.test(normalizedDescription)) add('Approvals & governance', 2);
+  if (/\bai|agent|knowledge|summar|draft\b/.test(normalizedDescription)) add('AI & knowledge', 2);
+  if (/\bwebhook|connector|integration|http|sync\b/.test(normalizedDescription)) add('Integrations & sync', 2);
+  if (/\bcase|support|customer|sla|inbox\b/.test(normalizedDescription)) add('Support operations', 2);
+
+  return score;
+}
+
+function deriveWorkflowCategory(rawNodes: any[] | string = [], rawTrigger: any = {}, description = '', explicit?: string | null) {
+  const normalizedExplicit = normalizeWorkflowCategory(explicit);
+  if (normalizedExplicit && WORKFLOW_CATEGORY_META[normalizedExplicit]) return normalizedExplicit;
+
+  const nodes = parseMaybeJsonArray(rawNodes);
+  const keys = nodes
+    .map((node) => normalizeNodeKey(node, normalizeNodeType(node.type, node.key)))
+    .filter(Boolean);
+  const trigger = parseMaybeJsonObject(rawTrigger);
+  const triggerType = String(trigger.workflowCategoryTrigger ?? trigger.type ?? '').trim();
+  const score = scoreWorkflowCategory(keys, triggerType, description);
+  const top = [...WORKFLOW_CATEGORY_ORDER].sort((a, b) => (score[b] ?? 0) - (score[a] ?? 0))[0];
+  return score[top] > 0 ? top : 'Orchestration & data';
+}
+
+function buildWorkflowTrigger(existingTrigger: any, category: string, firstNodeKey?: string) {
+  const base = parseMaybeJsonObject(existingTrigger);
+  const normalizedCategory = normalizeWorkflowCategory(category) || 'Orchestration & data';
+  return {
+    ...base,
+    type: base.type ?? firstNodeKey ?? 'manual.run',
+    workflowCategory: normalizedCategory,
+  };
+}
+
 function makeNode(spec: Pick<WorkflowNode, 'type' | 'key' | 'label'> & { config?: Record<string, any>; position?: { x: number; y: number } }, index: number): WorkflowNode {
   return {
     id: `node_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 7)}`,
@@ -751,16 +877,17 @@ function normalizeEdges(raw: any[] | string = [], nodes: WorkflowNode[] = []): W
 
 function mapWorkflow(w: any): Workflow {
   const rawVersion = w.current_version ?? w.workflow_versions ?? null;
+  const rawTrigger = rawVersion?.trigger ?? w.trigger ?? {};
   const currentVersion = rawVersion ? {
     ...rawVersion,
     nodes: normalizeNodes(rawVersion.nodes ?? w.nodes ?? []),
     edges: normalizeEdges(rawVersion.edges ?? w.edges ?? []),
-    trigger: parseMaybeJsonObject(rawVersion.trigger ?? w.trigger ?? {}),
+    trigger: parseMaybeJsonObject(rawTrigger),
   } : null;
   return {
     id: w.id,
     name: w.name,
-    category: w.category || 'General',
+    category: deriveWorkflowCategory(rawVersion?.nodes ?? w.nodes ?? [], rawTrigger, w.description || '', parseMaybeJsonObject(rawTrigger).workflowCategory ?? w.category),
     description: w.description || '',
     currentVersion,
     versions: parseMaybeJsonArray(w.versions ?? []),
@@ -831,7 +958,7 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Other', items: pick(['data.rename_fields', 'data.merge_objects', 'data.calculate', 'data.extract_json', 'data.normalize_text', 'data.format_date', 'data.split_items', 'data.dedupe']) },
     ],
     AI: [
-      { title: 'Popular', items: pick(['agent.run', 'agent.classify', 'agent.draft_reply']) },
+      { title: 'Popular', items: pick(['agent.run', 'agent.classify', 'agent.draft_reply', 'ai.generate_text']) },
       { title: 'Other', items: pick(['agent.sentiment', 'agent.summarize', 'knowledge.search']) },
     ],
     Action: [
@@ -848,7 +975,7 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Runtime', items: pick(['core.audit_log', 'stop', 'retry', 'delay']) },
     ],
     Integration: [
-      { title: 'Connectors', items: pick(['connector.check_health', 'connector.call', 'connector.emit_event']) },
+      { title: 'Connectors', items: pick(['connector.check_health', 'connector.call', 'connector.emit_event', 'data.http_request']) },
     ],
     Knowledge: [
       { title: 'Knowledge', items: pick(['knowledge.search', 'knowledge.validate_policy', 'knowledge.attach_evidence']) },
@@ -856,7 +983,7 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
     Trigger: [
       { title: 'Support', items: pick(['manual.run', 'case.created', 'case.updated', 'message.received', 'sla.breached']) },
       { title: 'Commerce', items: pick(['order.updated', 'shipment.updated', 'payment.failed', 'payment.dispute.created', 'return.created']) },
-      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'webhook.received']) },
+      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'webhook.received', 'trigger.schedule']) },
     ],
   };
 
@@ -1172,7 +1299,7 @@ const nodeTypes = { workflowNode: WorkflowNodeCard };
 const edgeTypes = { workflowEdge: WorkflowEdgeButton };
 
 export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: WorkflowsProps) {
-  void _onNavigate;
+  const onNavigate = _onNavigate;
   const [view, setView] = useState<WorkflowView>('list');
   const [activeTab, setActiveTab] = useState<WorkflowTab>('overview');
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
@@ -1197,6 +1324,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const [editorNodeId, setEditorNodeId] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<'parameters' | 'settings'>('parameters');
+  const [actionDialog, setActionDialog] = useState<WorkflowActionDialogState | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingCardAction, setPendingCardAction] = useState<string | null>(null);
 
@@ -1223,8 +1351,8 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
     if (!Array.isArray(catalogPayload?.nodes)) return FALLBACK_CATALOG;
     return catalogPayload.nodes.map((node: NodeSpec) => ({ ...node, category: categoryForSpec(node) }));
   }, [catalogPayload]);
-  const workflowCategories = useMemo(() => workflows.map((workflow) => String(workflow.category)), [workflows]);
-  const filters: string[] = useMemo(() => ['All', ...Array.from(new Set<string>(workflowCategories))], [workflowCategories]);
+  const workflowCategories = useMemo(() => Array.from(new Set(workflows.map((workflow) => normalizeWorkflowCategory(String(workflow.category)) || 'Orchestration & data'))), [workflows]);
+  const filters: string[] = useMemo(() => ['All', ...WORKFLOW_CATEGORY_ORDER.filter((category) => workflowCategories.includes(category))], [workflowCategories]);
   const selectedNode = useMemo(() => workflowNodes.find((node) => node.id === selectedNodeId) ?? null, [workflowNodes, selectedNodeId]);
   const editorNode = useMemo(() => workflowNodes.find((node) => node.id === editorNodeId) ?? null, [workflowNodes, editorNodeId]);
   const latestSteps = useMemo(() => (stepResult ? [stepResult] : runResult?.steps ?? dryRun?.steps ?? []), [stepResult, runResult?.steps, dryRun?.steps]);
@@ -1232,7 +1360,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const connectors = useMemo(() => (Array.isArray(connectorsPayload) ? connectorsPayload : []), [connectorsPayload]);
 
   const filtered = useMemo(() => workflows.filter((workflow) => {
-    const matchesFilter = activeFilter === 'All' || workflow.category === activeFilter;
+    const matchesFilter = activeFilter === 'All' || normalizeWorkflowCategory(workflow.category) === activeFilter;
     const haystack = `${workflow.name} ${workflow.description} ${workflow.category} ${workflow.status}`.toLowerCase();
     return matchesFilter && (!query.trim() || haystack.includes(query.trim().toLowerCase()));
   }), [workflows, activeFilter, query]);
@@ -1430,6 +1558,7 @@ function loadBuilderState(workflow: Workflow) {
     loadBuilderState(hydrated);
     setView('builder');
     setActiveTab('builder');
+    onNavigate?.({ page: 'workflows', entityType: 'workflow', entityId: hydrated.id, section: 'builder', sourceContext: 'workflow_list' });
   }
 
   async function handleCardAction(workflow: Workflow, action: string) {
@@ -1441,11 +1570,12 @@ function loadBuilderState(workflow: Workflow) {
   async function createFromTemplate(template = TEMPLATES[0]) {
     const nextNodes = template.nodes.map((node, index) => makeNode(node as any, index));
     const nextEdges = templateEdges(template, nextNodes);
+    const category = normalizeWorkflowCategory(template.category) || deriveWorkflowCategory(nextNodes, { type: nextNodes[0]?.key ?? 'manual.run' }, template.description);
     const created = await createWorkflow.mutate({
       name: template.label,
       description: template.description,
-      category: template.category,
-      trigger: { type: nextNodes[0]?.key ?? 'manual.run' },
+      category,
+      trigger: buildWorkflowTrigger({ type: nextNodes[0]?.key ?? 'manual.run' }, category, nextNodes[0]?.key),
       nodes: nextNodes,
       edges: nextEdges,
     });
@@ -1459,6 +1589,7 @@ function loadBuilderState(workflow: Workflow) {
       setView('builder');
       setActiveTab('builder');
       setMessage(`Created workflow from ${template.label}.`);
+      onNavigate?.({ page: 'workflows', entityType: 'workflow', entityId: workflow.id, section: 'builder', sourceContext: 'workflow_template' });
     }
   }
 
@@ -1597,11 +1728,16 @@ function loadBuilderState(workflow: Workflow) {
   function buildDraftBody(overrides: Partial<Pick<Workflow, 'name' | 'description' | 'category'>> = {}) {
     const nodes = flowNodes.length ? fromFlowNodes(flowNodes, workflowNodes) : workflowNodes;
     const edges = flowEdges.length ? fromFlowEdges(flowEdges) : workflowEdges;
+    const category = normalizeWorkflowCategory(
+      overrides.category
+      ?? selectedWorkflow?.category
+      ?? deriveWorkflowCategory(nodes, selectedWorkflow?.currentVersion?.trigger ?? {}, overrides.description ?? selectedWorkflow?.description ?? ''),
+    ) || 'Orchestration & data';
     return {
       name: overrides.name ?? selectedWorkflow?.name ?? 'Workflow',
       description: overrides.description ?? selectedWorkflow?.description ?? '',
-      category: overrides.category ?? selectedWorkflow?.category ?? 'General',
-      trigger: { type: nodes[0]?.key ?? 'manual.run' },
+      category,
+      trigger: buildWorkflowTrigger(selectedWorkflow?.currentVersion?.trigger ?? {}, category, nodes[0]?.key),
       nodes,
       edges,
     };
@@ -1656,48 +1792,63 @@ function loadBuilderState(workflow: Workflow) {
 
   async function shareCurrentWorkflow() {
     if (!selectedWorkflow) return;
-    const url = window.location.href;
-    await navigator.clipboard.writeText(url);
+    const url = new URL(window.location.href);
+    url.search = new URLSearchParams({
+      view: 'workflows',
+      entityType: 'workflow',
+      entityId: selectedWorkflow.id,
+      section: activeTab,
+      source: 'workflow_share',
+    }).toString();
+    await navigator.clipboard.writeText(url.toString());
     setMessage('Workflow link copied to clipboard.');
   }
 
   async function renameCurrentWorkflow() {
     if (!selectedWorkflow) return;
-    const next = window.prompt('Rename workflow', selectedWorkflow.name);
-    if (!next || next === selectedWorkflow.name) return;
-    await persistWorkflowDraft({ name: next });
-    setMessage('Workflow renamed.');
+    setActionDialog({ kind: 'rename', value: selectedWorkflow.name });
   }
 
   async function moveCurrentWorkflow() {
     if (!selectedWorkflow) return;
-    const next = window.prompt('Move workflow to category', selectedWorkflow.category);
-    if (!next || next === selectedWorkflow.category) return;
-    await persistWorkflowDraft({ category: next });
-    setMessage(`Workflow moved to ${next}.`);
+    setActionDialog({ kind: 'move', value: normalizeWorkflowCategory(selectedWorkflow.category) || 'Support operations' });
   }
 
   async function editWorkflowDescription() {
     if (!selectedWorkflow) return;
-    setActiveTab('overview');
-    setMessage('Edit the workflow description in Overview.');
+    setActionDialog({ kind: 'description', value: selectedWorkflow.description ?? '' });
   }
 
   async function importWorkflowFromUrl() {
-    if (!selectedWorkflow) return;
-    const source = window.prompt('Import workflow JSON from URL');
-    if (!source) return;
+    setActionDialog({ kind: 'import_url', value: '' });
+  }
+
+  async function importWorkflowFromSource(source: string) {
     try {
       const response = await fetch(source, { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const raw = await response.json();
       const imported = mapWorkflow(raw);
-      setSelectedWorkflow(imported);
-      setWorkflowNodes(imported.currentVersion?.nodes ?? []);
-      setWorkflowEdges(imported.currentVersion?.edges ?? []);
-      setSelectedNodeId(imported.currentVersion?.nodes?.[0]?.id ?? null);
+      const importedNodes = imported.currentVersion?.nodes ?? normalizeNodes(raw.currentVersion?.nodes ?? raw.nodes ?? []);
+      const importedEdges = imported.currentVersion?.edges ?? normalizeEdges(raw.currentVersion?.edges ?? raw.edges ?? [], importedNodes);
+      const category = normalizeWorkflowCategory(imported.category) || deriveWorkflowCategory(importedNodes, imported.currentVersion?.trigger ?? raw.currentVersion?.trigger ?? raw.trigger ?? {}, imported.description);
+      const created = await createWorkflow.mutate({
+        name: `${imported.name || 'Imported workflow'} imported`,
+        description: imported.description ?? '',
+        category,
+        trigger: buildWorkflowTrigger(imported.currentVersion?.trigger ?? raw.currentVersion?.trigger ?? raw.trigger ?? {}, category, importedNodes[0]?.key),
+        nodes: importedNodes,
+        edges: importedEdges,
+      });
+      const persisted = created?.id ? mapWorkflow(created) : imported;
+      setSelectedWorkflow(persisted);
+      setWorkflowNodes(persisted.currentVersion?.nodes ?? importedNodes);
+      setWorkflowEdges(persisted.currentVersion?.edges ?? importedEdges);
+      setSelectedNodeId(persisted.currentVersion?.nodes?.[0]?.id ?? importedNodes[0]?.id ?? null);
       setEditorNodeId(null);
       setActiveTab('builder');
+      setView('builder');
+      onNavigate?.({ page: 'workflows', entityType: 'workflow', entityId: persisted.id, section: 'builder', sourceContext: 'workflow_import' });
       setMessage('Workflow imported from URL.');
     } catch (error) {
       setMessage(`Import from URL failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -1715,12 +1866,26 @@ function loadBuilderState(workflow: Workflow) {
     try {
       const raw = JSON.parse(await file.text());
       const imported = mapWorkflow(raw);
-      setSelectedWorkflow(imported);
-      setWorkflowNodes(imported.currentVersion?.nodes ?? []);
-      setWorkflowEdges(imported.currentVersion?.edges ?? []);
-      setSelectedNodeId(imported.currentVersion?.nodes?.[0]?.id ?? null);
+      const importedNodes = imported.currentVersion?.nodes ?? normalizeNodes(raw.currentVersion?.nodes ?? raw.nodes ?? []);
+      const importedEdges = imported.currentVersion?.edges ?? normalizeEdges(raw.currentVersion?.edges ?? raw.edges ?? [], importedNodes);
+      const category = normalizeWorkflowCategory(imported.category) || deriveWorkflowCategory(importedNodes, imported.currentVersion?.trigger ?? raw.currentVersion?.trigger ?? raw.trigger ?? {}, imported.description);
+      const created = await createWorkflow.mutate({
+        name: `${imported.name || 'Imported workflow'} imported`,
+        description: imported.description ?? '',
+        category,
+        trigger: buildWorkflowTrigger(imported.currentVersion?.trigger ?? raw.currentVersion?.trigger ?? raw.trigger ?? {}, category, importedNodes[0]?.key),
+        nodes: importedNodes,
+        edges: importedEdges,
+      });
+      const persisted = created?.id ? mapWorkflow(created) : imported;
+      setSelectedWorkflow(persisted);
+      setWorkflowNodes(persisted.currentVersion?.nodes ?? importedNodes);
+      setWorkflowEdges(persisted.currentVersion?.edges ?? importedEdges);
+      setSelectedNodeId(persisted.currentVersion?.nodes?.[0]?.id ?? importedNodes[0]?.id ?? null);
       setEditorNodeId(null);
       setActiveTab('builder');
+      setView('builder');
+      onNavigate?.({ page: 'workflows', entityType: 'workflow', entityId: persisted.id, section: 'builder', sourceContext: 'workflow_import' });
       setMessage('Workflow imported from file.');
     } catch (error) {
       setMessage(`Import from file failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -1738,16 +1903,12 @@ function loadBuilderState(workflow: Workflow) {
       edges: workflowEdges,
     };
     await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-    setMessage('Workflow JSON copied for git push.');
+    setMessage('Workflow JSON copied to the clipboard for git export.');
   }
 
   async function archiveCurrentWorkflow() {
     if (!selectedWorkflow) return;
-    const archived = await archiveWorkflow.mutate(selectedWorkflow.id);
-    if (archived?.id) {
-      setSelectedWorkflow(mapWorkflow(archived));
-      setMessage('Workflow archived.');
-    }
+    setActionDialog({ kind: 'archive' });
   }
 
   async function duplicateCurrentWorkflow() {
@@ -1767,6 +1928,7 @@ function loadBuilderState(workflow: Workflow) {
       setView('builder');
       setActiveTab('builder');
       setMessage('Workflow duplicated.');
+      onNavigate?.({ page: 'workflows', entityType: 'workflow', entityId: workflow.id, section: 'builder', sourceContext: 'workflow_duplicate' });
     }
   }
 
@@ -1789,17 +1951,25 @@ function loadBuilderState(workflow: Workflow) {
     const validationResult = await validateCurrentWorkflow();
     if (validationResult && !validationResult.ok) {
       setMessage(`Publish blocked: ${validationResult.errors?.[0] ?? 'workflow validation failed'}`);
-      return;
+      return null;
     }
     const published = await publishWorkflow.mutate(selectedWorkflow.id);
     if (published?.id) {
-      setSelectedWorkflow(mapWorkflow(published));
+      const workflow = mapWorkflow(published);
+      setSelectedWorkflow(workflow);
+      loadBuilderState(workflow);
       setMessage('Workflow published.');
+      return workflow;
     }
+    return null;
   }
 
   async function executeManualRun() {
     if (!selectedWorkflow) return;
+    if (selectedWorkflow.currentVersion?.status !== 'published') {
+      const published = await publish();
+      if (!published) return;
+    }
     const run = await runWorkflow.mutate(selectedWorkflow.id);
     setRunResult(run);
     setStepResult(null);
@@ -1810,7 +1980,10 @@ function loadBuilderState(workflow: Workflow) {
 
   async function retryLatestRun() {
     const runId = runResult?.id ?? selectedWorkflow?.recentRuns?.[0]?.id;
-    if (!runId) return;
+    if (!runId) {
+      setMessage('No previous workflow run is available to retry.');
+      return;
+    }
     const run = await retryWorkflowRun.mutate(runId);
     setRunResult(run);
     setSelectedRunId(run?.id ?? null);
@@ -1820,7 +1993,10 @@ function loadBuilderState(workflow: Workflow) {
 
   async function resumeLatestRun() {
     const runId = runResult?.id ?? selectedRunId ?? selectedWorkflow?.recentRuns?.[0]?.id;
-    if (!runId) return;
+    if (!runId) {
+      setMessage('No paused workflow run is available to resume.');
+      return;
+    }
     const run = await resumeWorkflowRun.mutate(runId);
     setRunResult(run);
     setSelectedRunId(run?.id ?? runId);
@@ -1830,7 +2006,10 @@ function loadBuilderState(workflow: Workflow) {
 
   async function cancelLatestRun() {
     const runId = runResult?.id ?? selectedRunId ?? selectedWorkflow?.recentRuns?.[0]?.id;
-    if (!runId) return;
+    if (!runId) {
+      setMessage('No workflow run is available to cancel.');
+      return;
+    }
     const run = await cancelWorkflowRun.mutate(runId);
     setRunResult(run);
     setSelectedRunId(run?.id ?? runId);
@@ -1841,6 +2020,10 @@ function loadBuilderState(workflow: Workflow) {
   async function triggerCurrentEvent() {
     const triggerNode = workflowNodes.find((node) => node.type === 'trigger') ?? workflowNodes[0];
     if (!triggerNode) return;
+    if (selectedWorkflow?.currentVersion?.status !== 'published') {
+      const published = await publish();
+      if (!published) return;
+    }
     const result = await triggerWorkflowEvent.mutate({
       eventType: triggerNode.key,
       payload: { workflowId: selectedWorkflow?.id, manual: true, ...(triggerNode.config ?? {}) },
@@ -1862,11 +2045,68 @@ function loadBuilderState(workflow: Workflow) {
 
   async function rollback() {
     if (!selectedWorkflow) return;
+    if ((selectedWorkflow.versions?.length ?? 0) < 2) {
+      setMessage('There is no previous version available to roll back to.');
+      return;
+    }
     const rolledBack = await rollbackWorkflow.mutate(selectedWorkflow.id);
     if (rolledBack?.id) {
       setSelectedWorkflow(mapWorkflow(rolledBack));
       loadBuilderState(mapWorkflow(rolledBack));
       setMessage('Workflow rolled back to the previous version.');
+    }
+  }
+
+  async function confirmWorkflowActionDialog() {
+    if (!selectedWorkflow || !actionDialog) return;
+
+    if (actionDialog.kind === 'rename') {
+      const next = actionDialog.value.trim();
+      if (!next || next === selectedWorkflow.name) {
+        setActionDialog(null);
+        return;
+      }
+      await persistWorkflowDraft({ name: next });
+      setMessage('Workflow renamed.');
+      setActionDialog(null);
+      return;
+    }
+
+    if (actionDialog.kind === 'description') {
+      const next = actionDialog.value.trim();
+      await persistWorkflowDraft({ description: next });
+      setActiveTab('overview');
+      setMessage('Workflow description updated.');
+      setActionDialog(null);
+      return;
+    }
+
+    if (actionDialog.kind === 'move') {
+      const next = normalizeWorkflowCategory(actionDialog.value) || 'Support operations';
+      await persistWorkflowDraft({ category: next });
+      setMessage(`Workflow moved to ${next}.`);
+      setActionDialog(null);
+      return;
+    }
+
+    if (actionDialog.kind === 'archive') {
+      const archived = await archiveWorkflow.mutate(selectedWorkflow.id);
+      if (archived?.id) {
+        setSelectedWorkflow(mapWorkflow(archived));
+        setMessage('Workflow archived.');
+      }
+      setActionDialog(null);
+      return;
+    }
+
+    if (actionDialog.kind === 'import_url') {
+      const source = actionDialog.value.trim();
+      if (!source) {
+        setActionDialog(null);
+        return;
+      }
+      setActionDialog(null);
+      await importWorkflowFromSource(source);
     }
   }
 
@@ -1928,7 +2168,10 @@ function loadBuilderState(workflow: Workflow) {
                 setWorkflow={setSelectedWorkflow}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
-                onBack={() => setView('list')}
+                onBack={() => {
+                  setView('list');
+                  onNavigate?.({ page: 'workflows', entityType: 'workflow', entityId: null, section: 'library', sourceContext: 'workflow_list' });
+                }}
                 onEditDescription={editWorkflowDescription}
                 onDuplicate={duplicateCurrentWorkflow}
                 onDownload={downloadCurrentWorkflow}
@@ -2047,6 +2290,13 @@ function loadBuilderState(workflow: Workflow) {
           className="hidden"
           onChange={handleWorkflowFileImport}
         />
+        <WorkflowActionDialog
+          open={Boolean(actionDialog)}
+          state={actionDialog}
+          onClose={() => setActionDialog(null)}
+          onChange={(value) => setActionDialog((current) => current && 'value' in current ? { ...current, value } as WorkflowActionDialogState : current)}
+          onConfirm={() => void confirmWorkflowActionDialog()}
+        />
         <TemplateModal open={templateOpen} onClose={() => setTemplateOpen(false)} onCreate={createFromTemplate} />
         {editorNode && (
           <WorkflowNodeEditorModal
@@ -2078,7 +2328,7 @@ const CARD_MANAGE_ITEMS: Array<{ action: string; label: string; icon: string; da
   { action: 'duplicate',        label: 'Duplicate',        icon: 'content_copy' },
   { action: 'download',         label: 'Download JSON',    icon: 'download' },
   { action: 'share',            label: 'Copy link',        icon: 'link' },
-  { action: 'push_git',         label: 'Push to Git',      icon: 'commit' },
+  { action: 'push_git',         label: 'Copy JSON for Git', icon: 'commit' },
   { action: 'import_url',       label: 'Import from URL',  icon: 'cloud_download' },
   { action: 'import_file',      label: 'Import from file', icon: 'upload_file' },
   { action: 'archive',          label: 'Archive',          icon: 'archive', danger: true },
@@ -2214,6 +2464,25 @@ function WorkflowList(props: {
               <button key={filter} onClick={() => props.setActiveFilter(filter)} className={`py-3 text-sm border-b-2 ${props.activeFilter === filter ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white' : 'border-transparent font-medium text-gray-500'}`}>{filter}</button>
             ))}
           </div>
+          <div className="grid gap-3 border-t border-gray-100 px-6 py-4 md:grid-cols-2 xl:grid-cols-4 dark:border-gray-800">
+            {props.filters.filter((filter) => filter !== 'All').map((filter) => {
+              const meta = WORKFLOW_CATEGORY_META[filter] ?? { subtitle: 'Operational workflows grouped by domain.', icon: 'grid_view' };
+              const active = props.activeFilter === filter;
+              return (
+                <button
+                  key={filter}
+                  onClick={() => props.setActiveFilter(filter)}
+                  className={`rounded-2xl border px-4 py-4 text-left transition ${active ? 'border-black bg-gray-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-lg text-gray-700">{meta.icon}</span>
+                    <div className="text-sm font-semibold text-gray-900">{filter}</div>
+                  </div>
+                  <div className="mt-2 text-xs leading-relaxed text-gray-500">{meta.subtitle}</div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
       {props.error && <div className="mx-6 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{props.error}</div>}
@@ -2225,15 +2494,23 @@ function WorkflowList(props: {
               className="relative cursor-pointer rounded-2xl border border-gray-200 bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-800 dark:bg-card-dark"
               onClick={() => void props.onOpen(workflow)}
             >
+              {(() => {
+                const meta = WORKFLOW_CATEGORY_META[normalizeWorkflowCategory(workflow.category)] ?? { subtitle: workflow.category, icon: 'grid_view' };
+                return (
+                  <>
               {/* Card header */}
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">{workflow.category}</div>
+                  <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    <span className="material-symbols-outlined !text-sm text-gray-500">{meta.icon}</span>
+                    {workflow.category}
+                  </div>
                   <h3 className="font-bold text-gray-900 dark:text-white">{workflow.name}</h3>
                 </div>
                 <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase ${workflow.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{workflow.status}</span>
               </div>
               <p className="mt-3 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">{workflow.description}</p>
+              <div className="mt-2 text-xs text-gray-400">{meta.subtitle}</div>
               {/* Metrics */}
               <div className="mt-5 grid grid-cols-3 gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
                 {workflow.metrics.map((metric) => (
@@ -2248,6 +2525,9 @@ function WorkflowList(props: {
                 <WorkflowCardDropdown workflow={workflow} kind="manage" onAction={props.onCardAction} />
                 <WorkflowCardDropdown workflow={workflow} kind="run"    onAction={props.onCardAction} />
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -2321,7 +2601,7 @@ function WorkflowEditorTopbar(props: {
     { label: 'Share', action: runAndClose(props.onShare) },
     { label: 'Import from URL...', action: runAndClose(props.onImportFromUrl) },
     { label: 'Import from file...', action: runAndClose(props.onImportFromFile) },
-    { label: 'Push to git', action: runAndClose(props.onPushToGit) },
+    { label: 'Copy JSON for Git', action: runAndClose(props.onPushToGit) },
   ];
 
   const runMenuItems = [
@@ -3191,6 +3471,121 @@ function WorkflowEvaluations({ workflow }: { workflow: Workflow | null }) {
         </p>
       </div>
     </div>
+  );
+}
+
+function WorkflowActionDialog(props: {
+  open: boolean;
+  state: WorkflowActionDialogState | null;
+  onClose: () => void;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+}) {
+  if (!props.open || !props.state) return null;
+
+  const titleByKind: Record<WorkflowActionDialogState['kind'], string> = {
+    rename: 'Rename workflow',
+    description: 'Edit description',
+    move: 'Move to category',
+    import_url: 'Import from URL',
+    archive: 'Archive workflow',
+  };
+
+  const bodyByKind: Record<WorkflowActionDialogState['kind'], string> = {
+    rename: 'Update the workflow name shown in the library and editor.',
+    description: 'Keep this concise and operational so people understand when to use it.',
+    move: 'Reclassify this workflow so it appears in the right operational lane.',
+    import_url: 'Load a workflow JSON document from a direct URL.',
+    archive: 'Archive this workflow version and keep the audit trail in place.',
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-xl rounded-3xl border border-gray-200 bg-white p-6 shadow-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-gray-400">Workflow action</div>
+              <h3 className="mt-2 text-xl font-semibold text-gray-900">{titleByKind[props.state.kind]}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-gray-500">{bodyByKind[props.state.kind]}</p>
+            </div>
+            <button onClick={props.onClose} className="rounded-xl p-2 text-gray-500 transition hover:bg-gray-100">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          {props.state.kind === 'rename' && (
+            <input
+              value={props.state.value}
+              onChange={(event) => props.onChange(event.target.value)}
+              className="mt-6 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-black/10"
+              placeholder="Workflow name"
+            />
+          )}
+
+          {props.state.kind === 'description' && (
+            <textarea
+              value={props.state.value}
+              onChange={(event) => props.onChange(event.target.value)}
+              className="mt-6 min-h-36 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-900 outline-none focus:ring-2 focus:ring-black/10"
+              placeholder="Describe what this workflow automates and when teams should use it."
+            />
+          )}
+
+          {props.state.kind === 'import_url' && (
+            <input
+              value={props.state.value}
+              onChange={(event) => props.onChange(event.target.value)}
+              className="mt-6 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-black/10"
+              placeholder="https://example.com/workflow.json"
+            />
+          )}
+
+          {props.state.kind === 'move' && (
+            <div className="mt-6 grid gap-3 md:grid-cols-2">
+              {WORKFLOW_CATEGORY_ORDER.map((category) => {
+                const active = props.state.kind === 'move' && normalizeWorkflowCategory(props.state.value) === category;
+                const meta = WORKFLOW_CATEGORY_META[category];
+                return (
+                  <button
+                    key={category}
+                    onClick={() => props.onChange(category)}
+                    className={`rounded-2xl border px-4 py-4 text-left transition ${active ? 'border-black bg-gray-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="material-symbols-outlined text-base text-gray-700">{meta.icon}</span>
+                      <div className="text-sm font-semibold text-gray-900">{category}</div>
+                    </div>
+                    <div className="mt-2 text-xs leading-relaxed text-gray-500">{meta.subtitle}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {props.state.kind === 'archive' && (
+            <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm leading-relaxed text-gray-600">
+              The workflow will stay in the audit trail, but it will stop appearing as an active automation path for future runs.
+            </div>
+          )}
+
+          <div className="mt-6 flex items-center justify-end gap-3">
+            <button onClick={props.onClose} className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50">
+              Cancel
+            </button>
+            <button onClick={props.onConfirm} className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90">
+              {props.state.kind === 'archive'
+                ? 'Archive'
+                : props.state.kind === 'import_url'
+                  ? 'Import'
+                  : props.state.kind === 'move'
+                    ? 'Move'
+                    : 'Save'}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
