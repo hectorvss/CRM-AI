@@ -9,6 +9,7 @@ import KnowledgeView from './KnowledgeView';
 import ReasoningView from './ReasoningView';
 import SafetyView from './SafetyView';
 import { MinimalButton, MinimalCard, MinimalPill, MinimalProgressBar } from './MinimalCategoryShell';
+import { connectionCategories } from '../connectionsData';
 
 type AIStudioTab = 'Overview' | 'Agents' | 'Connections' | 'Permissions' | 'Knowledge' | 'Reasoning' | 'Safety';
 
@@ -378,6 +379,7 @@ export default function AIStudio() {
   const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
   const [pendingAgentToggle, setPendingAgentToggle] = useState<any | null>(null);
   const [agentActiveOverrides, setAgentActiveOverrides] = useState<Record<string, boolean>>({});
+  const [stableAgentCatalog, setStableAgentCatalog] = useState<any[]>([]);
   const [savingCostControls, setSavingCostControls] = useState(false);
 
   const { data: studioData, refetch: refetchStudio } = useApi(aiApi.studio);
@@ -389,16 +391,50 @@ export default function AIStudio() {
   const { data: operationsOverview } = useApi(operationsApi.overview, [], null);
   const { data: recentRuns, refetch: refetchRuns } = useApi(operationsApi.agentRuns, [], []);
   const { data: connectors } = useApi(connectorsApi.list, [], []);
+
+  useEffect(() => {
+    if (Array.isArray(agentCatalog) && agentCatalog.length > 0) {
+      setStableAgentCatalog(agentCatalog);
+    }
+  }, [agentCatalog]);
+
   const apiAgents = useMemo(() => {
-    const raw = Array.isArray(agentCatalog)
+    const raw = Array.isArray(agentCatalog) && agentCatalog.length > 0
       ? agentCatalog
+      : stableAgentCatalog.length > 0
+        ? stableAgentCatalog
       : Array.isArray(studioData?.agents?.list)
         ? studioData.agents.list
-        : Array.isArray(studioData?.agents)
-          ? studioData.agents
-          : studioData?.data ?? [];
-    return Array.isArray(raw) ? raw : [];
-  }, [agentCatalog, studioData]);
+          : Array.isArray(studioData?.agents)
+            ? studioData.agents
+            : studioData?.data ?? [];
+    if (!Array.isArray(raw)) return [];
+
+    const byIdentity = new Map<string, any>();
+    raw.forEach((agent: any) => {
+      const key = agent.slug || agent.name || agent.id;
+      const current = byIdentity.get(key);
+      if (!current) {
+        byIdentity.set(key, agent);
+        return;
+      }
+
+      const currentScore =
+        (current.current_version_id ? 4 : 0) +
+        (current.version_status === 'published' ? 2 : 0) +
+        (current.has_registered_impl ? 1 : 0);
+      const candidateScore =
+        (agent.current_version_id ? 4 : 0) +
+        (agent.version_status === 'published' ? 2 : 0) +
+        (agent.has_registered_impl ? 1 : 0);
+
+      if (candidateScore > currentScore) {
+        byIdentity.set(key, agent);
+      }
+    });
+
+    return Array.from(byIdentity.values());
+  }, [agentCatalog, stableAgentCatalog, studioData]);
 
   const CATEGORY_ICONS: Record<string, string> = {
     orchestration: 'supervisor_account', ingest: 'input', resolution: 'build',
@@ -412,33 +448,48 @@ export default function AIStudio() {
 
   const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
 
+  const connectionAgentByName = useMemo(() => {
+    const map = new Map<string, any>();
+    connectionCategories.forEach((category) => {
+      category.agents.forEach((agent: any) => map.set(agent.name, { ...agent, category: category.category }));
+    });
+    return map;
+  }, []);
+
   // Map API agents into the categories structure for rendering
   const mappedCategories = useMemo(() => (
     apiAgents && apiAgents.length > 0
       ? [...new Set(apiAgents.map((a: any) => a.category))].map(cat => ({
           title: String(cat).toUpperCase().replace(/_/g, ' '),
-          agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => ({
-            id: a.id,
-            slug: a.slug,
-            category: a.category,
-            name: a.name,
-            desc: a.description || a.slug,
-            icon: a.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
-            iconColor: a.iconColor || CATEGORY_COLORS[a.category] || 'text-indigo-600',
-            active: a.id && agentActiveOverrides[a.id] !== undefined ? agentActiveOverrides[a.id] : !!a.is_active,
-            locked: !!a.is_locked,
-            purpose: a.purpose || a.reasoning_profile?.systemInstruction || a.description || a.slug,
-            triggers: a.triggers?.length ? a.triggers : ['System defined triggers'],
-            dependencies: a.dependencies?.length ? a.dependencies : ['Core routing', 'Context Window'],
-            ioLogic: a.ioLogic || { input: 'Canonical event', output: 'Approved action or Routing' },
-            metrics: a.metrics || {},
-            permissionProfile: a.permission_profile,
-            reasoningProfile: a.reasoning_profile,
-            safetyProfile: a.safety_profile,
-          }))
+          agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => {
+            const connectionProfile = connectionAgentByName.get(a.name);
+            return {
+              id: a.id,
+              slug: a.slug,
+              category: a.category,
+              name: a.name,
+              desc: connectionProfile?.role || a.description || a.slug,
+              icon: connectionProfile?.icon || a.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
+              iconColor: connectionProfile?.iconColor || a.iconColor || CATEGORY_COLORS[a.category] || 'text-indigo-600',
+              active: a.id && agentActiveOverrides[a.id] !== undefined ? agentActiveOverrides[a.id] : !!a.is_active,
+              locked: !!a.is_locked,
+              purpose: connectionProfile?.role || a.purpose || a.reasoning_profile?.systemInstruction || a.description || a.slug,
+              triggers: connectionProfile?.receivesFrom?.length ? connectionProfile.receivesFrom : a.triggers?.length ? a.triggers : ['System defined triggers'],
+              dependencies: connectionProfile?.reportsTo?.length ? connectionProfile.reportsTo : a.dependencies?.length ? a.dependencies : ['Core routing', 'Context Window'],
+              ioLogic: a.ioLogic || {
+                input: connectionProfile?.receivesFrom?.slice(0, 2).join(', ') || 'Canonical event',
+                output: connectionProfile?.reportsTo?.slice(0, 2).join(', ') || 'Approved action or Routing',
+              },
+              metrics: a.metrics || {},
+              permissionProfile: a.permission_profile,
+              reasoningProfile: a.reasoning_profile,
+              safetyProfile: a.safety_profile,
+              connectionProfile,
+            };
+          })
         }))
       : originalCategories
-  ), [agentActiveOverrides, apiAgents]);
+  ), [CATEGORY_COLORS, CATEGORY_ICONS, agentActiveOverrides, apiAgents, connectionAgentByName]);
 
   const activeAgentData = useMemo(
     () => mappedCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || mappedCategories[0]?.agents?.[0],
@@ -711,56 +762,19 @@ export default function AIStudio() {
     if (changed) setPendingAgentToggle(null);
   };
 
-  const agentRoadmap = (agent: any) => {
-    const inputs = Array.isArray(agent?.triggers) ? agent.triggers.slice(0, 4) : [];
-    const dependencies = Array.isArray(agent?.dependencies) ? agent.dependencies.slice(0, 5) : [];
-    const toolSignals = [agent?.ioLogic?.input, agent?.ioLogic?.output].filter(Boolean) as string[];
-    const upstream = dependencies.filter((item: string) => !/Agent|Runtime|Window|Window|Window|Knowledge|Composer/i.test(item)).slice(0, 3);
-    const downstream = dependencies.filter((item: string) => /Agent|Runtime|Workflow|Helpdesk|Stripe|Shopify|OMS|Returns|Logistics|Recharge|Audit|SLA|Customer/i.test(item)).slice(0, 4);
-
+  const agentRoadmapData = (agent: any) => {
+    const profile = agent?.connectionProfile || connectionAgentByName.get(agent?.name) || {};
     return {
-      inputs,
-      upstream: upstream.length ? upstream : dependencies.slice(0, 3),
-      downstream: downstream.length ? downstream : dependencies.slice(0, 4),
-      toolSignals,
+      receivesFrom: Array.isArray(profile.receivesFrom) && profile.receivesFrom.length ? profile.receivesFrom : agent.triggers || [],
+      uses: Array.isArray(profile.uses) ? profile.uses : [],
+      does: Array.isArray(profile.does) ? profile.does : [],
+      reportsTo: Array.isArray(profile.reportsTo) && profile.reportsTo.length ? profile.reportsTo : agent.dependencies || [],
+      writesTo: Array.isArray(profile.writesTo) ? profile.writesTo : [],
+      blockedBy: Array.isArray(profile.blockedBy) ? profile.blockedBy : [],
+      steps: Array.isArray(profile.steps) ? profile.steps : [],
+      summary: profile.summary || `${(agent.triggers || []).length} inputs - ${(agent.dependencies || []).length} connections`,
+      role: profile.role || agent.purpose || agent.desc,
     };
-  };
-
-  const agentFlowNodes = (agent: any) => {
-    const roadmap = agentRoadmap(agent);
-    return [
-      {
-        id: 'input',
-        icon: 'input',
-        title: 'Intake signal',
-        subtitle: roadmap.inputs[0] || agent.ioLogic?.input || 'Canonical event',
-      },
-      {
-        id: 'agent',
-        icon: agent.icon || 'smart_toy',
-        title: agent.name,
-        subtitle: agent.active ? 'Runtime enabled' : 'Runtime paused',
-        active: true,
-      },
-      {
-        id: 'policy',
-        icon: 'policy',
-        title: 'Policy check',
-        subtitle: roadmap.downstream[0] || roadmap.upstream[0] || 'Guardrails',
-      },
-      {
-        id: 'tool',
-        icon: 'construction',
-        title: 'Tool handoff',
-        subtitle: agent.ioLogic?.output || 'Operational output',
-      },
-      {
-        id: 'audit',
-        icon: 'fact_check',
-        title: 'Audit trail',
-        subtitle: 'Trace and outcome',
-      },
-    ];
   };
 
   return (
@@ -1419,52 +1433,99 @@ export default function AIStudio() {
                                       <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
                                     </div>
                                     {(() => {
-                                      const nodes = agentFlowNodes(agent);
+                                      const roadmap = agentRoadmapData(agent);
+                                      const inbound = roadmap.receivesFrom;
+                                      const outbound = roadmap.reportsTo;
+                                      const tools = roadmap.uses;
+                                      const writes = roadmap.writesTo;
+                                      const blockers = roadmap.blockedBy;
+                                      const steps = roadmap.steps;
                                       return (
-                                        <div className="relative mt-5 overflow-x-auto rounded-[18px] border border-black/5 bg-white px-5 py-6 dark:border-white/10 dark:bg-[#171717]">
-                                          <div className="pointer-events-none absolute inset-0 opacity-[0.22] [background-image:radial-gradient(circle,#d1d5db_1px,transparent_1px)] [background-size:16px_16px] dark:opacity-[0.12]" />
-                                          <div className="relative flex min-w-[780px] items-start">
-                                            {nodes.map((node, index) => (
-                                              <React.Fragment key={node.id}>
-                                                <div className="relative flex w-[148px] flex-col items-center">
-                                                  <div
-                                                    className={`w-full rounded-lg border bg-white px-3 py-2 shadow-sm dark:bg-[#1f1f1f] ${
-                                                      node.active
-                                                        ? 'border-violet-300 ring-1 ring-violet-500/25 dark:border-violet-500/40'
-                                                        : 'border-black/10 dark:border-white/10'
-                                                    }`}
-                                                  >
-                                                    <div className="mb-2 flex items-center justify-between gap-2">
-                                                      <span className={`material-symbols-outlined text-[17px] ${node.active ? 'text-violet-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                                        {node.icon}
-                                                      </span>
-                                                      <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">{index + 1}</span>
-                                                    </div>
-                                                    <p className="truncate text-[12px] font-bold leading-snug text-gray-950 dark:text-white">{node.title}</p>
-                                                    <p className="mt-1 line-clamp-2 min-h-[28px] text-[10px] leading-snug text-gray-500 dark:text-gray-400">{node.subtitle}</p>
+                                        <div className="relative mt-5 overflow-x-auto rounded-[18px] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#171717]">
+                                          <div className="pointer-events-none absolute inset-0 opacity-[0.2] [background-image:radial-gradient(circle,#d1d5db_1px,transparent_1px)] [background-size:18px_18px] dark:opacity-[0.12]" />
+                                          <div className="relative min-w-[1100px]">
+                                            <div className="mb-5 grid grid-cols-[270px_1fr_270px] gap-8">
+                                              <div className="space-y-2">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Receives from</p>
+                                                {inbound.map((item: string) => (
+                                                  <div key={item} className="relative rounded-lg border border-black/10 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#202020] dark:text-gray-300">
+                                                    {item}
+                                                    <span className="absolute -right-[33px] top-1/2 h-px w-8 bg-gray-300 dark:bg-gray-700" />
                                                   </div>
+                                                ))}
+                                              </div>
+
+                                              <div className="flex flex-col items-center justify-center">
+                                                <div className="w-[260px] rounded-xl border border-violet-300 bg-white px-4 py-4 text-center shadow-sm ring-1 ring-violet-500/20 dark:border-violet-500/40 dark:bg-[#202020]">
+                                                  <span className={`material-symbols-outlined text-[24px] ${agent.iconColor}`}>{agent.icon}</span>
+                                                  <h4 className="mt-2 text-sm font-bold text-gray-950 dark:text-white">{agent.name}</h4>
+                                                  <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">{roadmap.role}</p>
                                                 </div>
-                                                {index < nodes.length - 1 ? (
-                                                  <div className="relative flex h-[74px] w-12 flex-none items-center justify-center">
-                                                    <div className="h-px w-full bg-gray-300 dark:bg-gray-700" />
-                                                    <div className="absolute right-0 h-2 w-2 rotate-45 border-r border-t border-gray-300 dark:border-gray-700" />
+                                                <div className="mt-4 rounded-full border border-black/10 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-[#202020] dark:text-gray-400">
+                                                  {roadmap.summary}
+                                                </div>
+                                              </div>
+
+                                              <div className="space-y-2">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Reports to</p>
+                                                {outbound.map((item: string) => (
+                                                  <div key={item} className="relative rounded-lg border border-black/10 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-[#202020] dark:text-gray-300">
+                                                    <span className="absolute -left-[33px] top-1/2 h-px w-8 bg-gray-300 dark:bg-gray-700" />
+                                                    {item}
                                                   </div>
-                                                ) : null}
-                                              </React.Fragment>
-                                            ))}
-                                          </div>
-                                          <div className="relative mt-5 grid gap-3 border-t border-black/5 pt-4 md:grid-cols-3 dark:border-white/10">
-                                            <div>
-                                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Role</p>
-                                              <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{agent.desc}</p>
+                                                ))}
+                                              </div>
                                             </div>
-                                            <div>
-                                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Decision</p>
-                                              <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{agent.ioLogic?.input || 'Canonical event'} to {agent.ioLogic?.output || 'operational output'}.</p>
+
+                                            <div className="grid grid-cols-3 gap-4">
+                                              <div className="rounded-xl border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1d1d1d]">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Uses</p>
+                                                <div className="mt-3 flex flex-wrap gap-2">
+                                                  {tools.map((item: string) => (
+                                                    <span key={item} className="rounded-md border border-black/10 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-[#242424] dark:text-gray-300">{item}</span>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                              <div className="rounded-xl border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1d1d1d]">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Writes to</p>
+                                                <div className="mt-3 flex flex-wrap gap-2">
+                                                  {writes.map((item: string) => (
+                                                    <span key={item} className="rounded-md border border-black/10 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-[#242424] dark:text-gray-300">{item}</span>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                              <div className="rounded-xl border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1d1d1d]">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Blocked by</p>
+                                                <div className="mt-3 flex flex-wrap gap-2">
+                                                  {blockers.map((item: string) => (
+                                                    <span key={item} className="rounded-md border border-black/10 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:bg-[#242424] dark:text-gray-300">{item}</span>
+                                                  ))}
+                                                </div>
+                                              </div>
                                             </div>
-                                            <div>
-                                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Dependencies</p>
-                                              <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{agent.dependencies.slice(0, 3).join(', ') || 'Runtime context'}.</p>
+
+                                            <div className="mt-4 rounded-xl border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-[#1d1d1d]">
+                                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Execution path</p>
+                                              <div className="mt-3 flex min-w-max items-start">
+                                                {steps.map((step: any, index: number) => (
+                                                  <React.Fragment key={`${step.num}-${step.title}`}>
+                                                    <div className="w-[190px] rounded-lg border border-black/10 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#242424]">
+                                                      <div className="mb-2 flex items-center justify-between">
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Step {step.num ?? index + 1}</span>
+                                                        <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500 dark:bg-white/[0.06]">{step.mode}</span>
+                                                      </div>
+                                                      <p className="text-[12px] font-bold text-gray-950 dark:text-white">{step.title}</p>
+                                                      <p className="mt-1 text-[10px] leading-snug text-gray-500 dark:text-gray-400">{step.desc}</p>
+                                                    </div>
+                                                    {index < steps.length - 1 ? (
+                                                      <div className="relative flex h-[82px] w-10 flex-none items-center justify-center">
+                                                        <div className="h-px w-full bg-gray-300 dark:bg-gray-700" />
+                                                        <div className="absolute right-0 h-2 w-2 rotate-45 border-r border-t border-gray-300 dark:border-gray-700" />
+                                                      </div>
+                                                    ) : null}
+                                                  </React.Fragment>
+                                                ))}
+                                              </div>
                                             </div>
                                           </div>
                                         </div>
