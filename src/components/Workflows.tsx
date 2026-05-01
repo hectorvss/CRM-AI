@@ -280,6 +280,7 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'action', key: 'case.update_status', label: 'Update case status', category: 'Action', icon: 'published_with_changes', requiresConfig: true, description: 'Move a case to a new operational status.' },
   { type: 'action', key: 'case.set_priority', label: 'Set case priority', category: 'Action', icon: 'priority_high', requiresConfig: true, description: 'Update priority, severity, or risk.' },
   { type: 'action', key: 'case.add_tag', label: 'Add case tag', category: 'Action', icon: 'sell', requiresConfig: true, description: 'Append a tag to the case.' },
+  { type: 'action', key: 'case.graph_lookup', label: 'Case graph lookup', category: 'Action', icon: 'account_tree', requiresConfig: true, description: 'Traverse the case graph to find related entities, owners, and linked context.' },
   { type: 'action', key: 'order.cancel', label: 'Cancel order', category: 'Action', icon: 'block', requiresConfig: true, sensitive: true, description: 'Cancel an eligible order.' },
   { type: 'action', key: 'order.hold', label: 'Place order hold', category: 'Action', icon: 'pause_circle', requiresConfig: true, sensitive: true, description: 'Pause fulfillment while an issue is reviewed.' },
   { type: 'action', key: 'order.release', label: 'Release order hold', category: 'Action', icon: 'play_circle', requiresConfig: true, description: 'Release a previously held order.' },
@@ -862,6 +863,58 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'topic', label: 'Allowed topic (optional)', type: 'text', placeholder: 'customer support' },
     { key: 'target', label: 'Result variable', type: 'text', placeholder: 'guardResult' },
   ],
+  // ── CRM Actions ───────────────────────────────────────────────────────────
+  'case.assign': [
+    { key: 'teamId', label: 'Team', type: 'select', options: ['support', 'billing', 'shipping', 'technical', 'legal', 'vip'] },
+    { key: 'agentId', label: 'Assignee (Optional)', type: 'text', placeholder: 'Agent name or email' },
+  ],
+  'case.update_status': [
+    { key: 'status', label: 'New status', type: 'select', options: ['open', 'pending', 'resolved', 'closed', 'on_hold', 'escalated'] },
+  ],
+  'case.set_priority': [
+    { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'normal', 'high', 'critical'] },
+  ],
+  'case.add_tag': [
+    { key: 'tag', label: 'Tag name', type: 'text', placeholder: 'e.g. urgent, v2-beta, payment_issue' },
+  ],
+  'case.reply': [
+    { key: 'content', label: 'Message body', type: 'textarea', placeholder: 'Hello {{customer.name}}, ...' },
+    { key: 'channel', label: 'Channel', type: 'select', options: ['email', 'chat', 'sms', 'whatsapp'] },
+  ],
+  'case.note': [
+    { key: 'content', label: 'Note content', type: 'textarea', placeholder: 'Internal context for agents...' },
+    { key: 'visibility', label: 'Visibility', type: 'select', options: ['internal', 'public'] },
+  ],
+  'case.graph_lookup': [
+    { key: 'caseId', label: 'Case ID', type: 'text', placeholder: '{{case.id}}' },
+    { key: 'depth', label: 'Traversal depth', type: 'number', placeholder: '2' },
+  ],
+  'order.hold': [
+    { key: 'reason', label: 'Hold reason', type: 'text', placeholder: 'e.g. Fraud check, missing address' },
+  ],
+  'order.release': [
+    { key: 'reason', label: 'Release reason', type: 'text', placeholder: 'e.g. Address verified' },
+  ],
+  'order.cancel': [
+    { key: 'reason', label: 'Cancellation reason', type: 'text', placeholder: 'e.g. Customer request' },
+  ],
+  'payment.refund': [
+    { key: 'amount', label: 'Refund amount', type: 'text', placeholder: '{{payment.amount}} or literal' },
+    { key: 'reason', label: 'Reason', type: 'text' },
+  ],
+  'payment.mark_dispute': [
+    { key: 'reason', label: 'Dispute reason', type: 'text' },
+  ],
+  'return.create': [
+    { key: 'orderId', label: 'Order ID', type: 'text', placeholder: '{{order.id}}' },
+    { key: 'items', label: 'Items to return (JSON or comma-separated)', type: 'text' },
+  ],
+  'return.approve': [
+    { key: 'reason', label: 'Approval reason', type: 'text' },
+  ],
+  'return.reject': [
+    { key: 'reason', label: 'Rejection reason', type: 'text' },
+  ],
   // ── HTTP ──────────────────────────────────────────────────────────────────
   'data.http_request': [
     { key: 'url', label: 'URL', type: 'text', placeholder: 'https://api.example.com/endpoint', hint: 'Supports {{template}} interpolation' },
@@ -910,10 +963,11 @@ const EDITOR_TABS = [
   { id: 'runs', label: 'Executions' },
   { id: 'evaluations', label: 'Evaluations' },
 ] as const;
-const ADD_GROUPS = ['AI Agent', 'AI', 'Action', 'Data transformation', 'Flow', 'Core', 'Human review', 'Integration', 'Knowledge', 'Trigger'] as const;
+const ADD_GROUPS = ['AI Studio Agent', 'AI Agent', 'AI', 'Action', 'Data transformation', 'Flow', 'Core', 'Human review', 'Integration', 'Knowledge', 'Trigger'] as const;
 
 const CATEGORY_META: Record<string, { title: string; subtitle: string; icon: string }> = {
-  'AI Agent': { title: 'AI Agent', subtitle: 'Connect pre-configured AI Studio agents directly into your workflows.', icon: 'smart_toy' },
+  'AI Studio Agent': { title: 'AI Studio Agent', subtitle: 'Connect your custom-configured agents from AI Studio as modular workflow steps.', icon: 'psychology' },
+  'AI Agent': { title: 'AI Agent', subtitle: 'Standard AI operations like classification, sentiment, and summaries.', icon: 'smart_toy' },
   AI: { title: 'AI', subtitle: 'LLM providers, extractors, and safety guardrails for AI-powered steps.', icon: 'auto_awesome' },
   Action: { title: 'Action', subtitle: 'Write into cases, orders, payments, returns, and more.', icon: 'bolt' },
   'Data transformation': { title: 'Data transformation', subtitle: 'Map, clean, reshape, and prepare workflow data.', icon: 'transform' },
@@ -1354,8 +1408,8 @@ function getCategoryOverview(catalog: NodeSpec[], studioAgentCount = 0) {
   return ADD_GROUPS.map((category) => {
     const items = catalog.filter((spec) => categoryForSpec(spec) === category);
     const meta = CATEGORY_META[category] ?? { title: category, subtitle: 'Browse available blocks.', icon: 'grid_view' };
-    // For the AI Agent category, add the live AI Studio agent count on top of the static spec count
-    const count = category === 'AI Agent' ? items.length + studioAgentCount : items.length;
+    // For the AI Studio Agent category, the count comes from the live agent catalog
+    const count = category === 'AI Studio Agent' ? studioAgentCount : items.length;
     return { category, ...meta, count, items };
   });
 }
@@ -3380,6 +3434,12 @@ function WorkflowVariablesSection(props: {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-end">
+        <button onClick={props.onCreate} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90">
+          New variable
+        </button>
+      </div>
+
       {props.storedVariables.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-2">
           {props.storedVariables
@@ -3475,6 +3535,12 @@ function WorkflowDataTablesSection(props: {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-end">
+        <button onClick={props.onCreate} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90">
+          Create data table
+        </button>
+      </div>
+
       {visibleStoredTables.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-2">
           {visibleStoredTables.map((table) => (
@@ -4087,23 +4153,23 @@ function WorkflowAddNodePanel(props: {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
-              {/* AI Agent category: show real AI Studio agents as the first section */}
-              {props.activeCategory === 'AI Agent' && props.agentCatalog && props.agentCatalog.length > 0 && !props.search && (
+              {/* AI Studio Agent category: show real AI Studio agents */}
+              {props.activeCategory === 'AI Studio Agent' && (
                 <section className="mb-5">
                   <div className="flex items-center justify-between border-b border-orange-100 pb-2">
-                    <h4 className="text-sm font-bold text-orange-700">Your AI Studio Agents</h4>
-                    <span className="text-[11px] uppercase tracking-[0.24em] text-orange-400">{props.agentCatalog.length}</span>
+                    <h4 className="text-sm font-bold text-orange-700">Available Agents</h4>
+                    <span className="text-[11px] uppercase tracking-[0.24em] text-orange-400">{props.agentCatalog?.length ?? 0}</span>
                   </div>
                   <div className="mt-2 space-y-1">
-                    {props.agentCatalog.map((agent) => (
+                    {props.agentCatalog?.map((agent) => (
                       <button
                         key={agent.id}
                         onClick={() => props.onSelect({
                           type: 'agent',
                           key: 'agent.run',
                           label: agent.name,
-                          category: 'AI Agent',
-                          icon: 'smart_toy',
+                          category: 'AI Studio Agent',
+                          icon: 'psychology',
                           requiresConfig: false,
                           description: agent.description ?? `Run the ${agent.name} agent`,
                           defaultConfig: { agent: agent.slug, agentId: agent.id },
@@ -4111,7 +4177,7 @@ function WorkflowAddNodePanel(props: {
                         className="flex w-full items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/50 px-3 py-3 text-left transition hover:bg-orange-50"
                       >
                         <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 text-orange-600 shadow-sm">
-                          <span className="material-symbols-outlined text-lg">smart_toy</span>
+                          <span className="material-symbols-outlined text-lg">psychology</span>
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
@@ -4128,8 +4194,17 @@ function WorkflowAddNodePanel(props: {
                         <span className="material-symbols-outlined mt-1 text-base text-orange-400">arrow_forward</span>
                       </button>
                     ))}
+                    {(!props.agentCatalog || props.agentCatalog.length === 0) && (
+                      <div className="rounded-xl border border-dashed border-gray-200 py-8 text-center">
+                        <span className="material-symbols-outlined mb-2 text-3xl text-gray-300">smart_toy</span>
+                        <p className="text-xs text-gray-500">No agents found in AI Studio.</p>
+                      </div>
+                    )}
                   </div>
-                  <p className="mt-3 text-[10px] text-gray-400">Configure agents in AI Studio → Agents. Each agent runs with its own persona, tools, and knowledge.</p>
+                  <p className="mt-4 text-[10px] leading-4 text-gray-400">
+                    <b className="text-gray-500">How this works:</b> When this step executes, the workflow context is passed to the agent. 
+                    The agent uses its specific reasoning profile, knowledge base, and tools to process the data and returns a structured response.
+                  </p>
                 </section>
               )}
               {props.sections.length > 0 ? (
@@ -4157,11 +4232,13 @@ function WorkflowAddNodePanel(props: {
                     </section>
                   ))}
                 </div>
-              ) : props.activeCategory !== 'AI Agent' ? (
-                <div className="flex h-full items-center justify-center text-sm text-gray-500">No nodes found.</div>
-              ) : null}
-              {props.activeCategory === 'AI Agent' && props.sections.length === 0 && (!props.agentCatalog || props.agentCatalog.length === 0) && (
-                <div className="flex h-full items-center justify-center text-sm text-gray-500">No AI agents found. Create one in AI Studio → Agents.</div>
+              {props.activeCategory === 'AI Studio Agent' && props.sections.length === 0 && (!props.agentCatalog || props.agentCatalog.length === 0) && (
+                <div className="flex h-full items-center justify-center text-sm text-gray-500 text-center px-8">
+                  <div>
+                    <span className="material-symbols-outlined mb-4 text-4xl text-gray-200">psychology</span>
+                    <p>No AI agents found. Create your first specialized agent in AI Studio to use it as a workflow node.</p>
+                  </div>
+                </div>
               )}
             </div>
           </motion.div>

@@ -756,6 +756,37 @@ async function executeActionNode(
         return { nodeId: node.id, key: label, status: 'ok', detail: 'Approval request recorded — awaiting human review' };
       }
 
+      case 'case.status': {
+        if (!caseId) return { nodeId: node.id, key: label, status: 'skipped', detail: 'No caseId in payload' };
+        const status = cfg?.status || payload?.status || 'resolved';
+        await caseRepo.update(scope, caseId, {
+          status,
+          updated_at: new Date().toISOString(),
+        });
+        return { nodeId: node.id, key: label, status: 'ok', detail: `Case ${caseId} status updated to ${status}` };
+      }
+
+      case 'case.priority': {
+        if (!caseId) return { nodeId: node.id, key: label, status: 'skipped', detail: 'No caseId in payload' };
+        const priority = cfg?.priority || payload?.priority || 'medium';
+        await caseRepo.update(scope, caseId, {
+          priority,
+          updated_at: new Date().toISOString(),
+        });
+        return { nodeId: node.id, key: label, status: 'ok', detail: `Case ${caseId} priority updated to ${priority}` };
+      }
+
+      case 'customer.segment': {
+        const customerId = payload?.customerId ?? cfg?.customerId ?? null;
+        if (!customerId) return { nodeId: node.id, key: label, status: 'skipped', detail: 'No customerId in payload' };
+        const segment = cfg?.segment || payload?.segment || 'standard';
+        await customerRepo.update(scope, customerId, {
+          segment,
+          updated_at: new Date().toISOString(),
+        });
+        return { nodeId: node.id, key: label, status: 'ok', detail: `Customer ${customerId} segment updated to ${segment}` };
+      }
+
       case 'return.create': {
         return { nodeId: node.id, key: label, status: 'skipped', detail: 'return.create requires a return request form — skipped in automated run' };
       }

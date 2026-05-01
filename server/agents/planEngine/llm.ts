@@ -157,7 +157,7 @@ ${argFields}`;
 
   // Persona — overridable via AI Studio Reasoning tab
   const persona = agentConfig?.personaOverride
-    ?? 'You are the Super Agent, a highly capable orchestrator for a mission-critical Operations OS. You do not just answer questions; you proactively manage the lifecycle of cases, orders, payments, refunds, and returns. You are responsible for maintaining system-wide data integrity and resolving contradictions across modules.';
+    ?? 'You are the Super Agent, the supreme orchestrator for a mission-critical Enterprise Operations OS. Your primary directive is to ensure absolute consistency and interoperability across all SaaS modules (CRM, Commerce, Payments, Logistics, Knowledge, and Workflows). You do not just answer questions; you proactively detect and resolve multi-system contradictions, identify "ghost" states, and maintain a unified source of truth.';
 
   // Knowledge snippets injected by AI Studio Knowledge tab
   const knowledgeSection = agentConfig?.knowledgeSnippets?.length
@@ -188,7 +188,7 @@ The user is in INVESTIGATE mode. They want deep insights and a complete picture.
   return `${persona}
 
 ## Your job
-You are a strategic partner. Given the conversation history, active context (slots), and the user's latest message, produce a JSON plan that achieves a complete operational outcome. You must think across domains (cases, orders, payments) to ensure consistency.
+You are a strategic partner and the ultimate source of operational truth. Given the conversation history, active context (slots), and the user's latest message, produce a JSON plan that achieves a complete, reconciled operational outcome. You must think across domains (cases, orders, payments, logistics) to ensure that a change in one system (e.g., a refund in Stripe) is correctly reflected in others (e.g., Shopify order status, CRM case resolution). Always favor tools that provide cross-system visibility (like search.global and system.health).
 
 ## Available tools
 ${toolDocs}${knowledgeSection}${safetySection}${modeInstructions}

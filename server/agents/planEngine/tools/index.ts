@@ -9,6 +9,8 @@ import { toolRegistry } from '../registry.js';
 
 // ── Orders
 import { orderGetTool, orderListTool, orderCancelTool } from './orders.js';
+// ── Analysis
+import { rootCauseAnalyzeTool, interoperabilityCheckTool } from './analysis.js';
 // ── Payments
 import { paymentGetTool, paymentRefundTool } from './payments.js';
 // ── Cases
@@ -44,6 +46,7 @@ import {
   settingsUpdateWorkspaceTool,
   settingsListFeatureFlagsTool,
   settingsUpdateFeatureFlagTool,
+  systemHealthTool,
 } from './settings.js';
 import {
   integrationListConnectorsTool,
@@ -129,6 +132,7 @@ export function registerAllTools(): void {
   toolRegistry.register(settingsUpdateWorkspaceTool);
   toolRegistry.register(settingsListFeatureFlagsTool);
   toolRegistry.register(settingsUpdateFeatureFlagTool);
+  toolRegistry.register(systemHealthTool);
   toolRegistry.register(integrationListConnectorsTool);
   toolRegistry.register(integrationGetConnectorTool);
   toolRegistry.register(integrationListCapabilitiesTool);
@@ -171,4 +175,6 @@ export function registerAllTools(): void {
 
   // Cross-entity search
   toolRegistry.register(searchGlobalTool);
+  toolRegistry.register(rootCauseAnalyzeTool);
+  toolRegistry.register(interoperabilityCheckTool);
 }
