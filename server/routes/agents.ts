@@ -18,7 +18,6 @@ import {
   createKnowledgeRepository,
   createAuditRepository,
 } from '../data/index.js';
-import { getSupabaseAdmin } from '../db/supabase.js';
 import { resolveAgentKnowledgeBundleAsync } from '../services/agentKnowledge.js';
 
 const router = Router();
@@ -389,20 +388,12 @@ connectorsRouter.get('/:id', requirePermission('settings.read'), async (req: Mul
 connectorsRouter.put('/:id', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
   try {
     const existing = await integrationRepository.getConnector({ tenantId: req.tenantId! }, req.params.id);
-    if (!existing) return sendError(res, 404, 'CONNECTOR_NOT_FOUND', 'Connector not found');
-
-    const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+    const updates: Record<string, any> = {};
     for (const key of ['name', 'status', 'auth_type', 'auth_config', 'capabilities']) {
       if (req.body?.[key] !== undefined) updates[key] = req.body[key];
     }
 
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase
-      .from('connectors')
-      .update(updates)
-      .eq('id', req.params.id)
-      .eq('tenant_id', req.tenantId!);
-    if (error) throw error;
+    await integrationRepository.updateConnector({ tenantId: req.tenantId! }, req.params.id, updates);
 
     await auditRepository.log({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
       actorId: req.userId || 'system',
@@ -421,6 +412,28 @@ connectorsRouter.put('/:id', requirePermission('settings.write'), async (req: Mu
   }
 });
 
+connectorsRouter.delete('/:id', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    const existing = await integrationRepository.getConnector({ tenantId: req.tenantId! }, req.params.id);
+    if (!existing) return sendError(res, 404, 'CONNECTOR_NOT_FOUND', 'Connector not found');
+
+    await integrationRepository.deleteConnector({ tenantId: req.tenantId! }, req.params.id);
+
+    await auditRepository.log({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
+      actorId: req.userId || 'system',
+      action: 'CONNECTOR_DELETED',
+      entityType: 'connector',
+      entityId: req.params.id,
+      oldValue: existing,
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting connector:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete connector');
+  }
+});
+
 connectorsRouter.post('/:id/test', requirePermission('settings.write'), async (req: MultiTenantRequest, res) => {
   try {
     const connector = await integrationRepository.getConnector({ tenantId: req.tenantId! }, req.params.id);
@@ -428,13 +441,11 @@ connectorsRouter.post('/:id/test', requirePermission('settings.write'), async (r
 
     const now = new Date().toISOString();
     const status = connector.auth_config && Object.keys(connector.auth_config).length > 0 ? 'connected' : connector.status;
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase
-      .from('connectors')
-      .update({ status, last_health_check_at: now, updated_at: now })
-      .eq('id', req.params.id)
-      .eq('tenant_id', req.tenantId!);
-    if (error) throw error;
+    
+    await integrationRepository.updateConnector({ tenantId: req.tenantId! }, req.params.id, {
+      status,
+      last_health_check_at: now,
+    });
 
     await auditRepository.log({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
       actorId: req.userId || 'system',

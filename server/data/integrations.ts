@@ -16,9 +16,9 @@ export interface IntegrationRepository {
   getWebhookEventByDedupeKey(scope: IntegrationScope, dedupeKey: string): Promise<any | null>;
   createWebhookEvent(scope: IntegrationScope, data: any): Promise<any>;
   updateWebhookEventStatus(scope: IntegrationScope, id: string, status: string, updates?: any): Promise<void>;
-  getCanonicalEvent(id: string): Promise<any | null>;
-  createCanonicalEvent(scope: IntegrationScope, data: any): Promise<any>;
   updateCanonicalEvent(id: string, updates: any): Promise<void>;
+  updateConnector(scope: IntegrationScope, id: string, updates: any): Promise<void>;
+  deleteConnector(scope: IntegrationScope, id: string): Promise<void>;
 }
 
 async function listConnectorsSupabase(scope: IntegrationScope) {
@@ -66,9 +66,43 @@ async function getConnectorSupabase(scope: IntegrationScope, id: string) {
   return data;
 }
 
+async function updateConnectorSupabase(scope: IntegrationScope, id: string, updates: any) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('connectors')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('tenant_id', scope.tenantId);
+  if (error) throw error;
+}
+
+async function deleteConnectorSupabase(scope: IntegrationScope, id: string) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('connectors')
+    .delete()
+    .eq('id', id)
+    .eq('tenant_id', scope.tenantId);
+  if (error) throw error;
+}
+
 function getConnectorSqlite(scope: IntegrationScope, id: string) {
   const db = getDb();
   return parseRow(db.prepare('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
+}
+
+function updateConnectorSqlite(scope: IntegrationScope, id: string, updates: any) {
+  const db = getDb();
+  const payload = { ...updates, updated_at: new Date().toISOString() };
+  Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
+  const fields = Object.keys(payload);
+  db.prepare(`UPDATE connectors SET ${fields.map((field) => `${field} = ?`).join(', ')} WHERE id = ? AND tenant_id = ?`)
+    .run(...Object.values(payload).map((value) => value && typeof value === 'object' ? JSON.stringify(value) : value), id, scope.tenantId);
+}
+
+function deleteConnectorSqlite(scope: IntegrationScope, id: string) {
+  const db = getDb();
+  db.prepare('DELETE FROM connectors WHERE id = ? AND tenant_id = ?').run(id, scope.tenantId);
 }
 
 async function listCapabilitiesSupabase(scope: IntegrationScope, connectorId: string) {
@@ -276,6 +310,8 @@ export function createIntegrationRepository(): IntegrationRepository {
       getCanonicalEvent: getCanonicalEventSupabase,
       createCanonicalEvent: createCanonicalEventSupabase,
       updateCanonicalEvent: updateCanonicalEventSupabase,
+      updateConnector: updateConnectorSupabase,
+      deleteConnector: deleteConnectorSupabase,
     };
   }
 
@@ -291,5 +327,7 @@ export function createIntegrationRepository(): IntegrationRepository {
     getCanonicalEvent: async (id) => getCanonicalEventSqlite(id),
     createCanonicalEvent: async (scope, data) => createCanonicalEventSqlite(scope, data),
     updateCanonicalEvent: async (id, updates) => updateCanonicalEventSqlite(id, updates),
+    updateConnector: async (scope, id, updates) => updateConnectorSqlite(scope, id, updates),
+    deleteConnector: async (scope, id) => deleteConnectorSqlite(scope, id),
   };
 }

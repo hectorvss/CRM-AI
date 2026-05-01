@@ -387,6 +387,10 @@ export const connectorsApi = {
       method: 'POST',
       body: '{}',
     }),
+  delete: (id: string) =>
+    request<any>(`/connectors/${id}`, {
+      method: 'DELETE',
+    }),
 };
 
 // ── AI ────────────────────────────────────────────────────

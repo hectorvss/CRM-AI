@@ -25,6 +25,7 @@ import { connectorsApi, workflowsApi, workspacesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import type { NavigateFn } from '../types';
 import LoadingState from './LoadingState';
+import StyledSelect from './StyledSelect';
 
 type WorkflowView = 'list' | 'builder';
 type WorkflowTab = 'overview' | 'builder' | 'runs' | 'evaluations';
@@ -280,7 +281,6 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'action', key: 'case.update_status', label: 'Update case status', category: 'Action', icon: 'published_with_changes', requiresConfig: true, description: 'Move a case to a new operational status.' },
   { type: 'action', key: 'case.set_priority', label: 'Set case priority', category: 'Action', icon: 'priority_high', requiresConfig: true, description: 'Update priority, severity, or risk.' },
   { type: 'action', key: 'case.add_tag', label: 'Add case tag', category: 'Action', icon: 'sell', requiresConfig: true, description: 'Append a tag to the case.' },
-  { type: 'action', key: 'case.graph_lookup', label: 'Case graph lookup', category: 'Action', icon: 'account_tree', requiresConfig: true, description: 'Traverse the case graph to find related entities, owners, and linked context.' },
   { type: 'action', key: 'order.cancel', label: 'Cancel order', category: 'Action', icon: 'block', requiresConfig: true, sensitive: true, description: 'Cancel an eligible order.' },
   { type: 'action', key: 'order.hold', label: 'Place order hold', category: 'Action', icon: 'pause_circle', requiresConfig: true, sensitive: true, description: 'Pause fulfillment while an issue is reviewed.' },
   { type: 'action', key: 'order.release', label: 'Release order hold', category: 'Action', icon: 'play_circle', requiresConfig: true, description: 'Release a previously held order.' },
@@ -863,58 +863,6 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'topic', label: 'Allowed topic (optional)', type: 'text', placeholder: 'customer support' },
     { key: 'target', label: 'Result variable', type: 'text', placeholder: 'guardResult' },
   ],
-  // ── CRM Actions ───────────────────────────────────────────────────────────
-  'case.assign': [
-    { key: 'teamId', label: 'Team', type: 'select', options: ['support', 'billing', 'shipping', 'technical', 'legal', 'vip'] },
-    { key: 'agentId', label: 'Assignee (Optional)', type: 'text', placeholder: 'Agent name or email' },
-  ],
-  'case.update_status': [
-    { key: 'status', label: 'New status', type: 'select', options: ['open', 'pending', 'resolved', 'closed', 'on_hold', 'escalated'] },
-  ],
-  'case.set_priority': [
-    { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'normal', 'high', 'critical'] },
-  ],
-  'case.add_tag': [
-    { key: 'tag', label: 'Tag name', type: 'text', placeholder: 'e.g. urgent, v2-beta, payment_issue' },
-  ],
-  'case.reply': [
-    { key: 'content', label: 'Message body', type: 'textarea', placeholder: 'Hello {{customer.name}}, ...' },
-    { key: 'channel', label: 'Channel', type: 'select', options: ['email', 'chat', 'sms', 'whatsapp'] },
-  ],
-  'case.note': [
-    { key: 'content', label: 'Note content', type: 'textarea', placeholder: 'Internal context for agents...' },
-    { key: 'visibility', label: 'Visibility', type: 'select', options: ['internal', 'public'] },
-  ],
-  'case.graph_lookup': [
-    { key: 'caseId', label: 'Case ID', type: 'text', placeholder: '{{case.id}}' },
-    { key: 'depth', label: 'Traversal depth', type: 'number', placeholder: '2' },
-  ],
-  'order.hold': [
-    { key: 'reason', label: 'Hold reason', type: 'text', placeholder: 'e.g. Fraud check, missing address' },
-  ],
-  'order.release': [
-    { key: 'reason', label: 'Release reason', type: 'text', placeholder: 'e.g. Address verified' },
-  ],
-  'order.cancel': [
-    { key: 'reason', label: 'Cancellation reason', type: 'text', placeholder: 'e.g. Customer request' },
-  ],
-  'payment.refund': [
-    { key: 'amount', label: 'Refund amount', type: 'text', placeholder: '{{payment.amount}} or literal' },
-    { key: 'reason', label: 'Reason', type: 'text' },
-  ],
-  'payment.mark_dispute': [
-    { key: 'reason', label: 'Dispute reason', type: 'text' },
-  ],
-  'return.create': [
-    { key: 'orderId', label: 'Order ID', type: 'text', placeholder: '{{order.id}}' },
-    { key: 'items', label: 'Items to return (JSON or comma-separated)', type: 'text' },
-  ],
-  'return.approve': [
-    { key: 'reason', label: 'Approval reason', type: 'text' },
-  ],
-  'return.reject': [
-    { key: 'reason', label: 'Rejection reason', type: 'text' },
-  ],
   // ── HTTP ──────────────────────────────────────────────────────────────────
   'data.http_request': [
     { key: 'url', label: 'URL', type: 'text', placeholder: 'https://api.example.com/endpoint', hint: 'Supports {{template}} interpolation' },
@@ -963,11 +911,10 @@ const EDITOR_TABS = [
   { id: 'runs', label: 'Executions' },
   { id: 'evaluations', label: 'Evaluations' },
 ] as const;
-const ADD_GROUPS = ['AI Studio Agent', 'AI Agent', 'AI', 'Action', 'Data transformation', 'Flow', 'Core', 'Human review', 'Integration', 'Knowledge', 'Trigger'] as const;
+const ADD_GROUPS = ['AI Agent', 'AI', 'Action', 'Data transformation', 'Flow', 'Core', 'Human review', 'Integration', 'Knowledge', 'Trigger'] as const;
 
 const CATEGORY_META: Record<string, { title: string; subtitle: string; icon: string }> = {
-  'AI Studio Agent': { title: 'AI Studio Agent', subtitle: 'Connect your custom-configured agents from AI Studio as modular workflow steps.', icon: 'psychology' },
-  'AI Agent': { title: 'AI Agent', subtitle: 'Standard AI operations like classification, sentiment, and summaries.', icon: 'smart_toy' },
+  'AI Agent': { title: 'AI Agent', subtitle: 'Connect pre-configured AI Studio agents directly into your workflows.', icon: 'smart_toy' },
   AI: { title: 'AI', subtitle: 'LLM providers, extractors, and safety guardrails for AI-powered steps.', icon: 'auto_awesome' },
   Action: { title: 'Action', subtitle: 'Write into cases, orders, payments, returns, and more.', icon: 'bolt' },
   'Data transformation': { title: 'Data transformation', subtitle: 'Map, clean, reshape, and prepare workflow data.', icon: 'transform' },
@@ -1408,8 +1355,8 @@ function getCategoryOverview(catalog: NodeSpec[], studioAgentCount = 0) {
   return ADD_GROUPS.map((category) => {
     const items = catalog.filter((spec) => categoryForSpec(spec) === category);
     const meta = CATEGORY_META[category] ?? { title: category, subtitle: 'Browse available blocks.', icon: 'grid_view' };
-    // For the AI Studio Agent category, the count comes from the live agent catalog
-    const count = category === 'AI Studio Agent' ? studioAgentCount : items.length;
+    // For the AI Agent category, add the live AI Studio agent count on top of the static spec count
+    const count = category === 'AI Agent' ? items.length + studioAgentCount : items.length;
     return { category, ...meta, count, items };
   });
 }
@@ -3016,7 +2963,10 @@ function WorkflowList(props: {
   onOpenDataTable: (tableId: string) => void;
   onCloseDataTable: () => void;
   onSaveDataTable: (table: WorkflowDataTableRecord) => Promise<void>;
+  onRefreshConnectors?: () => void;
 }) {
+  const [sortKey, setSortKey] = useState('updated');
+
   const searchPlaceholder = props.section === 'credentials'
     ? 'Search credentials...'
     : props.section === 'executions'
@@ -3027,6 +2977,29 @@ function WorkflowList(props: {
           ? 'Search data tables...'
           : 'Search workflows...';
 
+  const sortedWorkflows = [...props.workflows].sort((a, b) => {
+    if (sortKey === 'name') return a.name.localeCompare(b.name);
+    // @ts-ignore
+    const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+    // @ts-ignore
+    const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+    return dateB - dateA;
+  });
+
+  const sortedConnectors = [...props.connectors].sort((a, b) => {
+    if (sortKey === 'name') return (a.name || a.system || '').localeCompare(b.name || b.system || '');
+    if (sortKey === 'type') return (a.system || '').localeCompare(b.system || '');
+    const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+    const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+    return dateB - dateA;
+  });
+
+  const sortedExecutions = [...props.recentRuns].sort((a, b) => {
+    const dateA = new Date(a.startedAt || a.started_at || a.created_at || 0).getTime();
+    const dateB = new Date(b.startedAt || b.started_at || b.created_at || 0).getTime();
+    return dateB - dateA;
+  });
+
   const workflowCount = props.workflows.length;
   const credentialCount = props.connectors.length;
   const executionCount = props.recentRuns.length;
@@ -3035,39 +3008,59 @@ function WorkflowList(props: {
 
   return (
     <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col overflow-hidden">
-      <div className="p-6 pb-0">
-        <div className="rounded-xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-card-dark">
-          <div className="px-6 py-4 flex items-center justify-between gap-4">
+      <div className="p-6 pb-4">
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-card dark:border-gray-800 dark:bg-card-dark">
+          <div className="px-8 py-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Workflows</h1>
-              <p className="text-xs text-gray-500 mt-1">Build operational automations for agents, cases, orders, refunds, returns, approvals, policies, and integrations.</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Workflows</h1>
+              <p className="text-sm text-gray-500 mt-1.5 max-w-xl">Build operational automations for agents, cases, orders, refunds, returns, approvals, and complex multi-tool integrations.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <input value={props.query} onChange={(event) => props.setQuery(event.target.value)} placeholder={searchPlaceholder} className="w-64 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 dark:border-gray-700 dark:bg-gray-800" />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative group">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-black transition-colors dark:group-focus-within:text-white">search</span>
+                <input 
+                  value={props.query} 
+                  onChange={(event) => props.setQuery(event.target.value)} 
+                  placeholder={searchPlaceholder} 
+                  className="w-full lg:w-72 rounded-xl border border-gray-200 bg-gray-50 pl-10 pr-4 py-2.5 text-sm outline-none transition-all focus:border-black/20 focus:bg-white focus:ring-4 focus:ring-black/5 dark:border-gray-700 dark:bg-gray-800 dark:focus:border-white/20 dark:focus:bg-gray-900 dark:focus:ring-white/5" 
+                />
+              </div>
+              
               {props.section === 'workflows' ? (
                 <>
-                  <button onClick={props.onTemplate} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Templates</button>
-                  <button onClick={props.onCreate} className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90 dark:bg-white dark:text-black">New workflow</button>
+                  <button onClick={props.onTemplate} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Templates</button>
+                  <button onClick={props.onCreate} className="rounded-xl bg-black px-5 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-90 dark:bg-white dark:text-black">New workflow</button>
                 </>
               ) : props.section === 'credentials' ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', sourceContext: 'workflow_credentials' })}
-                    className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90 dark:bg-white dark:text-black"
-                  >
-                    Open integrations
-                  </button>
-                </div>
+                <button
+                  onClick={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', sourceContext: 'workflow_credentials' })}
+                  className="rounded-xl bg-black px-5 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-90 dark:bg-white dark:text-black flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-lg">add_link</span>
+                  Open integrations
+                </button>
               ) : (
-                <button onClick={props.onCreate} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Create workflow</button>
+                <button onClick={props.onCreate} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Create workflow</button>
               )}
             </div>
           </div>
-          <div className="px-6 flex items-center gap-6 border-t border-gray-100 dark:border-gray-800">
+          <div className="px-8 flex items-center gap-8 border-t border-gray-100 dark:border-gray-800 overflow-x-auto no-scrollbar">
             {WORKFLOW_LIBRARY_SECTIONS.map((section) => (
-              <button key={section.key} onClick={() => props.setSection(section.key)} className={`py-3 text-sm border-b-2 ${props.section === section.key ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white' : 'border-transparent font-medium text-gray-500'}`}>
+              <button 
+                key={section.key} 
+                onClick={() => props.setSection(section.key)} 
+                className={`py-4 text-sm whitespace-nowrap transition-all border-b-2 ${
+                  props.section === section.key 
+                    ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white' 
+                    : 'border-transparent font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                }`}
+              >
                 {section.label}
-                <span className="ml-1 text-xs text-gray-400">
+                <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  props.section === section.key 
+                    ? 'bg-black text-white dark:bg-white dark:text-black' 
+                    : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                }`}>
                   {section.key === 'workflows' ? workflowCount : section.key === 'credentials' ? credentialCount : section.key === 'executions' ? executionCount : section.key === 'variables' ? variableCount : dataTableCount}
                 </span>
               </button>
@@ -3079,7 +3072,7 @@ function WorkflowList(props: {
       <div className="flex-1 overflow-y-auto p-6">
         {props.section === 'workflows' ? (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            {props.workflows.map((workflow) => (
+            {sortedWorkflows.map((workflow) => (
               <div
                 key={workflow.id}
                 className="relative cursor-pointer rounded-2xl border border-gray-200 bg-white p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-800 dark:bg-card-dark"
@@ -3100,7 +3093,10 @@ function WorkflowList(props: {
                   <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase ${workflow.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>{workflow.status}</span>
                 </div>
                 <p className="mt-3 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">{workflow.description}</p>
-                <div className="mt-2 text-xs text-gray-400">{meta.subtitle}</div>
+                <div className="mt-2 text-xs text-gray-400 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[12px]">history</span>
+                  Last run {formatRelativeDate(workflow.metrics.find(m => m.label === 'Last run')?.value)}
+                </div>
                 <div className="mt-5 grid grid-cols-3 gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
                   {workflow.metrics.map((metric) => (
                     <div key={metric.label}>
@@ -3120,23 +3116,45 @@ function WorkflowList(props: {
             ))}
           </div>
         ) : props.section === 'credentials' ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* Sort + filter bar */}
-            <div className="flex items-center justify-end gap-2">
-              <select className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm outline-none hover:border-gray-300 focus:ring-1 focus:ring-black/10">
-                <option>Sort by last updated</option>
-                <option>Sort by name</option>
-                <option>Sort by type</option>
-                <option>Sort by created</option>
-              </select>
-              <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm hover:bg-gray-50 hover:text-gray-700 transition">
-                <span className="material-symbols-outlined text-base">filter_list</span>
-              </button>
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                Manage your service connections
+              </div>
+              <div className="flex items-center gap-2">
+                <StyledSelect value={sortKey} onChange={(e) => setSortKey(e.target.value)} className="min-w-[180px]">
+                  <option value="updated">Sort by last updated</option>
+                  <option value="name">Sort by name</option>
+                  <option value="type">Sort by system</option>
+                  <option value="created">Sort by created date</option>
+                </StyledSelect>
+                <button className="flex h-[38px] w-[38px] items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 shadow-sm transition-all hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700">
+                  <span className="material-symbols-outlined text-xl">filter_list</span>
+                </button>
+              </div>
             </div>
-            <WorkflowCredentialsSection connectors={props.connectors} workflows={props.workflows} query={props.query} onNavigate={props.onNavigate} />
+            <WorkflowCredentialsSection 
+              connectors={sortedConnectors} 
+              workflows={props.workflows} 
+              query={props.query} 
+              onNavigate={props.onNavigate} 
+              onRefresh={props.onRefreshConnectors}
+            />
           </div>
         ) : props.section === 'executions' ? (
-          <WorkflowExecutionsSection runs={props.recentRuns} query={props.query} workflows={props.workflows} onOpen={props.onOpen} />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                Recent workflow activity
+              </div>
+              <StyledSelect value={sortKey} onChange={(e) => setSortKey(e.target.value)} className="min-w-[180px]">
+                <option value="updated">Sort by started time</option>
+                <option value="status">Sort by status</option>
+              </StyledSelect>
+            </div>
+            <WorkflowExecutionsSection runs={sortedExecutions} query={props.query} workflows={props.workflows} onOpen={props.onOpen} />
+          </div>
         ) : props.section === 'variables' ? (
           <WorkflowVariablesSection
             variables={props.variableReferences}
@@ -3211,8 +3229,20 @@ function WorkflowCredentialsSection(props: {
   workflows: Workflow[];
   query: string;
   onNavigate?: NavigateFn;
+  onRefresh?: () => void;
 }) {
   const [menuOpenId, setMenuOpenId] = React.useState<string | null>(null);
+
+  const deleteMutation = useMutation(connectorsApi.delete, {
+    onSuccess: () => props.onRefresh?.()
+  });
+
+  const testMutation = useMutation(connectorsApi.test, {
+    onSuccess: (res: any) => {
+      console.log('Test result:', res);
+      props.onRefresh?.();
+    }
+  });
   React.useEffect(() => {
     if (!menuOpenId) return;
     const handler = () => setMenuOpenId(null);
@@ -3250,101 +3280,97 @@ function WorkflowCredentialsSection(props: {
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white shadow-card overflow-hidden">
-      {/* Table header */}
-      <div className="grid grid-cols-[2fr_1.2fr_1fr_auto] items-center gap-4 border-b border-gray-100 px-5 py-3">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Name</div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Type</div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Last updated</div>
-        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 w-32 text-right">Workflows</div>
-      </div>
-
-      {/* Rows */}
-      {rows.map((connector, idx) => {
+    <div className="grid grid-cols-1 gap-3">
+      {rows.map((connector) => {
         const { icon, color } = connectorIcon(connector.system);
         const system = String(connector.system || connector.name || '').toLowerCase();
         const authTypeLabel = connector.auth_type
-          ? `${String(connector.auth_type).replace(/_/g, ' ')} · ${system || 'connector'}`
-          : system || 'Connector';
+          ? String(connector.auth_type).replace(/_/g, ' ')
+          : 'OAuth2';
         const statusOk = ['active', 'connected', 'healthy'].includes(String(connector.status ?? '').toLowerCase());
         const statusError = ['error', 'failed'].includes(String(connector.status ?? '').toLowerCase());
         const linked = linkedCounts.get(connector.id) ?? 0;
-        const isLastRow = idx === rows.length - 1;
 
         return (
           <div
             key={connector.id}
-            className={`grid grid-cols-[2fr_1.2fr_1fr_auto] items-center gap-4 px-5 py-3.5 transition hover:bg-gray-50 ${!isLastRow ? 'border-b border-gray-100' : ''}`}
+            className="group relative flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-card transition-all hover:border-gray-300 hover:shadow-md dark:border-gray-800 dark:bg-card-dark"
           >
-            {/* Name + icon */}
-            <div className="flex items-center gap-3 min-w-0">
-              <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${color}`}>
-                <span className="material-symbols-outlined text-base">{icon}</span>
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-gray-900">{connector.name || system || 'Connector'}</div>
-                <div className="mt-0.5 flex items-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${statusOk ? 'bg-green-500' : statusError ? 'bg-red-500' : 'bg-gray-300'}`} />
-                  <span className="text-[11px] text-gray-400 capitalize">
-                    {statusOk ? 'Connected' : statusError ? 'Error' : (connector.status || 'Not connected')}
+            {/* Icon Container */}
+            <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${color} shadow-sm transition-transform group-hover:scale-105`}>
+              <span className="material-symbols-outlined text-2xl">{icon}</span>
+            </div>
+
+            {/* Info Section */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="truncate text-base font-bold text-gray-900 dark:text-white">
+                  {connector.name || system.charAt(0).toUpperCase() + system.slice(1)}
+                </h4>
+                <div className="flex items-center gap-1.5">
+                  <span className={`h-2 w-2 rounded-full ${statusOk ? 'bg-green-500' : statusError ? 'bg-red-500' : 'bg-gray-300'}`} />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    {statusOk ? 'Active' : statusError ? 'Error' : 'Offline'}
                   </span>
                 </div>
               </div>
-            </div>
-
-            {/* Type */}
-            <div className="min-w-0">
-              <div className="truncate text-sm text-gray-700 capitalize">{authTypeLabel}</div>
-              <div className="mt-0.5 text-[11px] text-gray-400">
-                Created {formatRelativeDate(connector.created_at)}
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                <span className="font-medium text-gray-700 dark:text-gray-300 capitalize">{system}</span>
+                <span className="h-1 w-1 rounded-full bg-gray-300 dark:bg-gray-600" />
+                <span>Last updated {formatRelativeDate(connector.updated_at)}</span>
+                <span className="h-1 w-1 rounded-full bg-gray-300 dark:bg-gray-600" />
+                <span>Created {formatRelativeDate(connector.created_at)}</span>
               </div>
             </div>
 
-            {/* Last updated */}
-            <div className="text-sm text-gray-600">
-              {connector.updated_at ? formatRelativeDate(connector.updated_at) : '—'}
-            </div>
-
-            {/* Linked count + scope + menu */}
-            <div className="flex items-center justify-end gap-2 w-32">
+            {/* Badges & Actions */}
+            <div className="flex items-center gap-3">
               {linked > 0 && (
-                <span className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 shadow-sm">
-                  <span className="material-symbols-outlined text-[12px] text-gray-400">link</span>
+                <div className="hidden sm:flex items-center gap-1.5 rounded-xl border border-gray-100 bg-gray-50 px-3 py-1.5 text-xs font-bold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  <span className="material-symbols-outlined text-base text-gray-400">link</span>
                   {linked}
-                </span>
+                </div>
               )}
-              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+              
+              <span className="hidden md:inline-block rounded-full bg-gray-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                 Workspace
               </span>
+
               <div className="relative">
                 <button
-                  onClick={() => setMenuOpenId(menuOpenId === connector.id ? null : connector.id)}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === connector.id ? null : connector.id); }}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                 >
-                  <span className="material-symbols-outlined text-base">more_horiz</span>
+                  <span className="material-symbols-outlined">more_vert</span>
                 </button>
+                
                 {menuOpenId === connector.id && (
-                  <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl">
+                  <div className="absolute right-0 top-full z-30 mt-2 w-52 origin-top-right rounded-2xl border border-gray-200 bg-white py-2 shadow-xl dark:border-gray-700 dark:bg-gray-900">
                     <button
                       onClick={() => { props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', entityId: connector.id, sourceContext: 'workflow_credentials' }); setMenuOpenId(null); }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                     >
-                      <span className="material-symbols-outlined text-base text-gray-400">open_in_new</span>
+                      <span className="material-symbols-outlined text-lg text-gray-400">open_in_new</span>
                       Open in Integrations
                     </button>
                     <button
-                      onClick={() => { setMenuOpenId(null); }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                      onClick={() => { void testMutation.mutate(connector.id); setMenuOpenId(null); }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                     >
-                      <span className="material-symbols-outlined text-base text-gray-400">edit</span>
-                      Edit credential
+                      <span className="material-symbols-outlined text-lg text-gray-400">vitals</span>
+                      Test connection
                     </button>
-                    <div className="my-1 border-t border-gray-100" />
+                    <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
                     <button
-                      onClick={() => { setMenuOpenId(null); }}
-                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                      onClick={() => { 
+                        if (confirm(`Are you sure you want to delete the ${connector.name || connector.system} connection? This will break workflows using it.`)) {
+                          void deleteMutation.mutate(connector.id);
+                        }
+                        setMenuOpenId(null); 
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
                     >
-                      <span className="material-symbols-outlined text-base">delete_outline</span>
+                      <span className="material-symbols-outlined text-lg">delete_outline</span>
                       Delete
                     </button>
                   </div>
@@ -3366,56 +3392,78 @@ function WorkflowExecutionsSection(props: { runs: any[]; query: string; workflow
 
   const workflowById = new Map(props.workflows.map((workflow) => [workflow.id, workflow]));
 
+  if (rows.length === 0) {
+    return (
+      <WorkflowEmptySection
+        title="No executions yet"
+        description="Published workflows will report their latest runs here so operators can inspect the execution trail."
+      />
+    );
+  }
+
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white shadow-card">
-      <div className="grid grid-cols-[1.8fr_0.9fr_1fr_0.9fr] gap-4 border-b border-gray-100 px-5 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-        <div>Workflow</div>
-        <div>Status</div>
-        <div>Started</div>
-        <div className="text-right">Action</div>
-      </div>
-      {rows.length === 0 ? (
-        <div className="px-5 py-10">
-          <WorkflowEmptySection
-            title="No executions yet"
-            description="Published workflows will report their latest runs here so operators can inspect the execution trail."
-          />
-        </div>
-      ) : (
-        rows.map((run) => {
-          const workflow = workflowById.get(run?.workflowId ?? run?.workflow_id ?? '');
-          const startedAt = run?.startedAt ?? run?.started_at ?? run?.created_at;
-          const status = String(run?.status ?? 'pending');
-          return (
-            <div key={run.id} className="grid grid-cols-[1.8fr_0.9fr_1fr_0.9fr] gap-4 border-b border-gray-100 px-5 py-4 text-sm last:border-b-0">
-              <div className="min-w-0">
-                <div className="truncate font-semibold text-gray-900">{run?.workflow_name ?? workflow?.name ?? 'Workflow run'}</div>
-                <div className="mt-1 text-xs text-gray-500">{run?.trigger_type ?? 'manual'} · {run.id}</div>
-              </div>
-              <div>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
-                  ['completed', 'resumed'].includes(status) ? 'bg-green-50 text-green-700' :
-                  ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-50 text-red-700' :
-                  ['waiting', 'paused', 'waiting_approval'].includes(status) ? 'bg-amber-50 text-amber-700' :
-                  'bg-gray-100 text-gray-600'
+    <div className="grid grid-cols-1 gap-2">
+      {rows.map((run) => {
+        const workflow = workflowById.get(run?.workflowId ?? run?.workflow_id ?? '');
+        const startedAt = run?.startedAt ?? run?.started_at ?? run?.created_at;
+        const status = String(run?.status ?? 'pending').toLowerCase();
+        
+        return (
+          <div 
+            key={run.id} 
+            className="group flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-3.5 shadow-sm transition hover:border-gray-200 hover:shadow-md dark:border-gray-800 dark:bg-card-dark"
+          >
+            <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${
+              ['completed', 'resumed'].includes(status) ? 'bg-green-50 text-green-600' :
+              ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-50 text-red-600' :
+              'bg-amber-50 text-amber-600'
+            }`}>
+              <span className="material-symbols-outlined">
+                {['completed', 'resumed'].includes(status) ? 'check_circle' :
+                 ['failed', 'blocked', 'cancelled'].includes(status) ? 'error' : 'schedule'}
+              </span>
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-bold text-gray-900 dark:text-white">
+                  {run?.workflow_name ?? workflow?.name ?? 'Workflow run'}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                  ['completed', 'resumed'].includes(status) ? 'bg-green-100 text-green-700' :
+                  ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-100 text-red-700' :
+                  'bg-amber-100 text-amber-700'
                 }`}>
                   {status}
                 </span>
               </div>
-              <div className="text-gray-600">{startedAt ? new Date(startedAt).toLocaleString() : 'Pending'}</div>
-              <div className="text-right">
-                {workflow ? (
-                  <button onClick={() => props.onOpen(workflow)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50">
-                    Open workflow
-                  </button>
-                ) : (
-                  <span className="text-xs text-gray-400">No workflow link</span>
-                )}
+              <div className="mt-0.5 flex items-center gap-2 text-[11px] text-gray-500">
+                <span className="font-medium text-gray-700 dark:text-gray-300">{run?.trigger_type ?? 'manual'}</span>
+                <span className="h-0.5 w-0.5 rounded-full bg-gray-300" />
+                <span className="font-mono">{run.id.slice(0, 8)}...</span>
+                <span className="h-0.5 w-0.5 rounded-full bg-gray-300" />
+                <span>Started {formatRelativeDate(startedAt)}</span>
               </div>
             </div>
-          );
-        })
-      )}
+
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-tight">Started</div>
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300">{startedAt ? new Date(startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending'}</div>
+              </div>
+              
+              {workflow && (
+                <button 
+                  onClick={() => props.onOpen(workflow)}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                >
+                  Inspect
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -3434,12 +3482,6 @@ function WorkflowVariablesSection(props: {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-end">
-        <button onClick={props.onCreate} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90">
-          New variable
-        </button>
-      </div>
-
       {props.storedVariables.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-2">
           {props.storedVariables
@@ -3535,12 +3577,6 @@ function WorkflowDataTablesSection(props: {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-end">
-        <button onClick={props.onCreate} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90">
-          Create data table
-        </button>
-      </div>
-
       {visibleStoredTables.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-2">
           {visibleStoredTables.map((table) => (
@@ -4153,23 +4189,23 @@ function WorkflowAddNodePanel(props: {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
-              {/* AI Studio Agent category: show real AI Studio agents */}
-              {props.activeCategory === 'AI Studio Agent' && (
+              {/* AI Agent category: show real AI Studio agents as the first section */}
+              {props.activeCategory === 'AI Agent' && props.agentCatalog && props.agentCatalog.length > 0 && !props.search && (
                 <section className="mb-5">
                   <div className="flex items-center justify-between border-b border-orange-100 pb-2">
-                    <h4 className="text-sm font-bold text-orange-700">Available Agents</h4>
-                    <span className="text-[11px] uppercase tracking-[0.24em] text-orange-400">{props.agentCatalog?.length ?? 0}</span>
+                    <h4 className="text-sm font-bold text-orange-700">Your AI Studio Agents</h4>
+                    <span className="text-[11px] uppercase tracking-[0.24em] text-orange-400">{props.agentCatalog.length}</span>
                   </div>
                   <div className="mt-2 space-y-1">
-                    {props.agentCatalog?.map((agent) => (
+                    {props.agentCatalog.map((agent) => (
                       <button
                         key={agent.id}
                         onClick={() => props.onSelect({
                           type: 'agent',
                           key: 'agent.run',
                           label: agent.name,
-                          category: 'AI Studio Agent',
-                          icon: 'psychology',
+                          category: 'AI Agent',
+                          icon: 'smart_toy',
                           requiresConfig: false,
                           description: agent.description ?? `Run the ${agent.name} agent`,
                           defaultConfig: { agent: agent.slug, agentId: agent.id },
@@ -4177,7 +4213,7 @@ function WorkflowAddNodePanel(props: {
                         className="flex w-full items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/50 px-3 py-3 text-left transition hover:bg-orange-50"
                       >
                         <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 text-orange-600 shadow-sm">
-                          <span className="material-symbols-outlined text-lg">psychology</span>
+                          <span className="material-symbols-outlined text-lg">smart_toy</span>
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
@@ -4194,17 +4230,8 @@ function WorkflowAddNodePanel(props: {
                         <span className="material-symbols-outlined mt-1 text-base text-orange-400">arrow_forward</span>
                       </button>
                     ))}
-                    {(!props.agentCatalog || props.agentCatalog.length === 0) && (
-                      <div className="rounded-xl border border-dashed border-gray-200 py-8 text-center">
-                        <span className="material-symbols-outlined mb-2 text-3xl text-gray-300">smart_toy</span>
-                        <p className="text-xs text-gray-500">No agents found in AI Studio.</p>
-                      </div>
-                    )}
                   </div>
-                  <p className="mt-4 text-[10px] leading-4 text-gray-400">
-                    <b className="text-gray-500">How this works:</b> When this step executes, the workflow context is passed to the agent. 
-                    The agent uses its specific reasoning profile, knowledge base, and tools to process the data and returns a structured response.
-                  </p>
+                  <p className="mt-3 text-[10px] text-gray-400">Configure agents in AI Studio → Agents. Each agent runs with its own persona, tools, and knowledge.</p>
                 </section>
               )}
               {props.sections.length > 0 ? (
@@ -4232,13 +4259,11 @@ function WorkflowAddNodePanel(props: {
                     </section>
                   ))}
                 </div>
-              {props.activeCategory === 'AI Studio Agent' && props.sections.length === 0 && (!props.agentCatalog || props.agentCatalog.length === 0) && (
-                <div className="flex h-full items-center justify-center text-sm text-gray-500 text-center px-8">
-                  <div>
-                    <span className="material-symbols-outlined mb-4 text-4xl text-gray-200">psychology</span>
-                    <p>No AI agents found. Create your first specialized agent in AI Studio to use it as a workflow node.</p>
-                  </div>
-                </div>
+              ) : props.activeCategory !== 'AI Agent' ? (
+                <div className="flex h-full items-center justify-center text-sm text-gray-500">No nodes found.</div>
+              ) : null}
+              {props.activeCategory === 'AI Agent' && props.sections.length === 0 && (!props.agentCatalog || props.agentCatalog.length === 0) && (
+                <div className="flex h-full items-center justify-center text-sm text-gray-500">No AI agents found. Create one in AI Studio → Agents.</div>
               )}
             </div>
           </motion.div>
