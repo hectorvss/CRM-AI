@@ -36,6 +36,12 @@ export interface Config {
     geminiApiKey: string;
     /** Model used for case diagnosis and drafts */
     geminiModel: string;
+    /** Optional: Anthropic Claude API key for ai.anthropic workflow node */
+    anthropicApiKey?: string;
+    /** Optional: OpenAI API key for ai.openai workflow node */
+    openaiApiKey?: string;
+    /** Optional: Ollama base URL (default http://localhost:11434) for ai.ollama node */
+    ollamaBaseUrl?: string;
   };
 
   queue: {
@@ -158,6 +164,9 @@ function buildConfig(): Config {
     ai: {
       geminiApiKey,
       geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-2.5-pro'),
+      anthropicApiKey: optionalEnv('ANTHROPIC_API_KEY', '') || undefined,
+      openaiApiKey: optionalEnv('OPENAI_API_KEY', '') || undefined,
+      ollamaBaseUrl: optionalEnv('OLLAMA_BASE_URL', '') || undefined,
     },
 
     queue: {

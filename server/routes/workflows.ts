@@ -137,6 +137,10 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'stop', label: 'Stop workflow', category: 'Utility', icon: 'stop_circle', requiresConfig: false },
   { type: 'agent', key: 'ai.generate_text', label: 'Generate text (AI)', category: 'Agent', icon: 'auto_awesome', requiresConfig: true },
   { type: 'agent', key: 'ai.gemini', label: 'Google Gemini', category: 'Agent', icon: 'diamond', requiresConfig: true },
+  { type: 'agent', key: 'ai.anthropic', label: 'Anthropic Claude', category: 'Agent', icon: 'auto_awesome_motion', requiresConfig: true },
+  { type: 'agent', key: 'ai.openai', label: 'OpenAI', category: 'Agent', icon: 'memory', requiresConfig: true },
+  { type: 'agent', key: 'ai.ollama', label: 'Ollama (local)', category: 'Agent', icon: 'computer', requiresConfig: true },
+  { type: 'agent', key: 'ai.guardrails', label: 'Guardrails', category: 'Agent', icon: 'shield_lock', requiresConfig: true },
   { type: 'utility', key: 'data.http_request', label: 'HTTP request', category: 'Data transformation', icon: 'http', requiresConfig: true },
 ];
 
@@ -201,6 +205,10 @@ const NODE_CONTRACTS: Record<string, WorkflowNodeContract> = {
   'message.google_chat': { required: ['space', 'content'], sideEffects: 'external', risk: 'medium' },
   'ai.gemini': { required: ['prompt'], optional: ['operation', 'systemInstruction', 'model', 'temperature', 'maxTokens', 'target'], sideEffects: 'external', risk: 'low' },
   'ai.generate_text': { required: ['prompt'], optional: ['target', 'maxTokens', 'model'], sideEffects: 'external', risk: 'low' },
+  'ai.anthropic': { required: ['prompt'], optional: ['operation', 'systemInstruction', 'model', 'maxTokens', 'temperature', 'target'], sideEffects: 'external', risk: 'low' },
+  'ai.openai': { required: ['prompt'], optional: ['operation', 'systemInstruction', 'model', 'maxTokens', 'temperature', 'target'], sideEffects: 'external', risk: 'low' },
+  'ai.ollama': { required: ['prompt', 'model'], optional: ['systemInstruction', 'temperature', 'target'], sideEffects: 'external', risk: 'low' },
+  'ai.guardrails': { required: ['mode', 'text'], optional: ['checks', 'topic', 'target'], sideEffects: 'external', risk: 'low' },
   'case.assign': { required: ['user_id'], optional: ['team_id'], sideEffects: 'write', risk: 'medium' },
   'case.reply': { required: ['content'], sideEffects: 'write', risk: 'medium' },
   'case.note': { required: ['content'], sideEffects: 'write', risk: 'low' },
@@ -1842,6 +1850,212 @@ Write ONLY the reply text, no subject line, no JSON.`;
     try { extracted = JSON.parse(raw); } catch { extracted = { _raw: raw, _error: 'Model did not return valid JSON' }; }
     context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: extracted };
     return { status: 'completed', output: { data: context.data, target, model: modelName } };
+  }
+
+  // ── External AI providers (Anthropic / OpenAI / Ollama / Guardrails) ────────
+  // Each provider validates that its credentials are present in config (set via
+  // env in Integrations) and fails closed with a clear pointer otherwise.
+  if (node.key === 'ai.anthropic') {
+    const apiKey = appConfig.ai.anthropicApiKey;
+    if (!apiKey) {
+      return { status: 'failed', error: 'ai.anthropic: ANTHROPIC_API_KEY not configured. Add it under Integrations → AI providers.' };
+    }
+    const operation = String(config.operation || 'message');
+    const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
+    if (!prompt) return { status: 'failed', error: 'ai.anthropic: prompt is required' };
+    const model = String(config.model || 'claude-3-5-sonnet-latest');
+    const systemInstruction = resolveTemplateValue(config.systemInstruction || '', context);
+    const maxTokens = Math.max(1, Number(config.maxTokens || 1024));
+    const temperature = config.temperature !== undefined && config.temperature !== '' ? Number(config.temperature) : undefined;
+    const target = String(config.target || 'anthropicResult');
+
+    try {
+      const body: any = {
+        model,
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      };
+      if (systemInstruction) body.system = systemInstruction;
+      if (temperature !== undefined && Number.isFinite(temperature)) body.temperature = temperature;
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const json: any = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        return { status: 'failed', error: `ai.anthropic: ${resp.status} ${json?.error?.message ?? resp.statusText}` };
+      }
+      const text = Array.isArray(json.content)
+        ? json.content.map((c: any) => c.text || '').join('').trim()
+        : String(json.content ?? '');
+      context.agent = { ...(context.agent ?? {}), [target]: text };
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: text };
+      return { status: 'completed', output: { text, target, model, operation, length: text.length } };
+    } catch (err: any) {
+      return { status: 'failed', error: `ai.anthropic call failed: ${err?.message ?? String(err)}` };
+    }
+  }
+
+  if (node.key === 'ai.openai') {
+    const apiKey = appConfig.ai.openaiApiKey;
+    if (!apiKey) {
+      return { status: 'failed', error: 'ai.openai: OPENAI_API_KEY not configured. Add it under Integrations → AI providers.' };
+    }
+    const operation = String(config.operation || 'chat');
+    const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
+    if (!prompt) return { status: 'failed', error: 'ai.openai: prompt is required' };
+    const model = String(config.model || 'gpt-4o-mini');
+    const systemInstruction = resolveTemplateValue(config.systemInstruction || '', context);
+    const maxTokens = Math.max(1, Number(config.maxTokens || 1024));
+    const temperature = config.temperature !== undefined && config.temperature !== '' ? Number(config.temperature) : undefined;
+    const target = String(config.target || 'openaiResult');
+
+    try {
+      let endpoint = 'https://api.openai.com/v1/chat/completions';
+      let body: any;
+      if (operation === 'embeddings') {
+        endpoint = 'https://api.openai.com/v1/embeddings';
+        body = { model, input: prompt };
+      } else {
+        const messages: any[] = [];
+        if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+        messages.push({ role: 'user', content: prompt });
+        body = { model, messages, max_tokens: maxTokens };
+        if (temperature !== undefined && Number.isFinite(temperature)) body.temperature = temperature;
+      }
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const json: any = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        return { status: 'failed', error: `ai.openai: ${resp.status} ${json?.error?.message ?? resp.statusText}` };
+      }
+      let result: any;
+      if (operation === 'embeddings') {
+        result = json?.data?.[0]?.embedding ?? [];
+      } else {
+        result = String(json?.choices?.[0]?.message?.content ?? '').trim();
+      }
+      context.agent = { ...(context.agent ?? {}), [target]: result };
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: result };
+      return { status: 'completed', output: { result, target, model, operation } };
+    } catch (err: any) {
+      return { status: 'failed', error: `ai.openai call failed: ${err?.message ?? String(err)}` };
+    }
+  }
+
+  if (node.key === 'ai.ollama') {
+    const baseUrl = appConfig.ai.ollamaBaseUrl;
+    if (!baseUrl) {
+      return { status: 'failed', error: 'ai.ollama: OLLAMA_BASE_URL not configured. Set it under Integrations → AI providers.' };
+    }
+    const prompt = resolveTemplateValue(config.prompt || '', context);
+    const model = String(config.model || '');
+    if (!prompt) return { status: 'failed', error: 'ai.ollama: prompt is required' };
+    if (!model) return { status: 'failed', error: 'ai.ollama: model is required (must be installed on the Ollama server)' };
+    const systemInstruction = resolveTemplateValue(config.systemInstruction || '', context);
+    const temperature = config.temperature !== undefined && config.temperature !== '' ? Number(config.temperature) : undefined;
+    const target = String(config.target || 'ollamaResult');
+
+    try {
+      const body: any = { model, prompt, stream: false };
+      if (systemInstruction) body.system = systemInstruction;
+      if (temperature !== undefined && Number.isFinite(temperature)) body.options = { temperature };
+      const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120_000),
+      });
+      const json: any = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        return { status: 'failed', error: `ai.ollama: ${resp.status} ${json?.error ?? resp.statusText}` };
+      }
+      const text = String(json?.response ?? '').trim();
+      context.agent = { ...(context.agent ?? {}), [target]: text };
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: text };
+      return { status: 'completed', output: { text, target, model } };
+    } catch (err: any) {
+      return { status: 'failed', error: `ai.ollama call failed: ${err?.message ?? String(err)}` };
+    }
+  }
+
+  // Guardrails: a lightweight safety filter using Gemini (or pattern matching as
+  // fallback) to detect PII / toxicity / prompt injection / off-topic content.
+  if (node.key === 'ai.guardrails') {
+    const text = resolveTemplateValue(config.text || '', context);
+    if (!text) return { status: 'failed', error: 'ai.guardrails: text is required' };
+    const mode = String(config.mode || 'input');
+    const checks = String(config.checks || 'pii,toxicity,prompt_injection')
+      .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const topic = config.topic ? resolveTemplateValue(String(config.topic), context) : '';
+    const target = String(config.target || 'guardResult');
+
+    // Pattern-based fast checks (cheap, no API call)
+    const issues: Array<{ check: string; matched: boolean; detail?: string }> = [];
+    if (checks.includes('pii')) {
+      const piiPatterns = [
+        /\b\d{3}-\d{2}-\d{4}\b/, // SSN
+        /\b(?:\d[ -]*?){13,16}\b/, // Credit card
+        /\b[\w.-]+@[\w.-]+\.[a-z]{2,}\b/i, // email
+      ];
+      const matched = piiPatterns.some((p) => p.test(text));
+      issues.push({ check: 'pii', matched });
+    }
+    if (checks.includes('prompt_injection') || checks.includes('jailbreak')) {
+      const injectionPatterns = [
+        /ignore (?:all|previous) instructions/i,
+        /system prompt/i,
+        /you are now/i,
+        /developer mode/i,
+        /jailbreak/i,
+        /pretend (?:you are|to be)/i,
+      ];
+      const matched = injectionPatterns.some((p) => p.test(text));
+      issues.push({ check: 'prompt_injection', matched });
+    }
+    if (checks.includes('toxicity')) {
+      const toxicWords = /(\bhate\b|\bkill\b|\bfucking?\b|\bidiot\b|\bstupid\b)/i;
+      issues.push({ check: 'toxicity', matched: toxicWords.test(text) });
+    }
+    if (checks.includes('off_topic') && topic && appConfig.ai.geminiApiKey) {
+      // Use Gemini to classify on/off-topic
+      try {
+        const genAI = new GoogleGenerativeAI(appConfig.ai.geminiApiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const judgePrompt = `Is the following text relevant to the topic "${topic}"? Answer with a single word: YES or NO.\n\nText: ${text}`;
+        const result = await withGeminiRetry(
+          () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: judgePrompt }] }], generationConfig: { maxOutputTokens: 8 } }),
+          { label: 'workflow.ai.guardrails.off_topic' },
+        );
+        const verdict = result.response.text().trim().toUpperCase();
+        issues.push({ check: 'off_topic', matched: verdict.startsWith('NO'), detail: `topic=${topic}, verdict=${verdict}` });
+      } catch (err: any) {
+        issues.push({ check: 'off_topic', matched: false, detail: `judge failed: ${err?.message ?? String(err)}` });
+      }
+    }
+
+    const flagged = issues.filter((i) => i.matched);
+    const safe = flagged.length === 0;
+    const guardResult = { safe, mode, issues, flagged: flagged.map((f) => f.check) };
+    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: guardResult };
+    return {
+      status: safe ? 'completed' : 'blocked',
+      output: { ...guardResult, target },
+      error: safe ? null : `Guardrails blocked: ${flagged.map((f) => f.check).join(', ')}`,
+    };
   }
 
   // ── Google Gemini (explicit AI provider node) ───────────────────────────────
