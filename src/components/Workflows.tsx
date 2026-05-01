@@ -2031,7 +2031,6 @@ function loadBuilderState(workflow: Workflow) {
     setWorkflowNodes((items) => [...items, node]);
     setWorkflowEdges(nextEdges);
     setSelectedNodeId(node.id);
-    setEditorNodeId(node.id);
     setAddPanel(null);
     setAddSearch('');
   }
@@ -3202,7 +3201,7 @@ function formatRelativeDate(iso: string | undefined | null): string {
 }
 
 function WorkflowExecutionsSection(props: {
-  runs: WorkflowRun[];
+  runs: any[];
   query: string;
   workflows: Workflow[];
   onOpen: (workflow: Workflow) => void;
@@ -3340,14 +3339,14 @@ function WorkflowVariablesSection(props: {
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && props.storedVariables.length === 0 ? (
         <WorkflowEmptySection
           title="No workflow variables discovered"
           description="This workspace is not referencing shared workflow variables yet. Add reusable variables inside workflow prompts or data-mapping nodes to make flows easier to maintain."
           actionLabel="New variable"
           onAction={props.onCreate}
         />
-      ) : (
+      ) : rows.length > 0 ? (
         <div className="space-y-4">
           {rows.map((item) => (
         <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
@@ -3379,7 +3378,7 @@ function WorkflowVariablesSection(props: {
         </div>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -3433,14 +3432,14 @@ function WorkflowDataTablesSection(props: {
         </div>
       )}
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && visibleStoredTables.length === 0 ? (
         <WorkflowEmptySection
           title="No data tables configured"
           description="No workflow node is referencing a shared data table yet. Use data-aware workflows when you want durable records, evaluation datasets, or shared execution context."
           actionLabel="Create data table"
           onAction={props.onCreate}
         />
-      ) : (
+      ) : rows.length > 0 ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {rows.map((item) => (
             <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
@@ -3469,7 +3468,7 @@ function WorkflowDataTablesSection(props: {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
