@@ -1205,11 +1205,6 @@ function buildApprovalPanel(approval: any, context: any): ContextPanel {
 }
 
 function buildWorkflowPanel(workflow: any): ContextPanel {
-  const nodes = Array.isArray(workflow.current_version?.nodes) ? workflow.current_version.nodes : [];
-  const edges = Array.isArray(workflow.current_version?.edges) ? workflow.current_version.edges : [];
-  const failedRunCount = workflow.metrics?.failed || workflow.failed_run_count || 0;
-  const lastRunDuration = workflow.metrics?.last_run_duration_ms || workflow.last_run_duration_ms;
-
   return {
     entityType: 'workflow',
     entityId: workflow.id,
@@ -1222,18 +1217,16 @@ function buildWorkflowPanel(workflow: any): ContextPanel {
       { label: 'Version', value: toText(workflow.version_number || 'N/A') },
       { label: 'Trigger', value: titleCase(workflow.trigger?.type || workflow.trigger?.event || workflow.current_version?.trigger?.type || 'manual') },
       { label: 'Runs', value: String(workflow.metrics?.total || workflow.metrics?.runs || 0) },
-      { label: 'Failed runs', value: String(failedRunCount) },
-      { label: 'Success rate', value: (() => { const total = workflow.metrics?.total || workflow.metrics?.runs || 0; return total > 0 ? `${Math.round(((total - failedRunCount) / total) * 100)}%` : 'N/A'; })() },
+      { label: 'Failures', value: String(workflow.metrics?.failed || 0) },
+      { label: 'Success rate', value: (() => { const total = workflow.metrics?.total || workflow.metrics?.runs || 0; const failed = workflow.metrics?.failed || 0; return total > 0 ? `${Math.round(((total - failed) / total) * 100)}%` : 'N/A'; })() },
       { label: 'Published', value: workflow.current_version_id ? 'Yes' : 'No' },
       { label: 'Last run', value: formatWhen(workflow.last_run_at || workflow.metrics?.last_run_at) },
-      ...(lastRunDuration ? [{ label: 'Last run duration', value: `${lastRunDuration}ms` }] : []),
-      { label: 'Steps', value: String(nodes.length) },
-      { label: 'Connections', value: String(edges.length) },
+      ...(workflow.current_version?.nodes ? [{ label: 'Steps', value: String(Array.isArray(workflow.current_version.nodes) ? workflow.current_version.nodes.length : 0) }] : []),
     ],
     evidence: [
       { label: 'Health', value: titleCase(workflow.health_status || 'active'), tone: workflow.health_status === 'warning' ? 'warning' : 'success' },
       { label: 'Description', value: workflow.description || 'No description provided.', tone: 'neutral' },
-      ...(nodes.length > 0 ? [{ label: 'Step types', value: [...new Set(nodes.map((n: any) => n.type || 'action'))].join(', '), tone: 'neutral' as const }] : []),
+      ...(workflow.current_version?.nodes ? [{ label: 'Step types', value: [...new Set((workflow.current_version.nodes as any[]).map((n: any) => n.type || 'action'))].join(', '), tone: 'neutral' as const }] : []),
     ],
     timeline: [
       { label: 'Last run', value: workflow.health_message || 'Latest workflow execution metrics loaded.', time: workflow.last_run_at || workflow.metrics?.last_run_at || null },
@@ -1245,7 +1238,6 @@ function buildWorkflowPanel(workflow: any): ContextPanel {
     ],
     related: [
       { label: 'Workflow builder', value: 'Open Workflows', targetPage: 'workflows', focusId: workflow.id },
-      ...(nodes.length > 0 ? [{ label: 'Definition', value: `${nodes.length} nodes, ${edges.length} connections`, targetPage: 'workflows', focusId: workflow.id }] : []),
     ],
   };
 }
