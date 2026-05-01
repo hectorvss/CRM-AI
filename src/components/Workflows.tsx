@@ -3439,12 +3439,12 @@ function WorkflowDataTablesSection(props: {
               Create Data Table
             </button>
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="space-y-3">
             {visibleStoredTables.map((table) => (
               <button
                 key={table.id}
                 onClick={() => props.onOpenTable(table.id)}
-                className="rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300 hover:shadow-lg"
+                className="w-full rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300 hover:shadow-lg"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
