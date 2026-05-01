@@ -101,6 +101,32 @@ export interface LLMProvider {
   composeNarrative(req: NarrativeRequest): Promise<string>;
 }
 
+export class PlanEngineLLMError extends Error {
+  code: 'LLM_PROVIDER_NOT_CONFIGURED' | 'LLM_RESPONSE_INVALID' | 'LLM_PROVIDER_FAILED';
+  status: number;
+
+  constructor(code: PlanEngineLLMError['code'], message: string, status = 500) {
+    super(message);
+    this.name = 'PlanEngineLLMError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export function isPlanEngineLLMConfigured(): boolean {
+  return Boolean(config.ai.geminiApiKey && config.ai.geminiApiKey !== 'YOUR_GEMINI_API_KEY');
+}
+
+export function assertPlanEngineLLMConfigured(): void {
+  if (!isPlanEngineLLMConfigured()) {
+    throw new PlanEngineLLMError(
+      'LLM_PROVIDER_NOT_CONFIGURED',
+      'Configura un proveedor LLM para usar el SuperAgent.',
+      503,
+    );
+  }
+}
+
 // ── Gemini system prompt ─────────────────────────────────────────────────────
 
 function buildSystemPrompt(tools: CatalogEntry[], agentConfig?: AgentRuntimeConfig, mode?: 'investigate' | 'operate'): string {
@@ -205,10 +231,13 @@ ${toolDocs}${knowledgeSection}${safetySection}${modeInstructions}
 - Use "{{stepId.path}}" to reference a prior step's output, e.g. "{{s0.id}}".
 - If confidence < 0.7, ask a clarifying question instead of producing a plan.
 - Steps may run in parallel if dependsOn is empty or references already-satisfied steps.
+<<<<<<< Updated upstream
 - Use "kind": "chat" for greetings ("hi", "hola"), small talk, capability questions ("what can you do?"), or any request that needs no tool execution. Be warm, concise, and helpful — like a senior teammate.
 - For ANY request involving real data or actions (look up, find, search, list, show, update, cancel, refund, send, notify, create), produce a "kind": "plan" — never answer from imagination.
-- Generate as many steps as needed to fully satisfy the request. For complex requests, chain 3-7 steps: reads first, then writes. Use dependsOn for sequential dependencies. Steps with empty dependsOn run in parallel. Reject multi-step plans that could cause irreversible harm without first setting needsApproval: true.
+- Generate as many steps as needed to fully satisfy the request. Chain reads before writes. Prefer bulk tools for repeated mutations and playbook tools for known operational procedures. Before executing a large bulk write, call bulk.preview first. Before executing a playbook with several side effects, call playbook.preview first. Use dependsOn for sequential dependencies. Steps with empty dependsOn run in parallel. Reject multi-step plans that could cause irreversible harm without first setting needsApproval: true.
 - Set needsApproval: true when you believe the action is sensitive.
+- Use analysis.root_cause when the user asks why something is happening, asks for root cause, or needs a causal explanation grounded in canonical state.
+- Use scheduled_action.create for reminders, deferred follow-ups, and time-aware actions instead of asking the user to remember manually.
 - Respond ONLY with the JSON object. No prose outside the JSON.`;
 }
 
@@ -314,6 +343,18 @@ function buildContextMessages(req: PlanRequest): Array<{ role: 'user' | 'model';
   return messages;
 }
 
+function normalizeTemperature(value: number | undefined, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  if (value < 0) return 0;
+  if (value > 2) return 2;
+  return value;
+}
+
+function normalizeMaxOutputTokens(value: number | undefined, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+  return Math.max(1, Math.floor(value));
+}
+
 // ── Response parser ──────────────────────────────────────────────────────────
 
 function parseResponse(raw: string, planId: string, sessionId: string): LLMResponse {
@@ -395,8 +436,8 @@ class GeminiProvider implements LLMProvider {
 
     // Resolve model/generation overrides from AI Studio Reasoning tab
     const modelName = agentConfig?.model ?? this.modelName;
-    const temperature = typeof agentConfig?.temperature === 'number' ? agentConfig.temperature : 0.2;
-    const maxOutputTokens = typeof agentConfig?.maxOutputTokens === 'number' ? agentConfig.maxOutputTokens : 2048;
+    const temperature = normalizeTemperature(agentConfig?.temperature, 0.2);
+    const maxOutputTokens = normalizeMaxOutputTokens(agentConfig?.maxOutputTokens, 2048);
 
     return withGeminiRetry(
       async () => {
@@ -480,8 +521,12 @@ Write the assistant reply as 2-4 short conversational sentences in the user's la
         { label: 'planEngine.composeNarrative' },
       );
     } catch (err) {
-      logger.warn('composeNarrative failed — using deterministic fallback', { error: String(err) });
-      return req.traceSummary || 'Done.';
+      logger.warn('composeNarrative failed', { error: String(err) });
+      throw new PlanEngineLLMError(
+        'LLM_PROVIDER_FAILED',
+        `LLM narrative generation failed: ${err instanceof Error ? err.message : String(err)}`,
+        502,
+      );
     }
   }
 
@@ -520,6 +565,7 @@ let _provider: LLMProvider | null = null;
 
 export function getPlanEngineLLMProvider(): LLMProvider {
   if (!_provider) {
+    assertPlanEngineLLMConfigured();
     _provider = new GeminiProvider();
   }
   return _provider;
