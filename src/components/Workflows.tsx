@@ -249,6 +249,7 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'condition', key: 'flow.switch', label: 'Switch', category: 'Flow', icon: 'shuffle', requiresConfig: true, description: 'Route items to different branches by rules.' },
   { type: 'condition', key: 'flow.compare', label: 'Compare datasets', category: 'Flow', icon: 'compare_arrows', requiresConfig: true, description: 'Compare two inputs and branch on the result.' },
   { type: 'condition', key: 'flow.branch', label: 'Branch', category: 'Flow', icon: 'account_tree', requiresConfig: true, description: 'Split one flow into multiple routes.' },
+  { type: 'utility', key: 'flow.note', label: 'Sticky Note', category: 'Flow', icon: 'sticky_note_2', requiresConfig: true, description: 'Add a persistent documentation note to the canvas.' },
   { type: 'utility', key: 'flow.merge', label: 'Merge', category: 'Flow', icon: 'merge', requiresConfig: true, description: 'Join parallel branches into one stream.' },
   { type: 'utility', key: 'flow.loop', label: 'Loop Over Items (Split in Batches)', category: 'Flow', icon: 'repeat', requiresConfig: true, description: 'Iterate over items in batches or one by one.' },
   { type: 'utility', key: 'flow.wait', label: 'Wait', category: 'Flow', icon: 'hourglass_top', requiresConfig: true, description: 'Pause before continuing the flow.' },
@@ -263,6 +264,7 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'utility', key: 'data.split_items', label: 'Split items', category: 'Data transformation', icon: 'split_scene', requiresConfig: true, description: 'Split a string or array into multiple items.' },
   { type: 'utility', key: 'data.dedupe', label: 'Deduplicate', category: 'Data transformation', icon: 'content_copy', requiresConfig: true, description: 'Remove duplicate entries from a list.' },
   { type: 'utility', key: 'data.map_fields', label: 'Map fields', category: 'Data transformation', icon: 'map', requiresConfig: true, description: 'Map one object structure into another.' },
+  { type: 'utility', key: 'data.clean_context', label: 'Clean context', category: 'Data transformation', icon: 'cleaning_services', requiresConfig: true, description: 'Remove or prune keys from the workflow data to save memory and tokens.' },
   { type: 'utility', key: 'data.pick_fields', label: 'Pick fields', category: 'Data transformation', icon: 'select_all', requiresConfig: true, description: 'Keep only selected fields from a payload.' },
   { type: 'utility', key: 'data.merge_objects', label: 'Merge objects', category: 'Data transformation', icon: 'join_inner', requiresConfig: true, description: 'Merge multiple objects into one payload.' },
   { type: 'utility', key: 'data.validate_required', label: 'Validate required fields', category: 'Data transformation', icon: 'fact_check', requiresConfig: true, description: 'Block the flow if required fields are missing.' },
@@ -506,6 +508,10 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'outputKey', label: 'Output variable', type: 'text', placeholder: 'subworkflow', hint: 'Result stored as context.data.<variable>' },
     { key: 'input', label: 'Input mapping (JSON, optional)', type: 'textarea', placeholder: '{"caseId":"{{case.id}}"}', hint: 'Pass specific fields to the sub-workflow. Defaults to current context.' },
   ],
+  'flow.note': [
+    { key: 'content', label: 'Note content', type: 'textarea', placeholder: 'Write your notes here...' },
+    { key: 'color', label: 'Color', type: 'select', options: ['yellow', 'blue', 'green', 'red', 'purple'] },
+  ],
   'flow.stop_error': [
     { key: 'errorMessage', label: 'Error message', type: 'text', placeholder: 'e.g. Stopped: missing required data' },
   ],
@@ -553,6 +559,10 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
   'data.dedupe': [{ key: 'field', label: 'Items field', type: 'text', placeholder: 'e.g. data.items' }],
   'data.map_fields': [
     { key: 'mapping', label: 'Mapping (JSON)', type: 'textarea', placeholder: '{"target_key": "source.path"}' },
+  ],
+  'data.clean_context': [
+    { key: 'fields', label: 'Fields to remove (comma-separated)', type: 'text', placeholder: 'large_payload, sensitive_data' },
+    { key: 'mode', label: 'Mode', type: 'select', options: ['remove', 'keep_only'] },
   ],
   'data.pick_fields': [
     { key: 'fields', label: 'Fields to keep (comma-separated)', type: 'text', placeholder: 'id, name, status' },
@@ -1478,6 +1488,21 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
         ? 'border-amber-300 ring-amber-100'
         : 'border-gray-200 ring-gray-100';
 
+  if (node.key === 'flow.note') {
+    return (
+      <div className={`group relative p-5 rounded-2xl shadow-sm border-2 min-w-56 min-h-32 flex flex-col ${node.config?.color === 'blue' ? 'bg-blue-50 border-blue-200' : node.config?.color === 'green' ? 'bg-green-50 border-green-200' : node.config?.color === 'red' ? 'bg-red-50 border-red-200' : node.config?.color === 'purple' ? 'bg-purple-50 border-purple-200' : 'bg-yellow-50 border-yellow-200'}`}>
+        <div className="flex items-center gap-2 mb-3 text-gray-500 border-b border-black/5 pb-1.5">
+          <span className="material-symbols-outlined text-base">sticky_note_2</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">Note</span>
+        </div>
+        <div className="flex-1 whitespace-pre-wrap text-sm text-gray-700 font-medium leading-relaxed italic">
+          {node.config?.content || 'Double click to edit note...'}
+        </div>
+        <NodeInlineControls data={data} />
+      </div>
+    );
+  }
+
   if (node.type === 'trigger') {
     return (
       <div className={`group relative flex flex-col items-center ${node.disabled ? 'opacity-45' : ''}`}>
@@ -1572,6 +1597,18 @@ function WorkflowNodeCard({ data }: NodeProps<Node<FlowNodeData>>) {
         <>
           <Handle type="source" id="main" position={Position.Right} className="!h-4 !w-4 !border-gray-400 !bg-white" />
           <button onClick={() => data.onAdd(node.id, 'main')} className="absolute -right-14 top-1/2 -translate-y-1/2 rounded-md bg-gray-200 px-2 py-1 text-xs font-bold text-gray-700 opacity-0 transition group-hover:opacity-100">+</button>
+          
+          {(node.type === 'action' || node.type === 'agent' || node.type === 'integration') && (
+            <>
+              <Handle type="source" id="error" position={Position.Bottom} className="!h-4 !w-4 !border-red-500 !bg-white" />
+              <button 
+                onClick={() => data.onAdd(node.id, 'error')} 
+                className="absolute -bottom-10 left-1/2 -translate-x-1/2 rounded-md bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 opacity-0 transition group-hover:opacity-100 border border-red-100 shadow-sm"
+              >
+                ON FAILURE
+              </button>
+            </>
+          )}
         </>
       )}
       {node.type === 'agent' && (
@@ -1982,13 +2019,13 @@ function loadBuilderState(workflow: Workflow) {
     } else if (sourceNode) {
       nextEdges = [
         ...workflowEdges,
-        {
-          id: `edge_${sourceNode.id}_${node.id}_${Date.now()}`,
-          source: sourceNode.id,
-          target: node.id,
-          label: mode?.sourceHandle === 'false' ? 'false' : mode?.sourceHandle === 'true' ? 'true' : 'next',
-          sourceHandle: mode?.sourceHandle ?? 'main',
-        },
+          {
+            id: `edge_${sourceNode.id}_${node.id}_${Date.now()}`,
+            source: sourceNode.id,
+            target: node.id,
+            label: mode?.sourceHandle === 'false' ? 'false' : mode?.sourceHandle === 'true' ? 'true' : mode?.sourceHandle === 'error' ? 'failure' : 'next',
+            sourceHandle: mode?.sourceHandle ?? 'main',
+          },
       ];
     }
     setWorkflowNodes((items) => [...items, node]);
@@ -4419,7 +4456,43 @@ function WorkflowNodeEditorModal(props: {
                       <input type="number" min={0} value={props.node.retryPolicy?.backoffMs ?? ''} onChange={(event) => props.onRetryPolicy({ backoffMs: Number(event.target.value || 0) })} className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" />
                     </label>
                   </div>
-                  <div className="border-t border-gray-100 pt-4 text-xs text-gray-400">{props.node.key} node version 1.0</div>
+                  <div className="border-t border-gray-100 pt-4">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-3">System Controls</div>
+                    <div className="space-y-4">
+                      <label className="block">
+                        <span className="text-xs font-semibold text-gray-600">Idempotency Key (Template)</span>
+                        <input 
+                          value={props.node.config?.idempotencyKey ?? ''} 
+                          onChange={(e) => props.onConfig('idempotencyKey', e.target.value)} 
+                          placeholder="e.g. {{order.id}}:cancel"
+                          className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" 
+                        />
+                        <p className="mt-1.5 text-[10px] text-gray-400">Prevents the node from running again if the key matches a previous execution in this context.</p>
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="text-xs font-semibold text-gray-600">Rate Limit Bucket</span>
+                          <input 
+                            value={props.node.config?.rateLimitBucket ?? ''} 
+                            onChange={(e) => props.onConfig('rateLimitBucket', e.target.value)} 
+                            placeholder="e.g. stripe_api"
+                            className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" 
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-semibold text-gray-600">Max / Session</span>
+                          <input 
+                            type="number"
+                            value={props.node.config?.rateLimitLimit ?? ''} 
+                            onChange={(e) => props.onConfig('rateLimitLimit', e.target.value)} 
+                            placeholder="e.g. 5"
+                            className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400" 
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-100 pt-4 text-xs text-gray-400">{props.node.key} node version 1.1</div>
                 </div>
               )}
             </div>

@@ -90,6 +90,8 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'core.code', label: 'Code', category: 'Core', icon: 'code', requiresConfig: true },
   { type: 'utility', key: 'core.data_table_op', label: 'Data table', category: 'Core', icon: 'table_view', requiresConfig: true },
   { type: 'utility', key: 'core.respond_webhook', label: 'Respond to webhook', category: 'Core', icon: 'reply_all', requiresConfig: true },
+  { type: 'utility', key: 'flow.note', label: 'Sticky Note', category: 'Flow', icon: 'sticky_note_2', requiresConfig: true },
+  { type: 'utility', key: 'data.clean_context', label: 'Clean context', category: 'Data transformation', icon: 'cleaning_services', requiresConfig: true },
   { type: 'agent', key: 'ai.information_extractor', label: 'Information Extractor', category: 'Agent', icon: 'fact_check', requiresConfig: true },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true },
@@ -176,6 +178,8 @@ const NODE_CONTRACTS: Record<string, WorkflowNodeContract> = {
   'flow.wait': { required: ['mode'], optional: ['duration', 'until', 'timeout'], sideEffects: 'none', resumable: true },
   'flow.subworkflow': { required: ['workflow'], optional: ['input'], sideEffects: 'external', risk: 'medium' },
   'flow.stop_error': { required: ['errorMessage'], sideEffects: 'none' },
+  'flow.note': { required: ['content'], optional: ['color'], sideEffects: 'none' },
+  'data.clean_context': { required: ['fields'], optional: ['mode'], sideEffects: 'none' },
   'data.set_fields': { required: ['field', 'value'], optional: ['source', 'target'], sideEffects: 'none' },
   'data.rename_fields': { required: ['mapping'], sideEffects: 'none' },
   'data.extract_json': { required: ['source'], optional: ['path'], sideEffects: 'none' },
@@ -504,7 +508,15 @@ async function buildDryRun(
         workflowContext.data = result.output.data ?? result.output;
       }
       order += 1;
-      if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) break;
+      if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) {
+        // Check if there is an error handler branch
+        const errorNode = pickErrorNode(validation.nodes, validation.edges, currentNode);
+        if (errorNode) {
+          currentNode = errorNode;
+          continue;
+        }
+        break;
+      }
       currentNode = pickNextNode(validation.nodes, validation.edges, currentNode, workflowContext);
     }
   }
@@ -652,6 +664,13 @@ function pickNextNode(nodes: any[] = [], edges: any[] = [], currentNode: any, co
  * For flow.branch (parallel fan-out): returns ALL connected nodes.
  * For everything else: returns the single "next/success" node.
  */
+function pickErrorNode(nodes: any[] = [], edges: any[] = [], currentNode: any) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const outgoing = (edges ?? []).filter((edge) => edge.source === currentNode.id);
+  const errorEdge = outgoing.find((edge) => ['error', 'failure', 'fail'].includes(String(edge.label || edge.sourceHandle || '').toLowerCase()));
+  return errorEdge ? byId.get(errorEdge.target) : null;
+}
+
 function pickNextNodes(nodes: any[] = [], edges: any[] = [], currentNode: any, context: any): any[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const outgoing = (edges ?? []).filter((edge) => edge.source === currentNode.id);
@@ -659,7 +678,8 @@ function pickNextNodes(nodes: any[] = [], edges: any[] = [], currentNode: any, c
 
   // flow.branch = parallel fan-out: execute ALL connected targets
   if (currentNode.key === 'flow.branch') {
-    return outgoing.map((edge) => byId.get(edge.target)).filter(Boolean);
+    return outgoing.filter(edge => !['error', 'failure', 'fail'].includes(String(edge.label || edge.sourceHandle || '').toLowerCase()))
+      .map((edge) => byId.get(edge.target)).filter(Boolean);
   }
 
   if (currentNode.type === 'condition') {
@@ -678,7 +698,10 @@ function pickNextNodes(nodes: any[] = [], edges: any[] = [], currentNode: any, c
     return [];
   }
 
-  const next = outgoing.find((edge) => !edge.label || ['next', 'success'].includes(String(edge.label).toLowerCase())) ?? outgoing[0];
+  const next = outgoing.find((edge) => {
+    const label = String(edge.label || edge.sourceHandle || '').toLowerCase();
+    return !label || ['next', 'success', 'main', 'true'].includes(label);
+  }) ?? outgoing[0];
   const target = byId.get(next.target);
   return target ? [target] : [];
 }
@@ -806,6 +829,27 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
 
   const config = resolveNodeConfig(node.config ?? {}, context);
 
+  // ── Node-level System Settings: Idempotency ──
+  if (config.idempotencyKey) {
+    const key = resolveTemplateValue(config.idempotencyKey, context);
+    context.__idempotency = context.__idempotency ?? {};
+    if (context.__idempotency[key]) {
+      return { status: 'skipped', output: { duplicate: true, idempotencyKey: key, reason: 'Idempotency key match' } };
+    }
+    context.__idempotency[key] = true;
+  }
+
+  // ── Node-level System Settings: Rate Limit ──
+  if (config.rateLimitBucket && config.rateLimitLimit) {
+    const bucket = resolveTemplateValue(config.rateLimitBucket, context);
+    const limit = Number(config.rateLimitLimit);
+    context.__rateLimits = context.__rateLimits ?? {};
+    context.__rateLimits[bucket] = (context.__rateLimits[bucket] || 0) + 1;
+    if (context.__rateLimits[bucket] > limit) {
+      return { status: 'waiting', output: { bucket, limit, current: context.__rateLimits[bucket], reason: 'Rate limit exceeded' } };
+    }
+  }
+
   if (node.type === 'trigger') {
     return { status: 'completed', output: { accepted: true, trigger: node.key } };
   }
@@ -880,6 +924,27 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
   if (node.key.startsWith('data.')) {
     const source = readContextPath(context, config.source || config.path || 'data');
     const base = cloneJson(source && typeof source === 'object' ? source : context.data && typeof context.data === 'object' ? context.data : {});
+
+    if (node.key === 'flow.note') {
+      return { status: 'completed', output: { note: config.content, color: config.color || 'yellow' } };
+    }
+
+    if (node.key === 'data.clean_context') {
+      const fields = asArray(config.fields || config.keys);
+      const mode = config.mode || 'remove'; // remove or keep_only
+      if (mode === 'keep_only') {
+        const cleaned: Record<string, any> = {};
+        fields.forEach(f => {
+          if (context.data && context.data[f] !== undefined) cleaned[f] = context.data[f];
+        });
+        context.data = cleaned;
+      } else {
+        fields.forEach(f => {
+          if (context.data) delete context.data[f];
+        });
+      }
+      return { status: 'completed', output: { cleaned: true, count: fields.length, mode } };
+    }
 
     if (node.key === 'data.set_fields') {
       const field = String(config.field || config.target || 'value');

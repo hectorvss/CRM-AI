@@ -112,7 +112,13 @@ function interpolateArgs(args: unknown, completed: Map<string, ExecutionSpan>): 
         if (cursor === null || cursor === undefined) return 'undefined';
         cursor = cursor[key];
       }
-      return String(cursor ?? '');
+      
+      // Phase 5: Prevent massive context injection. 
+      // If the result is a massive object, we truncate its string representation to 2000 chars 
+      // to avoid bloating downstream tool arguments unless the model requested a "pure" reference.
+      const str = typeof cursor === 'object' ? JSON.stringify(cursor) : String(cursor ?? '');
+      if (str.length > 2000) return str.slice(0, 1997) + '...';
+      return str;
     });
   }
 
@@ -174,6 +180,64 @@ async function runCompensateWithRetry(
     if (i < maxAttempts - 1) await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)));
   }
   return { ok: false, error: `Compensation failed after ${maxAttempts} attempts: ${lastError}`, errorCode: 'COMPENSATION_FAILED' };
+}
+
+/**
+ * Phase 5: Fuzzy Arg Coercion.
+ * The LLM sometimes sends "true" instead of true, or "10" instead of 10.
+ * This helper uses the tool's schema descriptor to perform safe type coercion.
+ */
+function coerceArgs(args: any, descriptor: any): any {
+  if (args === null || args === undefined) return args;
+  if (!descriptor || typeof descriptor !== 'object') return args;
+
+  if (descriptor.type === 'number' && typeof args === 'string') {
+    const n = Number(args);
+    if (!isNaN(n)) return n;
+  }
+
+  if (descriptor.type === 'boolean' && typeof args === 'string') {
+    if (args.toLowerCase() === 'true') return true;
+    if (args.toLowerCase() === 'false') return false;
+  }
+
+  if (descriptor.type === 'object' && descriptor.fields && typeof args === 'object' && !Array.isArray(args)) {
+    const coerced: Record<string, any> = {};
+    for (const [k, v] of Object.entries(args)) {
+      coerced[k] = coerceArgs(v, descriptor.fields[k]);
+    }
+    return coerced;
+  }
+
+  if (descriptor.type === 'array' && descriptor.items && Array.isArray(args)) {
+    return args.map((item: any) => coerceArgs(item, descriptor.items));
+  }
+
+  return args;
+}
+
+/**
+ * Phase 6: Smart Timeouts.
+ * Heuristically determine a reasonable timeout based on tool category and risk.
+ */
+function calculateSmartTimeout(tool: any): number {
+  if (tool.timeoutMs) return tool.timeoutMs;
+  
+  // Defaults based on category
+  const categories: Record<string, number> = {
+    search: 25_000,
+    report: 30_000,
+    knowledge: 15_000,
+    integration: 20_000,
+    resolution: 20_000,
+  };
+  
+  let base = categories[tool.category] ?? 10_000;
+  
+  // Risk elevation: critical risk tools often involve more coordination or complex state
+  if (tool.risk === 'high' || tool.risk === 'critical') base += 5000;
+  
+  return base;
 }
 
 function elevateRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
@@ -343,8 +407,11 @@ export async function executePlan(
         }) };
       }
 
+      // Phase 5: Apply Fuzzy Coercion before strict Zod/Schema parsing
+      const coerced = coerceArgs(interpolated, tool!.args.describe());
+
       // Validate args
-      const parsed = tool!.args.parse(interpolated);
+      const parsed = tool!.args.parse(coerced);
       if (!parsed.ok) {
         return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
           ok: false,
@@ -356,8 +423,8 @@ export async function executePlan(
       const runtimeRisk = elevateRisk(
         decision.riskLevel,
         elevateRisk(
-          classifyRiskFromPlanSignal(tool.name, interpolated),
-          classifyRiskFromArgs(tool.name, interpolated),
+          classifyRiskFromPlanSignal(tool.name, coerced),
+          classifyRiskFromArgs(tool.name, coerced),
         ),
       );
 
@@ -370,7 +437,7 @@ export async function executePlan(
           step,
           parsed.value,
           { ...context, dryRun: options.dryRun === true },
-          tool.timeoutMs ?? 10_000,
+          calculateSmartTimeout(tool),
           (args) => tool.run({ args, context: { ...context, dryRun: options.dryRun === true } }),
         );
       } catch (err) {
