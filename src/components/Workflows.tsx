@@ -3006,15 +3006,13 @@ function WorkflowList(props: {
 }) {
   const [sortKey, setSortKey] = useState('updated');
 
-  const searchPlaceholder = props.section === 'credentials'
-    ? 'Search credentials...'
-    : props.section === 'executions'
-      ? 'Search executions...'
-      : props.section === 'variables'
-        ? 'Search variables...'
-        : props.section === 'data_tables'
-          ? 'Search data tables...'
-          : 'Search workflows...';
+  const searchPlaceholder = props.section === 'executions'
+    ? 'Search executions...'
+    : props.section === 'variables'
+      ? 'Search variables...'
+      : props.section === 'data_tables'
+        ? 'Search data tables...'
+        : 'Search workflows...';
 
   const sortedWorkflows = [...props.workflows].sort((a, b) => {
     if (sortKey === 'name') return a.name.localeCompare(b.name);
@@ -3040,10 +3038,9 @@ function WorkflowList(props: {
   });
 
   const workflowCount = props.workflows.length;
-  const credentialCount = props.connectors.length;
   const executionCount = props.recentRuns.length;
-  const variableCount = props.variableReferences.length;
-  const dataTableCount = props.tableReferences.length;
+  const variableCount = props.storedVariables.length > 0 ? props.storedVariables.length : props.variableReferences.length;
+  const dataTableCount = props.storedDataTables.length > 0 ? props.storedDataTables.length : props.tableReferences.length;
 
   return (
     <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col overflow-hidden">
@@ -3077,19 +3074,19 @@ function WorkflowList(props: {
             {WORKFLOW_LIBRARY_SECTIONS.map((section) => {
               const isActive = props.section === section.key;
               return (
-                <button 
-                  key={section.key} 
-                  onClick={() => props.setSection(section.key)} 
+                <button
+                  key={section.key}
+                  onClick={() => props.setSection(section.key)}
                   className={`py-4 text-sm whitespace-nowrap transition-all border-b-2 ${
                     isActive
-                      ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white' 
+                      ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white'
                       : 'border-transparent font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                   }`}
                 >
                   {section.label}
                   <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                     isActive
-                      ? 'bg-black text-white dark:bg-white dark:text-black' 
+                      ? 'bg-black text-white dark:bg-white dark:text-black'
                       : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
                   }`}>
                     {section.key === 'workflows' ? workflowCount : section.key === 'executions' ? executionCount : section.key === 'variables' ? variableCount : dataTableCount}
