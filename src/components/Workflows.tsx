@@ -23,13 +23,14 @@ import {
 import '@xyflow/react/dist/style.css';
 import { connectorsApi, workflowsApi, workspacesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
+import { ActionModal } from './ActionModal';
 import type { NavigateFn } from '../types';
 import LoadingState from './LoadingState';
 import StyledSelect from './StyledSelect';
 
 type WorkflowView = 'list' | 'builder';
 type WorkflowTab = 'overview' | 'builder' | 'runs' | 'evaluations';
-type WorkflowLibrarySection = 'workflows' | 'credentials' | 'executions' | 'variables' | 'data_tables';
+type WorkflowLibrarySection = 'workflows' | 'executions' | 'variables' | 'data_tables';
 type NodeType = 'trigger' | 'condition' | 'action' | 'agent' | 'policy' | 'knowledge' | 'integration' | 'utility';
 type AddPanelMode = { sourceNodeId?: string; sourceHandle?: string; edgeId?: string } | null;
 
@@ -2769,6 +2770,7 @@ function loadBuilderState(workflow: Workflow) {
           onClose={() => setActionDialog(null)}
           onChange={(value) => setActionDialog((current) => current && 'value' in current ? { ...current, value } as WorkflowActionDialogState : current)}
           onConfirm={() => void confirmWorkflowActionDialog()}
+          loading={archiveWorkflow.loading}
         />
         <WorkflowVariableModal
           open={variableModalOpen}
@@ -2823,7 +2825,6 @@ const CARD_MANAGE_ITEMS: Array<{ action: string; label: string; icon: string; da
 
 const WORKFLOW_LIBRARY_SECTIONS: Array<{ key: WorkflowLibrarySection; label: string }> = [
   { key: 'workflows', label: 'Workflows' },
-  { key: 'credentials', label: 'Credentials' },
   { key: 'executions', label: 'Executions' },
   { key: 'variables', label: 'Variables' },
   { key: 'data_tables', label: 'Data tables' },
@@ -3027,45 +3028,38 @@ function WorkflowList(props: {
                 />
               </div>
               
-              {props.section === 'workflows' ? (
+              {props.section === 'workflows' && (
                 <>
                   <button onClick={props.onTemplate} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Templates</button>
                   <button onClick={props.onCreate} className="rounded-xl bg-black px-5 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-90 dark:bg-white dark:text-black">New workflow</button>
                 </>
-              ) : props.section === 'credentials' ? (
-                <button
-                  onClick={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', sourceContext: 'workflow_credentials' })}
-                  className="rounded-xl bg-black px-5 py-2.5 text-sm font-bold text-white shadow-card transition-opacity hover:opacity-90 dark:bg-white dark:text-black flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-lg">add_link</span>
-                  Open integrations
-                </button>
-              ) : (
-                <button onClick={props.onCreate} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Create workflow</button>
               )}
             </div>
           </div>
           <div className="px-8 flex items-center gap-8 border-t border-gray-100 dark:border-gray-800 overflow-x-auto no-scrollbar">
-            {WORKFLOW_LIBRARY_SECTIONS.map((section) => (
-              <button 
-                key={section.key} 
-                onClick={() => props.setSection(section.key)} 
-                className={`py-4 text-sm whitespace-nowrap transition-all border-b-2 ${
-                  props.section === section.key 
-                    ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white' 
-                    : 'border-transparent font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}
-              >
-                {section.label}
-                <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  props.section === section.key 
-                    ? 'bg-black text-white dark:bg-white dark:text-black' 
-                    : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                }`}>
-                  {section.key === 'workflows' ? workflowCount : section.key === 'credentials' ? credentialCount : section.key === 'executions' ? executionCount : section.key === 'variables' ? variableCount : dataTableCount}
-                </span>
-              </button>
-            ))}
+            {WORKFLOW_LIBRARY_SECTIONS.map((section) => {
+              const isActive = props.section === section.key;
+              return (
+                <button 
+                  key={section.key} 
+                  onClick={() => props.setSection(section.key)} 
+                  className={`py-4 text-sm whitespace-nowrap transition-all border-b-2 ${
+                    isActive
+                      ? 'border-black font-bold text-gray-900 dark:border-white dark:text-white' 
+                      : 'border-transparent font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {section.label}
+                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    isActive
+                      ? 'bg-black text-white dark:bg-white dark:text-black' 
+                      : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                  }`}>
+                    {section.key === 'workflows' ? workflowCount : section.key === 'executions' ? executionCount : section.key === 'variables' ? variableCount : dataTableCount}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -3116,43 +3110,18 @@ function WorkflowList(props: {
               </div>
             ))}
           </div>
-        ) : props.section === 'credentials' ? (
-          <div className="space-y-4">
-            {/* Sort + filter bar */}
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                Manage your service connections
-              </div>
-              <div className="flex items-center gap-2">
-                <StyledSelect value={sortKey} onChange={(e) => setSortKey(e.target.value)} className="min-w-[180px]">
-                  <option value="updated">Sort by last updated</option>
-                  <option value="name">Sort by name</option>
-                  <option value="type">Sort by system</option>
-                  <option value="created">Sort by created date</option>
-                </StyledSelect>
-                <button className="flex h-[38px] w-[38px] items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 shadow-sm transition-all hover:bg-gray-50 hover:text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700">
-                  <span className="material-symbols-outlined text-xl">filter_list</span>
-                </button>
-              </div>
-            </div>
-            <WorkflowCredentialsSection 
-              connectors={sortedConnectors} 
-              workflows={props.workflows} 
-              query={props.query} 
-              onNavigate={props.onNavigate} 
-              onRefresh={props.onRefreshConnectors}
-            />
-          </div>
         ) : props.section === 'executions' ? (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                Recent workflow activity
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-50 text-gray-500">
+                  <span className="material-symbols-outlined">receipt_long</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Execution History</h2>
+                  <p className="text-xs text-gray-500">Audit and inspect recent automated runs across your workspace.</p>
+                </div>
               </div>
-              <StyledSelect value={sortKey} onChange={(e) => setSortKey(e.target.value)} className="min-w-[180px]">
-                <option value="updated">Sort by started time</option>
-                <option value="status">Sort by status</option>
-              </StyledSelect>
             </div>
             <WorkflowExecutionsSection runs={sortedExecutions} query={props.query} workflows={props.workflows} onOpen={props.onOpen} />
           </div>
@@ -3185,33 +3154,6 @@ function WorkflowList(props: {
   );
 }
 
-// ── Icon/color map for known connector systems ────────────────────────────────
-const CONNECTOR_ICON_MAP: Record<string, { icon: string; color: string }> = {
-  slack:         { icon: 'tag',                color: 'bg-purple-100 text-purple-700' },
-  discord:       { icon: 'forum',              color: 'bg-indigo-100 text-indigo-700' },
-  telegram:      { icon: 'send',               color: 'bg-sky-100 text-sky-700' },
-  teams:         { icon: 'groups',             color: 'bg-blue-100 text-blue-700' },
-  google_chat:   { icon: 'chat_bubble',        color: 'bg-green-100 text-green-700' },
-  shopify:       { icon: 'shopping_bag',       color: 'bg-green-100 text-green-700' },
-  stripe:        { icon: 'payments',           color: 'bg-violet-100 text-violet-700' },
-  zendesk:       { icon: 'support_agent',      color: 'bg-emerald-100 text-emerald-700' },
-  intercom:      { icon: 'chat',               color: 'bg-blue-100 text-blue-700' },
-  gmail:         { icon: 'mail',               color: 'bg-red-100 text-red-700' },
-  outlook:       { icon: 'mark_email_unread',  color: 'bg-blue-100 text-blue-700' },
-  whatsapp:      { icon: 'chat_bubble',        color: 'bg-green-100 text-green-700' },
-  anthropic:     { icon: 'auto_awesome_motion',color: 'bg-orange-100 text-orange-700' },
-  openai:        { icon: 'memory',             color: 'bg-gray-100 text-gray-700' },
-  gemini:        { icon: 'diamond',            color: 'bg-blue-100 text-blue-700' },
-  ollama:        { icon: 'computer',           color: 'bg-gray-100 text-gray-700' },
-  hubspot:       { icon: 'hub',                color: 'bg-orange-100 text-orange-700' },
-  notion:        { icon: 'description',        color: 'bg-gray-100 text-gray-700' },
-  zapier:        { icon: 'bolt',               color: 'bg-orange-100 text-orange-700' },
-};
-
-function connectorIcon(system: string | undefined | null): { icon: string; color: string } {
-  return CONNECTOR_ICON_MAP[String(system ?? '').toLowerCase()] ?? { icon: 'link', color: 'bg-gray-100 text-gray-500' };
-}
-
 function formatRelativeDate(iso: string | undefined | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -3225,172 +3167,13 @@ function formatRelativeDate(iso: string | undefined | null): string {
   return `${Math.floor(diffDays / 365)} years ago`;
 }
 
-function WorkflowCredentialsSection(props: {
-  connectors: any[];
-  workflows: Workflow[];
+function WorkflowExecutionsSection(props: {
+  runs: WorkflowRun[];
   query: string;
-  onNavigate?: NavigateFn;
-  onRefresh?: () => void;
+  workflows: Workflow[];
+  onOpen: (workflow: Workflow) => void;
 }) {
-  const [menuOpenId, setMenuOpenId] = React.useState<string | null>(null);
-
-  const deleteMutation = useMutation(connectorsApi.delete, {
-    onSuccess: () => props.onRefresh?.()
-  });
-
-  const testMutation = useMutation(connectorsApi.test, {
-    onSuccess: (res: any) => {
-      console.log('Test result:', res);
-      props.onRefresh?.();
-    }
-  });
-  React.useEffect(() => {
-    if (!menuOpenId) return;
-    const handler = () => setMenuOpenId(null);
-    document.addEventListener('click', handler, { capture: true });
-    return () => document.removeEventListener('click', handler, { capture: true });
-  }, [menuOpenId]);
-
-  const rows = props.connectors.filter((connector) => {
-    const haystack = `${connector?.name ?? ''} ${connector?.system ?? ''} ${connector?.status ?? ''} ${connector?.auth_type ?? ''}`.toLowerCase();
-    return !props.query.trim() || haystack.includes(props.query.trim().toLowerCase());
-  });
-
-  // Count linked workflows per connector
-  const linkedCounts = React.useMemo(() => {
-    const map = new Map<string, number>();
-    for (const wf of props.workflows as any[]) {
-      const nodes: any[] = Array.isArray(wf.nodes) ? wf.nodes : [];
-      for (const node of nodes) {
-        const ref = node.credentialsRef ?? node.credentials_ref ?? node.config?.connector ?? node.config?.connector_id;
-        if (ref) map.set(String(ref), (map.get(String(ref)) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [props.workflows]);
-
-  if (rows.length === 0) {
-    return (
-      <WorkflowEmptySection
-        title="No credentials found"
-        description="Connectors and credentials configured in Integrations appear here and can be referenced by workflow nodes."
-        actionLabel="Open Integrations"
-        onAction={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', sourceContext: 'workflow_credentials_empty' })}
-      />
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-1 gap-3">
-      {rows.map((connector) => {
-        const { icon, color } = connectorIcon(connector.system);
-        const system = String(connector.system || connector.name || '').toLowerCase();
-        const authTypeLabel = connector.auth_type
-          ? String(connector.auth_type).replace(/_/g, ' ')
-          : 'OAuth2';
-        const statusOk = ['active', 'connected', 'healthy'].includes(String(connector.status ?? '').toLowerCase());
-        const statusError = ['error', 'failed'].includes(String(connector.status ?? '').toLowerCase());
-        const linked = linkedCounts.get(connector.id) ?? 0;
-
-        return (
-          <div
-            key={connector.id}
-            className="group relative flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-card transition-all hover:border-gray-300 hover:shadow-md dark:border-gray-800 dark:bg-card-dark"
-          >
-            {/* Icon Container */}
-            <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${color} shadow-sm transition-transform group-hover:scale-105`}>
-              <span className="material-symbols-outlined text-2xl">{icon}</span>
-            </div>
-
-            {/* Info Section */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h4 className="truncate text-base font-bold text-gray-900 dark:text-white">
-                  {connector.name || system.charAt(0).toUpperCase() + system.slice(1)}
-                </h4>
-                <div className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full ${statusOk ? 'bg-green-500' : statusError ? 'bg-red-500' : 'bg-gray-300'}`} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                    {statusOk ? 'Active' : statusError ? 'Error' : 'Offline'}
-                  </span>
-                </div>
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-                <span className="font-medium text-gray-700 dark:text-gray-300 capitalize">{system}</span>
-                <span className="h-1 w-1 rounded-full bg-gray-300 dark:bg-gray-600" />
-                <span>Last updated {formatRelativeDate(connector.updated_at)}</span>
-                <span className="h-1 w-1 rounded-full bg-gray-300 dark:bg-gray-600" />
-                <span>Created {formatRelativeDate(connector.created_at)}</span>
-              </div>
-            </div>
-
-            {/* Badges & Actions */}
-            <div className="flex items-center gap-3">
-              {linked > 0 && (
-                <div className="hidden sm:flex items-center gap-1.5 rounded-xl border border-gray-100 bg-gray-50 px-3 py-1.5 text-xs font-bold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                  <span className="material-symbols-outlined text-base text-gray-400">link</span>
-                  {linked}
-                </div>
-              )}
-              
-              <span className="hidden md:inline-block rounded-full bg-gray-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                Workspace
-              </span>
-
-              <div className="relative">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === connector.id ? null : connector.id); }}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                >
-                  <span className="material-symbols-outlined">more_vert</span>
-                </button>
-                
-                {menuOpenId === connector.id && (
-                  <div className="absolute right-0 top-full z-30 mt-2 w-52 origin-top-right rounded-2xl border border-gray-200 bg-white py-2 shadow-xl dark:border-gray-700 dark:bg-gray-900">
-                    <button
-                      onClick={() => { props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', entityId: connector.id, sourceContext: 'workflow_credentials' }); setMenuOpenId(null); }}
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
-                    >
-                      <span className="material-symbols-outlined text-lg text-gray-400">open_in_new</span>
-                      Open in Integrations
-                    </button>
-                    <button
-                      onClick={() => { void testMutation.mutate(connector.id); setMenuOpenId(null); }}
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
-                    >
-                      <span className="material-symbols-outlined text-lg text-gray-400">vitals</span>
-                      Test connection
-                    </button>
-                    <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
-                    <button
-                      onClick={() => { 
-                        if (confirm(`Are you sure you want to delete the ${connector.name || connector.system} connection? This will break workflows using it.`)) {
-                          void deleteMutation.mutate(connector.id);
-                        }
-                        setMenuOpenId(null); 
-                      }}
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-                    >
-                      <span className="material-symbols-outlined text-lg">delete_outline</span>
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function WorkflowExecutionsSection(props: { runs: any[]; query: string; workflows: Workflow[]; onOpen: (workflow: Workflow) => void }) {
-  const rows = props.runs.filter((run) => {
-    const haystack = `${run?.workflow_name ?? ''} ${run?.workflowId ?? ''} ${run?.status ?? ''} ${run?.trigger_type ?? ''}`.toLowerCase();
-    return !props.query.trim() || haystack.includes(props.query.trim().toLowerCase());
-  });
-
+  const rows = props.runs.filter((item) => !props.query.trim() || `${item.id} ${item.workflow_name || ''} ${item.status}`.toLowerCase().includes(props.query.trim().toLowerCase()));
   const workflowById = new Map(props.workflows.map((workflow) => [workflow.id, workflow]));
 
   if (rows.length === 0) {
@@ -3403,69 +3186,87 @@ function WorkflowExecutionsSection(props: { runs: any[]; query: string; workflow
   }
 
   return (
-    <div className="grid grid-cols-1 gap-2">
-      {rows.map((run) => {
-        const workflow = workflowById.get(run?.workflowId ?? run?.workflow_id ?? '');
-        const startedAt = run?.startedAt ?? run?.started_at ?? run?.created_at;
-        const status = String(run?.status ?? 'pending').toLowerCase();
-        
-        return (
-          <div 
-            key={run.id} 
-            className="group flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-3.5 shadow-sm transition hover:border-gray-200 hover:shadow-md dark:border-gray-800 dark:bg-card-dark"
-          >
-            <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${
-              ['completed', 'resumed'].includes(status) ? 'bg-green-50 text-green-600' :
-              ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-50 text-red-600' :
-              'bg-amber-50 text-amber-600'
-            }`}>
-              <span className="material-symbols-outlined">
-                {['completed', 'resumed'].includes(status) ? 'check_circle' :
-                 ['failed', 'blocked', 'cancelled'].includes(status) ? 'error' : 'schedule'}
-              </span>
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-bold text-gray-900 dark:text-white">
-                  {run?.workflow_name ?? workflow?.name ?? 'Workflow run'}
-                </span>
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                  ['completed', 'resumed'].includes(status) ? 'bg-green-100 text-green-700' :
-                  ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-100 text-red-700' :
-                  'bg-amber-100 text-amber-700'
-                }`}>
-                  {status}
-                </span>
-              </div>
-              <div className="mt-0.5 flex items-center gap-2 text-[11px] text-gray-500">
-                <span className="font-medium text-gray-700 dark:text-gray-300">{run?.trigger_type ?? 'manual'}</span>
-                <span className="h-0.5 w-0.5 rounded-full bg-gray-300" />
-                <span className="font-mono">{run.id.slice(0, 8)}...</span>
-                <span className="h-0.5 w-0.5 rounded-full bg-gray-300" />
-                <span>Started {formatRelativeDate(startedAt)}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden sm:block">
-                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-tight">Started</div>
-                <div className="text-xs font-medium text-gray-600 dark:text-gray-300">{startedAt ? new Date(startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending'}</div>
-              </div>
+    <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
+              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Execution</th>
+              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Trigger</th>
+              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Date</th>
+              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">Status</th>
+              <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((run) => {
+              const workflow = workflowById.get(run?.workflowId ?? run?.workflow_id ?? '');
+              const startedAt = run?.startedAt ?? run?.started_at ?? run?.created_at;
+              const status = String(run?.status ?? 'pending').toLowerCase();
               
-              {workflow && (
-                <button 
-                  onClick={() => props.onOpen(workflow)}
-                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-                >
-                  Inspect
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+              return (
+                <tr key={run.id} className="border-b border-gray-50 dark:border-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${
+                        ['completed', 'resumed'].includes(status) ? 'bg-green-50 text-green-600' :
+                        ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-50 text-red-600' :
+                        'bg-amber-50 text-amber-600'
+                      }`}>
+                        <span className="material-symbols-outlined text-lg">
+                          {['completed', 'resumed'].includes(status) ? 'check_circle' :
+                           ['failed', 'blocked', 'cancelled'].includes(status) ? 'error' : 'schedule'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">
+                          {run?.workflow_name ?? workflow?.name ?? 'Workflow run'}
+                        </p>
+                        <p className="text-[10px] font-mono text-gray-500 mt-0.5 uppercase tracking-tighter">
+                          ID: {run.id.slice(0, 8)}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="px-2 py-1 rounded-lg border border-gray-100 bg-gray-50 text-[10px] font-bold text-gray-600 uppercase tracking-tight dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                      {run?.trigger_type ?? 'manual'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                      {startedAt ? new Date(startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending'}
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">
+                      {formatRelativeDate(startedAt)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                      ['completed', 'resumed'].includes(status) ? 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/30' :
+                      ['failed', 'blocked', 'cancelled'].includes(status) ? 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30' :
+                      'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/30'
+                    }`}>
+                      {status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {workflow && (
+                      <button 
+                        onClick={() => props.onOpen(workflow)}
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                      >
+                        Inspect
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -4305,11 +4106,6 @@ function WorkflowContextMenu(props: {
   );
 }
 
-/** Renders smart per-node config fields based on NODE_FIELD_SCHEMAS. Falls back to generic CONFIG_FIELDS if no schema defined. */
-// ── AgentPickerField ──────────────────────────────────────────────────────────
-// Fetches AI Studio agents from /api/workflows/agent-catalog and renders a
-// searchable dropdown so the user can pick by name instead of typing a slug.
-
 interface AgentCatalogEntry {
   id: string;
   slug: string;
@@ -4929,6 +4725,7 @@ function WorkflowActionDialog(props: {
   onClose: () => void;
   onChange: (value: string) => void;
   onConfirm: () => void;
+  loading?: boolean;
 }) {
   if (!props.open || !props.state) return null;
 
@@ -4951,95 +4748,31 @@ function WorkflowActionDialog(props: {
   if (props.state.kind === 'archive') {
     const workflow = props.workflow;
     return (
-      <AnimatePresence>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
-          <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} className="w-full max-w-xl overflow-hidden rounded-[32px] bg-white shadow-2xl">
-            <div className="relative border-b border-gray-100 p-8">
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-                  <span className="material-symbols-outlined text-2xl">inventory_2</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">Archive Workflow</h3>
-                  <p className="mt-1 text-sm text-gray-500">Permanently disable this workflow version while preserving history.</p>
-                </div>
-              </div>
-              <button onClick={props.onClose} className="absolute right-6 top-6 rounded-full p-2 text-gray-400 transition hover:bg-gray-100">
-                <span className="material-symbols-outlined text-xl">close</span>
-              </button>
-            </div>
-
-            <div className="p-8">
-              <div className="rounded-2xl bg-gray-50/50 p-6">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Current State</div>
-                <div className="mt-4 grid grid-cols-2 gap-y-6">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Workflow ID</div>
-                    <div className="mt-1 text-sm font-bold text-gray-900">{workflow?.id.slice(0, 8) ?? 'N/A'}...</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Name</div>
-                    <div className="mt-1 text-sm font-bold text-gray-900">{workflow?.name ?? 'Untitled'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Category</div>
-                    <div className="mt-1 text-sm font-bold text-gray-900">{workflow?.category ?? 'General'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</div>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                      <span className="text-sm font-bold text-gray-900">Active</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">What will happen</div>
-                <div className="mt-4 space-y-4">
-                  {[
-                    { title: 'Disable all triggers', desc: 'This workflow will no longer respond to events or schedules.' },
-                    { title: 'Release resources', desc: 'Any pending executions or queue items will be cancelled.' },
-                    { title: 'Preserve audit trail', desc: 'Historical runs and version history will remain available for compliance.' },
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex gap-4">
-                      <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-gray-900">{item.title}</div>
-                        <div className="mt-0.5 text-xs text-gray-500">{item.desc}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-8 rounded-2xl bg-indigo-50/50 p-4">
-                <div className="flex gap-3">
-                  <span className="material-symbols-outlined text-indigo-600">info</span>
-                  <div className="flex-1">
-                    <div className="text-xs font-bold text-indigo-900">KEEP IN MIND</div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-indigo-700">
-                      Archiving is reversible, but may disrupt ongoing operations if other systems depend on this workflow's outputs.
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-center justify-between">
-                <button onClick={props.onClose} className="rounded-xl border border-gray-200 px-6 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-50">
-                  ← Back
-                </button>
-                <button onClick={props.onConfirm} className="rounded-xl bg-gray-900 px-8 py-2.5 text-sm font-bold text-white transition hover:bg-black">
-                  Archive Workflow
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      </AnimatePresence>
+      <ActionModal
+        open={props.open}
+        onClose={props.onClose}
+        onConfirm={props.onConfirm}
+        loading={props.loading}
+        variant="danger"
+        icon="inventory_2"
+        title="Archive Workflow"
+        subtitle="Permanently disable this workflow version while preserving history."
+        context={[
+          { label: 'Workflow ID', value: workflow?.id.slice(0, 8) ?? 'N/A' },
+          { label: 'Name', value: workflow?.name ?? 'Untitled' },
+          { label: 'Category', value: workflow?.category ?? 'General' },
+          { label: 'Status', value: 'Active' },
+        ]}
+        steps={[
+          { text: 'Disable all triggers', detail: 'This workflow will no longer respond to events or schedules.' },
+          { text: 'Release resources', detail: 'Any pending executions or queue items will be cancelled.' },
+          { text: 'Preserve audit trail', detail: 'Historical runs and version history will remain available for compliance.' },
+        ]}
+        considerations={[
+          { text: 'Archiving is reversible, but may disrupt ongoing operations if other systems depend on this workflow\'s outputs.' }
+        ]}
+        confirmLabel="Archive Workflow"
+      />
     );
   }
 
