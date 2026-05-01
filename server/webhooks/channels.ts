@@ -22,7 +22,7 @@
 
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { getDb }   from '../db/client.js';
+import { createIntegrationRepository } from '../data/integrations.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { config }  from '../config.js';
@@ -80,7 +80,7 @@ whatsappWebhookRouter.get('/', (req: Request, res: Response) => {
  *   }]
  * }
  */
-whatsappWebhookRouter.post('/', (req: Request, res: Response) => {
+whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
   if (!rawBody) {
     res.status(400).send('bad request');
@@ -99,8 +99,8 @@ whatsappWebhookRouter.post('/', (req: Request, res: Response) => {
   // Respond immediately — Meta retries if no 200 within 20 s
   res.status(200).send('ok');
 
-  const db = getDb();
-  const context = resolveTenantWorkspaceContext(
+  const integrationRepo = createIntegrationRepository();
+  const context = await resolveTenantWorkspaceContext(
     req.headers['x-tenant-id'] as string | undefined,
     req.headers['x-workspace-id'] as string | undefined,
   );
@@ -131,36 +131,42 @@ whatsappWebhookRouter.post('/', (req: Request, res: Response) => {
 
           // Deduplicate by externalMessageId
           const dedupeKey = `whatsapp:message:${externalMessageId}`;
-          const existing = db.prepare(
-            'SELECT id FROM canonical_events WHERE dedupe_key = ? LIMIT 1'
-          ).get(dedupeKey);
+          const existing = await (integrationRepo as any).getCanonicalEventByDedupeKey?.(dedupeKey);
 
           if (existing) {
             logger.debug('WhatsApp: duplicate message, skipping', { externalMessageId });
             continue;
           }
 
-          const normalized = JSON.stringify({
+          const normalized = {
             messageContent:    content,
             senderId:          from,
             senderName:        senderName ?? null,
-            channel:           'whatsapp',
+            channel:           'whatsapp' as const,
             externalMessageId,
             sentAt,
-          });
+          };
 
           const eventId = randomUUID();
           const now     = new Date().toISOString();
 
-          db.prepare(`
-            INSERT INTO canonical_events (
-              id, source_system, source_entity_type, source_entity_id,
-              event_type, occurred_at,
-              canonical_entity_type, canonical_entity_id,
-              normalized_payload, dedupe_key,
-              status, tenant_id, workspace_id, ingested_at, updated_at
-            ) VALUES (?, 'whatsapp', 'customer', ?, 'message.inbound', ?, 'customer', ?, ?, ?, 'received', ?, ?, ?, ?)
-          `).run(eventId, from, sentAt, from, normalized, dedupeKey, context.tenantId, context.workspaceId, now, now);
+          await integrationRepo.createCanonicalEvent({ tenantId: context.tenantId }, {
+            id: eventId,
+            source_system: 'whatsapp',
+            source_entity_type: 'customer',
+            source_entity_id: from,
+            event_type: 'message.inbound',
+            occurred_at: sentAt,
+            canonical_entity_type: 'customer',
+            canonical_entity_id: from,
+            normalized_payload: normalized,
+            dedupe_key: dedupeKey,
+            status: 'received',
+            tenant_id: context.tenantId,
+            workspace_id: context.workspaceId,
+            ingested_at: now,
+            updated_at: now,
+          });
 
           enqueue(
             JobType.CHANNEL_INGEST,
@@ -196,7 +202,7 @@ export const emailWebhookRouter = Router();
  *
  * We detect the format by checking for Postmark's capital-cased keys.
  */
-emailWebhookRouter.post('/', (req: Request, res: Response) => {
+emailWebhookRouter.post('/', async (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
   if (!rawBody) {
     res.status(400).send('bad request');
@@ -215,8 +221,8 @@ emailWebhookRouter.post('/', (req: Request, res: Response) => {
   // Respond immediately
   res.status(200).send('ok');
 
-  const db = getDb();
-  const context = resolveTenantWorkspaceContext(
+  const integrationRepo = createIntegrationRepository();
+  const context = await resolveTenantWorkspaceContext(
     req.headers['x-tenant-id'] as string | undefined,
     req.headers['x-workspace-id'] as string | undefined,
   );
@@ -247,38 +253,44 @@ emailWebhookRouter.post('/', (req: Request, res: Response) => {
     const senderEmail = (emailMatch[1] ?? from).trim().toLowerCase();
 
     const dedupeKey = `email:message:${externalMessageId}`;
-    const existing  = db.prepare(
-      'SELECT id FROM canonical_events WHERE dedupe_key = ? LIMIT 1'
-    ).get(dedupeKey);
+    const existing = await (integrationRepo as any).getCanonicalEventByDedupeKey?.(dedupeKey);
 
     if (existing) {
       logger.debug('Email: duplicate message, skipping', { externalMessageId });
       return;
     }
 
-    const normalized = JSON.stringify({
+    const normalized = {
       messageContent:    textContent,
       senderId:          senderEmail,
       senderName:        extractDisplayName(from),
-      channel:           'email',
+      channel:           'email' as const,
       externalMessageId,
       sentAt,
       subject,
       attachments,
-    });
+    };
 
     const eventId = randomUUID();
     const now     = new Date().toISOString();
 
-    db.prepare(`
-      INSERT INTO canonical_events (
-        id, source_system, source_entity_type, source_entity_id,
-        event_type, occurred_at,
-        canonical_entity_type, canonical_entity_id,
-        normalized_payload, dedupe_key,
-        status, tenant_id, workspace_id, ingested_at, updated_at
-      ) VALUES (?, 'email', 'customer', ?, 'message.inbound', ?, 'customer', ?, ?, ?, 'received', ?, ?, ?, ?)
-    `).run(eventId, senderEmail, sentAt, senderEmail, normalized, dedupeKey, context.tenantId, context.workspaceId, now, now);
+    await integrationRepo.createCanonicalEvent({ tenantId: context.tenantId }, {
+      id: eventId,
+      source_system: 'email',
+      source_entity_type: 'customer',
+      source_entity_id: senderEmail,
+      event_type: 'message.inbound',
+      occurred_at: sentAt,
+      canonical_entity_type: 'customer',
+      canonical_entity_id: senderEmail,
+      normalized_payload: normalized,
+      dedupe_key: dedupeKey,
+      status: 'received',
+      tenant_id: context.tenantId,
+      workspace_id: context.workspaceId,
+      ingested_at: now,
+      updated_at: now,
+    });
 
     enqueue(
       JobType.CHANNEL_INGEST,

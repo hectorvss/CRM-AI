@@ -23,11 +23,14 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb }        from '../db/client.js';
+import { createIntegrationRepository } from '../data/integrations.js';
+import { createCustomerRepository } from '../data/customers.js';
+import { createCaseRepository } from '../data/cases.js';
 import { enqueue }      from '../queue/client.js';
 import { JobType }      from '../queue/types.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { logger }       from '../utils/logger.js';
+import { requireScope } from '../lib/scope.js';
 import type { ChannelIngestPayload, JobContext } from '../queue/types.js';
 
 // ── Normalised inbound message shape ─────────────────────────────────────────
@@ -69,14 +72,15 @@ async function handleChannelIngest(
     traceId:         ctx.traceId,
   });
 
-  const db          = getDb();
-  const tenantId    = ctx.tenantId    ?? 'org_default';
-  const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const integrationRepo = createIntegrationRepository();
+  const customerRepo = createCustomerRepository();
+  const caseRepo = createCaseRepository();
+
+  const scope = requireScope(ctx, 'channelIngest');
+  const { tenantId, workspaceId } = scope;
 
   // ── 1. Load canonical event ───────────────────────────────────────────────
-  const event = db.prepare(
-    'SELECT * FROM canonical_events WHERE id = ?'
-  ).get(payload.canonicalEventId) as any;
+  const event = await integrationRepo.getCanonicalEvent(payload.canonicalEventId);
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -91,7 +95,9 @@ async function handleChannelIngest(
   // ── 2. Parse normalised message ───────────────────────────────────────────
   let msg: NormalizedChannelMessage;
   try {
-    msg = JSON.parse(event.normalized_payload) as NormalizedChannelMessage;
+    msg = typeof event.normalized_payload === 'string' 
+      ? JSON.parse(event.normalized_payload) as NormalizedChannelMessage 
+      : event.normalized_payload;
   } catch {
     log.warn('Failed to parse normalized_payload for channel event');
     return;
@@ -108,14 +114,8 @@ async function handleChannelIngest(
   });
 
   // ── 3. Resolve customer ───────────────────────────────────────────────────
-  // Try to find an existing customer by their channel identity.
-  // linked_identities maps (system, external_id) → customer_id.
   const identitySystem = channelToSystem(msg.channel);
-  const existingIdentity = db.prepare(`
-    SELECT customer_id FROM linked_identities
-    WHERE system = ? AND external_id = ?
-    LIMIT 1
-  `).get(identitySystem, msg.senderId) as any;
+  const existingIdentity = await customerRepo.getIdentity(scope, identitySystem, msg.senderId);
 
   let customerId: string;
 
@@ -123,34 +123,18 @@ async function handleChannelIngest(
     customerId = existingIdentity.customer_id;
     log.debug('Found existing customer via linked identity', { customerId });
   } else {
-    // Create a stub customer that can be enriched later by the Identity agent
     customerId = randomUUID();
     const canonicalName = msg.senderName ?? deriveDisplayName(msg.senderId, msg.channel);
-    const now = new Date().toISOString();
-
-    db.prepare(`
-      INSERT INTO customers (
-        id, canonical_name, canonical_email, email, phone,
-        segment, risk_level, lifetime_value, total_orders,
-        workspace_id, tenant_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'standard', 'low', 0, 0, ?, ?, ?, ?)
-    `).run(
-      customerId,
+    
+    await customerRepo.createStub(scope, {
+      id: customerId,
       canonicalName,
-      msg.channel === 'email' ? msg.senderId : null,  // canonical_email
-      msg.channel === 'email' ? msg.senderId : null,  // email (alias)
-      ['whatsapp', 'sms'].includes(msg.channel) ? msg.senderId : null,
-      workspaceId,
-      tenantId,
-      now,
-      now,
-    );
-
-    db.prepare(`
-      INSERT INTO linked_identities (
-        id, customer_id, tenant_id, workspace_id, system, external_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(randomUUID(), customerId, tenantId, workspaceId, identitySystem, msg.senderId, now);
+      canonicalEmail: msg.channel === 'email' ? msg.senderId : null,
+      email: msg.channel === 'email' ? msg.senderId : null,
+      phone: ['whatsapp', 'sms'].includes(msg.channel) ? msg.senderId : null,
+      identitySystem,
+      identityExternalId: msg.senderId,
+    });
 
     log.info('Created stub customer for new channel sender', {
       customerId,
@@ -160,69 +144,38 @@ async function handleChannelIngest(
   }
 
   // ── 4. Find or create conversation thread ─────────────────────────────────
-  // A conversation groups all messages in the same channel thread.
-  // Match on (customer_id, channel, status != closed) to reuse open threads.
-  const existingConv = db.prepare(`
-    SELECT id FROM conversations
-    WHERE customer_id = ?
-      AND channel     = ?
-      AND tenant_id   = ?
-      AND status NOT IN ('closed', 'resolved')
-    ORDER BY last_message_at DESC
-    LIMIT 1
-  `).get(customerId, msg.channel, tenantId) as any;
+  const existingConv = await caseRepo.getConversationByChannel(scope, customerId, msg.channel);
 
   let conversationId: string;
 
   if (existingConv) {
     conversationId = existingConv.id;
-
-    // Bump last_message_at so the inbox sorts this conversation to the top
-    db.prepare(`
-      UPDATE conversations
-      SET last_message_at = ?,
-          updated_at      = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(msg.sentAt, conversationId);
-
+    await caseRepo.updateConversation(scope, conversationId, {
+      last_message_at: msg.sentAt,
+    });
     log.debug('Reusing existing open conversation', { conversationId });
   } else {
     conversationId = randomUUID();
-    const now = new Date().toISOString();
-
-    db.prepare(`
-      INSERT INTO conversations (
-        id, customer_id, channel, status,
-        subject, external_thread_id,
-        tenant_id, workspace_id,
-        first_message_at, last_message_at,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      conversationId,
-      customerId,
-      msg.channel,
-      msg.subject ?? null,
-      msg.externalThreadId ?? null,
-      tenantId,
-      workspaceId,
-      msg.sentAt,
-      msg.sentAt,
-      now,
-      now,
-    );
+    await caseRepo.createConversation(scope, {
+      id: conversationId,
+      customer_id: customerId,
+      channel: msg.channel,
+      status: 'open',
+      subject: msg.subject ?? null,
+      external_thread_id: msg.externalThreadId ?? null,
+      tenant_id: tenantId,
+      workspace_id: workspaceId,
+      first_message_at: msg.sentAt,
+      last_message_at: msg.sentAt,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
 
     log.info('Created new conversation', { conversationId, channel: msg.channel });
   }
 
   // ── 5. Persist inbound message ────────────────────────────────────────────
-  // Check for duplicate (same externalMessageId on the same conversation)
-  const existingMsg = db.prepare(`
-    SELECT id FROM messages
-    WHERE conversation_id   = ?
-      AND external_message_id = ?
-    LIMIT 1
-  `).get(conversationId, msg.externalMessageId) as any;
+  const existingMsg = await caseRepo.getMessageByExternalId(scope, conversationId, msg.externalMessageId);
 
   let messageId: string;
 
@@ -231,53 +184,36 @@ async function handleChannelIngest(
     log.debug('Message already persisted (duplicate delivery), reusing', { messageId });
   } else {
     messageId = randomUUID();
-    const now = new Date().toISOString();
-
-    db.prepare(`
-      INSERT INTO messages (
-        id, conversation_id, customer_id,
-        direction, channel,
-        content, content_type,
-        external_message_id,
-        attachments,
-        sent_at, created_at,
-        tenant_id
-      ) VALUES (?, ?, ?, 'inbound', ?, ?, 'text', ?, ?, ?, ?, ?)
-    `).run(
-      messageId,
-      conversationId,
-      customerId,
-      msg.channel,
-      msg.messageContent,
-      msg.externalMessageId,
-      JSON.stringify(msg.attachments ?? []),
-      msg.sentAt,
-      now,
-      tenantId,
-    );
+    await caseRepo.createMessage(scope, {
+      id: messageId,
+      conversation_id: conversationId,
+      customer_id: customerId,
+      direction: 'inbound',
+      channel: msg.channel,
+      content: msg.messageContent,
+      content_type: 'text',
+      external_message_id: msg.externalMessageId,
+      attachments: msg.attachments ?? [],
+      sent_at: msg.sentAt,
+      created_at: new Date().toISOString(),
+      tenant_id: tenantId,
+    });
 
     log.debug('Message persisted', { messageId });
   }
 
   // ── 6. Update canonical event with resolved entity refs ──────────────────
-  db.prepare(`
-    UPDATE canonical_events
-    SET status               = 'canonicalized',
-        canonical_entity_type = 'customer',
-        canonical_entity_id   = ?,
-        normalized_payload   = ?
-    WHERE id = ?
-  `).run(
-    customerId,
-    // Re-encode with resolved IDs so INTENT_ROUTE can read them cleanly
-    JSON.stringify({
+  await integrationRepo.updateCanonicalEvent(payload.canonicalEventId, {
+    status: 'canonicalized',
+    canonical_entity_type: 'customer',
+    canonical_entity_id: customerId,
+    normalized_payload: {
       ...msg,
       customerId,
       conversationId,
       messageId,
-    }),
-    payload.canonicalEventId,
-  );
+    },
+  });
 
   log.info('Channel event canonicalized', {
     customerId,

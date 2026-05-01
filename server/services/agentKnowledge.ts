@@ -1,4 +1,6 @@
 import { getDb } from '../db/client.js';
+import { getDatabaseProvider } from '../db/provider.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 
 type AccessLevel =
@@ -34,6 +36,18 @@ export interface KnowledgeProfile {
   hard_blocks?: string[];
 }
 
+export interface KnowledgeSheet {
+  summary: string;
+  policy: string;
+  allowed: string[];
+  blocked: string[];
+  escalation: string[];
+  evidence: string[];
+  agent_notes: string[];
+  examples: string[];
+  keywords: string[];
+}
+
 export interface KnowledgeArticleView {
   id: string;
   title: string;
@@ -52,6 +66,7 @@ export interface KnowledgeArticleView {
   relevance_score: number;
   blocked_reason?: string;
   excerpt?: string;
+  sheet: KnowledgeSheet;
 }
 
 export interface AgentKnowledgeBundle {
@@ -60,6 +75,17 @@ export interface AgentKnowledgeBundle {
   blockedDocuments: KnowledgeArticleView[];
   promptContext: string;
   citations: Array<{ article_id: string; title: string; domain_name: string | null }>;
+}
+
+function parseKnowledgeProfile(input: KnowledgeProfile | string | null | undefined): KnowledgeProfile {
+  if (typeof input === 'string') {
+    try {
+      return JSON.parse(input) as KnowledgeProfile;
+    } catch {
+      return {};
+    }
+  }
+  return input ?? {};
 }
 
 interface ResolveKnowledgeOptions {
@@ -177,6 +203,45 @@ function summarizeContent(content: string): string {
   return `${compact.slice(0, 217)}...`;
 }
 
+function asArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? '').trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeKnowledgeSheet(article: any): KnowledgeSheet {
+  const raw = article?.content_structured;
+  const structured = typeof raw === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return {};
+        }
+      })()
+    : (raw ?? {});
+  const summary = String(structured.summary ?? structured.overview ?? summarizeContent(article.content ?? '')).trim();
+  const policy = String(structured.policy ?? structured.policy_statement ?? article.content ?? '').trim();
+  return {
+    summary: summary || summarizeContent(article.content ?? ''),
+    policy: policy || summarizeContent(article.content ?? ''),
+    allowed: asArray(structured.allowed ?? structured.allowed_actions),
+    blocked: asArray(structured.blocked ?? structured.blocked_actions),
+    escalation: asArray(structured.escalation ?? structured.escalation_rules),
+    evidence: asArray(structured.evidence ?? structured.required_evidence),
+    agent_notes: asArray(structured.agent_notes ?? structured.agent_instructions),
+    examples: asArray(structured.examples),
+    keywords: asArray(structured.keywords),
+  };
+}
+
 function matchesAny(text: string, phrases: string[]): boolean {
   return phrases.some((phrase) => phrase && text.includes(phrase.toLowerCase()));
 }
@@ -246,11 +311,23 @@ function buildPromptContext(documents: KnowledgeArticleView[]): string {
   return documents
     .slice(0, 6)
     .map((doc, index) => {
+      const structuredSections = [
+        doc.sheet.summary ? `Summary: ${doc.sheet.summary}` : null,
+        doc.sheet.policy ? `Policy: ${doc.sheet.policy}` : null,
+        doc.sheet.allowed.length ? `Allowed:\n- ${doc.sheet.allowed.join('\n- ')}` : null,
+        doc.sheet.blocked.length ? `Blocked:\n- ${doc.sheet.blocked.join('\n- ')}` : null,
+        doc.sheet.escalation.length ? `Escalation:\n- ${doc.sheet.escalation.join('\n- ')}` : null,
+        doc.sheet.evidence.length ? `Evidence:\n- ${doc.sheet.evidence.join('\n- ')}` : null,
+        doc.sheet.agent_notes.length ? `Agent Notes:\n- ${doc.sheet.agent_notes.join('\n- ')}` : null,
+        doc.sheet.examples.length ? `Examples:\n- ${doc.sheet.examples.join('\n- ')}` : null,
+        doc.sheet.keywords.length ? `Keywords: ${doc.sheet.keywords.join(', ')}` : null,
+      ].filter(Boolean).join('\n');
+
       const payload = doc.content_mode === 'metadata'
         ? `Title: ${doc.title}\nType: ${doc.type}\nDomain: ${doc.domain_name ?? 'General'}`
         : doc.content_mode === 'summary'
-          ? `Title: ${doc.title}\nSummary: ${doc.excerpt ?? summarizeContent(doc.content)}`
-          : `Title: ${doc.title}\nContent:\n${doc.content}`;
+          ? `Title: ${doc.title}\nSummary: ${doc.excerpt ?? doc.sheet.summary}`
+          : `Title: ${doc.title}\n${structuredSections || `Content:\n${doc.content}`}`;
 
       return `## Policy ${index + 1}\n${payload}`;
     })
@@ -259,15 +336,7 @@ function buildPromptContext(documents: KnowledgeArticleView[]): string {
 
 export function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): AgentKnowledgeBundle {
   const db = getDb();
-  const profile = typeof options.knowledgeProfile === 'string'
-    ? (() => {
-        try {
-          return JSON.parse(options.knowledgeProfile) as KnowledgeProfile;
-        } catch {
-          return {};
-        }
-      })()
-    : options.knowledgeProfile ?? {};
+  const profile = parseKnowledgeProfile(options.knowledgeProfile);
   const signals = buildSignals(options.caseContext);
 
   let query = `
@@ -324,6 +393,7 @@ export function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): A
       relevance_score: relevanceScore,
       blocked_reason: blockedReason ?? undefined,
       excerpt: summarizeContent(article.content),
+      sheet: normalizeKnowledgeSheet(article),
     };
 
     if (blockedReason || contentMode === 'none') {
@@ -351,5 +421,101 @@ export function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): A
       title: doc.title,
       domain_name: doc.domain_name,
     })),
+  };
+}
+
+export async function resolveAgentKnowledgeBundleAsync(options: ResolveKnowledgeOptions): Promise<AgentKnowledgeBundle> {
+  if (getDatabaseProvider() !== 'supabase') {
+    return resolveAgentKnowledgeBundle(options);
+  }
+
+  const profile = parseKnowledgeProfile(options.knowledgeProfile);
+  const signals = buildSignals(options.caseContext);
+  const supabase = getSupabaseAdmin();
+
+  let query = supabase
+    .from('knowledge_articles')
+    .select('*, knowledge_domains(name)')
+    .eq('tenant_id', options.tenantId)
+    .eq('workspace_id', options.workspaceId)
+    .order('updated_at', { ascending: false })
+    .order('citation_count', { ascending: false });
+
+  const docStatus = profile.document_status ?? 'Final documents only';
+  if (docStatus === 'Include drafts') {
+    query = query.in('status', ['draft', 'published']);
+  } else if (docStatus === 'Approved policies only') {
+    query = query.eq('status', 'published').eq('type', 'policy');
+  } else {
+    query = query.eq('status', 'published');
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = (data ?? []).map((row: any) => ({
+    ...row,
+    domain_name: Array.isArray(row.knowledge_domains)
+      ? row.knowledge_domains[0]?.name ?? null
+      : row.knowledge_domains?.name ?? null,
+  }));
+
+  const sourcePriority = profile.trusted_source_priority ?? [];
+  const accessibleDocuments: KnowledgeArticleView[] = [];
+  const blockedDocuments: KnowledgeArticleView[] = [];
+
+  for (const article of rows) {
+    const sourceLabel = classifySource(article);
+    const accessLevel = (profile.source_access?.[sourceLabel] ?? resolveDefaultAccess(profile)) as AccessLevel;
+    let blockedReason = evaluateBlockedReason(article, profile, sourceLabel);
+    if (!blockedReason && profile.trusted_source_flags?.draftDocsExcluded && article.status === 'draft') {
+      blockedReason = 'Draft documents are excluded by trust policy';
+    }
+    if (!blockedReason && (profile.archived_records === 'Blocked') && Number(article.outdated_flag ?? 0) === 1) {
+      blockedReason = 'Archived or outdated records are blocked';
+    }
+    const relevanceScore = computeRelevance(article, signals, sourcePriority);
+    const contentMode = mapAccessToContentMode(accessLevel);
+    const view: KnowledgeArticleView = {
+      id: article.id,
+      title: article.title,
+      type: article.type,
+      status: article.status,
+      content: article.content,
+      domain_id: article.domain_id ?? null,
+      domain_name: article.domain_name ?? null,
+      citation_count: Number(article.citation_count ?? 0),
+      outdated_flag: Number(article.outdated_flag ?? 0),
+      linked_workflow_ids: article.linked_workflow_ids ?? [],
+      linked_approval_policy_ids: article.linked_approval_policy_ids ?? [],
+      source_label: sourceLabel,
+      access_level: accessLevel,
+      content_mode: contentMode,
+      relevance_score: relevanceScore,
+      blocked_reason: blockedReason ?? undefined,
+      excerpt: summarizeContent(article.content ?? ''),
+      sheet: normalizeKnowledgeSheet(article),
+    };
+
+    if (blockedReason || contentMode === 'none') {
+      blockedDocuments.push(view);
+    } else {
+      accessibleDocuments.push(view);
+    }
+  }
+
+  accessibleDocuments.sort((left, right) => right.relevance_score - left.relevance_score);
+  blockedDocuments.sort((left, right) => right.relevance_score - left.relevance_score);
+
+  return {
+    profile,
+    accessibleDocuments,
+    blockedDocuments,
+    citations: accessibleDocuments.slice(0, 6).map((doc) => ({
+      article_id: doc.id,
+      title: doc.title,
+      domain_name: doc.domain_name,
+    })),
+    promptContext: buildPromptContext(accessibleDocuments),
   };
 }

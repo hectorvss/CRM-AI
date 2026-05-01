@@ -1,7 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Conversation, Channel, CaseTab, Message } from '../types';
 import { aiApi, casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import LoadingState from './LoadingState';
+
+// ── Lightweight emoji picker data ──────────────────────────────────────────
+const EMOJI_GROUPS = [
+  { label: 'Smileys', emojis: ['😊','😄','😂','🤣','😍','🥰','😎','🤔','😅','😬','🙄','😭','😤','😡','🤯','🤗','👍','👎','🙏','✅','❌','⚠️','🔥','💡','📎','🖇️','📷','📧','⏰','🔔'] },
+];
+
+type Attachment = { id: string; name: string; size: number; type: string; dataUrl?: string; file: File };
+
+const COMMON_EMOJIS = ['😊','😄','😂','🤣','😍','🥰','😎','🤔','😅','😬','🙄','😭','😤','😡','🤯','🤗','👍','👎','🙏','✅','❌','⚠️','🔥','💡','❤️','💙','💚','💛','🎉','🎊','📎','🖇️','📷','📧','⏰','🔔','💬','📝','🔗','✍️','📌','🚀','⭐','💎','🏆'];
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 type RightTab = 'details' | 'copilot';
 type ComposeMode = 'reply' | 'internal';
@@ -32,6 +48,16 @@ const truncateMiddle = (value?: string | null, max = 18) => {
   const tail = Math.floor((max - 1) / 2);
   return `${value.slice(0, head)}…${value.slice(-tail)}`;
 };
+
+const normalizeMessageText = (value?: string | null) =>
+  (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+const fingerprintMessage = (message: Message) =>
+  [
+    message.type || 'unknown',
+    normalizeMessageText(message.sender),
+    normalizeMessageText(message.content),
+  ].join('|');
 
 const CONVERSATIONS: Conversation[] = [
   {
@@ -365,10 +391,10 @@ const CONVERSATIONS: Conversation[] = [
   }
 ];
 
-export default function Inbox() {
+export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<CaseTab>('assigned');
-  const [selectedId, setSelectedId] = useState<string>('1');
+  const [selectedId, setSelectedId] = useState<string>('');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [composeMode, setComposeMode] = useState<ComposeMode>('reply');
@@ -378,14 +404,31 @@ export default function Inbox() {
   const [copilotInput, setCopilotInput] = useState('');
   const [isCopilotSending, setIsCopilotSending] = useState(false);
   const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
+  const [copilotSortOrder, setCopilotSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const submitLockRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   // Fetch canonical cases from the backend. Static fixtures are no longer used
   // as runtime data, so every visible case comes from the simulated API/DB flow.
-  const { data: apiCases } = useApi(() => casesApi.list(), [refreshKey], []);
-  const { data: selectedInboxView } = useApi(
+  const { data: apiCases, loading: casesLoading, error: casesError } = useApi(() => casesApi.list(), [refreshKey], []);
+  const { data: selectedInboxView, loading: inboxViewLoading, error: inboxError } = useApi(
     () => selectedId ? casesApi.inboxView(selectedId) : Promise.resolve(null),
     [selectedId, refreshKey]
   );
+
+  useEffect(() => {
+    if (!selectedId && apiCases && apiCases.length > 0) {
+      setSelectedId(apiCases[0].id);
+    }
+  }, [apiCases, selectedId]);
 
   const mapApiCase = (c: any): Conversation => {
     const orderIds = Array.isArray(c.order_ids) ? c.order_ids : [];
@@ -406,11 +449,11 @@ export default function Inbox() {
       brand: 'Acme Store',
       caseType: c.type || 'General',
       riskLevel: c.risk_level === 'high' || c.risk_level === 'critical' ? 'High' : c.risk_level === 'medium' ? 'Medium' : 'Low',
-      orderStatus: titleCase(c.system_status_summary?.orders || 'N/A'),
-      paymentStatus: titleCase(c.system_status_summary?.payments || 'N/A'),
+      orderStatus: titleCase(c.system_status_summary?.order || c.system_status_summary?.orders || 'N/A'),
+      paymentStatus: titleCase(c.system_status_summary?.payment || c.system_status_summary?.payments || 'N/A'),
       fulfillmentStatus: titleCase(c.system_status_summary?.fulfillment || 'N/A'),
-      refundStatus: titleCase(c.system_status_summary?.returns || 'N/A'),
-      approvalStatus: titleCase(c.approval_state || 'N/A'),
+      refundStatus: titleCase(c.system_status_summary?.refund || c.system_status_summary?.returns || 'N/A'),
+      approvalStatus: titleCase(c.system_status_summary?.approval || c.approval_state || 'N/A'),
       context: c.conflict_summary?.root_cause || c.ai_diagnosis || '',
       assignedTeam: c.assigned_team_name || 'Support',
       lastSync: '1m ago',
@@ -433,6 +476,14 @@ export default function Inbox() {
 
   const filteredConversations = conversations.filter(c => c.tab === activeTab);
   const selectedBaseConv = filteredConversations.find(c => c.id === selectedId) || filteredConversations[0];
+
+  useEffect(() => {
+    if (!focusCaseId || !filteredConversations.length) return;
+    const target = filteredConversations.find((conv) => conv.id === focusCaseId || conv.caseId === focusCaseId);
+    if (target && target.id !== selectedId) {
+      setSelectedId(target.id);
+    }
+  }, [focusCaseId, filteredConversations, selectedId]);
   const caseState = selectedInboxView?.state;
   const selectedConv = selectedBaseConv ? (() => {
     const apiMessages = selectedInboxView?.messages?.map((msg: any) => ({
@@ -443,7 +494,14 @@ export default function Inbox() {
       time: formatTime(msg.sent_at),
     })) || selectedBaseConv.messages || [];
     const localMessages = localMessagesByCase[selectedBaseConv.id] || [];
-    const knownIds = new Set(apiMessages.map((message: Message) => message.id));
+    const knownFingerprints = new Set(apiMessages.map((message: Message) => fingerprintMessage(message)));
+    const mergedMessages = [...apiMessages, ...localMessages].filter((message, index, list) => {
+      const signature = fingerprintMessage(message);
+      if (knownFingerprints.has(signature) && index >= apiMessages.length) {
+        return false;
+      }
+      return list.findIndex(item => fingerprintMessage(item) === signature) === index;
+    });
     return {
     ...selectedBaseConv,
     orderId: caseState?.related?.orders?.[0]?.external_order_id || caseState?.identifiers?.order_ids?.[0] || selectedBaseConv.orderId,
@@ -457,10 +515,7 @@ export default function Inbox() {
       type: linked.type || 'Case',
       status: titleCase(linked.status || 'open'),
     })) || selectedBaseConv.relatedCases,
-    messages: [
-      ...apiMessages,
-      ...localMessages.filter(message => !knownIds.has(message.id)),
-    ],
+    messages: mergedMessages,
   };
   })() : undefined;
 
@@ -506,7 +561,8 @@ export default function Inbox() {
     return links.filter(link => link.visible);
   })();
 
-  const copilotMessages = selectedConv ? (copilotMessagesByCase[selectedConv.id] || []) : [];
+  const copilotMessagesRaw = selectedConv ? (copilotMessagesByCase[selectedConv.id] || []) : [];
+  const copilotMessages = copilotSortOrder === 'desc' ? [...copilotMessagesRaw].reverse() : copilotMessagesRaw;
 
   useEffect(() => {
     if (filteredConversations.length > 0 && !filteredConversations.find(c => c.id === selectedId)) {
@@ -526,6 +582,71 @@ export default function Inbox() {
     setComposerText('');
   }, [selectedInboxView?.latest_draft?.id, selectedId]);
 
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEmojiPicker]);
+
+  // Reset attachments when switching cases
+  useEffect(() => { setAttachments([]); setShowEmojiPicker(false); }, [selectedId]);
+
+  const handleFilesSelected = useCallback((files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAttachments(prev => [...prev, {
+          id: `att-${Date.now()}-${Math.random()}`,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          dataUrl: file.type.startsWith('image/') ? (e.target?.result as string) : undefined,
+          file,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const removeAttachment = (id: string) => setAttachments(prev => prev.filter(a => a.id !== id));
+
+  const insertEmoji = (emoji: string) => {
+    const el = textareaRef.current;
+    if (!el) { setComposerText(prev => prev + emoji); return; }
+    const start = el.selectionStart ?? composerText.length;
+    const end = el.selectionEnd ?? composerText.length;
+    const next = composerText.slice(0, start) + emoji + composerText.slice(end);
+    setComposerText(next);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + emoji.length, start + emoji.length); });
+    setShowEmojiPicker(false);
+  };
+
+  const applyFormat = (tag: 'bold' | 'italic' | 'link') => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const selected = composerText.slice(start, end);
+    let replacement = '';
+    if (tag === 'bold') replacement = `**${selected || 'bold text'}**`;
+    else if (tag === 'italic') replacement = `_${selected || 'italic text'}_`;
+    else if (tag === 'link') {
+      const url = window.prompt('Enter URL:', 'https://');
+      if (!url) return;
+      replacement = `[${selected || 'link text'}](${url})`;
+    }
+    const next = composerText.slice(0, start) + replacement + composerText.slice(end);
+    setComposerText(next);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + replacement.length, start + replacement.length); });
+  };
+
   const handleApplyDraft = () => {
     const draft = selectedInboxView?.latest_draft?.content;
     if (draft) {
@@ -535,52 +656,74 @@ export default function Inbox() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedConv || !composerText.trim() || isSubmitting) return;
+    if (!selectedConv || !composerText.trim() || submitLockRef.current) return;
 
+    const content = composerText.trim();
+    const optimisticId = composeMode === 'internal' ? `local-note-${Date.now()}` : `local-reply-${Date.now()}`;
+
+    // ── Optimistic update: show message instantly ──────────────────────────
+    setLocalMessagesByCase(current => ({
+      ...current,
+      [selectedConv.id]: [
+        ...(current[selectedConv.id] || []),
+        composeMode === 'internal'
+          ? { id: optimisticId, type: 'internal' as const, sender: 'Internal Note', content, time: formatTime(new Date().toISOString()) }
+          : { id: optimisticId, type: 'agent' as const, sender: 'Alex Morgan', content, time: formatTime(new Date().toISOString()), status: 'sent' },
+      ],
+    }));
+    setComposerText('');
+    setAttachments([]);
+    setActionError(null);
+
+    // ── Background API call (non-blocking) ────────────────────────────────
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
-      const content = composerText.trim();
       if (composeMode === 'internal') {
-        const result = await casesApi.addInternalNote(selectedConv.id, content);
-        const message = result?.message;
-        setLocalMessagesByCase(current => ({
-          ...current,
-          [selectedConv.id]: [
-            ...(current[selectedConv.id] || []),
-            {
-              id: message?.id || `local-note-${Date.now()}`,
-              type: 'internal',
-              sender: message?.sender_name || 'Internal Note',
-              content,
-              time: formatTime(message?.sent_at || new Date().toISOString()),
-            },
-          ],
-        }));
+        await casesApi.addInternalNote(selectedConv.id, content);
       } else {
-        const result = await casesApi.reply(selectedConv.id, content, selectedInboxView?.latest_draft?.id);
-        const message = result?.message;
-        setLocalMessagesByCase(current => ({
-          ...current,
-          [selectedConv.id]: [
-            ...(current[selectedConv.id] || []),
-            {
-              id: message?.id || result?.message_id || `local-reply-${Date.now()}`,
-              type: 'agent',
-              sender: message?.sender_name || 'Alex Morgan',
-              content,
-              time: formatTime(message?.sent_at || new Date().toISOString()),
-              status: 'sent',
-            },
-          ],
-        }));
+        await casesApi.reply(selectedConv.id, content, selectedInboxView?.latest_draft?.id);
       }
-      setComposerText('');
       setRefreshKey(key => key + 1);
-      window.setTimeout(() => setRefreshKey(key => key + 1), 900);
     } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Failed to send. Please try again.');
       console.error('Inbox action failed:', error);
+      // Roll back the optimistic message on failure
+      setLocalMessagesByCase(current => ({
+        ...current,
+        [selectedConv.id]: (current[selectedConv.id] || []).filter(m => m.id !== optimisticId),
+      }));
+      setComposerText(content);
     } finally {
       setIsSubmitting(false);
+      submitLockRef.current = false;
+    }
+  };
+
+  const showFeedback = (msg: string, isError = false) => {
+    if (isError) setActionError(msg); else setActionSuccess(msg);
+    setTimeout(() => { setActionError(null); setActionSuccess(null); }, 3000);
+  };
+
+  const handleMarkResolved = async () => {
+    if (!selectedConv) return;
+    try {
+      await casesApi.resolve(selectedConv.id);
+      setRefreshKey(k => k + 1);
+      showFeedback('Case marked as resolved');
+    } catch {
+      showFeedback('Failed to resolve case', true);
+    }
+  };
+
+  const handleSnooze = async () => {
+    if (!selectedConv) return;
+    try {
+      await casesApi.updateStatus(selectedConv.id, 'snoozed', 'Snoozed by agent');
+      setRefreshKey(k => k + 1);
+      showFeedback('Case snoozed');
+    } catch {
+      showFeedback('Failed to snooze case', true);
     }
   };
 
@@ -629,8 +772,9 @@ export default function Inbox() {
             content: `Copilot could not answer right now: ${error?.message || 'unknown error'}`,
             time: formatTime(new Date().toISOString()),
           },
-        ],
+          ],
       }));
+      setActionError(error?.message || 'Copilot could not answer right now');
     } finally {
       setIsCopilotSending(false);
     }
@@ -717,20 +861,40 @@ export default function Inbox() {
             <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
             Online
           </div>
-          <button className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+          <button 
+            onClick={() => alert('Filtering cases... (Mock)')}
+            className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
             <span className="material-symbols-outlined">filter_list</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Area (3 Panes) */}
-      <div className="flex-1 flex mx-2 mb-2 bg-card-light dark:bg-card-dark shadow-card overflow-hidden rounded-b-xl border border-t-0 border-gray-100 dark:border-gray-800">
+      <div className="relative flex-1 flex mx-2 mb-2 bg-card-light dark:bg-card-dark shadow-card overflow-hidden rounded-b-xl border border-t-0 border-gray-100 dark:border-gray-800">
+        {(casesError || inboxError || actionError) && (
+          <div className="absolute left-1/2 top-20 z-20 w-[min(960px,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-card dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-lg mt-0.5">error</span>
+              <div className="min-w-0">
+                <div className="font-semibold">Inbox action unavailable</div>
+                <div className="text-xs opacity-90">{actionError || inboxError || casesError}</div>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Left Pane: Conversation List */}
         <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
           <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
-            {filteredConversations.length > 0 ? (
-              filteredConversations.map((conv) => (
+            {casesLoading && conversations.length === 0 && (
+              <LoadingState
+                title="Loading cases"
+                message="Fetching cases from Supabase."
+                compact
+              />
+            )}
+            {!casesLoading && filteredConversations.length > 0 && filteredConversations.map((conv) => (
                 <div
                   key={conv.id}
                   onClick={() => setSelectedId(conv.id)}
@@ -765,23 +929,47 @@ export default function Inbox() {
                     {conv.conflictDetected && <span className="bg-red-50 text-red-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-red-200">Conflict</span>}
                   </div>
                 </div>
-              ))
-            ) : (
+            ))}
+            {!casesLoading && filteredConversations.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">inbox</span>
-                <p className="text-sm text-gray-500 font-medium">
-                  {activeTab === 'unassigned' && "No unassigned operational cases right now."}
-                  {activeTab === 'assigned' && "You have no assigned cases."}
-                  {activeTab === 'waiting' && "No cases are currently waiting for approval."}
-                  {activeTab === 'high_risk' && "No high-risk operational cases at the moment."}
+                <span className="material-symbols-outlined text-5xl text-gray-200 dark:text-gray-700 mb-3">
+                  {activeTab === 'high_risk' ? 'shield_check' : activeTab === 'waiting' ? 'pending_actions' : 'inbox'}
+                </span>
+                <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                  {activeTab === 'unassigned' && "No unassigned cases"}
+                  {activeTab === 'assigned' && "No assigned cases"}
+                  {activeTab === 'waiting' && "No cases waiting for approval"}
+                  {activeTab === 'high_risk' && "No high-risk cases"}
                 </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 max-w-[180px] leading-relaxed">
+                  {conversations.length === 0
+                    ? "Cases will appear here when customers contact you or when webhooks are received."
+                    : "All cases are in other tabs."}
+                </p>
+                {conversations.length === 0 && (
+                  <div className="flex flex-col gap-2 w-full max-w-[200px]">
+                    <button
+                      onClick={() => casesApi.list({ limit: '1' }).then(() => window.location.reload()).catch(() => {})}
+                      className="text-xs px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
 
         {/* Middle Pane: Chat Window */}
-        {selectedConv ? (
+        {casesLoading && conversations.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center bg-white dark:bg-card-dark border-r border-gray-100 dark:border-gray-700">
+            <LoadingState
+              title="Loading inbox"
+              message="Fetching your cases from Supabase."
+            />
+          </div>
+        ) : selectedConv ? (
           <div className={`flex-1 flex flex-col min-w-0 relative border-r border-gray-100 dark:border-gray-700 ${
             selectedConv.channel === 'whatsapp' ? 'bg-[#efeae2] dark:bg-[#0b141a]' : 'bg-white dark:bg-card-dark'
           }`}>
@@ -819,26 +1007,87 @@ export default function Inbox() {
                   <span className="material-symbols-outlined text-lg">view_sidebar</span>
                 </button>
               )}
-              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                <span className="material-symbols-outlined text-lg">{selectedConv.channel === 'email' ? 'reply' : 'check_circle'}</span>
+              <button
+                onClick={handleMarkResolved}
+                title="Mark as resolved"
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">check_circle</span>
               </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                <span className="material-symbols-outlined text-lg">{selectedConv.channel === 'email' ? 'check_circle' : 'snooze'}</span>
+              <button
+                onClick={handleSnooze}
+                title="Snooze case"
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-amber-50 dark:hover:bg-amber-900/20 text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">snooze</span>
               </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                <span className="material-symbols-outlined text-lg">more_horiz</span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowMoreMenu(p => !p)}
+                  title="More actions"
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-lg">more_horiz</span>
+                </button>
+                {showMoreMenu && (
+                  <div className="absolute right-0 top-9 z-30 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+                    {[
+                      { label: 'Assign to me', status: 'open' },
+                      { label: 'Mark as pending', status: 'pending' },
+                      { label: 'Close case', status: 'closed' },
+                    ].map(({ label, status }) => (
+                      <button
+                        key={status}
+                        onClick={async () => {
+                          setShowMoreMenu(false);
+                          if (!selectedConv) return;
+                          try {
+                            await casesApi.updateStatus(selectedConv.id, status);
+                            setRefreshKey(k => k + 1);
+                            showFeedback(`Case set to ${status}`);
+                          } catch {
+                            showFeedback('Failed to update case status', true);
+                          }
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
+          {/* Action feedback toasts */}
+          {(actionSuccess || actionError) && (
+            <div className={`mx-4 mt-2 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
+              actionError
+                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+            }`}>
+              <span className="material-symbols-outlined text-base">{actionError ? 'error' : 'check_circle'}</span>
+              {actionError || actionSuccess}
+            </div>
+          )}
+
           {/* Chat Messages */}
           <div className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar ${
-            selectedConv.channel === 'whatsapp' 
-              ? "bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-opacity-10 dark:bg-opacity-5" 
+            selectedConv.channel === 'whatsapp'
+              ? "bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-opacity-10 dark:bg-opacity-5"
               : "bg-gray-50/30 dark:bg-black/20"
           }`}>
+            {inboxViewLoading && !selectedInboxView && (
+              <div className="flex items-center justify-center h-full">
+                <LoadingState
+                  title="Loading messages"
+                  message="Fetching conversation history."
+                />
+              </div>
+            )}
             {/* Operational Status Summary */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 shadow-card flex flex-wrap gap-4 items-center justify-between mb-2">
+            <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 shadow-card flex flex-wrap gap-4 items-center justify-between mb-2 ${inboxViewLoading && !selectedInboxView ? 'hidden' : ''}`}>
               <div className="flex flex-wrap gap-4">
                 <div className="flex flex-col">
                   <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Order</span>
@@ -868,21 +1117,23 @@ export default function Inbox() {
             </div>
 
             {/* Conflict Detection (if any) */}
-            {selectedConv.conflictDetected && (
-              <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800/30 rounded-lg p-3 flex items-start gap-3">
-                <span className="material-symbols-outlined text-red-500 text-lg">warning</span>
+            {!inboxViewLoading && selectedConv.conflictDetected && (
+              <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-lg p-3 flex items-start gap-3 shadow-card">
+                <span className="material-symbols-outlined text-red-500 text-[18px] flex-shrink-0 mt-0.5">warning</span>
                 <div>
-                  <h4 className="text-xs font-bold text-red-800 dark:text-red-400 uppercase tracking-wider mb-1">Conflict Detected</h4>
-                  <p className="text-xs text-red-700 dark:text-red-300">{selectedConv.conflictDetected}</p>
+                  <h4 className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-0.5">Conflict Detected</h4>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">{selectedConv.conflictDetected}</p>
                 </div>
               </div>
             )}
 
-            <div className="flex justify-center">
-              <span className="text-xs text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-card">Today, 08:15 AM</span>
-            </div>
+            {!inboxViewLoading && (
+              <div className="flex justify-center">
+                <span className="text-xs text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-card">Today, 08:15 AM</span>
+              </div>
+            )}
 
-            {selectedConv.messages?.map((msg) => {
+            {!inboxViewLoading && selectedConv.messages?.map((msg) => {
               if (msg.type === 'system') {
                 return (
                   <div key={msg.id} className="flex justify-center my-2">
@@ -896,17 +1147,17 @@ export default function Inbox() {
               if (msg.type === 'internal') {
                 return (
                   <div key={msg.id} className="flex space-x-3 my-4">
-                    <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 flex-shrink-0 border border-yellow-200">
+                    <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 flex-shrink-0 border border-gray-200 dark:border-gray-600">
                       <span className="material-symbols-outlined text-sm">lock</span>
                     </div>
                     <div className="space-y-1 max-w-[85%] w-full">
-                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/30 p-3 rounded-xl rounded-tl-none relative">
+                      <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 p-3 rounded-xl rounded-tl-none shadow-card">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-bold text-yellow-800 dark:text-yellow-500 uppercase tracking-wide">Internal Note • {msg.sender}</span>
-                          <span className="text-xs text-yellow-600/70">{msg.time}</span>
+                          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Internal Note · {msg.sender}</span>
+                          <span className="text-xs text-gray-400">{msg.time}</span>
                         </div>
-                        <p className="text-sm text-yellow-900 dark:text-yellow-100 leading-relaxed italic whitespace-pre-wrap break-words">
-                          "{msg.content}"
+                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
+                          {msg.content}
                         </p>
                       </div>
                     </div>
@@ -943,15 +1194,13 @@ export default function Inbox() {
               return (
                 <div key={msg.id} className={`flex space-x-3 my-4 ${isRight ? 'flex-row-reverse space-x-reverse' : ''}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
-                    isAI ? 'bg-secondary' : isRight ? 'bg-blue-500' : 'bg-pink-500'
+                    isAI ? 'bg-secondary' : isRight ? 'bg-gray-700 dark:bg-gray-600' : 'bg-gray-400 dark:bg-gray-500'
                   }`}>
-                    {isAI ? <span className="material-symbols-outlined text-sm">smart_toy</span> : msg.sender.split(' ').map(n => n[0]).join('')}
+                    {isAI ? <span className="material-symbols-outlined text-sm">smart_toy</span> : msg.sender.split(' ').map((n: string) => n[0]).join('')}
                   </div>
                   <div className={`space-y-1 max-w-[85%] ${isRight ? 'text-right' : ''}`}>
-                    <div className={`p-4 rounded-2xl shadow-card border ${
-                      isRight 
-                        ? "bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800/30 rounded-tr-none" 
-                        : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-tl-none"
+                    <div className={`p-4 rounded-2xl shadow-card border bg-white dark:bg-card-dark border-gray-100 dark:border-gray-700 ${
+                      isRight ? 'rounded-tr-none' : 'rounded-tl-none'
                     }`}>
                       {isAI && <div className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">AI Suggestion</div>}
                       <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
@@ -967,53 +1216,125 @@ export default function Inbox() {
 
           {/* Reply Area */}
           <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all">
-              <div className="flex items-center space-x-2 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 px-2">
-                <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><span className="material-symbols-outlined text-lg">format_bold</span></button>
-                <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><span className="material-symbols-outlined text-lg">format_italic</span></button>
-                <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500"><span className="material-symbols-outlined text-lg">link</span></button>
-                <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
+            {/* Hidden file inputs */}
+            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => handleFilesSelected(e.target.files)} />
+            <input ref={imageInputRef} type="file" multiple accept="image/*" className="hidden" onChange={e => handleFilesSelected(e.target.files)} />
+
+            <div className={`bg-white dark:bg-card-dark border rounded-xl p-2 transition-all focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary shadow-card ${
+              composeMode === 'internal' ? 'border-amber-200 dark:border-amber-800/40' : 'border-gray-200 dark:border-gray-700'
+            }`}>
+              {/* Toolbar */}
+              <div className="flex items-center gap-1 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 px-1">
+                <button title="Bold" onClick={() => applyFormat('bold')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                  <span className="material-symbols-outlined text-[18px]">format_bold</span>
+                </button>
+                <button title="Italic" onClick={() => applyFormat('italic')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                  <span className="material-symbols-outlined text-[18px]">format_italic</span>
+                </button>
+                <button title="Insert link" onClick={() => applyFormat('link')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                  <span className="material-symbols-outlined text-[18px]">link</span>
+                </button>
+                <div className="h-4 w-px bg-gray-200 dark:bg-gray-600 mx-1"></div>
+                {/* Mode toggle */}
                 <button
                   onClick={() => setComposeMode(mode => mode === 'reply' ? 'internal' : 'reply')}
-                  className={`relative inline-flex items-center h-5 rounded-full w-9 transition-colors focus:outline-none ${composeMode === 'reply' ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'}`}
-                  id="toggle"
+                  className={`relative inline-flex items-center h-5 rounded-full w-9 flex-shrink-0 transition-colors focus:outline-none ${composeMode === 'reply' ? 'bg-secondary' : 'bg-amber-400'}`}
                 >
-                  <span className={`inline-block w-3 h-3 transform bg-white rounded-full transition-transform ${composeMode === 'reply' ? 'translate-x-5' : 'translate-x-1'}`}></span>
+                  <span className={`inline-block w-3 h-3 transform bg-white rounded-full shadow transition-transform ${composeMode === 'reply' ? 'translate-x-5' : 'translate-x-1'}`}></span>
                 </button>
-                <span className={`text-xs font-medium ${composeMode === 'reply' ? 'text-blue-600' : 'text-gray-500'}`}>
+                <span className={`text-xs font-medium flex-shrink-0 ${composeMode === 'reply' ? 'text-secondary' : 'text-amber-600 dark:text-amber-400'}`}>
                   {composeMode === 'reply' ? `Reply as ${selectedConv.channel === 'email' ? 'Email' : selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 'Web Chat'}` : 'Internal Note'}
                 </span>
-                <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-500 flex items-center gap-1 ml-auto">
-                  <span className="material-symbols-outlined text-lg">sentiment_satisfied</span>
-                </button>
+                {/* Emoji picker trigger */}
+                <div className="ml-auto relative" ref={emojiPickerRef}>
+                  <button
+                    title="Emoji"
+                    onClick={() => setShowEmojiPicker(prev => !prev)}
+                    className={`p-1.5 rounded transition-colors ${showEmojiPicker ? 'bg-gray-100 dark:bg-gray-700 text-secondary' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">sentiment_satisfied</span>
+                  </button>
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-full right-0 mb-2 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3 z-50">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Emojis</p>
+                      <div className="grid grid-cols-8 gap-1">
+                        {COMMON_EMOJIS.map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => insertEmoji(emoji)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base transition-colors"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Textarea */}
               <textarea
+                ref={textareaRef}
                 value={composerText}
-                onChange={(event) => setComposerText(event.target.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                    event.preventDefault();
-                    handleSubmit();
-                  }
+                onChange={e => setComposerText(e.target.value)}
+                onKeyDown={e => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
                 }}
-                className="w-full bg-transparent border-0 focus:ring-0 text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2"
+                className="w-full bg-transparent border-0 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 shadow-none text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2 appearance-none"
                 placeholder={composeMode === 'reply' ? `Write your reply to ${selectedConv.contactName}...` : `Write an internal note for ${selectedConv.contactName}...`}
-              ></textarea>
+              />
+
+              {/* Attachment previews */}
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-2 pb-2">
+                  {attachments.map(att => (
+                    <div key={att.id} className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg px-2 py-1 text-xs max-w-[160px] group">
+                      {att.dataUrl ? (
+                        <img src={att.dataUrl} alt={att.name} className="w-5 h-5 rounded object-cover flex-shrink-0" />
+                      ) : (
+                        <span className="material-symbols-outlined text-[16px] text-gray-500 flex-shrink-0">description</span>
+                      )}
+                      <span className="truncate text-gray-700 dark:text-gray-300">{att.name}</span>
+                      <span className="text-gray-400 flex-shrink-0">{formatFileSize(att.size)}</span>
+                      <button onClick={() => removeAttachment(att.id)} className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 ml-0.5">
+                        <span className="material-symbols-outlined text-[14px]">close</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Bottom bar */}
               <div className="flex justify-between items-center px-2 pt-1">
-                <div className="flex space-x-2">
-                  <button className="text-gray-400 hover:text-gray-600"><span className="material-symbols-outlined text-xl">attach_file</span></button>
-                  <button className="text-gray-400 hover:text-gray-600"><span className="material-symbols-outlined text-xl">image</span></button>
+                <div className="flex items-center gap-1">
+                  <button
+                    title="Attach file"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">attach_file</span>
+                  </button>
+                  <button
+                    title="Attach image"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">image</span>
+                  </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">Press ⌘ + Enter to send</span>
+                  <span className="text-xs text-gray-400 hidden sm:inline">Press ⌘ + Enter to send</span>
                   <button
                     onClick={handleSubmit}
-                    disabled={isSubmitting || !composerText.trim()}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-                      composeMode === 'reply' && selectedConv.channel === 'email' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-black dark:bg-white text-white dark:text-black hover:opacity-90'
+                    disabled={!composerText.trim() && attachments.length === 0}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      composeMode === 'internal'
+                        ? 'bg-amber-500 text-white hover:bg-amber-600'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
                     }`}
                   >
-                    {isSubmitting ? 'Sending...' : composeMode === 'reply' ? 'Send' : 'Save note'}
+                    {composeMode === 'reply' ? 'Send' : 'Save note'}
                   </button>
                 </div>
               </div>
@@ -1032,146 +1353,91 @@ export default function Inbox() {
           {selectedConv ? (
             <>
               {/* Tabs */}
-              <div className="flex items-center border-b border-gray-100 dark:border-gray-700 px-2 flex-shrink-0">
-                <button
-                  onClick={() => setRightTab('details')}
-                  className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${
-                    rightTab === 'details'
-                      ? 'text-gray-900 border-gray-900 font-bold'
-                      : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
-                  }`}
-                >
-                  Details
-                </button>
-                <button
-                  onClick={() => setRightTab('copilot')}
-                  className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 flex items-center justify-center gap-2 ${
-                    rightTab === 'copilot'
-                      ? 'text-secondary border-secondary font-bold bg-purple-50/50 dark:bg-purple-900/10'
-                      : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-lg">smart_toy</span>
-                  Copilot
-                </button>
-                <div className="flex items-center gap-1 ml-auto">
-                  <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                    <span className="material-symbols-outlined text-[20px]">settings</span>
-                  </button>
-                  <button 
-                    onClick={() => setIsRightSidebarOpen(false)}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
-                    title="Hide Sidebar"
+              <div className="relative flex items-center justify-center px-4 pt-4 pb-3 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setRightTab('details')}
+                    className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+                      rightTab === 'details'
+                        ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                        : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
                   >
-                    <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
+                    Details
+                  </button>
+                  <button
+                    onClick={() => setRightTab('copilot')}
+                    className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+                      rightTab === 'copilot'
+                        ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                        : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    Copilot
                   </button>
                 </div>
+                <button
+                  onClick={() => setIsRightSidebarOpen(false)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
+                  title="Hide Sidebar"
+                >
+                  <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
+                </button>
               </div>
 
               {/* Tab Content */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className={`flex-1 min-h-0 ${rightTab === 'copilot' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
                 {rightTab === 'copilot' ? (
-                  <div className="p-4 flex flex-col gap-5">
-                    {/* Copilot Case Summary */}
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-lg shadow-secondary/20">
-                        <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-                      </div>
-                      <div className="flex flex-col gap-3 max-w-[85%] w-full">
-                        <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-3 px-4 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30 shadow-sm">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="material-symbols-outlined text-secondary text-lg">description</span>
-                            <h4 className="font-bold text-xs uppercase tracking-wider text-secondary">Case Summary</h4>
-                          </div>
-                          <p className="leading-relaxed mb-4 text-gray-700 dark:text-gray-300">{selectedConv.context}</p>
-                          
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="material-symbols-outlined text-red-500 text-lg">warning</span>
-                            <h4 className="font-bold text-xs uppercase tracking-wider text-red-600 dark:text-red-400">Conflict Detection</h4>
-                          </div>
-                          <div className={`p-2.5 rounded border text-xs mb-4 ${
-                            selectedConv.conflictDetected 
-                              ? 'bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-800/30 text-red-700 dark:text-red-400' 
-                              : 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30 text-green-700 dark:text-green-400'
-                          }`}>
-                            {selectedConv.conflictDetected || 'No major conflicts detected in system logs.'}
-                          </div>
+                  <div className="flex flex-col h-full min-h-0">
 
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="material-symbols-outlined text-secondary text-lg">bolt</span>
-                            <h4 className="font-bold text-xs uppercase tracking-wider text-secondary">Recommended Action</h4>
-                          </div>
-                          <p className="text-xs bg-white/60 dark:bg-black/30 p-2.5 rounded border border-purple-100 dark:border-purple-800/30 italic text-gray-600 dark:text-gray-400">
-                            {selectedConv.recommendedNextAction}
-                          </p>
-                        </div>
-                        
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-card">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-gray-400 text-lg">chat_bubble</span>
-                              <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500">Suggested Reply</h4>
-                            </div>
-                            <span className="text-[10px] font-bold text-secondary bg-purple-50 dark:bg-purple-900/30 px-2 py-0.5 rounded-full">AI Powered</span>
-                          </div>
-                          <div className="relative group">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic mb-4 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                              {selectedInboxView?.latest_draft?.content || getSuggestedReply(selectedConv)}
-                            </p>
-                            <button
-                              onClick={handleApplyDraft}
-                              className="w-full py-2.5 bg-secondary text-white text-xs font-bold rounded-xl hover:bg-secondary/90 transition-all shadow-lg shadow-secondary/20 flex items-center justify-center gap-2"
-                            >
-                              <span className="material-symbols-outlined text-sm">content_copy</span>
-                              Apply to Composer
-                            </button>
-                          </div>
-                        </div>
 
-                        {/* Extra AI Insights */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-blue-50 dark:bg-blue-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-800/30">
-                            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-1">Sentiment</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="material-symbols-outlined text-blue-500 text-sm">sentiment_neutral</span>
-                              <span className="text-xs font-bold text-blue-900 dark:text-blue-200">Neutral</span>
-                            </div>
-                          </div>
-                          <div className="bg-orange-50 dark:bg-orange-900/10 p-3 rounded-xl border border-orange-100 dark:border-orange-800/30">
-                            <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest block mb-1">Risk Score</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="material-symbols-outlined text-orange-500 text-sm">trending_up</span>
-                              <span className="text-xs font-bold text-orange-900 dark:text-orange-200">{selectedConv.riskLevel}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {copilotMessages.length > 0 && (
-                          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-card overflow-hidden">
-                            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
-                              <span className="material-symbols-outlined text-secondary text-lg">forum</span>
-                              <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500">Copilot Chat</h4>
-                            </div>
-                            <div className="p-3 space-y-3 max-h-72 overflow-y-auto custom-scrollbar">
-                              {copilotMessages.map(message => (
-                                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
-                                    message.role === 'user'
-                                      ? 'bg-gray-900 text-white border-gray-900 rounded-br-sm'
-                                      : 'bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200 border-purple-100 dark:border-purple-800/30 rounded-bl-sm'
-                                  }`}>
-                                    <p className="whitespace-pre-wrap">{message.content}</p>
-                                    <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-white/60' : 'text-gray-400'}`}>{message.time}</span>
-                                  </div>
-                                </div>
+                    {/* ── Chat messages ───────────────────────────────── */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
+                      {copilotMessages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                          <div className="relative">
+                            <div className="super-agent-title-glow pointer-events-none absolute -inset-x-6 -inset-y-4 rounded-full bg-sky-500/5 blur-2xl dark:bg-sky-400/5" />
+                            <h1 className="relative flex flex-wrap justify-center gap-x-2 gap-y-1 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
+                              {['Ask', 'about', 'this', 'case'].map((word, index) => (
+                                <span
+                                  key={`${word}-${index}`}
+                                  className="super-agent-title-word inline-block"
+                                  style={{ animationDelay: `${120 + index * 80}ms` }}
+                                >
+                                  {word}
+                                </span>
                               ))}
-                              {isCopilotSending && (
-                                <div className="text-xs text-gray-400 px-2 py-1">Copilot is reading the canonical state...</div>
-                              )}
+                            </h1>
+                          </div>
+                        </div>
+                      ) : (
+                        copilotMessages.map(message => (
+                          <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start items-end gap-2'}`}>
+                            {message.role === 'assistant' && (
+                              <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
+                                <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
+                              </div>
+                            )}
+                            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
+                              message.role === 'user'
+                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600 rounded-br-sm'
+                                : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
+                            }`}>
+                              <p className="whitespace-pre-wrap">{message.content}</p>
+                              <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-white/60' : 'text-gray-400'}`}>{message.time}</span>
                             </div>
                           </div>
-                        )}
-                      </div>
+                        ))
+                      )}
+                      {isCopilotSending && (
+                        <div className="flex justify-start">
+                          <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5 shadow-card">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce"></span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1316,8 +1582,8 @@ export default function Inbox() {
                 )}
               </div>
 
-              {/* Copilot Input Area (always visible at bottom) */}
-              <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
+              {/* Copilot Input Area — only for Copilot tab */}
+              {rightTab === 'copilot' && <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark flex-shrink-0">
                 <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
                   <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
                   <input
@@ -1330,12 +1596,18 @@ export default function Inbox() {
                       }
                     }}
                     disabled={!selectedConv || isCopilotSending}
-                    className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:opacity-50"
+                    className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:opacity-50"
                     placeholder="Ask Copilot about this case..."
                     type="text"
                   />
                   <div className="flex items-center gap-1">
-                    <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
+                    <button
+                      onClick={() => setCopilotSortOrder(o => o === 'asc' ? 'desc' : 'asc')}
+                      title={`Sort: ${copilotSortOrder === 'asc' ? 'oldest first' : 'newest first'}`}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">{copilotSortOrder === 'asc' ? 'sort' : 'sort'}</span>
+                    </button>
                     <button
                       onClick={handleCopilotSubmit}
                       disabled={!copilotInput.trim() || isCopilotSending}
@@ -1345,7 +1617,7 @@ export default function Inbox() {
                     </button>
                   </div>
                 </div>
-              </div>
+              </div>}
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gray-50/50 dark:bg-black/10">

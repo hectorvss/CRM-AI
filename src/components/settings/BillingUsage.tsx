@@ -1,152 +1,336 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useApi } from '../../api/hooks';
+import { billingApi, workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
+import { MinimalButton, MinimalCard, MinimalPill, MinimalProgressBar } from '../MinimalCategoryShell';
+import { NavigateInput } from '../../types';
 
-export default function BillingUsageTab() {
+type SaveHandler = (() => Promise<void> | void) | null;
+type Props = {
+  onSaveReady?: (handler: SaveHandler) => void;
+  onNavigate?: (target: NavigateInput) => void;
+};
+
+const fallbackWorkspace = {
+  id: 'ws_default',
+  name: 'CRM AI Workspace',
+  slug: 'crm-ai',
+  settings: {},
+};
+
+function parseSettings(settings: any) {
+  if (!settings) return {};
+  if (typeof settings === 'string') {
+    try {
+      return JSON.parse(settings);
+    } catch {
+      return {};
+    }
+  }
+  return settings;
+}
+
+function money(value: unknown): string {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return 'EUR 0.00';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(parsed);
+}
+
+export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
+  const { data: workspace, loading: workspaceLoading, error: workspaceError } = useApi(workspacesApi.currentContext);
+  const workspaceRecord = workspace || fallbackWorkspace;
+  const workspaceSettings = useMemo(() => parseSettings(workspaceRecord?.settings), [workspaceRecord]);
+  const orgId = workspaceRecord?.org_id;
+
+  const { data: subscription, refetch: refetchSubscription } = useApi(
+    () => (orgId ? billingApi.subscription(orgId) : Promise.resolve(null)),
+    [orgId],
+    null,
+  );
+  const { data: ledger, refetch: refetchLedger } = useApi(
+    () => (orgId ? billingApi.ledger(orgId) : Promise.resolve([])),
+    [orgId],
+    [],
+  );
+
+  const [monthlyBudgetCap, setMonthlyBudgetCap] = useState('2500');
+  const [flexibleUsageEnabled, setFlexibleUsageEnabled] = useState(false);
+  const [alertAtPercent, setAlertAtPercent] = useState(80);
+  const [stopAtPercent, setStopAtPercent] = useState(90);
+  const [billingEmail, setBillingEmail] = useState('billing@acme.com');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const controlsRef = useRef<HTMLDivElement | null>(null);
+  const ledgerRef = useRef<HTMLDivElement | null>(null);
+  const billingEmailRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setMonthlyBudgetCap(String(workspaceSettings.billing?.monthlyBudgetCap ?? 2500));
+    setFlexibleUsageEnabled(workspaceSettings.billing?.flexibleUsageEnabled ?? false);
+    setAlertAtPercent(workspaceSettings.billing?.alertAtPercent ?? 80);
+    setStopAtPercent(workspaceSettings.billing?.stopAtPercent ?? 90);
+    setBillingEmail(workspaceSettings.billing?.billingEmail ?? 'billing@acme.com');
+  }, [workspaceSettings]);
+
+  const handleSave = useCallback(async () => {
+    if (!workspace?.id) {
+      setStatusMessage('Workspace is still loading. Please try again in a moment.');
+      return;
+    }
+    setIsSaving(true);
+    setStatusMessage(null);
+    try {
+      const nextSettings = {
+        ...workspaceSettings,
+        billing: {
+          monthlyBudgetCap: Number(monthlyBudgetCap) || 0,
+          flexibleUsageEnabled,
+          alertAtPercent,
+          stopAtPercent,
+          billingEmail,
+        },
+      };
+      await workspacesApi.update(workspace.id, { settings: nextSettings });
+      setStatusMessage('Billing preferences saved.');
+    } catch (error: any) {
+      setStatusMessage(error?.message || 'Unable to save billing preferences.');
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [alertAtPercent, billingEmail, flexibleUsageEnabled, monthlyBudgetCap, stopAtPercent, workspace?.id, workspaceSettings]);
+
+  useEffect(() => {
+    onSaveReady?.(handleSave);
+    return () => onSaveReady?.(null);
+  }, [handleSave, onSaveReady]);
+
+  if (workspaceLoading) return <LoadingState title="Loading billing usage" message="Fetching plan, seats and ledger data." compact />;
+
+  const seatsIncluded = subscription?.seats_included ?? 3;
+  const seatsUsed = subscription?.seats_used ?? 2;
+  const creditsIncluded = subscription?.credits_included ?? 5000;
+  const creditsUsed = subscription?.credits_used ?? 3240;
+  const ledgerEntries = Array.isArray(ledger) ? ledger : [];
+
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-2 gap-6">
-        {/* Plan Info */}
-        <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card p-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-6">
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 uppercase">Active</span>
-          </div>
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-              <span className="material-symbols-outlined text-3xl">diamond</span>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Enterprise Plan</h2>
-              <p className="text-xs text-gray-500">Billed annually. Next invoice on Nov 12, 2024.</p>
-            </div>
-          </div>
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between items-baseline mb-2">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Seats Used</h3>
-                <span className="text-sm font-bold text-gray-900 dark:text-white">42 / 50</span>
-              </div>
-              <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-600 rounded-full" style={{ width: '84%' }}></div>
-              </div>
-              <div className="flex items-center gap-1.5 mt-2 text-[10px] text-gray-500">
-                <span className="material-symbols-outlined text-sm">group</span>
-                8 seats remaining
-              </div>
-            </div>
-            <button className="text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-2">
-              Manage Plan & Seats
-              <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            </button>
-          </div>
-        </section>
+    <div className="space-y-5">
+      {workspaceError && (
+        <div className="rounded-2xl border border-black/5 bg-black/[0.015] px-4 py-3 text-sm text-gray-600 dark:border-white/10 dark:bg-white/[0.02] dark:text-gray-300">
+          Workspace context is still settling. Showing safe local defaults until Supabase responds.
+        </div>
+      )}
+      {statusMessage && (
+        <div className="rounded-2xl border border-black/5 bg-black/[0.015] px-4 py-3 text-sm text-gray-600 dark:border-white/10 dark:bg-white/[0.02] dark:text-gray-300">
+          {statusMessage}
+        </div>
+      )}
 
-        {/* AI Usage & Budget */}
-        <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card p-6">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-600 dark:text-orange-400">
-                <span className="material-symbols-outlined">smart_toy</span>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <MinimalCard
+          title="Billing overview"
+          subtitle="Current subscription and usage at a glance."
+          icon="diamond"
+          action={<MinimalPill tone="active">{subscription?.status || 'Active'}</MinimalPill>}
+        >
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="rounded-2xl border border-black/5 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Plan</p>
+                <p className="mt-2 text-base font-semibold text-gray-950 dark:text-white capitalize">{String(subscription?.plan_id || workspaceRecord?.plan_id || 'starter').replace(/_/g, ' ')}</p>
+              </div>
+              <div className="rounded-2xl border border-black/5 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Budget</p>
+                <p className="mt-2 text-base font-semibold text-gray-950 dark:text-white">{money(monthlyBudgetCap)}</p>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              <MinimalProgressBar label="Seats used" value={seatsUsed} max={seatsIncluded} />
+              <MinimalProgressBar label="Credits used" value={creditsUsed} max={creditsIncluded} />
+            </div>
+
+            <div className="flex items-center justify-between gap-4 text-xs text-gray-500">
+              <span>{Math.max(seatsIncluded - seatsUsed, 0)} seats remaining</span>
+              <span>{creditsUsed.toLocaleString()} of {creditsIncluded.toLocaleString()} credits used</span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <MinimalButton onClick={() => onNavigate?.({ page: 'upgrade', entityType: 'workspace', section: 'plans', sourceContext: 'settings_billing' })}>
+                Manage plan & seats
+              </MinimalButton>
+              <MinimalButton
+                variant="outline"
+                onClick={() => {
+                  controlsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  billingEmailRef.current?.focus();
+                  setStatusMessage('Billing controls are ready to edit below.');
+                }}
+              >
+                Edit controls
+              </MinimalButton>
+            </div>
+          </div>
+        </MinimalCard>
+
+        <div ref={controlsRef}>
+        <MinimalCard
+          title="Billing controls"
+          subtitle="Budget, alerts, and contact details."
+          icon="settings"
+          action={(
+            <MinimalButton
+              variant="ghost"
+              onClick={() => {
+                ledgerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                setStatusMessage('Billing details are reflected in the ledger below.');
+              }}
+            >
+              Details
+            </MinimalButton>
+          )}
+        >
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Budget cap</label>
+                <div className="flex items-center gap-2 rounded-full border border-black/5 bg-black/[0.015] px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.02]">
+                  <span className="text-sm text-gray-400">EUR</span>
+                  <input
+                    type="number"
+                    value={monthlyBudgetCap}
+                    onChange={event => setMonthlyBudgetCap(event.target.value)}
+                    className="w-full border-none bg-transparent p-0 text-sm font-medium text-gray-950 outline-none dark:text-white"
+                  />
+                </div>
               </div>
               <div>
-                <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">AI Usage & Budget</h2>
-                <p className="text-[10px] text-gray-500">Monthly token consumption cycle resets in 8 days</p>
+                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Billing email</label>
+                <input
+                  ref={billingEmailRef}
+                  type="email"
+                  value={billingEmail}
+                  onChange={event => setBillingEmail(event.target.value)}
+                  className="w-full rounded-full border border-black/5 bg-black/[0.015] px-4 py-2.5 text-sm text-gray-950 outline-none transition-colors focus:border-black/20 dark:border-white/10 dark:bg-white/[0.02] dark:text-white"
+                />
               </div>
             </div>
-            <button className="text-xs font-bold text-gray-500 hover:text-gray-900 transition-colors">View Usage Details</button>
-          </div>
-          <div className="space-y-6">
-            <div className="flex items-center gap-8">
-              <div className="flex-1">
-                <div className="flex justify-between items-baseline mb-2">
-                  <span className="text-3xl font-bold text-gray-900 dark:text-white">72%</span>
-                  <span className="text-xs font-medium text-gray-500">14.4M / 20M Tokens</span>
-                </div>
-                <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-orange-500 rounded-full" style={{ width: '72%' }}></div>
-                </div>
-                <p className="text-[10px] text-gray-400 mt-2">Projected usage: ~19.2M tokens by month end.</p>
-              </div>
-              <div className="w-px h-16 bg-gray-100 dark:bg-gray-800"></div>
-              <div className="w-40">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">Monthly Budget Cap (USD)</label>
-                <div className="flex items-center bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2">
-                  <span className="text-sm font-bold text-gray-400 mr-1">$</span>
-                  <input type="text" defaultValue="2,500.00" className="bg-transparent border-none p-0 text-sm font-bold outline-none w-full" />
-                  <span className="text-[10px] font-bold text-gray-400 ml-1">USD</span>
-                </div>
-              </div>
-            </div>
-            <div className="bg-orange-50 dark:bg-orange-900/10 rounded-xl p-4 border border-orange-100 dark:border-orange-900/30 flex gap-3">
-              <span className="material-symbols-outlined text-orange-600 dark:text-orange-400 text-sm">warning</span>
-              <p className="text-[11px] text-orange-800/70 dark:text-orange-300/70 leading-relaxed">You are approaching your 80% soft limit. Consider upgrading your token tier to avoid service interruption for non-admin users.</p>
-            </div>
+
             <div className="space-y-3">
-              <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Alert Thresholds</h4>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded bg-indigo-600 flex items-center justify-center text-white"><span className="material-symbols-outlined text-[10px]">check</span></div>
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Alert Admins at 80% usage</span>
+              <label className="block text-[10px] font-semibold uppercase tracking-widest text-gray-400">Alert thresholds</label>
+              <div className="space-y-4 rounded-2xl border border-black/5 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs text-gray-600 dark:text-gray-300">Alert admins at {alertAtPercent}% usage</span>
+                    <span className="text-xs text-gray-400">{alertAtPercent}%</span>
+                  </div>
+                  <input type="range" min={50} max={95} step={5} value={alertAtPercent} onChange={event => setAlertAtPercent(Number(event.target.value))} className="w-full accent-violet-500" />
                 </div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase">~16M tokens</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded bg-indigo-600 flex items-center justify-center text-white"><span className="material-symbols-outlined text-[10px]">check</span></div>
-                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Stop Autopilot at 90% usage</span>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs text-gray-600 dark:text-gray-300">Stop autopilot at {stopAtPercent}% usage</span>
+                    <span className="text-xs text-gray-400">{stopAtPercent}%</span>
+                  </div>
+                  <input type="range" min={60} max={100} step={5} value={stopAtPercent} onChange={event => setStopAtPercent(Number(event.target.value))} className="w-full accent-violet-500" />
                 </div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase">~18M tokens</span>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setFlexibleUsageEnabled(current => !current)}
+              className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/5"
+            >
+              <span className="material-symbols-outlined text-[16px]">{flexibleUsageEnabled ? 'toggle_on' : 'toggle_off'}</span>
+              Flexible usage {flexibleUsageEnabled ? 'enabled' : 'disabled'}
+            </button>
           </div>
-        </section>
+        </MinimalCard>
+        </div>
       </div>
 
-      {/* Invoices */}
-      <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/20">
-          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Invoices & Payment History</h2>
-          <div className="flex gap-3">
-            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-bold shadow-card">
-              <span className="material-symbols-outlined text-sm">mail</span>
-              Update Billing Email
-            </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-bold shadow-card">
-              Download All
-            </button>
+      <div ref={ledgerRef}>
+      <MinimalCard
+        title="Invoices & payment history"
+        subtitle="Billing events from the workspace ledger."
+        icon="receipt_long"
+        action={(
+          <div className="flex flex-wrap items-center gap-2">
+            <MinimalButton
+              variant="outline"
+              onClick={() => {
+                controlsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                billingEmailRef.current?.focus();
+                setStatusMessage('Billing email field focused in the controls panel.');
+              }}
+            >
+              Update billing email
+            </MinimalButton>
+            <MinimalButton
+              variant="ghost"
+              onClick={() => {
+                refetchSubscription();
+                refetchLedger();
+                setStatusMessage('Refreshing subscription and ledger data from the backend.');
+              }}
+            >
+              Refresh
+            </MinimalButton>
           </div>
-        </div>
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-gray-100 dark:border-gray-800 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              <th className="px-6 py-3">Invoice ID</th>
-              <th className="px-6 py-3">Date</th>
-              <th className="px-6 py-3">Amount</th>
-              <th className="px-6 py-3">Status</th>
-              <th className="px-6 py-3 text-right"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50 text-xs">
-            {[
-              { id: 'INV-2024-0012', date: 'Oct 12, 2024', amount: '$2,450.00', status: 'Paid' },
-              { id: 'INV-2024-0011', date: 'Sep 12, 2024', amount: '$2,450.00', status: 'Paid' },
-              { id: 'INV-2024-0010', date: 'Aug 12, 2024', amount: '$2,100.00', status: 'Paid' },
-            ].map((inv, i) => (
-              <tr key={i} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors">
-                <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{inv.id}</td>
-                <td className="px-6 py-4 text-gray-500">{inv.date}</td>
-                <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{inv.amount}</td>
-                <td className="px-6 py-4">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 uppercase">{inv.status}</span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <button className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition-colors">
-                    <span className="material-symbols-outlined text-lg">download</span>
-                  </button>
-                </td>
+        )}
+      >
+        <div className="overflow-hidden rounded-2xl border border-black/5 dark:border-white/10">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-black/5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:border-white/10">
+                <th className="px-5 py-3">Date</th>
+                <th className="px-5 py-3">Reason</th>
+                <th className="px-5 py-3">Amount</th>
+                <th className="px-5 py-3">Balance after</th>
+                <th className="px-5 py-3 text-right">Type</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody className="divide-y divide-black/5 text-sm dark:divide-white/10">
+              {ledgerEntries.length === 0 && (
+                <tr>
+                  <td className="px-5 py-10 text-sm text-gray-500" colSpan={5}>
+                    No billing ledger entries yet.
+                  </td>
+                </tr>
+              )}
+              {ledgerEntries.map((entry: any) => (
+                <tr key={entry.id} className="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
+                  <td className="px-5 py-4 text-gray-500">{entry.occurred_at ? new Date(entry.occurred_at).toLocaleDateString() : '-'}</td>
+                  <td className="px-5 py-4 font-medium text-gray-950 dark:text-white">{entry.reason || entry.reference_type || 'Ledger entry'}</td>
+                  <td className="px-5 py-4 font-medium text-gray-950 dark:text-white">{money(entry.amount)}</td>
+                  <td className="px-5 py-4 text-gray-500">{money(entry.balance_after)}</td>
+                  <td className="px-5 py-4 text-right">
+                    <MinimalPill>{entry.entry_type || 'debit'}</MinimalPill>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </MinimalCard>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 rounded-[24px] border border-black/5 bg-black/[0.02] p-6 dark:border-white/10 dark:bg-white/[0.03]">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-950 dark:text-white">Billing policy</h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Monthly limits, flexible usage, and ledger history are stored in workspace settings and the billing tables.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleSave().catch(() => undefined)}
+          disabled={isSaving}
+          className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Save preferences
+        </button>
+      </div>
     </div>
   );
 }

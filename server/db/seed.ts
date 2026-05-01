@@ -1,12 +1,18 @@
 import { getDb } from './client.js';
 import { randomUUID } from 'crypto';
 import { seedAgents } from '../agents/seed.js';
+import { getDatabaseProvider } from './provider.js';
 
 const ORG_ID = 'org_default';
 const TENANT_ID = ORG_ID;
 const WORKSPACE_ID = 'ws_default';
 
 export function seedDatabase(): void {
+  if (getDatabaseProvider() === 'supabase') {
+    console.log('ℹ️  Skipping SQLite seed (Provider is set to Supabase)');
+    return;
+  }
+
   const db = getDb();
 
   // Check if already seeded
@@ -210,6 +216,27 @@ export function seedDatabase(): void {
   ));
 
   // ── Returns ──────────────────────────────────────────────
+  const insertPaymentEvent = db.prepare(
+    'INSERT OR IGNORE INTO payment_events (id,payment_id,type,content,system,time,tenant_id) VALUES (?,?,?,?,?,?,?)'
+  );
+  const paymentEvents = [
+    ['pe_001_1', 'pay_001', 'authorized', 'Payment authorized — $129.00', 'Stripe', '2023-10-16T10:00:20Z'],
+    ['pe_001_2', 'pay_001', 'captured', 'Payment captured successfully', 'Stripe', '2023-10-16T10:01:00Z'],
+    ['pe_001_3', 'pay_001', 'refund_requested', 'Refund requested via OMS', 'OMS', '2023-10-16T12:00:00Z'],
+    ['pe_001_4', 'pay_001', 'refund_initiated', 'Refund initiated in PSP', 'Stripe', '2023-10-16T12:05:00Z'],
+    ['pe_001_5', 'pay_001', 'pending_bank', 'Awaiting bank clearance — T+3 expected', 'Bank', '2023-10-16T12:05:30Z'],
+    ['pe_002_1', 'pay_002', 'authorized', 'Payment authorized — $129.00', 'Stripe', '2023-10-16T10:00:20Z'],
+    ['pe_002_2', 'pay_002', 'captured', 'Payment captured', 'Stripe', '2023-10-16T10:01:00Z'],
+    ['pe_002_3', 'pay_002', 'cancellation_hold', 'Refund on hold pending ops cancellation approval', 'System', '2023-10-16T12:01:00Z'],
+    ['pe_003_1', 'pay_003', 'authorized', 'Payment authorized — $89.00', 'Stripe', '2023-10-15T10:00:20Z'],
+    ['pe_003_2', 'pay_003', 'captured', 'Payment captured', 'Stripe', '2023-10-15T10:01:00Z'],
+    ['pe_003_3', 'pay_003', 'settled', 'Payment settled and reconciled', 'System', '2023-10-15T20:00:00Z'],
+    ['pe_004_1', 'pay_004', 'authorized', 'Payment authorized — $249.00', 'Stripe', '2023-10-14T10:00:20Z'],
+    ['pe_004_2', 'pay_004', 'captured', 'Payment captured', 'Stripe', '2023-10-14T10:01:00Z'],
+    ['pe_004_3', 'pay_004', 'settled', 'Payment settled', 'Stripe', '2023-10-14T22:00:00Z'],
+  ] as const;
+  paymentEvents.forEach(event => insertPaymentEvent.run(...event, TENANT_ID));
+
   const returns: any[] = [
     {
       id: 'ret_001', ext: 'RET-20491', order: 'ord_55210', cust: 'cust_sarah_jenkins',
@@ -475,33 +502,172 @@ export function seedDatabase(): void {
     {
       id: 'art_001', domain: 'dom_refunds', title: 'Refund Policy — Standard',
       content: `# Standard Refund Policy\n\nRefunds are processed within 5-10 business days of return receipt.\n\n## Thresholds\n- Up to $50: Auto-approved\n- $50-$500: Agent approval required\n- Over $500: Supervisor approval required\n- VIP customers: Standard thresholds apply unless flagged\n\n## Bank Transfer Refunds\nBank transfer refunds may take 10-20 business days to appear.`,
-      type: 'policy', owner: 'user_alex', citations: 12
+      type: 'policy', owner: 'user_alex', citations: 12,
+      reviewCycleDays: 45,
+      workflows: ['wf_001', 'wf_002'],
+      approvals: ['pr_chargeback_review'],
+      sheet: {
+        summary: 'Standard refund policy for retail orders with tiered approval thresholds.',
+        policy: 'Refunds follow a strict threshold ladder and must be reconciled before closure.',
+        allowed: [
+          'Auto-approve refunds up to $50 when the order is eligible and no dispute is open.',
+          'Agent approval can cover refunds between $50 and $500 when evidence is complete.',
+          'Supervisor approval is mandatory above $500 or when the case is flagged VIP plus risk.',
+        ],
+        blocked: [
+          'Do not approve if the refund conflicts with a live dispute or chargeback.',
+          'Do not issue bank transfer refunds without a recorded settlement window.',
+        ],
+        escalation: [
+          'Escalate to finance if the refund is older than the stated bank window.',
+          'Escalate to supervisor when the customer profile is VIP and evidence is incomplete.',
+        ],
+        evidence: [
+          'Order confirmation',
+          'Return receipt or cancellation record',
+          'Payment reconciliation status',
+        ],
+        agent_notes: [
+          'Use this article as the primary refund policy source for assistant reasoning.',
+          'Reference the threshold directly in customer-facing messages.',
+        ],
+        examples: [
+          'Refund under $50 with no dispute -> approve',
+          'Refund of $180 with full evidence -> agent review',
+        ],
+        keywords: ['refund', 'bank clearance', 'threshold', 'reconciliation', 'vip'],
+      }
     },
     {
       id: 'art_002', domain: 'dom_returns', title: 'Return Window Policy',
       content: `# Return Window Policy\n\n## Standard Policy\nReturns must be initiated within **30 days** of delivery.\n\n## Exceptions\n- VIP customers (Gold/Platinum): Supervisor may approve up to 60 days\n- Defective items: No time limit applies\n- Holiday purchases: Extended to 60 days (Nov 15 – Jan 15)\n\n## Process\n1. Customer initiates return via portal\n2. System validates return window\n3. Label generated if approved\n4. Refund triggered upon warehouse receipt`,
-      type: 'policy', owner: 'user_alex', citations: 28
+      type: 'policy', owner: 'user_alex', citations: 28,
+      reviewCycleDays: 60,
+      workflows: ['wf_002', 'wf_004'],
+      approvals: ['pr_replacement_approval'],
+      sheet: {
+        summary: 'Return window policy with holiday and defective-item exceptions.',
+        policy: 'Return eligibility depends on delivery date unless an approved exception applies.',
+        allowed: [
+          'Approve returns initiated within 30 days of delivery.',
+          'Allow supervisor override for VIP customers up to 60 days.',
+          'Allow unlimited returns for defective items when evidence is present.',
+        ],
+        blocked: [
+          'Block returns initiated outside the window without a documented exception.',
+          'Block shipping labels until the return window is validated.',
+        ],
+        escalation: [
+          'Escalate holiday-period edge cases to a human reviewer.',
+          'Escalate when delivery date or carrier proof is missing.',
+        ],
+        evidence: [
+          'Delivery confirmation',
+          'Customer return request',
+          'Exception approval record',
+        ],
+        agent_notes: [
+          'The agent should check delivery date before suggesting any return label.',
+          'Use exception rules before recommending a denial.',
+        ],
+        examples: [
+          'Delivered 18 days ago -> approve',
+          'Delivered 40 days ago, VIP -> supervisor review',
+        ],
+        keywords: ['return', 'delivery date', 'holiday', 'vip', 'defective'],
+      }
     },
     {
       id: 'art_003', domain: 'dom_disputes', title: 'Chargeback Response SOP',
       content: `# Chargeback Response Procedure\n\n## Timeline\nRespond within 5 business days of chargeback notification.\n\n## Evidence Required\n- Proof of delivery (carrier tracking)\n- Order confirmation and customer acceptance\n- Communication history\n- Inspection report (for returns)\n\n## Decision Matrix\n- Item delivered + no return initiated → Dispute the chargeback\n- Item returned damaged → Provide inspection photos, partial refund may apply\n- Item not delivered → Accept chargeback, investigate carrier`,
-      type: 'sop', owner: 'user_alex', citations: 8
+      type: 'sop', owner: 'user_alex', citations: 8,
+      reviewCycleDays: 30,
+      workflows: ['wf_003'],
+      approvals: ['pr_chargeback_review'],
+      sheet: {
+        summary: 'Operational SOP for chargeback handling and response packaging.',
+        policy: 'Chargeback responses must be evidence-based and filed within five business days.',
+        allowed: [
+          'Dispute chargebacks when delivery and acceptance evidence are both available.',
+          'Provide partial refund evidence when the return item is damaged.',
+        ],
+        blocked: [
+          'Do not dispute if the carrier never delivered the parcel.',
+          'Do not promise a chargeback win without proof of delivery.',
+        ],
+        escalation: [
+          'Escalate all disputed payment cases with missing delivery evidence.',
+          'Escalate when fraud or legal risk appears in the communication history.',
+        ],
+        evidence: [
+          'Carrier tracking',
+          'Order confirmation',
+          'Customer communication history',
+          'Inspection photos',
+        ],
+        agent_notes: [
+          'Keep the tone factual and avoid emotional language in evidence notes.',
+          'Reference the five-business-day deadline every time the SOP is used.',
+        ],
+        examples: [
+          'Delivered, no return, dispute opened -> contest chargeback',
+          'Not delivered -> accept and investigate carrier',
+        ],
+        keywords: ['chargeback', 'dispute', 'delivery proof', 'inspection', 'deadline'],
+      }
     },
     {
       id: 'art_004', domain: 'dom_refunds', title: 'High-Value Refund Approval Process',
       content: `# High-Value Refund Approval\n\nRefunds exceeding $500 require supervisor sign-off.\n\n## Evidence Package Required\n- Customer profile and LTV\n- Order and payment details\n- Reconciliation status across all systems\n- AI diagnosis and confidence score\n\n## SLA\nApprover must decide within 24 hours or case escalates to senior supervisor.`,
-      type: 'sop', owner: 'user_alex', citations: 5
+      type: 'sop', owner: 'user_alex', citations: 5,
+      reviewCycleDays: 30,
+      workflows: ['wf_001', 'wf_003'],
+      approvals: ['pr_cancel_approval'],
+      sheet: {
+        summary: 'High-value refund approvals require a tighter evidence package and a 24 hour SLA.',
+        policy: 'Refunds above $500 never auto-approve and always require supervisor sign-off.',
+        allowed: [
+          'Proceed only when the evidence package is complete.',
+          'Use the AI diagnosis as supporting context, not the only reason.',
+        ],
+        blocked: [
+          'Do not approve if reconciliation across systems is inconsistent.',
+          'Do not leave the case without a decision beyond the SLA.',
+        ],
+        escalation: [
+          'Escalate to senior supervisor if the 24 hour SLA is missed.',
+          'Escalate if the customer lifetime value is unusually high or disputed.',
+        ],
+        evidence: [
+          'Customer profile and LTV',
+          'Order and payment details',
+          'Cross-system reconciliation',
+          'AI diagnosis and confidence score',
+        ],
+        agent_notes: [
+          'Use this as the strictest refund gate in the knowledge library.',
+          'Agent reasoning should always mention the SLA and the evidence package.',
+        ],
+        examples: [
+          'Refund of $680 with complete evidence -> supervisor review',
+          'Refund of $900 with incomplete reconciliation -> block',
+        ],
+        keywords: ['high value', 'supervisor', 'sla', 'reconciliation', 'evidence'],
+      }
     },
   ];
   const insertArticle = db.prepare(`
     INSERT OR IGNORE INTO knowledge_articles
-    (id,tenant_id,workspace_id,domain_id,title,content,type,status,owner_user_id,
-     version,citation_count,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?)
+    (id,tenant_id,workspace_id,domain_id,title,content,content_structured,type,status,owner_user_id,
+     review_cycle_days,last_reviewed_at,next_review_at,version,citation_count,linked_workflow_ids,linked_approval_policy_ids,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)
   `);
   articles.forEach(a => insertArticle.run(
-    a.id, TENANT_ID, WORKSPACE_ID, a.domain, a.title, a.content, a.type, 'published',
-    a.owner, a.citations, new Date().toISOString(), new Date().toISOString()
+    a.id, TENANT_ID, WORKSPACE_ID, a.domain, a.title, a.content, JSON.stringify(a.sheet ?? {}), a.type, 'published',
+    a.owner, a.reviewCycleDays ?? 90, new Date().toISOString(),
+    new Date(Date.now() + (a.reviewCycleDays ?? 90) * 24 * 60 * 60 * 1000).toISOString(),
+    a.citations, JSON.stringify(a.workflows ?? []), JSON.stringify(a.approvals ?? []),
+    new Date().toISOString(), new Date().toISOString()
   ));
 
   // ── Workflows ─────────────────────────────────────────────
@@ -530,6 +696,61 @@ export function seedDatabase(): void {
   const insertConn = db.prepare('INSERT OR IGNORE INTO connectors (id,tenant_id,system,name,status,auth_type,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)');
   connectors.forEach(c => insertConn.run(c.id, TENANT_ID, c.system, c.name, c.status, 'oauth2', new Date().toISOString(), new Date().toISOString()));
 
+  const insertPlan = db.prepare('INSERT OR IGNORE INTO billing_plans (id, name, price_cents, currency, interval, created_at) VALUES (?,?,?,?,?,?)');
+  [
+    ['starter', 'Starter', 4900, 'EUR', 'month'],
+    ['growth', 'Growth', 12900, 'EUR', 'month'],
+    ['scale', 'Scale', 29900, 'EUR', 'month'],
+    ['business', 'Business', 0, 'EUR', 'month'],
+  ].forEach(([id, name, price_cents, currency, interval]) => insertPlan.run(id, name, price_cents, currency, interval, new Date().toISOString()));
+
+  const insertSubscription = db.prepare(`
+    INSERT OR IGNORE INTO billing_subscriptions
+    (id, org_id, plan_id, status, current_period_start, current_period_end, seats_included, seats_used, credits_included, credits_used, external_subscription_id, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+  `);
+  insertSubscription.run(
+    'sub_org_default',
+    ORG_ID,
+    'growth',
+    'active',
+    new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString(),
+    new Date(Date.now() + 16 * 24 * 3600 * 1000).toISOString(),
+    8,
+    2,
+    20000,
+    3240,
+    'sub_demo_growth',
+    new Date().toISOString(),
+  );
+
+  const insertLedger = db.prepare(`
+    INSERT OR IGNORE INTO credit_ledger
+    (id, org_id, tenant_id, entry_type, amount, reason, reference_id, balance_after, occurred_at)
+    VALUES (?,?,?,?,?,?,?,?,?)
+  `);
+  insertLedger.run(
+    'ledger_sub_001',
+    ORG_ID,
+    TENANT_ID,
+    'debit',
+    129,
+    'Growth plan subscription',
+    'sub_org_default',
+    18871,
+    new Date(Date.now() - 12 * 24 * 3600 * 1000).toISOString(),
+  );
+  insertLedger.run(
+    'ledger_sub_002',
+    ORG_ID,
+    TENANT_ID,
+    'debit',
+    79,
+    'AI credit top-up',
+    'topup_credits_001',
+    19621,
+    new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString(),
+  );
   // ── Agents ────────────────────────────────────────────────
   const agentList = [
     { id: 'agent_supervisor', slug: 'supervisor', name: 'Supervisor', cat: 'orchestration', sys: 1, locked: 1 },
@@ -558,3 +779,4 @@ export function seedDatabase(): void {
 
   console.log('✅ Database seeded successfully');
 }
+

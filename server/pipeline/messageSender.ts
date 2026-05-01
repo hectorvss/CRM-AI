@@ -25,125 +25,15 @@
  */
 
 import { randomUUID }         from 'crypto';
-import { getDb }              from '../db/client.js';
-import { config }             from '../config.js';
+import { createCaseRepository } from '../data/cases.js';
+import { createCustomerRepository } from '../data/customers.js';
+import { createOperationsRepository } from '../data/operations.js';
 import { registerHandler }    from '../queue/handlers/index.js';
 import { JobType }            from '../queue/types.js';
 import { logger }             from '../utils/logger.js';
-import { logAudit }           from '../db/utils.js';
+import { requireScope }       from '../lib/scope.js';
 import type { SendMessagePayload, JobContext } from '../queue/types.js';
-
-// ── Channel senders ───────────────────────────────────────────────────────────
-
-async function sendWhatsApp(
-  to: string,
-  content: string,
-): Promise<{ messageId: string; simulated: boolean }> {
-  const accessToken   = config.channels?.whatsappAccessToken;
-  const phoneNumberId = config.channels?.whatsappPhoneNumberId;
-
-  if (!accessToken || !phoneNumberId) {
-    logger.debug('WhatsApp: no credentials configured, simulating send', { to });
-    return { messageId: `sim_wa_${randomUUID()}`, simulated: true };
-  }
-
-  const url = `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`;
-  const body = JSON.stringify({
-    messaging_product: 'whatsapp',
-    to,
-    type:   'text',
-    text:   { body: content },
-  });
-
-  const res = await fetch(url, {
-    method:  'POST',
-    headers: {
-      Authorization:  `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body,
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`WhatsApp API error ${res.status}: ${errText}`);
-  }
-
-  const json = await res.json() as any;
-  return { messageId: json?.messages?.[0]?.id ?? randomUUID(), simulated: false };
-}
-
-async function sendEmail(
-  to: string,
-  subject: string,
-  content: string,
-  caseNumber: string,
-): Promise<{ messageId: string; simulated: boolean }> {
-  const postmarkToken = process.env.POSTMARK_SERVER_TOKEN;
-  const fromEmail     = process.env.EMAIL_FROM ?? 'support@example.com';
-
-  if (!postmarkToken) {
-    logger.debug('Email: no Postmark token configured, simulating send', { to });
-    return { messageId: `sim_email_${randomUUID()}`, simulated: true };
-  }
-
-  const res = await fetch('https://api.postmarkapp.com/email', {
-    method:  'POST',
-    headers: {
-      Accept:                  'application/json',
-      'Content-Type':          'application/json',
-      'X-Postmark-Server-Token': postmarkToken,
-    },
-    body: JSON.stringify({
-      From:     fromEmail,
-      To:       to,
-      Subject:  subject || `Re: Your Support Request [${caseNumber}]`,
-      TextBody: content,
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Postmark API error ${res.status}: ${errText}`);
-  }
-
-  const json = await res.json() as any;
-  return { messageId: json.MessageID ?? randomUUID(), simulated: false };
-}
-
-async function sendSms(
-  to: string,
-  content: string,
-): Promise<{ messageId: string; simulated: boolean }> {
-  const twilioSid   = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom  = process.env.TWILIO_FROM_NUMBER;
-
-  if (!twilioSid || !twilioToken || !twilioFrom) {
-    logger.debug('SMS: no Twilio credentials configured, simulating send', { to });
-    return { messageId: `sim_sms_${randomUUID()}`, simulated: true };
-  }
-
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-  const body = new URLSearchParams({ To: to, From: twilioFrom, Body: content });
-
-  const res = await fetch(url, {
-    method:  'POST',
-    headers: {
-      Authorization:  `Basic ${Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Twilio API error ${res.status}: ${errText}`);
-  }
-
-  const json = await res.json() as any;
-  return { messageId: json.sid ?? randomUUID(), simulated: false };
-}
+import { sendEmail, sendWhatsApp, sendSms } from './channelSenders.js';
 
 // ── Main handler ───────────────────────────────────────────────────────────────
 
@@ -158,17 +48,21 @@ async function handleSendMessage(
     traceId:        ctx.traceId,
   });
 
-  const db       = getDb();
-  const tenantId = ctx.tenantId ?? 'org_default';
+  const caseRepo = createCaseRepository();
+  const customerRepo = createCustomerRepository();
+  const opsRepo = createOperationsRepository();
+
+  const { tenantId, workspaceId } = requireScope(ctx, 'messageSender');
+  const scope = { tenantId, workspaceId };
 
   // ── 1. Load case + conversation ───────────────────────────────────────────
-  const caseRow = db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ?').get(payload.caseId, tenantId) as any;
+  const caseRow = await caseRepo.get(scope, payload.caseId);
   if (!caseRow) {
     log.warn('Case not found for message send');
     return;
   }
 
-  const conv = db.prepare('SELECT * FROM conversations WHERE id = ? AND tenant_id = ?').get(payload.conversationId, tenantId) as any;
+  const conv = await caseRepo.getConversation(scope, payload.conversationId);
   if (!conv) {
     log.warn('Conversation not found', { conversationId: payload.conversationId });
     return;
@@ -176,7 +70,7 @@ async function handleSendMessage(
 
   // ── 2. Load customer contact info ─────────────────────────────────────────
   const customer = caseRow.customer_id
-    ? db.prepare('SELECT * FROM customers WHERE id = ? AND tenant_id = ?').get(caseRow.customer_id, tenantId) as any
+    ? await customerRepo.get(scope, caseRow.customer_id)
     : null;
 
   if (!customer && !caseRow.source_entity_id) {
@@ -255,60 +149,50 @@ async function handleSendMessage(
   // ── 4. Persist outbound message ───────────────────────────────────────────
   const messageId = payload.queuedMessageId ?? randomUUID();
   if (payload.queuedMessageId) {
-    db.prepare(`
-      UPDATE messages
-      SET external_message_id = ?,
-          sent_at = COALESCE(sent_at, ?),
-          delivered_at = CASE WHEN ? = 1 THEN NULL ELSE COALESCE(delivered_at, ?) END
-      WHERE id = ? AND tenant_id = ?
-    `).run(externalMessageId, now, simulated ? 1 : 0, now, payload.queuedMessageId, tenantId);
+    await caseRepo.updateMessage(scope, payload.queuedMessageId, {
+      external_message_id: externalMessageId,
+      sent_at: now,
+      delivered_at: simulated ? null : now
+    });
   } else {
-    db.prepare(`
-      INSERT INTO messages (
-        id, conversation_id, case_id, customer_id, type, sender_id, sender_name,
-        direction, channel, content, content_type,
-        external_message_id,
-        draft_reply_id,
-        sent_at, created_at, tenant_id
-      ) VALUES (?, ?, ?, ?, 'agent', 'system_send_message', 'Alex Morgan', 'outbound', ?, ?, 'text', ?, ?, ?, ?, ?)
-    `).run(
-      messageId,
-      payload.conversationId,
-      payload.caseId,
-      customer?.id ?? caseRow.customer_id ?? null,
+    await caseRepo.createMessage(scope, {
+      id: messageId,
+      conversation_id: payload.conversationId,
+      case_id: payload.caseId,
+      customer_id: customer?.id ?? caseRow.customer_id ?? null,
+      type: 'agent',
+      sender_id: 'system_send_message',
+      sender_name: 'Alex Morgan',
+      direction: 'outbound',
       channel,
-      payload.content,
-      externalMessageId,
-      payload.draftReplyId ?? null,
-      now,
-      now,
-      tenantId,
-    );
+      content: payload.content,
+      content_type: 'text',
+      external_message_id: externalMessageId,
+      draft_reply_id: payload.draftReplyId ?? null,
+      sent_at: now,
+      created_at: now,
+      tenant_id: tenantId
+    });
   }
 
   // ── 5. Update conversation ────────────────────────────────────────────────
-  db.prepare(`
-    UPDATE conversations
-    SET last_message_at = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(now, payload.conversationId);
+  await caseRepo.updateConversation(scope, payload.conversationId, {
+    last_message_at: now
+  });
 
-  db.prepare(`
-    UPDATE cases
-    SET last_activity_at = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(now, payload.caseId);
+  await caseRepo.update(scope, payload.caseId, {
+    last_activity_at: now
+  });
 
   // ── 6. Mark draft as sent ─────────────────────────────────────────────────
   if (payload.draftReplyId) {
-    db.prepare(`
-      UPDATE draft_replies SET status = 'sent', sent_at = ? WHERE id = ?
-    `).run(now, payload.draftReplyId);
+    await caseRepo.updateDraft(scope, payload.draftReplyId, {
+      status: 'sent',
+      sent_at: now
+    });
   }
 
-  logAudit(db, {
-    tenantId,
-    workspaceId: ctx.workspaceId ?? 'ws_default',
+  await opsRepo.logAudit(scope, {
     actorId: 'system_send_message',
     actorType: 'system',
     action: 'MESSAGE_SENT',

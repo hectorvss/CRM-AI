@@ -6,7 +6,10 @@ import { parseRow } from '../db/utils.js';
 export interface WorkspaceRepository {
   listByUser(userId: string): Promise<any[]>;
   getById(id: string, orgId?: string): Promise<any>;
+  findByOrg(orgId: string): Promise<any>;
+  getFirstWorkspace(): Promise<any>;
   updateSettings(id: string, settings: any): Promise<void>;
+  update(id: string, updates: { name?: string; slug?: string; settings?: any }): Promise<void>;
   listFeatureFlags(tenantId: string, workspaceId: string): Promise<any[]>;
   updateFeatureFlag(data: {
     tenantId: string;
@@ -15,8 +18,6 @@ export interface WorkspaceRepository {
     isEnabled: boolean;
     userId: string;
   }): Promise<void>;
-  getFirstWorkspace(): Promise<any>;
-  findByOrg(orgId: string): Promise<any>;
 }
 
 class SQLiteWorkspaceRepository implements WorkspaceRepository {
@@ -32,10 +33,30 @@ class SQLiteWorkspaceRepository implements WorkspaceRepository {
 
   async getById(id: string, orgId?: string) {
     const db = getDb();
+    if (id === 'ws_default') {
+      if (orgId) {
+        const byOrg = db.prepare('SELECT * FROM workspaces WHERE org_id = ? ORDER BY created_at ASC LIMIT 1').get(orgId);
+        if (byOrg) return byOrg;
+      }
+      const first = db.prepare('SELECT * FROM workspaces ORDER BY created_at ASC LIMIT 1').get();
+      if (first) return first;
+    }
     if (orgId) {
-      return db.prepare('SELECT * FROM workspaces WHERE id = ? AND org_id = ?').get(id, orgId);
+      const workspace = db.prepare('SELECT * FROM workspaces WHERE id = ? AND org_id = ?').get(id, orgId);
+      if (workspace) return workspace;
+      return db.prepare('SELECT * FROM workspaces WHERE org_id = ? ORDER BY created_at ASC LIMIT 1').get(orgId);
     }
     return db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id);
+  }
+
+  async findByOrg(orgId: string) {
+    const db = getDb();
+    return db.prepare('SELECT * FROM workspaces WHERE org_id = ? ORDER BY created_at ASC LIMIT 1').get(orgId);
+  }
+
+  async getFirstWorkspace() {
+    const db = getDb();
+    return db.prepare('SELECT * FROM workspaces ORDER BY created_at ASC LIMIT 1').get();
   }
 
   async updateSettings(id: string, settings: any) {
@@ -45,6 +66,30 @@ class SQLiteWorkspaceRepository implements WorkspaceRepository {
       SET settings = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(JSON.stringify(settings), id);
+  }
+
+  async update(id: string, updates: { name?: string; slug?: string; settings?: any }) {
+    const db = getDb();
+    const fields: string[] = [];
+    const params: any[] = [];
+
+    if (typeof updates.name === 'string') {
+      fields.push('name = ?');
+      params.push(updates.name);
+    }
+    if (typeof updates.slug === 'string') {
+      fields.push('slug = ?');
+      params.push(updates.slug);
+    }
+    if (updates.settings && typeof updates.settings === 'object' && !Array.isArray(updates.settings)) {
+      fields.push('settings = ?');
+      params.push(JSON.stringify(updates.settings));
+    }
+
+    if (fields.length === 0) return;
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+    db.prepare(`UPDATE workspaces SET ${fields.join(', ')} WHERE id = ?`).run(...params);
   }
 
   async listFeatureFlags(tenantId: string, workspaceId: string) {
@@ -90,16 +135,6 @@ class SQLiteWorkspaceRepository implements WorkspaceRepository {
         updated_at = CURRENT_TIMESTAMP
     `).run(crypto.randomUUID(), data.tenantId, data.workspaceId, data.featureKey, data.isEnabled ? 1 : 0, data.userId);
   }
-
-  async getFirstWorkspace() {
-    const db = getDb();
-    return db.prepare('SELECT * FROM workspaces ORDER BY created_at ASC LIMIT 1').get();
-  }
-
-  async findByOrg(orgId: string) {
-    const db = getDb();
-    return db.prepare('SELECT * FROM workspaces WHERE org_id = ? ORDER BY created_at ASC LIMIT 1').get(orgId);
-  }
 }
 
 class SupabaseWorkspaceRepository implements WorkspaceRepository {
@@ -119,10 +154,59 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
   async getById(id: string, orgId?: string) {
     const supabase = getSupabaseAdmin();
+    if (id === 'ws_default') {
+      if (orgId) {
+        const { data } = await supabase
+          .from('workspaces')
+          .select('*')
+          .eq('org_id', orgId)
+          .order('created_at', { ascending: true })
+          .limit(1);
+        if (data?.[0]) return data[0];
+      }
+      const { data: first } = await supabase
+        .from('workspaces')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (first?.[0]) return first[0];
+    }
+
     let query = supabase.from('workspaces').select('*').eq('id', id);
     if (orgId) query = query.eq('org_id', orgId);
-    const { data } = await query.single();
-    return data;
+    const { data } = await query.limit(1);
+    if (data?.[0]) return data[0];
+    if (orgId) {
+      const { data: byOrg } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      return byOrg?.[0] || null;
+    }
+    return null;
+  }
+
+  async findByOrg(orgId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from('workspaces')
+      .select('*')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    return data?.[0] || null;
+  }
+
+  async getFirstWorkspace() {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from('workspaces')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .limit(1);
+    return data?.[0] || null;
   }
 
   async updateSettings(id: string, settings: any) {
@@ -130,6 +214,24 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const { error } = await supabase
       .from('workspaces')
       .update({ settings, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+  }
+
+  async update(id: string, updates: { name?: string; slug?: string; settings?: any }) {
+    const supabase = getSupabaseAdmin();
+    const toUpdate: Record<string, any> = { updated_at: new Date().toISOString() };
+
+    if (typeof updates.name === 'string') toUpdate.name = updates.name;
+    if (typeof updates.slug === 'string') toUpdate.slug = updates.slug;
+    if (updates.settings && typeof updates.settings === 'object' && !Array.isArray(updates.settings)) {
+      toUpdate.settings = updates.settings;
+    }
+
+    if (Object.keys(toUpdate).length <= 1) return;
+    const { error } = await supabase
+      .from('workspaces')
+      .update(toUpdate)
       .eq('id', id);
     if (error) throw error;
   }
@@ -185,29 +287,6 @@ class SupabaseWorkspaceRepository implements WorkspaceRepository {
         updated_at: new Date().toISOString()
       }, { onConflict: 'tenant_id,workspace_id,feature_key' });
     if (error) throw error;
-  }
-
-  async getFirstWorkspace() {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from('workspaces')
-      .select('*')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    return data;
-  }
-
-  async findByOrg(orgId: string) {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from('workspaces')
-      .select('*')
-      .eq('org_id', orgId)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    return data;
   }
 }
 

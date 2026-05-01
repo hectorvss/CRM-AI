@@ -24,9 +24,14 @@ export interface JobRepository {
     attempts?: number;
     error?: string | null;
   }): Promise<void>;
+  rescheduleJob(id: string, updates: {
+    runAt: string;
+    error?: string | null;
+  }): Promise<void>;
 
   countJobs(): Promise<Record<string, number>>;
   retryDeadJob(id: string): Promise<boolean>;
+  quarantineOrphanJobs(): Promise<number>;
 }
 
 class SQLiteJobRepository implements JobRepository {
@@ -86,6 +91,19 @@ class SQLiteJobRepository implements JobRepository {
     db.prepare(`UPDATE jobs SET ${fields.join(', ')} WHERE id = ?`).run(...params);
   }
 
+  async rescheduleJob(id: string, updates: { runAt: string; error?: string | null }) {
+    const db = getDb();
+    db.prepare(`
+      UPDATE jobs
+      SET status = 'pending',
+          run_at = ?,
+          started_at = NULL,
+          finished_at = NULL,
+          error = ?
+      WHERE id = ?
+    `).run(updates.runAt, updates.error ?? null, id);
+  }
+
   async countJobs() {
     const db = getDb();
     const rows = db.prepare(`
@@ -103,6 +121,10 @@ class SQLiteJobRepository implements JobRepository {
       WHERE id = ? AND status = 'dead'
     `).run(id);
     return result.changes > 0;
+  }
+
+  async quarantineOrphanJobs() {
+    return 0;
   }
 }
 
@@ -195,6 +217,21 @@ class SupabaseJobRepository implements JobRepository {
     if (error) throw error;
   }
 
+  async rescheduleJob(id: string, updates: { runAt: string; error?: string | null }) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('jobs')
+      .update({
+        status: 'pending',
+        run_at: updates.runAt,
+        started_at: null,
+        finished_at: null,
+        error: updates.error ?? null,
+      })
+      .eq('id', id);
+    if (error) throw error;
+  }
+
   async countJobs() {
     const supabase = getSupabaseAdmin();
     // Count groups
@@ -223,9 +260,13 @@ class SupabaseJobRepository implements JobRepository {
       .eq('status', 'dead');
     return !error;
   }
+
+  async quarantineOrphanJobs() {
+    return 0;
+  }
 }
 
-let instance: JobRepository | null = null;
+var instance: JobRepository | null = null;
 
 export function createJobRepository(): JobRepository {
   if (instance) return instance;

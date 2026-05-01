@@ -47,6 +47,7 @@ const REGISTRY = new Map<string, AgentImplementation>([
   ['supervisor',               noopAgent('supervisor')],            // delegated to orchestrator
   ['approval-gatekeeper',      qaCheckImpl],                        // shares QA logic
   ['qa-policy-check',          qaCheckImpl],
+  ['case-validation-agent',    noopAgent('case-validation-agent')],
   ['escalation-manager',       escalationManagerImpl],
 
   // ── Ingest & Intelligence ─────────────────────────────────────────────────
@@ -55,12 +56,14 @@ const REGISTRY = new Map<string, AgentImplementation>([
   ['intent-router',            triageAgentImpl],                    // reuse triage logic
   ['triage-agent',             triageAgentImpl],
   ['knowledge-retriever',      knowledgeRetrieverImpl],
+  ['crm-case-link-agent',      noopAgent('crm-case-link-agent')],
   ['composer-translator',      composerTranslatorImpl],
 
   // ── Resolution & Reconciliation ───────────────────────────────────────────
   ['reconciliation-agent',     noopAgent('reconciliation-agent')],  // delegated to pipeline
   ['case-resolution-planner',  noopAgent('case-resolution-planner')], // delegated to pipeline
   ['resolution-executor',      noopAgent('resolution-executor')],   // delegated to pipeline
+  ['finance-reconciler',       noopAgent('finance-reconciler')],
   ['workflow-runtime-agent',   workflowRuntimeAgentImpl],
   ['fraud-detector',           fraudDetectorImpl],
   ['report-generator',         reportGeneratorImpl],
@@ -79,6 +82,7 @@ const REGISTRY = new Map<string, AgentImplementation>([
   ['shopify-connector',        shopifyConnectorImpl],
   ['oms-erp-agent',            omsErpAgentImpl],
   ['returns-agent',            returnsAgentImpl],
+  ['returns-specialist',       noopAgent('returns-specialist')],
   ['subscription-agent',       subscriptionAgentImpl],
   ['logistics-tracking-agent', logisticsTrackingAgentImpl],
 
@@ -86,9 +90,11 @@ const REGISTRY = new Map<string, AgentImplementation>([
   ['sla-monitor',              slaMonitorImpl],
   ['sla-escalation-agent',     slaEscalationAgentImpl],
   ['customer-communication-agent', customerCommunicationAgentImpl],
+  ['follow-up-agent',          noopAgent('follow-up-agent')],
   ['audit-observability',      auditLoggerImpl],
   ['audit-logger',             auditLoggerImpl],
   ['draft-reply-agent',        draftReplyAgentImpl],
+  ['customer-history-analyst', noopAgent('customer-history-analyst')],
 ]);
 
 // ── Noop stub (for pipeline agents handled by their own job handlers) ─────────
@@ -125,6 +131,8 @@ export function getImplementationMode(slug: string): 'implemented' | 'delegated'
   const delegatedSlugs = [
     'supervisor', 'channel-ingest', 'canonicalizer',
     'reconciliation-agent', 'case-resolution-planner', 'resolution-executor',
+    'case-validation-agent', 'crm-case-link-agent', 'finance-reconciler',
+    'returns-specialist', 'follow-up-agent', 'customer-history-analyst',
   ];
   if (delegatedSlugs.includes(slug)) return 'delegated';
   return 'implemented';

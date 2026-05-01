@@ -270,3 +270,20 @@ export interface WritableRefunds {
     idempotencyKey: string;
   }): Promise<CanonicalRefund>;
 }
+
+export interface WritableOrders {
+  cancelOrder(params: {
+    orderExternalId: string;
+    reason?: string;
+    email?: boolean;   // notify customer
+    restock?: boolean; // restock line items
+  }): Promise<CanonicalOrder>;
+}
+
+export interface WritableReturns {
+  createReturn(params: {
+    orderExternalId: string;
+    lineItems: Array<{ lineItemId: string; quantity: number; reason?: string }>;
+    notifyCustomer?: boolean;
+  }): Promise<CanonicalReturn>;
+}

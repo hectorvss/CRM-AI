@@ -26,6 +26,14 @@ type SSEClient = {
 };
 
 const clients: SSEClient[] = [];
+type BufferedSSEEvent = {
+  id: number;
+  event: string;
+  data: Record<string, unknown>;
+};
+
+const eventBuffers = new Map<string, BufferedSSEEvent[]>();
+const eventCounters = new Map<string, number>();
 let clientIdCounter = 0;
 
 function addClient(tenantId: string, res: Response): SSEClient {
@@ -39,12 +47,39 @@ function removeClient(id: string): void {
   if (idx !== -1) clients.splice(idx, 1);
 }
 
+function nextEventId(tenantId: string): number {
+  const current = eventCounters.get(tenantId) ?? 0;
+  const next = current + 1;
+  eventCounters.set(tenantId, next);
+  return next;
+}
+
+function bufferEvent(tenantId: string, event: string, data: Record<string, unknown>): BufferedSSEEvent {
+  const buffered: BufferedSSEEvent = {
+    id: nextEventId(tenantId),
+    event,
+    data,
+  };
+  const existing = eventBuffers.get(tenantId) ?? [];
+  existing.push(buffered);
+  if (existing.length > 200) {
+    existing.splice(0, existing.length - 200);
+  }
+  eventBuffers.set(tenantId, existing);
+  return buffered;
+}
+
+function formatEvent(event: BufferedSSEEvent): string {
+  return `id: ${event.id}\nevent: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
+}
+
 /**
  * Broadcast an event to all connected SSE clients for a given tenant.
  * Called from the orchestrator and runner to push live updates.
  */
 export function broadcastSSE(tenantId: string, event: string, data: Record<string, unknown>): void {
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const buffered = bufferEvent(tenantId, event, data);
+  const payload = formatEvent(buffered);
   for (const client of clients) {
     if (client.tenantId === tenantId) {
       try {
@@ -63,7 +98,8 @@ const router = Router();
 router.use(extractMultiTenant);
 
 router.get('/agent-runs', (req: MultiTenantRequest, res: Response) => {
-  const tenantId = req.tenantId ?? 'tenant_default';
+  const tenantId = req.tenantId ?? 'org_default';
+  const lastEventId = Number(req.headers['last-event-id'] ?? 0) || 0;
 
   // Set SSE headers
   res.writeHead(200, {
@@ -72,9 +108,24 @@ router.get('/agent-runs', (req: MultiTenantRequest, res: Response) => {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
+  res.write('retry: 5000\n\n');
 
   // Send initial connection event
-  res.write(`event: connected\ndata: ${JSON.stringify({ tenantId })}\n\n`);
+  const connected = bufferEvent(tenantId, 'connected', { tenantId });
+  res.write(formatEvent(connected));
+
+  if (lastEventId > 0) {
+    const bufferedEvents = eventBuffers.get(tenantId) ?? [];
+    for (const bufferedEvent of bufferedEvents) {
+      if (bufferedEvent.id > lastEventId && bufferedEvent.event !== 'connected') {
+        try {
+          res.write(formatEvent(bufferedEvent));
+        } catch {
+          break;
+        }
+      }
+    }
+  }
 
   const client = addClient(tenantId, res);
 

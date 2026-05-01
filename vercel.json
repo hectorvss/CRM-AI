@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin",      "value": "https://crm-ai-rose.vercel.app" },
+        { "key": "Access-Control-Allow-Credentials", "value": "true" },
+        { "key": "Access-Control-Allow-Methods",     "value": "GET,POST,PUT,PATCH,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers",     "value": "Content-Type,Authorization,x-tenant-id,x-workspace-id,x-user-id" }
+      ]
+    }
+  ],
+  "env": {
+    "NODE_ENV":                "production",
+    "SUPABASE_URL":            "https://erzfvnpzbmwnpchhemjt.supabase.co",
+    "GEMINI_MODEL":            "gemini-2.0-flash",
+    "SUPER_AGENT_LLM_ROUTING": "true",
+    "CORS_ORIGINS":            "https://crm-ai-rose.vercel.app,http://localhost:3005,http://localhost:5173"
+  },
+  "crons": [
+    {
+      "path": "/api/superagent/cron/check",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

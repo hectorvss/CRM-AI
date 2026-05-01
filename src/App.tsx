@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { PermissionsProvider } from './contexts/PermissionsContext';
 import Sidebar from './components/Sidebar';
 import Inbox from './components/Inbox';
 import Home from './components/Home';
@@ -16,38 +17,266 @@ import Orders from './components/Orders';
 import Returns from './components/Returns';
 import Payments from './components/Payments';
 import CaseGraph from './components/CaseGraph';
-import { Page } from './types';
+import PageErrorBoundary from './components/PageErrorBoundary';
+import SuperAgent from './components/SuperAgent';
+import GlobalSearch from './components/GlobalSearch';
+import Login from './components/auth/Login';
+import { supabase } from './api/supabase';
+import { NavigateInput, NavigationTarget, Page } from './types';
+
+const DEFAULT_TARGET: NavigationTarget = {
+  page: 'inbox',
+  entityType: 'case',
+  entityId: null,
+  section: null,
+  sourceContext: null,
+  runId: null,
+  draftPrompt: null,
+  draftLabel: null,
+};
+
+function entityTypeFromPage(page: Page): NavigationTarget['entityType'] {
+  switch (page) {
+    case 'inbox':
+    case 'case_graph':
+      return 'case';
+    case 'orders':
+      return 'order';
+    case 'payments':
+      return 'payment';
+    case 'returns':
+      return 'return';
+    case 'approvals':
+      return 'approval';
+    case 'customers':
+      return 'customer';
+    case 'workflows':
+      return 'workflow';
+    case 'knowledge':
+      return 'knowledge';
+    case 'reports':
+      return 'report';
+    case 'settings':
+      return 'setting';
+    default:
+      return 'workspace';
+  }
+}
+
+function normalizeNavigationTarget(target: NavigateInput, entityId?: string | null): NavigationTarget {
+  if (typeof target === 'string') {
+    return {
+      page: target,
+      entityType: entityTypeFromPage(target),
+      entityId: entityId ?? null,
+      section: null,
+      sourceContext: null,
+      runId: null,
+      draftPrompt: null,
+      draftLabel: null,
+    };
+  }
+
+  return {
+    page: target.page,
+    entityType: target.entityType ?? entityTypeFromPage(target.page),
+    entityId: target.entityId ?? null,
+    section: target.section ?? null,
+    sourceContext: target.sourceContext ?? null,
+    runId: target.runId ?? null,
+    draftPrompt: target.draftPrompt ?? null,
+    draftLabel: target.draftLabel ?? null,
+  };
+}
+
+function isValidPage(value: string | null): value is Page {
+  return [
+    'inbox',
+    'super_agent',
+    'home',
+    'ai_studio',
+    'workflows',
+    'approvals',
+    'knowledge',
+    'customers',
+    'tools_integrations',
+    'reports',
+    'settings',
+    'orders',
+    'returns',
+    'payments',
+    'case_graph',
+    'upgrade',
+    'profile',
+  ].includes(String(value));
+}
+
+function parseNavigationTargetFromUrl(): NavigationTarget {
+  if (typeof window === 'undefined') {
+    return DEFAULT_TARGET;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const page = params.get('view');
+
+  if (!isValidPage(page)) {
+    return DEFAULT_TARGET;
+  }
+
+  return {
+    page,
+    entityType: (params.get('entityType') as NavigationTarget['entityType']) || entityTypeFromPage(page),
+    entityId: params.get('entityId'),
+    section: params.get('section'),
+    sourceContext: params.get('source'),
+    runId: params.get('runId'),
+  };
+}
+
+function serializeNavigationTarget(target: NavigationTarget) {
+  const params = new URLSearchParams();
+  params.set('view', target.page);
+  if (target.entityType) params.set('entityType', target.entityType);
+  if (target.entityId) params.set('entityId', target.entityId);
+  if (target.section) params.set('section', target.section);
+  if (target.sourceContext) params.set('source', target.sourceContext);
+  if (target.runId) params.set('runId', target.runId);
+  return `?${params.toString()}`;
+}
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('case_graph');
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [navigationTarget, setNavigationTarget] = useState<NavigationTarget>(
+    typeof window !== 'undefined' ? parseNavigationTargetFromUrl() : DEFAULT_TARGET,
+  );
+  // Auth state — null = loading, false = unauthenticated, true = authenticated
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+
+  const currentPage = navigationTarget.page;
+
+  const navigate = useCallback((target: NavigateInput, entityId?: string | null) => {
+    setNavigationTarget(normalizeNavigationTarget(target, entityId));
+  }, []);
+
+  // Auth: check current session on mount + subscribe to auth state changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthenticated(!!data.session);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthenticated(!!session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Global Ctrl+K / Cmd+K shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handlePopState = () => {
+      setNavigationTarget(parseNavigationTargetFromUrl());
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nextUrl = `${window.location.pathname}${serializeNavigationTarget(navigationTarget)}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState({}, '', nextUrl);
+    }
+  }, [navigationTarget]);
+
+  const pageFocus = useMemo(
+    () => ({
+      caseId: navigationTarget.entityType === 'case' ? navigationTarget.entityId : null,
+      orderId: navigationTarget.entityType === 'order' ? navigationTarget.entityId : null,
+      paymentId: navigationTarget.entityType === 'payment' ? navigationTarget.entityId : null,
+      returnId: navigationTarget.entityType === 'return' ? navigationTarget.entityId : null,
+      approvalId: navigationTarget.entityType === 'approval' ? navigationTarget.entityId : null,
+      customerId: navigationTarget.entityType === 'customer' ? navigationTarget.entityId : null,
+      workflowId: navigationTarget.entityType === 'workflow' ? navigationTarget.entityId : null,
+    }),
+    [navigationTarget],
+  );
+
+  // Loading auth state
+  if (authenticated === null) {
+    return (
+      <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Unauthenticated — only show login if Supabase auth is actually configured
+  // (i.e. a real VITE_SUPABASE_ANON_KEY is set). In demo mode we skip the gate.
+  const hasSupabaseAuth = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (hasSupabaseAuth && !authenticated) {
+    return <Login onLogin={() => setAuthenticated(true)} />;
+  }
 
   return (
+    <PermissionsProvider>
     <div className="bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200 font-sans h-screen flex overflow-hidden selection:bg-purple-200 dark:selection:bg-purple-900">
-      <Sidebar 
-        currentPage={currentPage} 
-        onPageChange={setCurrentPage} 
+      <Sidebar
+        currentPage={currentPage}
+        currentSection={navigationTarget.section}
+        onPageChange={navigate}
         isOpen={isLeftSidebarOpen}
         onToggle={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
+        onSearchOpen={() => setSearchOpen(true)}
       />
       <main className="flex-1 flex flex-col h-full min-w-0 relative">
-        {currentPage === 'inbox' && <Inbox />}
-        {currentPage === 'home' && <Home />}
-        {currentPage === 'ai_studio' && <AIStudio />}
-        {currentPage === 'workflows' && <Workflows />}
-        {currentPage === 'approvals' && <Approvals />}
-        {currentPage === 'knowledge' && <Knowledge />}
-        {currentPage === 'customers' && <Customers />}
-        {currentPage === 'tools_integrations' && <ToolsIntegrations />}
-        {currentPage === 'reports' && <Reports />}
-        {currentPage === 'settings' && <Settings />}
-        {currentPage === 'upgrade' && <Upgrade />}
-        {currentPage === 'profile' && <Profile />}
-        {currentPage === 'orders' && <Orders />}
-        {currentPage === 'returns' && <Returns />}
-        {currentPage === 'payments' && <Payments />}
-        {currentPage === 'case_graph' && <CaseGraph onPageChange={setCurrentPage} />}
+        <PageErrorBoundary page={currentPage}>
+          {currentPage === 'inbox' && <Inbox focusCaseId={pageFocus.caseId} />}
+          {currentPage === 'super_agent' && <SuperAgent onNavigate={navigate} activeTarget={navigationTarget} />}
+          {currentPage === 'home' && <Home onNavigate={navigate} />}
+          {currentPage === 'ai_studio' && <AIStudio />}
+          {currentPage === 'workflows' && <Workflows onNavigate={navigate} focusWorkflowId={pageFocus.workflowId} />}
+          {currentPage === 'approvals' && <Approvals onNavigate={navigate} focusApprovalId={pageFocus.approvalId} />}
+          {currentPage === 'knowledge' && <Knowledge />}
+          {currentPage === 'customers' && <Customers onNavigate={navigate} focusCustomerId={pageFocus.customerId} />}
+          {currentPage === 'tools_integrations' && <ToolsIntegrations />}
+          {currentPage === 'reports' && <Reports />}
+          {currentPage === 'settings' && <Settings onNavigate={navigate} initialSection={navigationTarget.section} />}
+          {currentPage === 'upgrade' && <Upgrade />}
+          {currentPage === 'profile' && <Profile onNavigate={navigate} initialSection={navigationTarget.section} />}
+          {currentPage === 'orders' && <Orders onNavigate={navigate} focusEntityId={pageFocus.orderId} focusSection={navigationTarget.section} />}
+          {currentPage === 'returns' && <Returns onNavigate={navigate} focusEntityId={pageFocus.returnId} focusSection={navigationTarget.section} />}
+          {currentPage === 'payments' && <Payments onNavigate={navigate} focusEntityId={pageFocus.paymentId} focusSection={navigationTarget.section} />}
+          {currentPage === 'case_graph' && <CaseGraph onPageChange={(target) => {
+            if (typeof target === 'string') {
+              navigate(target, target === 'case_graph' ? pageFocus.caseId : null);
+            } else {
+              navigate(target);
+            }
+          }} focusCaseId={pageFocus.caseId} />}
+        </PageErrorBoundary>
       </main>
+
+      {/* Global Search modal — rendered outside main so it overlays everything */}
+      <GlobalSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onNavigate={navigate}
+      />
     </div>
+    </PermissionsProvider>
   );
 }

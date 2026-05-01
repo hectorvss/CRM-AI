@@ -294,7 +294,7 @@ const AGENTS: AgentDef[] = [
     safety: CRITICAL_SAFETY,
   },
   {
-    id: 'agent_fraud',
+    id: 'agent_fraud_detect',
     slug: 'fraud-detector',
     name: 'Fraud Detector',
     description: 'Identifies fraud signals in payment and customer behavior patterns.',

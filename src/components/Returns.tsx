@@ -1,10 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Return, ReturnTab, OrderTimelineEvent } from '../types';
+import { Return, ReturnTab, OrderTimelineEvent, NavigateFn } from '../types';
 import CaseHeader from './CaseHeader';
-import { returnsApi } from '../api/client';
-import { useApi } from '../api/hooks';
+import type { CaseHeaderMenuItem } from './CaseHeader';
+import CaseCopilotPanel from './CaseCopilotPanel';
+import MinimalTimeline from './MinimalTimeline';
+import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
+import { ActionModal } from './ActionModal';
+import { casesApi, returnsApi } from '../api/client';
+import { useApi, useMutation } from '../api/hooks';
+import LoadingState from './LoadingState';
 
 type RightTab = 'details' | 'copilot';
+type ReturnActionView = 'approve' | 'reject' | 'received' | 'refund' | 'block' | null;
+type ReturnModal = 'approve' | 'reject' | 'received' | 'refund' | 'block' | null;
+
+interface ReturnsProps {
+  onNavigate?: NavigateFn;
+  focusEntityId?: string | null;
+  focusSection?: string | null;
+}
 
 const formatDate = (value?: string | null) =>
   value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
@@ -22,246 +36,67 @@ const formatRelativeLabel = (value?: string | null) => {
 const titleCase = (value?: string | null) =>
   value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
 
-const RETURNS: Return[] = [
-  {
-    id: '1',
-    orderId: 'ORD-55210',
-    returnId: 'RET-20491',
-    customerName: 'Sarah Jenkins',
-    brand: 'Supply Main Store',
-    date: 'Oct 12',
-    total: '$129.00',
-    currency: 'USD',
-    country: 'USA',
-    returnType: 'Standard',
-    returnReason: 'Wrong size',
-    returnValue: '$129.00',
-    riskLevel: 'Low',
-    orderStatus: 'Delivered',
-    returnStatus: 'Return received',
-    inspectionStatus: 'Awaiting inspection',
-    refundStatus: 'Refund pending',
-    approvalStatus: 'No approval yet',
-    carrierStatus: 'Carrier delivered',
-    summary: 'Return received, refund pending',
-    lastUpdate: '2m ago',
-    badges: ['Received', 'Refund Pending'],
-    tab: 'refund_pending',
-    conflictDetected: 'Return received in WMS but refund not yet triggered',
-    recommendedNextAction: 'Review return condition',
-    context: 'Customer received the item but it was too small. Return was received today.',
-    method: 'Carrier return',
-    systemStates: {
-      oms: 'Delivered',
-      returnsPlatform: 'Received',
-      wms: 'Received',
-      carrier: 'Delivered',
-      psp: 'Captured',
-      canonical: 'Return Received'
-    },
-    relatedCases: [
-      { id: 'CAS-88219', type: 'Refund Inquiry', status: 'Open' }
-    ],
-    timeline: [
-      { id: 't1', type: 'system', content: 'Return requested', time: 'Oct 12, 09:00 AM' },
-      { id: 't2', type: 'system', content: 'Return policy checked', time: 'Oct 12, 09:05 AM' },
-      { id: 't3', type: 'system', content: 'Return approved', time: 'Oct 12, 09:10 AM' },
-      { id: 't4', type: 'system', content: 'Return label created', time: 'Oct 12, 10:00 AM' },
-      { id: 't5', type: 'system', content: 'Parcel dropped off', time: 'Oct 13, 02:00 PM' },
-      { id: 't6', type: 'system', content: 'Parcel in transit', time: 'Oct 14, 08:00 AM' },
-      { id: 't7', type: 'system', content: 'Parcel received by warehouse', time: 'Oct 16, 11:00 AM' }
-    ]
-  },
-  {
-    id: '2',
-    orderId: 'ORD-55211',
-    returnId: 'RET-20492',
-    customerName: 'Marcus Chen',
-    brand: 'Supply B2B',
-    date: 'Oct 13',
-    total: '$2,450.00',
-    currency: 'USD',
-    country: 'USA',
-    returnType: 'B2B Return',
-    returnReason: 'Damaged item',
-    returnValue: '$450.00',
-    riskLevel: 'Medium',
-    orderStatus: 'Delivered',
-    returnStatus: 'Pending review',
-    inspectionStatus: 'N/A',
-    refundStatus: 'N/A',
-    approvalStatus: 'Pending',
-    carrierStatus: 'N/A',
-    summary: 'Return requested, waiting review',
-    lastUpdate: '15m ago',
-    badges: ['Return Request', 'Approval Needed', 'High Risk'],
-    tab: 'pending_review',
-    conflictDetected: 'High value return request for damaged item',
-    recommendedNextAction: 'Request manual inspection',
-    context: 'Customer claims 5 units arrived damaged. High value return.',
-    method: 'Self-ship',
-    systemStates: {
-      oms: 'Delivered',
-      returnsPlatform: 'Pending Review',
-      wms: 'N/A',
-      carrier: 'N/A',
-      psp: 'Captured',
-      canonical: 'Return Requested'
-    },
-    relatedCases: [
-      { id: 'CAS-88220', type: 'Damaged item dispute', status: 'Open' }
-    ],
-    timeline: [
-      { id: 't1', type: 'system', content: 'Return requested', time: 'Oct 13, 11:00 AM' },
-      { id: 't2', type: 'system', content: 'Return policy checked', time: 'Oct 13, 11:05 AM' }
-    ]
-  },
-  {
-    id: '3',
-    orderId: 'ORD-55213',
-    returnId: 'RET-20493',
-    customerName: 'Elena Rodriguez',
-    brand: 'Supply Main Store',
-    date: 'Oct 11',
-    total: '$89.50',
-    currency: 'USD',
-    country: 'USA',
-    returnType: 'Standard',
-    returnReason: 'Wrong size',
-    returnValue: '$89.50',
-    riskLevel: 'Low',
-    orderStatus: 'Delivered',
-    returnStatus: 'In transit',
-    inspectionStatus: 'N/A',
-    refundStatus: 'N/A',
-    approvalStatus: 'Approved',
-    carrierStatus: 'In transit',
-    summary: 'Return label created, in transit',
-    lastUpdate: '3h ago',
-    badges: ['In Transit'],
-    tab: 'in_transit',
-    conflictDetected: 'Return label created but no carrier update received',
-    recommendedNextAction: 'Wait for carrier update',
-    context: 'Label was generated 2 days ago but carrier hasn\'t scanned it yet.',
-    method: 'Carrier return',
-    systemStates: {
-      oms: 'Delivered',
-      returnsPlatform: 'Label Created',
-      wms: 'N/A',
-      carrier: 'Label Created',
-      psp: 'Captured',
-      canonical: 'Return In Transit'
-    },
-    relatedCases: [],
-    timeline: [
-      { id: 't1', type: 'system', content: 'Return requested', time: 'Oct 11, 10:00 AM' },
-      { id: 't2', type: 'system', content: 'Return approved', time: 'Oct 11, 10:10 AM' },
-      { id: 't3', type: 'system', content: 'Return label created', time: 'Oct 11, 11:00 AM' }
-    ]
-  },
-  {
-    id: '4',
-    orderId: 'ORD-55214',
-    returnId: 'RET-20494',
-    customerName: 'James Wilson',
-    brand: 'Supply Main Store',
-    date: 'Oct 14',
-    total: '$54.00',
-    currency: 'USD',
-    country: 'USA',
-    returnType: 'Standard',
-    returnReason: 'Policy exception',
-    returnValue: '$54.00',
-    riskLevel: 'High',
-    orderStatus: 'Delivered',
-    returnStatus: 'Blocked',
-    inspectionStatus: 'N/A',
-    refundStatus: 'N/A',
-    approvalStatus: 'Rejected',
-    carrierStatus: 'N/A',
-    summary: 'Return blocked by policy mismatch',
-    lastUpdate: '5m ago',
-    badges: ['Blocked', 'Conflict', 'High Risk'],
-    tab: 'blocked',
-    conflictDetected: 'Return requested outside of 30-day window',
-    recommendedNextAction: 'Resolve OMS / WMS mismatch',
-    context: 'Customer is trying to return an item from 45 days ago.',
-    method: 'Carrier return',
-    systemStates: {
-      oms: 'Delivered',
-      returnsPlatform: 'Blocked',
-      wms: 'N/A',
-      carrier: 'N/A',
-      psp: 'Captured',
-      canonical: 'Return Blocked'
-    },
-    relatedCases: [
-      { id: 'CAS-88223', type: 'Return policy exception', status: 'Open' }
-    ],
-    timeline: [
-      { id: 't1', type: 'system', content: 'Return requested', time: 'Oct 14, 11:10 AM' },
-      { id: 't2', type: 'system', content: 'Return policy checked', time: 'Oct 14, 11:11 AM' },
-      { id: 't3', type: 'system', content: 'Return blocked', time: 'Oct 14, 11:12 AM' }
-    ]
-  },
-  {
-    id: '5',
-    orderId: 'ORD-55215',
-    returnId: 'RET-20495',
-    customerName: 'Linda Thompson',
-    brand: 'Supply Main Store',
-    date: 'Oct 10',
-    total: '$210.00',
-    currency: 'USD',
-    country: 'USA',
-    returnType: 'Standard',
-    returnReason: 'Wrong size',
-    returnValue: '$210.00',
-    riskLevel: 'Low',
-    orderStatus: 'Delivered',
-    returnStatus: 'Received',
-    inspectionStatus: 'Inspected',
-    refundStatus: 'Refund pending',
-    approvalStatus: 'Approval needed',
-    carrierStatus: 'Delivered',
-    summary: 'Return inspected, refund approval needed',
-    lastUpdate: '1h ago',
-    badges: ['Received', 'Inspection', 'Approval Needed'],
-    tab: 'refund_pending',
-    conflictDetected: 'Item inspection flagged damage discrepancy',
-    recommendedNextAction: 'Trigger refund',
-    context: 'Item was received with minor damage not reported by customer.',
-    method: 'Carrier return',
-    systemStates: {
-      oms: 'Delivered',
-      returnsPlatform: 'Inspected',
-      wms: 'Received',
-      carrier: 'Delivered',
-      psp: 'Captured',
-      canonical: 'Awaiting Refund Approval'
-    },
-    relatedCases: [
-      { id: 'CAS-88224', type: 'Refund approval request', status: 'Open' }
-    ],
-    timeline: [
-      { id: 't1', type: 'system', content: 'Return requested', time: 'Oct 10, 02:00 PM' },
-      { id: 't2', type: 'system', content: 'Return approved', time: 'Oct 10, 02:10 PM' },
-      { id: 't3', type: 'system', content: 'Parcel received by warehouse', time: 'Oct 12, 11:00 AM' },
-      { id: 't4', type: 'system', content: 'Inspection completed', time: 'Oct 14, 09:00 AM' },
-      { id: 't5', type: 'system', content: 'Approval requested', time: 'Oct 14, 09:05 AM' }
-    ]
-  }
-];
+const truncateLabel = (value?: string | null, max = 54) => {
+  if (!value) return 'No action needed';
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+};
 
-export default function Returns() {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
+export default function Returns({ onNavigate, focusEntityId, focusSection }: ReturnsProps) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [activeTab, setActiveTab] = useState<ReturnTab>('all');
   const [selectedId, setSelectedId] = useState<string>('1');
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [activeActionView, setActiveActionView] = useState<ReturnActionView>('approve');
+  const [activeModal, setActiveModal] = useState<ReturnModal>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  const { mutate: updateStatus, loading: statusLoading } = useMutation(
+    ({ id, payload }: { id: string; payload: Record<string, any> }) =>
+      returnsApi.updateStatus(id, payload)
+  );
+
+  const [caseActionMsg, setCaseActionMsg] = useState<string | null>(null);
+
+  const showFeedback = (msg: string, isError = false) => {
+    if (isError) { setActionError(msg); setActionSuccess(null); }
+    else { setActionSuccess(msg); setActionError(null); }
+    setTimeout(() => { setActionSuccess(null); setActionError(null); }, 4000);
+  };
+
+  const showCaseMsg = (msg: string) => {
+    setCaseActionMsg(msg);
+    setTimeout(() => setCaseActionMsg(null), 3500);
+  };
+
+  const handleResolveCase = async (caseId: string) => {
+    try { await casesApi.resolve(caseId); showCaseMsg('Case marked as resolved'); }
+    catch { showCaseMsg('Failed to resolve case'); }
+  };
+
+  const handleSnoozeCase = async (caseId: string) => {
+    try { await casesApi.updateStatus(caseId, 'snoozed'); showCaseMsg('Case snoozed'); }
+    catch { showCaseMsg('Failed to snooze case'); }
+  };
+
+  const handleCloseCase = async (caseId: string) => {
+    try { await casesApi.updateStatus(caseId, 'closed'); showCaseMsg('Case closed'); }
+    catch { showCaseMsg('Failed to close case'); }
+  };
+
+  const handleStatusUpdate = async (status: string, label: string) => {
+    if (!selectedReturn) return;
+    const result = await updateStatus({ id: selectedReturn.id, payload: { status } });
+    if (result) showFeedback(`Return ${label} successfully`);
+    else showFeedback(`Failed to ${label.toLowerCase()} return`, true);
+  };
 
   // Fetch canonical return contexts from the backend. Static fixtures are not
   // used as runtime data so this view stays aligned with Inbox/Case Graph.
-  const { data: apiReturns } = useApi(() => returnsApi.list(), [], []);
+  const { data: apiReturns, loading: returnsLoading, error: returnsError } = useApi(() => returnsApi.list(), [], []);
 
   const mapApiReturn = (r: any): Return => ({
     id: r.id,
@@ -314,16 +149,35 @@ export default function Returns() {
   });
 
   const returns = useMemo(
-    () => (apiReturns && apiReturns.length > 0) ? apiReturns.map(mapApiReturn) : [],
+    () => (Array.isArray(apiReturns) ? apiReturns.map(mapApiReturn) : []),
     [apiReturns],
   );
+  const isInitialReturnsLoading = returnsLoading && returns.length === 0;
 
   const filteredReturns = useMemo(() => returns.filter(r => {
     if (activeTab === 'all') return true;
     return r.tab === activeTab;
   }), [activeTab, returns]);
 
-  const selectedReturn = filteredReturns.find(r => r.id === selectedId) || filteredReturns[0] || null;
+  const selectedReturnBase = filteredReturns.find(r => r.id === selectedId) || filteredReturns[0] || null;
+  const { data: selectedReturnDetailRaw, loading: selectedReturnDetailLoading } = useApi(
+    () => selectedReturnBase ? returnsApi.get(selectedReturnBase.id) : Promise.resolve(null),
+    [selectedReturnBase?.id],
+    null,
+  );
+
+  const selectedReturn = useMemo(() => {
+    if (!selectedReturnBase) return null;
+    if (!selectedReturnDetailRaw) return selectedReturnBase;
+
+    const detail = mapApiReturn(selectedReturnDetailRaw);
+    return {
+      ...selectedReturnBase,
+      ...detail,
+      timeline: detail.timeline.length > 0 ? detail.timeline : selectedReturnBase.timeline,
+      relatedCases: detail.relatedCases.length > 0 ? detail.relatedCases : selectedReturnBase.relatedCases,
+    };
+  }, [selectedReturnBase, selectedReturnDetailRaw]);
 
   useEffect(() => {
     if (filteredReturns.length === 0) {
@@ -334,6 +188,35 @@ export default function Returns() {
       setSelectedId(filteredReturns[0].id);
     }
   }, [activeTab, filteredReturns, selectedId]);
+
+  useEffect(() => {
+    if (focusSection && ['all', 'pending_review', 'in_transit', 'received', 'refund_pending', 'blocked'].includes(focusSection) && activeTab !== focusSection) {
+      setActiveTab(focusSection as ReturnTab);
+    }
+  }, [activeTab, focusSection]);
+
+  useEffect(() => {
+    if (!focusEntityId) return;
+    if (activeTab !== 'all') {
+      setActiveTab('all');
+    }
+    if (selectedId !== focusEntityId) {
+      setSelectedId(focusEntityId);
+    }
+  }, [activeTab, focusEntityId, selectedId]);
+
+  useEffect(() => {
+    setActiveActionView('approve');
+  }, [selectedId]);
+
+  if (isInitialReturnsLoading) {
+    return (
+      <LoadingState
+        title="Loading returns"
+        message="Fetching canonical return data from Supabase."
+      />
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
@@ -354,9 +237,9 @@ export default function Returns() {
                 <span 
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as ReturnTab)}
-                  className={`px-3 py-1 text-sm font-medium rounded-full cursor-pointer transition-colors ${
+                  className={`px-3 py-1 text-sm font-medium rounded-md cursor-pointer transition-colors ${
                     activeTab === tab.id 
-                      ? 'bg-black text-white' 
+                      ? 'bg-blue-600 text-white' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                 >
@@ -367,19 +250,28 @@ export default function Returns() {
           </div>
           <div className="flex items-center space-x-3">
             <div className="flex items-center text-gray-500 text-sm mr-2">
-              <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+              <span className="w-2 h-2 rounded-md bg-green-500 mr-2"></span>
               Sync Active
             </div>
-            <button className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-              <span className="material-symbols-outlined">filter_list</span>
+            <button
+              onClick={() => setActiveTab('all')}
+              title="Clear filters"
+              className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              <span className="material-symbols-outlined">filter_list_off</span>
             </button>
           </div>
         </div>
 
         {/* Main Content Area: Three Panes */}
+        {returnsError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {returnsError}
+          </div>
+        )}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Pane: List */}
-          <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
+          <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-blue-600/5">
             <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
               {filteredReturns.map((ret) => (
                 <div
@@ -434,7 +326,14 @@ export default function Returns() {
                 </button>
               </div>
             )}
-            {selectedReturn ? (
+            {selectedReturnDetailLoading ? (
+              <div className="flex-1 flex items-center justify-center px-8 py-12">
+                <div className="max-w-sm text-center">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Loading return details</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Fetching the return timeline and context together.</p>
+                </div>
+              </div>
+            ) : selectedReturn ? (
               <div className="p-8 w-full space-y-8">
                 <CaseHeader
                   caseId={selectedReturn.relatedCases[0]?.id || selectedReturn.returnId}
@@ -449,9 +348,59 @@ export default function Returns() {
                   fulfillmentStatus={selectedReturn.systemStates.wms}
                   refundStatus={selectedReturn.refundStatus}
                   approvalStatus={selectedReturn.approvalStatus}
-                  recommendedAction={selectedReturn.recommendedNextAction || 'No action needed'}
+                  recommendedAction={truncateLabel(selectedReturn.recommendedNextAction)}
                   conflictDetected={selectedReturn.conflictDetected}
+                  onResolve={selectedReturn.relatedCases[0]?.id ? () => handleResolveCase(selectedReturn.relatedCases[0].id) : undefined}
+                  onSnooze={selectedReturn.relatedCases[0]?.id ? () => handleSnoozeCase(selectedReturn.relatedCases[0].id) : undefined}
+                  moreMenuItems={selectedReturn.relatedCases[0]?.id ? ([
+                    { label: 'Open in Inbox', icon: 'inbox', onClick: () => onNavigate?.('inbox', selectedReturn.relatedCases[0].id) },
+                    { label: 'Close case', icon: 'cancel', onClick: () => handleCloseCase(selectedReturn.relatedCases[0].id), danger: true },
+                  ] satisfies CaseHeaderMenuItem[]) : []}
                 />
+
+                {/* Action Bar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[
+                    { id: 'approve', label: 'Approve' },
+                    { id: 'reject', label: 'Reject' },
+                    { id: 'received', label: 'Mark received' },
+                    { id: 'refund', label: 'Process refund' },
+                    { id: 'block', label: 'Block' },
+                  ].map((action) => (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => setActiveActionView(action.id as ReturnActionView)}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                        activeActionView === action.id
+                          ? 'bg-black text-white dark:bg-white dark:text-black'
+                          : 'border border-black/10 bg-white text-gray-700 hover:bg-black/[0.03] dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+
+                {caseActionMsg && (
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-sm font-medium">
+                    <span className="material-symbols-outlined text-base">check_circle</span>
+                    {caseActionMsg}
+                  </div>
+                )}
+                {/* Feedback toast */}
+                {(actionSuccess || actionError) && (
+                  <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                    actionError
+                      ? 'bg-red-50 text-red-700 border border-red-200'
+                      : 'bg-green-50 text-green-700 border border-green-200'
+                  }`}>
+                    <span className="material-symbols-outlined text-base">
+                      {actionError ? 'error' : 'check_circle'}
+                    </span>
+                    {actionError || actionSuccess}
+                  </div>
+                )}
 
                 {/* Grid Info */}
                 <div className="grid grid-cols-3 gap-6">
@@ -492,54 +441,127 @@ export default function Returns() {
                   <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">Risk Analysis</span>
                     <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-2 h-2 rounded-full ${selectedReturn.riskLevel === 'Low' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <div className={`w-2 h-2 rounded-md ${selectedReturn.riskLevel === 'Low' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                       <span className="text-sm font-bold text-gray-900 dark:text-white">{selectedReturn.riskLevel} Risk</span>
                     </div>
                     <p className="text-[10px] text-gray-500 leading-relaxed">Based on customer history and return frequency.</p>
                   </div>
                 </div>
 
-                {/* Timeline */}
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Return Timeline</h3>
-                  <div className="space-y-4">
-                    {selectedReturn.timeline.map((event, idx) => {
-                      const getEventIcon = (content: string) => {
-                        const c = content.toLowerCase();
-                        if (c.includes('requested')) return 'assignment_return';
-                        if (c.includes('policy')) return 'verified';
-                        if (c.includes('approved')) return 'check_circle';
-                        if (c.includes('label created')) return 'label';
-                        if (c.includes('dropped off')) return 'local_shipping';
-                        if (c.includes('in transit')) return 'pending_actions';
-                        if (c.includes('received')) return 'warehouse';
-                        if (c.includes('blocked')) return 'block';
-                        if (c.includes('inspection')) return 'fact_check';
-                        if (c.includes('approval')) return 'approval';
-                        return 'circle';
-                      };
-
-                      return (
-                        <div key={event.id} className="flex gap-4 relative">
-                          {idx !== selectedReturn.timeline.length - 1 && (
-                            <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-gray-100 dark:bg-gray-800"></div>
-                          )}
-                          <div className={`w-6 h-6 rounded-full border-2 border-white dark:border-gray-900 z-10 flex items-center justify-center ${
-                            idx === selectedReturn.timeline.length - 1 ? 'bg-secondary text-white' : 'bg-gray-100 text-gray-400'
-                          }`}>
-                            <span className="material-symbols-outlined text-[14px]">{getEventIcon(event.content)}</span>
+                {activeActionView ? (
+                  <MinimalCard
+                    title={
+                      activeActionView === 'approve'
+                        ? 'Approval workspace'
+                        : activeActionView === 'reject'
+                          ? 'Rejection workspace'
+                          : activeActionView === 'received'
+                            ? 'Warehouse receipt workspace'
+                            : activeActionView === 'refund'
+                              ? 'Refund workspace'
+                              : 'Blocking workspace'
+                    }
+                    subtitle="Review the current return posture, understand the outcome, and then confirm the operational writeback from the same surface."
+                    icon={
+                      activeActionView === 'approve'
+                        ? 'task_alt'
+                        : activeActionView === 'reject'
+                          ? 'cancel'
+                          : activeActionView === 'received'
+                            ? 'warehouse'
+                            : activeActionView === 'refund'
+                              ? 'payments'
+                              : 'block'
+                    }
+                    action={<MinimalPill tone="active">{selectedReturn.returnStatus}</MinimalPill>}
+                  >
+                    <div className="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+                      <div className="space-y-4">
+                        <div className="rounded-[20px] border border-black/5 bg-[#fbfbfa] p-4 dark:border-white/10 dark:bg-[#151515]">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">What changes now</p>
+                          <p className="mt-3 text-sm font-medium leading-6 text-gray-900 dark:text-white">
+                            {activeActionView === 'approve'
+                              ? 'Approve the current return path so the replacement and courtesy-credit flow can continue with the expected writeback.'
+                              : activeActionView === 'reject'
+                                ? 'Reject the return path and leave a clear denied state for the downstream teams handling customer communications and policy follow-up.'
+                                : activeActionView === 'received'
+                                  ? 'Mark the item as physically received so warehouse and refund dependencies can move out of transit assumptions.'
+                                  : activeActionView === 'refund'
+                                    ? `Move this return into refund processing for ${selectedReturn.returnValue}, preserving the approval and risk trail.`
+                                    : 'Block the return path when you need to halt progression and surface the record as requiring manual intervention.'}
+                          </p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Approval</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedReturn.approvalStatus}</p>
                           </div>
-                          <div className="flex-1 pb-4">
-                            <div className="flex justify-between items-start">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">{event.content}</p>
-                              <span className="text-xs text-gray-400">{event.time}</span>
-                            </div>
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Refund</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedReturn.refundStatus}</p>
+                          </div>
+                          <div className="rounded-[18px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#171717]">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Risk</p>
+                            <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{selectedReturn.riskLevel} Risk</p>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        <div className="flex flex-wrap gap-2">
+                          <MinimalPill>{selectedReturn.method}</MinimalPill>
+                          <MinimalPill>{selectedReturn.systemStates.wms}</MinimalPill>
+                          <MinimalPill>{selectedReturn.systemStates.carrier}</MinimalPill>
+                          <MinimalPill>{selectedReturn.recommendedNextAction || 'No blocker detected'}</MinimalPill>
+                        </div>
+                      </div>
+                      <div className="space-y-3 rounded-[22px] border border-black/5 bg-white p-5 dark:border-white/10 dark:bg-[#171717]">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Operator notes</p>
+                          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                            {selectedReturn.conflictDetected || selectedReturn.context || 'No additional conflict is currently attached to this return. You can still confirm the next return-state writeback from this panel.'}
+                          </p>
+                        </div>
+                        <div className="space-y-2.5">
+                          {activeActionView === 'approve' ? (
+                            <button onClick={() => setActiveModal('approve')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">task_alt</span>
+                              Confirm approval
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          ) : activeActionView === 'reject' ? (
+                            <button onClick={() => setActiveModal('reject')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">cancel</span>
+                              Confirm rejection
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          ) : activeActionView === 'received' ? (
+                            <button onClick={() => setActiveModal('received')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors shadow-sm">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">warehouse</span>
+                              Confirm receipt
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          ) : activeActionView === 'refund' ? (
+                            <button onClick={() => setActiveModal('refund')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">payments</span>
+                              Start refund processing
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          ) : (
+                            <button onClick={() => setActiveModal('block')} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                              <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">block</span>
+                              Block this return
+                              <span className="material-symbols-outlined text-[14px] ml-auto opacity-70">chevron_right</span>
+                            </button>
+                          )}
+                          <button onClick={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('inbox', selectedReturn.relatedCases[0].id)} className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/30 text-gray-700 dark:text-gray-200 hover:bg-gray-50 px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                            <span className="material-symbols-outlined text-[16px] text-gray-400">inbox</span>
+                            Open linked case
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </MinimalCard>
+                ) : null}
+
+                <MinimalTimeline title="Return Timeline" events={selectedReturn.timeline} />
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center px-8 py-12">
@@ -553,79 +575,62 @@ export default function Returns() {
 
           {/* Right Pane: Copilot/Details */}
           <div className={`transition-all duration-300 bg-white dark:bg-card-dark flex flex-col overflow-hidden ${isRightSidebarOpen ? 'w-80 lg:w-96 border-l border-gray-100 dark:border-gray-700' : 'w-0 border-none'}`}>
-            <div className="flex items-center border-b border-gray-100 dark:border-gray-700 px-2 flex-shrink-0">
-              <button
-                onClick={() => setRightTab('details')}
-                className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${
-                  rightTab === 'details'
-                    ? 'text-gray-900 border-gray-900 font-bold'
-                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
-                }`}
-              >
-                Details
-              </button>
-              <button
-                onClick={() => setRightTab('copilot')}
-                className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 flex items-center justify-center gap-2 ${
-                  rightTab === 'copilot'
-                    ? 'text-secondary border-secondary font-bold bg-purple-50/50 dark:bg-purple-900/10'
-                    : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border-transparent'
-                }`}
-              >
-                <span className="material-symbols-outlined text-lg">smart_toy</span>
-                Copilot
-              </button>
-              <div className="flex items-center gap-1 ml-auto">
-                <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
-                  <span className="material-symbols-outlined text-[20px]">settings</span>
-                </button>
-                <button 
-                  onClick={() => setIsRightSidebarOpen(false)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
-                  title="Hide Sidebar"
+            <div className="relative flex items-center justify-center px-4 pt-4 pb-3 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setRightTab('details')}
+                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+                    rightTab === 'details'
+                      ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                      : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                  }`}
                 >
-                  <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
+                  Details
+                </button>
+                <button
+                  onClick={() => setRightTab('copilot')}
+                  className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
+                    rightTab === 'copilot'
+                      ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
+                      : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
+                  }`}
+                >
+                  Copilot
                 </button>
               </div>
+              <button
+                onClick={() => setIsRightSidebarOpen(false)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
+                title="Hide Sidebar"
+              >
+                <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
+              </button>
             </div>
 
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              {rightTab === 'copilot' ? (
-                <div className="p-4 flex flex-col gap-4">
-                  {/* Copilot Case Summary */}
-                  <div className="flex gap-2">
-                    <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-white flex-shrink-0 mt-0.5">
-                      <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                    </div>
-                    <div className="flex flex-col gap-2 max-w-[85%] w-full">
-                      <div className="bg-purple-50 dark:bg-purple-900/20 text-gray-800 dark:text-gray-200 text-sm py-2.5 px-3.5 rounded-2xl rounded-tl-sm border border-purple-100 dark:border-purple-800/30">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Return Summary</h4>
-                        <p className="leading-relaxed mb-3">Return {selectedReturn.returnId} for {selectedReturn.customerName} is currently {selectedReturn.returnStatus}. The refund amount is {selectedReturn.total}.</p>
-                        
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Conflict Detection</h4>
-                        <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-800/30 text-xs text-red-700 dark:text-red-400 mb-3">
-                          {selectedReturn.returnStatus === 'Delayed' ? 'Return received but refund not triggered in OMS.' : 'No major conflicts detected.'}
-                        </div>
-
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-secondary mb-2">Recommended Action</h4>
-                        <p className="text-xs bg-white/50 dark:bg-black/20 p-2 rounded border border-purple-100 dark:border-purple-800/30 italic">
-                          {selectedReturn.recommendedNextAction || "Monitor return transit status."}
-                        </p>
-                      </div>
-                      
-                      <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-gray-500 mb-2">Suggested Reply</h4>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed italic mb-3">
-                          "Hi {selectedReturn.customerName.split(' ')[0]}, I'm monitoring your return {selectedReturn.returnId}. It's currently {selectedReturn.returnStatus} and I'll update you as soon as the refund is processed."
-                        </p>
-                        <button className="w-full py-1.5 bg-secondary text-white text-xs font-bold rounded-lg hover:opacity-90 transition-opacity">
-                          Apply to Composer
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+              {!selectedReturn ? (
+                <div className="p-4 text-sm text-gray-500 dark:text-gray-400">
+                  Copilot is disabled until a return is selected.
                 </div>
+              ) : rightTab === 'copilot' ? (
+                <CaseCopilotPanel
+                  caseId={selectedReturn.relatedCases[0]?.id || selectedReturn.returnId}
+                  entityLabel="return"
+                  subjectLabel={`Return ${selectedReturn.returnId}`}
+                  summary={`Return ${selectedReturn.returnId} for ${selectedReturn.customerName} is currently ${selectedReturn.returnStatus}. The refund amount is ${selectedReturn.total}.`}
+                  conflict={selectedReturn.conflictDetected || (selectedReturn.returnStatus === 'Delayed' ? 'Return received but refund not triggered in OMS.' : 'No major conflicts detected.')}
+                  recommendation={selectedReturn.recommendedNextAction || 'Monitor return transit status.'}
+                  riskLabel={selectedReturn.riskLevel}
+                  isLoading={selectedReturnDetailLoading}
+                  suggestedQuestions={['What\'s the current status?', 'What should I do next?', 'Why is this return high risk?', 'Walk me through this return']}
+                  onOpenModule={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('case_graph', selectedReturn.relatedCases[0].id)}
+                  moduleButtonLabel="View case"
+                  onApply={() => selectedReturn.relatedCases[0]?.id && onNavigate?.('inbox', selectedReturn.relatedCases[0].id)}
+                  applyButtonLabel="Open case"
+                  emptyTitle="Ask me anything about this return"
+                  emptySubtitle="I have full context: order, WMS, carrier and history."
+                />
               ) : (
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {/* Case Attributes */}
@@ -757,20 +762,249 @@ export default function Returns() {
               )}
             </div>
 
-            {/* Copilot Input Area */}
-            <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
-              <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
-                <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
-                <input className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9" placeholder="Ask a question..." type="text" />
-                <div className="flex items-center gap-1">
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">sort</span></button>
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">arrow_upward</span></button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
+
+      {/* ── Action Modals ────────────────────────────────────────────── */}
+      {selectedReturn && (
+        <>
+          {/* Approve modal */}
+          <ActionModal
+            open={activeModal === 'approve'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('approved', 'Approved');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="default"
+            icon="task_alt"
+            title="Approve Return"
+            subtitle={`Approve return ${selectedReturn.returnId} for ${selectedReturn.customerName}`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Return Value', value: selectedReturn.returnValue },
+              { label: 'Current Status', value: selectedReturn.returnStatus },
+              { label: 'Approval Status', value: selectedReturn.approvalStatus },
+              { label: 'Risk Level', value: selectedReturn.riskLevel, accent: selectedReturn.riskLevel === 'High' },
+            ]}
+            steps={[
+              {
+                text: 'Set return status to Approved',
+                detail: 'Update the return record in the system and mark the approval flag as confirmed.',
+              },
+              {
+                text: 'Unblock downstream dependencies',
+                detail: 'Allow refund processing, warehouse receipt confirmation, and customer notifications to proceed.',
+              },
+              {
+                text: 'Log action in audit trail',
+                detail: 'Record the approval with your user ID, timestamp, and current return state for compliance.',
+              },
+            ]}
+            considerations={[
+              { text: 'Approving this return authorises the customer for a refund of ' + selectedReturn.returnValue + '. Ensure the return reason and inspection notes are correct before proceeding.' },
+              { text: 'If the item has not yet been received by the warehouse, approval will not automatically trigger the refund. A warehouse receipt confirmation is still required.' },
+              { text: 'High-risk returns should be reviewed against the customer\'s return history before approval.' },
+            ]}
+            confirmLabel="Approve Return"
+          />
+
+          {/* Reject modal */}
+          <ActionModal
+            open={activeModal === 'reject'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('rejected', 'Rejected');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="danger"
+            icon="cancel"
+            title="Reject Return"
+            subtitle={`Reject return ${selectedReturn.returnId} and deny the refund request`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Return Value', value: selectedReturn.returnValue, accent: true },
+              { label: 'Return Reason', value: selectedReturn.returnReason },
+              { label: 'Current Status', value: selectedReturn.returnStatus },
+              { label: 'Risk Level', value: selectedReturn.riskLevel, accent: selectedReturn.riskLevel === 'High' },
+            ]}
+            steps={[
+              {
+                text: 'Set return status to Rejected',
+                detail: 'Update the return record to reflect the denied state across all connected systems.',
+              },
+              {
+                text: 'Block refund and replacement flows',
+                detail: 'Prevent any refund processing or replacement shipment from being triggered automatically.',
+              },
+              {
+                text: 'Log rejection with reason',
+                detail: 'Record the rejection decision in the audit trail. Customer-facing communication must be handled separately.',
+              },
+            ]}
+            considerations={[
+              { text: 'This action is difficult to reverse. The customer will not receive a refund unless the rejection is manually overridden by a supervisor.' },
+              { text: 'Ensure the rejection complies with your return policy and consumer protection laws for the customer\'s country (' + selectedReturn.country + ').' },
+              { text: 'Customer communication after rejection is not automated — you will need to send a rejection notice manually through the messaging workspace.' },
+            ]}
+            confirmLabel="Reject Return"
+          />
+
+          {/* Mark Received modal */}
+          <ActionModal
+            open={activeModal === 'received'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('received', 'Marked Received');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="default"
+            icon="warehouse"
+            title="Mark as Received"
+            subtitle={`Confirm warehouse receipt for return ${selectedReturn.returnId}`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Carrier Status', value: selectedReturn.systemStates.carrier },
+              { label: 'WMS Status', value: selectedReturn.systemStates.wms },
+              { label: 'Inspection Status', value: selectedReturn.inspectionStatus },
+              { label: 'Return Value', value: selectedReturn.returnValue },
+            ]}
+            steps={[
+              {
+                text: 'Mark item as physically received in warehouse',
+                detail: 'Update the WMS record to confirm the item has arrived and is available for inspection.',
+              },
+              {
+                text: 'Trigger inspection workflow (if configured)',
+                detail: 'Notify the QA team that the item is ready for condition assessment before the refund is released.',
+              },
+              {
+                text: 'Update carrier and OMS states',
+                detail: 'Sync the received status back to the carrier tracking record and the OMS order line.',
+              },
+              {
+                text: 'Unlock refund processing',
+                detail: 'Once received, the return can proceed to refund processing if already approved.',
+              },
+            ]}
+            considerations={[
+              { text: 'Only mark as received if the item has physically arrived at your warehouse. Premature confirmation may trigger an incorrect refund.' },
+              { text: 'If inspection is required, the refund will not be released automatically until the inspection is completed and the item condition is confirmed.' },
+              { text: 'Carrier tracking discrepancies should be resolved before confirming receipt to avoid reconciliation issues later.' },
+            ]}
+            confirmLabel="Confirm Receipt"
+          />
+
+          {/* Process Refund modal */}
+          <ActionModal
+            open={activeModal === 'refund'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('refund_pending', 'Refund Initiated');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="warning"
+            icon="payments"
+            title={`Process Refund — ${selectedReturn.returnValue}`}
+            subtitle={`Initiate refund processing for ${selectedReturn.customerName}`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Refund Amount', value: selectedReturn.returnValue, accent: true },
+              { label: 'Refund Status', value: selectedReturn.refundStatus },
+              { label: 'Approval Status', value: selectedReturn.approvalStatus },
+              { label: 'Receipt Status', value: selectedReturn.inspectionStatus },
+            ]}
+            steps={[
+              {
+                text: 'Validate refund prerequisites',
+                detail: 'Confirm the return is approved, the item is received, and no disputes are blocking the refund.',
+              },
+              {
+                text: `Submit refund of ${selectedReturn.returnValue} to payment provider`,
+                detail: `Send the refund request via ${selectedReturn.systemStates.psp}. Processing time depends on the original payment method.`,
+              },
+              {
+                text: 'Update refund status to Pending',
+                detail: 'Mark the return as Refund Pending in the system until the PSP confirms the transaction.',
+              },
+              {
+                text: 'Notify customer (if configured)',
+                detail: 'Send a refund confirmation notification to the customer via their preferred channel.',
+              },
+            ]}
+            considerations={[
+              { text: 'Refund of ' + selectedReturn.returnValue + ' is irreversible once submitted to the payment provider. Double-check the return value before confirming.' },
+              { text: 'Processing times vary by payment method: card refunds typically take 5–10 business days; bank transfers may take longer.' },
+              { text: 'If the original payment has expired or the card was cancelled, the refund may fail and require manual processing through the PSP dashboard.' },
+            ]}
+            confirmLabel="Initiate Refund"
+          />
+
+          {/* Block modal */}
+          <ActionModal
+            open={activeModal === 'block'}
+            onClose={() => setActiveModal(null)}
+            onConfirm={async () => {
+              setModalLoading(true);
+              await handleStatusUpdate('blocked', 'Blocked');
+              setModalLoading(false);
+              setActiveModal(null);
+            }}
+            loading={modalLoading}
+            variant="danger"
+            icon="block"
+            title="Block Return"
+            subtitle={`Halt all processing for return ${selectedReturn.returnId}`}
+            context={[
+              { label: 'Return ID', value: selectedReturn.returnId },
+              { label: 'Customer', value: selectedReturn.customerName },
+              { label: 'Return Value', value: selectedReturn.returnValue, accent: true },
+              { label: 'Current Status', value: selectedReturn.returnStatus },
+              { label: 'Risk Level', value: selectedReturn.riskLevel, accent: selectedReturn.riskLevel === 'High' },
+              { label: 'Return Reason', value: selectedReturn.returnReason },
+            ]}
+            steps={[
+              {
+                text: 'Set return status to Blocked',
+                detail: 'Immediately halt all active processing pipelines for this return across OMS, WMS, and PSP.',
+              },
+              {
+                text: 'Freeze refund and approval flows',
+                detail: 'Prevent any refund from being issued or approval from advancing until the block is manually lifted.',
+              },
+              {
+                text: 'Flag for manual review',
+                detail: 'Mark the return as requiring supervisor review and add it to the blocked returns queue.',
+              },
+            ]}
+            considerations={[
+              { text: 'Blocking this return will prevent any automated processing from continuing. A supervisor must manually unblock it to resume.' },
+              { text: 'If the customer has already been notified of an approved refund, blocking may create a support escalation.' },
+              { text: 'High-risk blocks should be documented with an internal note explaining the reason for the block for compliance and audit purposes.' },
+              { text: 'Blocking does not cancel any return shipment in transit — coordinate with the carrier separately if needed.' },
+            ]}
+            confirmLabel="Block Return"
+          />
+        </>
+      )}
     </div>
   );
 }
+

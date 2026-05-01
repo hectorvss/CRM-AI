@@ -18,8 +18,10 @@
 import { randomUUID } from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-import { getDb } from '../db/client.js';
 import { config } from '../config.js';
+import { createAgentRepository } from '../data/agents.js';
+import { createAgentRunRepository } from '../data/agentRuns.js';
+import { createBillingRepository } from '../data/billing.js';
 import { logger } from '../utils/logger.js';
 import { buildContextWindow } from '../pipeline/contextWindow.js';
 import { resolveAgentKnowledgeBundle, type KnowledgeProfile } from '../services/agentKnowledge.js';
@@ -63,54 +65,49 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     extraContext = {},
   } = opts;
 
-  const db = getDb();
+  const agentRepo = createAgentRepository();
+  const runRepo = createAgentRunRepository();
+  const billingRepo = createBillingRepository();
+  const scope = { tenantId, workspaceId };
   const runId = randomUUID();
 
-  // ── Step 1: Load agent ────────────────────────────────────────────────────
-  const agentRow = db.prepare(
-    'SELECT * FROM agents WHERE slug = ? AND tenant_id = ? AND is_active = 1'
-  ).get(agentSlug, tenantId) as AgentRow | undefined;
+  // ── Step 1 & 2: Load agent and active version ─────────────────────────────
+  // getEffectiveAgent handles finding the agent by slug for the tenant and ensuring a published version
+  const agentBundle = await agentRepo.getEffectiveAgent({ tenantId, workspaceId }, agentSlug);
 
-  if (!agentRow) {
-    logger.warn('Agent not found or inactive', { agentSlug, tenantId });
-    return { success: false, error: `Agent "${agentSlug}" not found or inactive` };
+  if (!agentBundle) {
+    logger.warn('Agent not found, inactive, or has no published version', { agentSlug, tenantId });
+    return { success: false, error: `Agent "${agentSlug}" not found or unavailable` };
   }
 
-  // ── Step 2: Load active version ───────────────────────────────────────────
-  const versionRow = agentRow.current_version_id
-    ? db.prepare('SELECT * FROM agent_versions WHERE id = ? AND status = ?')
-        .get(agentRow.current_version_id, 'published') as AgentVersionRow | undefined
-    : undefined;
-
-  if (!versionRow) {
-    logger.warn('No published version for agent', { agentSlug, agentId: agentRow.id });
-    return { success: false, error: `Agent "${agentSlug}" has no published version` };
-  }
+  // The repository returns an enriched object with version details
+  const agentRow = agentBundle;
+  const versionId = agentBundle.version_id;
 
   // ── Step 3: Merge profiles ────────────────────────────────────────────────
   const permissions: PermissionProfile = {
     ...DEFAULT_PERMISSION_PROFILE,
-    ...safeJson<Partial<PermissionProfile>>(versionRow.permission_profile, {}),
+    ...safeJson<Partial<PermissionProfile>>(agentRow.permission_profile, {}),
   };
   const reasoning: ReasoningProfile = {
     ...DEFAULT_REASONING_PROFILE,
-    ...safeJson<Partial<ReasoningProfile>>(versionRow.reasoning_profile, {}),
+    ...safeJson<Partial<ReasoningProfile>>(agentRow.reasoning_profile, {}),
   };
   const safety: SafetyProfile = {
     ...DEFAULT_SAFETY_PROFILE,
-    ...safeJson<Partial<SafetyProfile>>(versionRow.safety_profile, {}),
+    ...safeJson<Partial<SafetyProfile>>(agentRow.safety_profile, {}),
   };
-  const knowledgeProfile = safeJson<KnowledgeProfile>(versionRow.knowledge_profile, {});
+  const knowledgeProfile = safeJson<KnowledgeProfile>(agentRow.knowledge_profile, {});
 
   // ── Step 4: Build context window ──────────────────────────────────────────
-  const contextWindow = buildContextWindow(caseId, tenantId);
+  const contextWindow = await buildContextWindow(caseId, tenantId, workspaceId);
   if (!contextWindow) {
     logger.warn('Could not build context window for case', { caseId, tenantId });
     return { success: false, error: `Case "${caseId}" not found` };
   }
 
   const latestMessage = contextWindow.messages[contextWindow.messages.length - 1]?.content ?? null;
-  const knowledgeBundle = resolveAgentKnowledgeBundle({
+  const knowledgeBundle = await resolveAgentKnowledgeBundle({
     tenantId,
     workspaceId,
     knowledgeProfile,
@@ -130,15 +127,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   // ── Step 6: Create agent_run row ──────────────────────────────────────────
   const startedAt = new Date().toISOString();
   try {
-    db.prepare(`
-      INSERT INTO agent_runs
-        (id, agent_id, agent_version_id, case_id, tenant_id, workspace_id,
-         trigger_event, status, started_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?)
-    `).run(
-      runId, agentRow.id, versionRow.id, caseId, tenantId, workspaceId,
-      triggerEvent, startedAt,
-    );
+    await runRepo.create(scope, {
+      id: runId,
+      agent_id: agentRow.id,
+      agent_version_id: versionId,
+      case_id: caseId,
+      trigger_event: triggerEvent,
+      status: 'running',
+      started_at: startedAt,
+    });
   } catch (err) {
     logger.error('Failed to create agent_run row', { err, agentSlug, caseId });
     // Continue anyway — don't block execution on DB issues
@@ -182,22 +179,16 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   const status = result.success ? 'completed' : 'failed';
 
   try {
-    db.prepare(`
-      UPDATE agent_runs SET
-        status = ?, confidence = ?, tokens_used = ?, cost_credits = ?,
-        summary = ?, output = ?, error_message = ?, finished_at = ?
-      WHERE id = ?
-    `).run(
-      status,
-      result.confidence ?? null,
-      result.tokensUsed ?? null,
-      result.costCredits ?? null,
-      result.summary ?? null,
-      result.output ? JSON.stringify(result.output) : null,
-      result.error ?? null,
-      finishedAt,
-      runId,
-    );
+    await runRepo.update(scope, runId, {
+      status, 
+      confidence: result.confidence ?? null, 
+      tokens_used: result.tokensUsed ?? null, 
+      cost_credits: result.costCredits ?? null,
+      summary: result.summary ?? null, 
+      output: result.output ? JSON.stringify(result.output) : null, 
+      error_message: result.error ?? null, 
+      finished_at: finishedAt,
+    });
   } catch (err) {
     logger.error('Failed to update agent_run row', { err, runId });
   }
@@ -205,17 +196,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
   // ── Step 11: Update credit ledger ─────────────────────────────────────────
   if (result.costCredits && result.costCredits > 0) {
     try {
-      db.prepare(`
-        INSERT INTO credit_ledger
-          (id, org_id, tenant_id, entry_type, amount, reason, reference_id, balance_after, occurred_at)
-        VALUES (?, ?, ?, 'debit', ?, ?, ?, 0, ?)
-      `).run(
-        randomUUID(), tenantId, tenantId,
-        result.costCredits,
-        `Agent run: ${agentSlug}`,
-        runId,
-        finishedAt,
-      );
+      await billingRepo.addLedgerEntry({ tenantId }, {
+        org_id: tenantId,
+        entry_type: 'debit',
+        amount: result.costCredits,
+        reason: `Agent run: ${agentSlug}`,
+        reference_id: runId,
+        balance_after: 0, // Should ideally calculate or let repo handle
+        occurred_at: finishedAt,
+      });
     } catch { /* non-critical */ }
   }
 

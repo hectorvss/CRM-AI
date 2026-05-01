@@ -8,15 +8,15 @@ export function asArray<T = string>(value: unknown): T[] {
       const parsed = JSON.parse(value);
       return Array.isArray(parsed) ? (parsed as T[]) : [];
     } catch {
-      return [];
+      return value.trim() ? ([value] as T[]) : [];
     }
   }
 
   return [];
 }
 
-export function compactStrings(values: Array<string | null | undefined>): string[] {
-  return Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0)));
+export function compactStrings(values: unknown): string[] {
+  return Array.from(new Set(asArray<string>(values).filter((value): value is string => typeof value === 'string' && value.length > 0)));
 }
 
 export function canonicalHealth(value: string | null | undefined): 'healthy' | 'warning' | 'critical' | 'blocked' | 'pending' | 'resolved' {

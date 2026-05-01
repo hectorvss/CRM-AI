@@ -1,129 +1,285 @@
 import React from 'react';
+import { useApi } from '../api/hooks';
+import { casesApi, approvalsApi, reportsApi, workspacesApi } from '../api/client';
+import type { NavigateFn } from '../types';
 
-export default function Home() {
+interface HomeProps {
+  onNavigate?: NavigateFn;
+}
+
+const titleCase = (s?: string | null) =>
+  s ? s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
+
+const formatRelative = (value?: string | null) => {
+  if (!value) return '—';
+  const diff = Math.max(1, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+  if (diff < 60) return `${diff}m ago`;
+  if (diff < 1440) return `${Math.round(diff / 60)}h ago`;
+  return `${Math.round(diff / 1440)}d ago`;
+};
+
+const PRIORITY_COLOR: Record<string, string> = {
+  critical: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  high:     'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  medium:   'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  low:      'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+};
+
+const SLA_COLOR: Record<string, string> = {
+  breached: 'text-red-500',
+  at_risk:  'text-orange-500',
+  on_track: 'text-green-500',
+};
+
+export default function Home({ onNavigate }: HomeProps) {
+  const navigate = (page: string, entityId?: string | null) => {
+    onNavigate?.(entityId ? { page: page as any, entityId } : page as any);
+  };
+
+  // ── Data ─────────────────────────────────────────────────────
+  const { data: workspace } = useApi(workspacesApi.currentContext, [], null as any);
+  const { data: overview }  = useApi(() => reportsApi.overview('7d'), [], null as any);
+  const { data: openCases, loading: casesLoading } = useApi(
+    () => casesApi.list({ status: 'open', limit: '5' }),
+    [], [] as any[]
+  );
+  const { data: pendingApprovals, loading: approvalsLoading } = useApi(
+    () => approvalsApi.list({ status: 'pending', limit: '5' }),
+    [], [] as any[]
+  );
+  const { data: allOpen } = useApi(
+    () => casesApi.list({ status: 'open', limit: '999' }),
+    [], [] as any[]
+  );
+
+  const openCount      = Array.isArray(allOpen) ? allOpen.length : '—';
+  const pendingCount   = Array.isArray(pendingApprovals) ? pendingApprovals.length : '—';
+  const slaRisk        = Array.isArray(allOpen) ? allOpen.filter((c: any) => c.sla_status === 'at_risk' || c.sla_status === 'breached').length : '—';
+  const aiResolution   = overview?.kpis?.find((k: any) => k.label?.toLowerCase().includes('resolution'))?.value ?? overview?.ai_resolution_rate ?? '—';
+
+  const wsName = workspace?.name || workspace?.workspace?.name || 'Workspace';
+  const today  = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const kpis = [
+    {
+      label: 'Open Cases',
+      value: openCount,
+      icon: 'inbox',
+      color: 'text-blue-600 dark:text-blue-400',
+      bg: 'bg-blue-50 dark:bg-blue-900/20',
+      action: () => navigate('inbox'),
+    },
+    {
+      label: 'Pending Approvals',
+      value: pendingCount,
+      icon: 'check_circle',
+      color: 'text-orange-600 dark:text-orange-400',
+      bg: 'bg-orange-50 dark:bg-orange-900/20',
+      action: () => navigate('approvals'),
+    },
+    {
+      label: 'SLA at Risk',
+      value: slaRisk,
+      icon: 'timer',
+      color: 'text-red-600 dark:text-red-400',
+      bg: 'bg-red-50 dark:bg-red-900/20',
+      action: () => navigate('inbox'),
+    },
+    {
+      label: 'AI Resolution Rate',
+      value: aiResolution,
+      icon: 'auto_awesome',
+      color: 'text-purple-600 dark:text-purple-400',
+      bg: 'bg-purple-50 dark:bg-purple-900/20',
+      action: () => navigate('reports'),
+    },
+  ];
+
+  const quickActions = [
+    { label: 'Open Inbox',       icon: 'inbox',          action: () => navigate('inbox'),              desc: 'View & manage cases' },
+    { label: 'Super Agent',      icon: 'auto_awesome',   action: () => navigate('super_agent'),        desc: 'AI command center' },
+    { label: 'Run a Workflow',   icon: 'account_tree',   action: () => navigate('workflows'),          desc: 'Automate operations' },
+    { label: 'View Reports',     icon: 'bar_chart',      action: () => navigate('reports'),            desc: 'Performance insights' },
+    { label: 'Knowledge Base',   icon: 'menu_book',      action: () => navigate('knowledge'),          desc: 'Articles & policies' },
+    { label: 'Customers',        icon: 'people',         action: () => navigate('customers'),          desc: 'Customer profiles' },
+  ];
+
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
-      <div className="flex items-center justify-between px-4 py-2 bg-purple-100 dark:bg-purple-900/40 rounded-t-xl mx-2 mt-2 mb-2 border border-purple-200 dark:border-purple-800/50">
-        <div className="text-sm text-gray-800 dark:text-gray-200">
-          You have <span className="font-bold">12 days left</span> in your <a className="underline decoration-1 underline-offset-2 hover:text-purple-700 dark:hover:text-purple-300" href="#">Advanced trial</a>. Includes unlimited Fin usage.
+    <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0 overflow-hidden">
+      <div className="flex-1 mx-2 my-2 overflow-y-auto custom-scrollbar">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{wsName}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{today}</p>
         </div>
-        <div className="flex items-center space-x-4">
-          <button className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white underline decoration-1 underline-offset-2">Talk to sales</button>
-          <button className="bg-primary text-white text-sm font-medium px-4 py-1.5 rounded-full hover:bg-black dark:hover:bg-gray-700 transition-colors">Buy Intercom</button>
+
+        {/* KPI row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {kpis.map((kpi) => (
+            <button
+              key={kpi.label}
+              onClick={kpi.action}
+              className="bg-white dark:bg-card-dark rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm text-left hover:shadow-md transition-shadow group"
+            >
+              <div className={`w-10 h-10 rounded-lg ${kpi.bg} flex items-center justify-center mb-3`}>
+                <span className={`material-symbols-outlined text-xl ${kpi.color}`}>{kpi.icon}</span>
+              </div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                {kpi.value}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{kpi.label}</div>
+            </button>
+          ))}
         </div>
-      </div>
-      <div className="flex-1 bg-card-light dark:bg-card-dark rounded-2xl mx-2 shadow-sm overflow-y-auto custom-scrollbar relative">
-        <div className="max-w-5xl mx-auto px-12 py-12">
-          <h1 className="font-display text-4xl text-gray-900 dark:text-white mb-8 text-center leading-tight">
-            Get started with AI-first customer support
-          </h1>
-          <div className="flex items-center mb-6 pl-4">
-            <div className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-600 mr-3"></div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Get set up</h2>
-            <span className="mx-2 text-gray-400">•</span>
-            <span className="text-gray-500 dark:text-gray-400">0 / 5 steps</span>
-          </div>
-          <div className="space-y-4">
-            <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm bg-white dark:bg-gray-800 transition-all duration-300">
-              <div className="flex flex-col md:flex-row gap-8">
-                <div className="flex-1">
-                  <div className="flex items-start mb-2">
-                    <div className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-500 mr-3 mt-0.5 flex-shrink-0"></div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Set up channels to connect with your customers</h3>
-                  </div>
-                  <div className="ml-9">
-                    <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed mb-4">
-                      Manage conversations across all channels: Messenger, email, phone, WhatsApp, SMS, and social. Support your customers wherever they are, directly from your Intercom Inbox. <a className="underline decoration-gray-400 hover:text-gray-900 dark:hover:text-white" href="#">More about channels</a>
-                    </p>
-                    <button className="bg-primary text-white px-5 py-2 rounded-full text-sm font-medium hover:opacity-90 transition-opacity">
-                      Set up channels
+
+        {/* Two columns: Recent Cases + Pending Approvals */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          {/* Recent Cases */}
+          <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-blue-500">inbox</span>
+                Recent Open Cases
+              </h2>
+              <button
+                onClick={() => navigate('inbox')}
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+              >
+                View all
+              </button>
+            </div>
+
+            {casesLoading ? (
+              <div className="p-6 space-y-3">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : !Array.isArray(openCases) || openCases.length === 0 ? (
+              <div className="p-8 text-center">
+                <span className="material-symbols-outlined text-4xl text-gray-300 dark:text-gray-600 block mb-2">inbox</span>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No open cases</p>
+                <p className="text-xs text-gray-400 mt-1">All caught up!</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-50 dark:divide-gray-800">
+                {openCases.slice(0, 5).map((c: any) => (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => navigate('inbox', c.id)}
+                      className="w-full px-5 py-3.5 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs font-mono text-gray-400">{c.case_number || c.id?.slice(0, 8)}</span>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${PRIORITY_COLOR[c.priority] || PRIORITY_COLOR.low}`}>
+                            {titleCase(c.priority)}
+                          </span>
+                          {c.sla_status && c.sla_status !== 'on_track' && (
+                            <span className={`material-symbols-outlined text-[14px] ${SLA_COLOR[c.sla_status] || ''}`}>timer</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
+                          {c.ai_diagnosis || titleCase(c.type) || 'Open case'}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">{c.customer_name || 'Unknown'} · {formatRelative(c.created_at)}</p>
+                      </div>
+                      <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-lg mt-0.5 flex-shrink-0">chevron_right</span>
                     </button>
-                  </div>
-                </div>
-                <div className="md:w-64 lg:w-72 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden relative group cursor-pointer border border-gray-100 dark:border-gray-600">
-                  <img alt="Dashboard Preview Abstract" className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-500" src="https://picsum.photos/seed/intercom/600/400" referrerPolicy="no-referrer" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
-                  <div className="absolute top-4 right-4 left-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 text-xs opacity-95">
-                    <div className="flex justify-between items-center mb-2 text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700 pb-1">
-                      <span>Views</span>
-                      <span className="material-icons-outlined text-sm">expand_more</span>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between p-1 bg-gray-100 dark:bg-gray-700 rounded">
-                        <div className="flex items-center gap-1">
-                          <span className="material-icons-outlined text-blue-500 text-xs">public</span>
-                          <span className="font-medium text-gray-800 dark:text-gray-200">All channels</span>
-                        </div>
-                        <span className="text-gray-400">47</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Pending Approvals */}
+          <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-orange-500">check_circle</span>
+                Pending Approvals
+              </h2>
+              <button
+                onClick={() => navigate('approvals')}
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+              >
+                View all
+              </button>
+            </div>
+
+            {approvalsLoading ? (
+              <div className="p-6 space-y-3">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="h-12 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : !Array.isArray(pendingApprovals) || pendingApprovals.length === 0 ? (
+              <div className="p-8 text-center">
+                <span className="material-symbols-outlined text-4xl text-gray-300 dark:text-gray-600 block mb-2">check_circle</span>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No pending approvals</p>
+                <p className="text-xs text-gray-400 mt-1">Queue is clear</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-50 dark:divide-gray-800">
+                {pendingApprovals.slice(0, 5).map((a: any) => (
+                  <li key={a.id}>
+                    <button
+                      onClick={() => navigate('approvals', a.id)}
+                      className="w-full px-5 py-3.5 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left"
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                        a.action_type?.includes('refund') ? 'bg-red-50 dark:bg-red-900/20' :
+                        a.action_type?.includes('cancel') ? 'bg-orange-50 dark:bg-orange-900/20' :
+                        'bg-blue-50 dark:bg-blue-900/20'
+                      }`}>
+                        <span className={`material-symbols-outlined text-[16px] ${
+                          a.action_type?.includes('refund') ? 'text-red-500' :
+                          a.action_type?.includes('cancel') ? 'text-orange-500' :
+                          'text-blue-500'
+                        }`}>
+                          {a.action_type?.includes('refund') ? 'currency_exchange' :
+                           a.action_type?.includes('cancel') ? 'cancel' :
+                           a.action_type?.includes('publish') ? 'publish' : 'pending_actions'}
+                        </span>
                       </div>
-                      <div className="flex items-center justify-between p-1">
-                        <div className="flex items-center gap-1">
-                          <span className="material-icons-outlined text-gray-400 text-xs">chat_bubble_outline</span>
-                          <span className="text-gray-600 dark:text-gray-300">Messenger</span>
-                        </div>
-                        <span className="text-gray-400">21</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800 dark:text-gray-200 truncate font-medium">
+                          {titleCase(a.action_type) || 'Approval needed'}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">
+                          {a.requested_by || 'System'} · {formatRelative(a.created_at)}
+                        </p>
                       </div>
-                      <div className="flex items-center justify-between p-1">
-                        <div className="flex items-center gap-1">
-                          <span className="material-icons-outlined text-gray-400 text-xs">mail_outline</span>
-                          <span className="text-gray-600 dark:text-gray-300">Email</span>
-                        </div>
-                        <span className="text-gray-400">14</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-10 h-10 bg-black/30 dark:bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <span className="material-icons-outlined text-white text-2xl">play_arrow</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="border-b border-gray-100 dark:border-gray-800 last:border-0 py-4 px-6 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg cursor-pointer group transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600 mr-3 group-hover:border-gray-400 dark:group-hover:border-gray-500"></div>
-                  <span className="font-medium text-gray-800 dark:text-gray-200">Invite your teammates to collaborate faster</span>
-                </div>
-                <span className="material-icons-outlined text-gray-400 dark:text-gray-600 transform rotate-0 group-hover:text-gray-600 dark:group-hover:text-gray-300">chevron_right</span>
-              </div>
-            </div>
-            <div className="border-b border-gray-100 dark:border-gray-800 last:border-0 py-4 px-6 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg cursor-pointer group transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600 mr-3 group-hover:border-gray-400 dark:group-hover:border-gray-500"></div>
-                  <span className="font-medium text-gray-800 dark:text-gray-200">Add content from Zendesk to power your AI</span>
-                </div>
-                <span className="material-icons-outlined text-gray-400 dark:text-gray-600 transform rotate-0 group-hover:text-gray-600 dark:group-hover:text-gray-300">chevron_right</span>
-              </div>
-            </div>
-            <div className="border-b border-gray-100 dark:border-gray-800 last:border-0 py-4 px-6 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg cursor-pointer group transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600 mr-3 group-hover:border-gray-400 dark:group-hover:border-gray-500"></div>
-                  <span className="font-medium text-gray-800 dark:text-gray-200">Set up Fin to give instant answers</span>
-                </div>
-                <span className="material-icons-outlined text-gray-400 dark:text-gray-600 transform rotate-0 group-hover:text-gray-600 dark:group-hover:text-gray-300">chevron_right</span>
-              </div>
-            </div>
-            <div className="border-b border-gray-100 dark:border-gray-800 last:border-0 py-4 px-6 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg cursor-pointer group transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-600 mr-3 group-hover:border-gray-400 dark:group-hover:border-gray-500"></div>
-                  <span className="font-medium text-gray-800 dark:text-gray-200">Ask Copilot to find an answer instantly</span>
-                </div>
-                <span className="material-icons-outlined text-gray-400 dark:text-gray-600 transform rotate-0 group-hover:text-gray-600 dark:group-hover:text-gray-300">chevron_right</span>
-              </div>
-            </div>
+                      <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-lg mt-0.5 flex-shrink-0">chevron_right</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
-        <div className="absolute bottom-6 right-8">
-          <button className="w-14 h-14 bg-black dark:bg-white rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
-            <span className="material-icons-outlined text-white dark:text-black text-2xl">chat</span>
-          </button>
+
+        {/* Quick Actions */}
+        <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-5 mb-6">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {quickActions.map((action) => (
+              <button
+                key={action.label}
+                onClick={action.action}
+                className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:border-indigo-200 dark:hover:border-indigo-700 border border-transparent transition-all group"
+              >
+                <span className="material-symbols-outlined text-2xl text-gray-500 dark:text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  {action.icon}
+                </span>
+                <div className="text-center">
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 leading-tight">{action.label}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 leading-tight">{action.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-16 h-1 bg-gray-300 dark:bg-gray-600 rounded-full opacity-50"></div>
       </div>
     </div>
   );

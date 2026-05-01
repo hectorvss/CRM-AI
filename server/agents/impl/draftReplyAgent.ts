@@ -1,17 +1,6 @@
-/**
- * server/agents/impl/draftReplyAgent.ts
- *
- * Draft Reply Agent — generates an AI-drafted customer reply.
- *
- * This is the agent-engine wrapper around the existing draftReply pipeline.
- * Rather than duplicating the Gemini prompt logic, it enqueues a DRAFT_REPLY
- * job if one isn't already pending — this keeps the pipeline idempotent.
- *
- * If a draft already exists (pending_review), the agent returns success
- * without creating a duplicate.
- */
-
 import { getDb } from '../../db/client.js';
+import { getDatabaseProvider } from '../../db/provider.js';
+import { getSupabaseAdmin } from '../../db/supabase.js';
 import { enqueue } from '../../queue/client.js';
 import { JobType } from '../../queue/types.js';
 import { logger } from '../../utils/logger.js';
@@ -23,14 +12,32 @@ export const draftReplyAgentImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, tenantId, workspaceId, traceId } = ctx;
     const caseId = contextWindow.case.id;
-    const db = getDb();
+    const provider = getDatabaseProvider();
+    const useSupabase = provider === 'supabase';
+    const db = useSupabase ? null : getDb();
+    const supabase = useSupabase ? getSupabaseAdmin() : null;
 
-    // ── Check if draft already pending ───────────────────────────────────
-    const existing = db.prepare(`
-      SELECT id FROM draft_replies
-      WHERE case_id = ? AND status = 'pending_review'
-      ORDER BY generated_at DESC LIMIT 1
-    `).get(caseId) as { id: string } | undefined;
+    let existing: { id: string } | undefined;
+    if (useSupabase) {
+      const { data, error } = await supabase!
+        .from('draft_replies')
+        .select('id')
+        .eq('case_id', caseId)
+        .eq('status', 'pending_review')
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .order('generated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      existing = data ?? undefined;
+    } else {
+      existing = db!.prepare(`
+        SELECT id FROM draft_replies
+        WHERE case_id = ? AND status = 'pending_review' AND tenant_id = ? AND workspace_id = ?
+        ORDER BY generated_at DESC LIMIT 1
+      `).get(caseId, tenantId, workspaceId) as { id: string } | undefined;
+    }
 
     if (existing) {
       return {
@@ -41,21 +48,13 @@ export const draftReplyAgentImpl: AgentImplementation = {
       };
     }
 
-    // ── Determine appropriate tone from context ───────────────────────────
     let tone: 'professional' | 'friendly' | 'empathetic' = 'professional';
     const { customer, conflicts } = contextWindow;
+    if (customer?.segment === 'vip' || conflicts.length > 0) tone = 'empathetic';
+    else if (contextWindow.case.priority === 'normal' || contextWindow.case.priority === 'low') tone = 'friendly';
 
-    if (customer?.segment === 'vip') {
-      tone = 'empathetic';
-    } else if (conflicts.length > 0) {
-      tone = 'empathetic';
-    } else if (contextWindow.case.priority === 'normal' || contextWindow.case.priority === 'low') {
-      tone = 'friendly';
-    }
-
-    // ── Enqueue DRAFT_REPLY job ───────────────────────────────────────────
     try {
-      enqueue(
+      await enqueue(
         JobType.DRAFT_REPLY,
         { caseId, tone },
         { tenantId, workspaceId, traceId, priority: 6 },

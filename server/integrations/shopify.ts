@@ -25,6 +25,8 @@ import type {
   ReadableCustomers,
   ReadableFulfillments,
   ReadableReturns,
+  WritableOrders,
+  WritableReturns,
   CanonicalOrder,
   CanonicalOrderLineItem,
   CanonicalCustomer,
@@ -259,7 +261,7 @@ function mapReturn(r: ShopifyReturn): CanonicalReturn {
 
 export class ShopifyAdapter
   extends BaseIntegrationClient
-  implements IntegrationAdapter, ReadableOrders, ReadableCustomers, ReadableFulfillments, ReadableReturns
+  implements IntegrationAdapter, ReadableOrders, ReadableCustomers, ReadableFulfillments, ReadableReturns, WritableOrders, WritableReturns
 {
   readonly system = 'shopify' as const;
   private readonly webhookSecret: string;
@@ -379,5 +381,65 @@ export class ShopifyAdapter
     } catch {
       return [];
     }
+  }
+
+  // ── Writable: Orders ──────────────────────────────────────────────────────
+
+  /**
+   * Cancel a Shopify order via POST /orders/:id/cancel.json
+   * Shopify requires the order to be unfulfilled or partially fulfilled.
+   * On success returns the updated canonical order.
+   */
+  async cancelOrder(params: {
+    orderExternalId: string;
+    reason?: string;
+    email?: boolean;
+    restock?: boolean;
+  }): Promise<CanonicalOrder> {
+    const body: Record<string, any> = {
+      reason:  params.reason ?? 'other',
+      email:   params.email  ?? true,
+      restock: params.restock ?? true,
+    };
+    const res = await this.post<{ order: ShopifyOrder }>(
+      `/orders/${params.orderExternalId}/cancel.json`,
+      body,
+    );
+    return mapOrder(res.order);
+  }
+
+  // ── Writable: Returns ─────────────────────────────────────────────────────
+
+  /**
+   * Create a return request via Shopify REST.
+   * Shopify's REST return creation is limited — we send a refund with restock.
+   * Full return management requires the GraphQL API; this is the REST fallback.
+   */
+  async createReturn(params: {
+    orderExternalId: string;
+    lineItems: Array<{ lineItemId: string; quantity: number; reason?: string }>;
+    notifyCustomer?: boolean;
+  }): Promise<CanonicalReturn> {
+    const refundLineItems = params.lineItems.map((li) => ({
+      line_item_id: li.lineItemId,
+      quantity:     li.quantity,
+      restock_type: 'return',
+    }));
+
+    const body = {
+      refund: {
+        note:    `Return requested via CRM-AI: ${params.lineItems.map((l) => l.reason).filter(Boolean).join(', ')}`,
+        notify:  params.notifyCustomer ?? true,
+        restock: true,
+        refund_line_items: refundLineItems,
+      },
+    };
+
+    const res = await this.post<{ refund: ShopifyReturn }>(
+      `/orders/${params.orderExternalId}/refunds.json`,
+      body,
+    );
+
+    return mapReturn({ ...res.refund, order_id: Number(params.orderExternalId) });
   }
 }

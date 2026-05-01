@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url TEXT,
   role TEXT NOT NULL DEFAULT 'agent',
   is_system INTEGER NOT NULL DEFAULT 0,
+  preferences TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 );
 
@@ -267,7 +268,8 @@ CREATE TABLE IF NOT EXISTS draft_replies (
   reviewed_at TEXT,
   sent_at TEXT,                              -- set when the draft is actually delivered
   updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-  tenant_id TEXT NOT NULL
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default'
 );
 
 CREATE TABLE IF NOT EXISTS internal_notes (
@@ -277,7 +279,8 @@ CREATE TABLE IF NOT EXISTS internal_notes (
   created_by TEXT,
   created_by_type TEXT DEFAULT 'human',
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-  tenant_id TEXT NOT NULL
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default'
 );
 
 -- ============================================================
@@ -352,6 +355,11 @@ CREATE TABLE IF NOT EXISTS payments (
   recommended_action TEXT,
   badges TEXT DEFAULT '[]',
   tab TEXT DEFAULT 'all',
+  authorized_at TEXT,
+  captured_at TEXT,
+  refund_status TEXT,
+  refund_details TEXT DEFAULT '[]',
+  reconciliation_details TEXT DEFAULT '{}',
   refund_amount REAL,
   refund_type TEXT,
   dispute_reference TEXT,
@@ -359,6 +367,16 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   last_update TEXT
+);
+
+CREATE TABLE IF NOT EXISTS payment_events (
+  id TEXT PRIMARY KEY,
+  payment_id TEXT NOT NULL REFERENCES payments(id),
+  type TEXT NOT NULL,
+  content TEXT NOT NULL,
+  system TEXT,
+  time TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  tenant_id TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS refunds (
@@ -434,6 +452,7 @@ CREATE TABLE IF NOT EXISTS reconciliation_issues (
   id TEXT PRIMARY KEY,
   case_id TEXT REFERENCES cases(id),
   tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'ws_default',
   entity_type TEXT NOT NULL,
   entity_id TEXT NOT NULL,
   conflict_domain TEXT NOT NULL,
@@ -729,6 +748,49 @@ CREATE INDEX IF NOT EXISTS idx_canonical_field_decisions_issue
 
 CREATE INDEX IF NOT EXISTS idx_canonical_field_decisions_entity
   ON canonical_field_decisions(tenant_id, entity_type, entity_id, field_key, decided_at DESC);
+
+CREATE TABLE IF NOT EXISTS super_agent_feedback (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  session_id TEXT,
+  run_id TEXT,
+  target_type TEXT,
+  target_id TEXT,
+  tool TEXT,
+  decision TEXT NOT NULL,
+  accepted INTEGER NOT NULL DEFAULT 0,
+  rationale TEXT,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE INDEX IF NOT EXISTS idx_super_agent_feedback_scope_time
+  ON super_agent_feedback(tenant_id, workspace_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS super_agent_scheduled_actions (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  due_at TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  payload TEXT NOT NULL DEFAULT '{}',
+  created_by TEXT,
+  session_id TEXT,
+  run_id TEXT,
+  executed_at TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE INDEX IF NOT EXISTS idx_super_agent_scheduled_actions_due
+  ON super_agent_scheduled_actions(tenant_id, workspace_id, status, due_at ASC);
 
 -- ============================================================
 -- INTEGRATIONS & CONNECTORS
@@ -1033,6 +1095,58 @@ CREATE INDEX IF NOT EXISTS idx_jobs_tenant
 CREATE INDEX IF NOT EXISTS idx_jobs_trace
   ON jobs(trace_id)
   WHERE trace_id IS NOT NULL;
+
+-- ============================================================
+-- SUPER AGENT PLAN ENGINE — SESSIONS
+-- ============================================================
+-- Stores conversational session state for the Plan Engine.
+-- L1 (recent turns) + L2 (rolling summary) + slots (live entities).
+-- TTL enforced at the application layer via ttl_at.
+
+CREATE TABLE IF NOT EXISTS super_agent_sessions (
+  id            TEXT PRIMARY KEY,                    -- UUIDv4
+  user_id       TEXT NOT NULL,
+  tenant_id     TEXT NOT NULL,
+  workspace_id  TEXT,
+  turns_json    TEXT NOT NULL DEFAULT '[]',          -- Turn[] — last N turns (L1)
+  summary       TEXT NOT NULL DEFAULT '',            -- Rolling summary (L2)
+  slots_json    TEXT NOT NULL DEFAULT '{}',          -- Slot map keyed by slot type
+  recent_targets_json TEXT NOT NULL DEFAULT '[]',     -- Recent navigation targets for coreference
+  pending_approval_ids_json TEXT NOT NULL DEFAULT '[]',
+  active_plan_id TEXT,
+  created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  updated_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  ttl_at        TEXT NOT NULL                        -- ISO timestamp; session expires after this
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_sessions_user   ON super_agent_sessions(user_id, tenant_id);
+CREATE INDEX IF NOT EXISTS idx_sa_sessions_ttl    ON super_agent_sessions(ttl_at);
+
+-- ============================================================
+-- SUPER AGENT PLAN ENGINE — EXECUTION TRACES
+-- ============================================================
+-- Immutable audit of every plan execution. One row per plan;
+-- spans stored as JSON for flexibility. Never updated once written.
+
+CREATE TABLE IF NOT EXISTS super_agent_traces (
+  plan_id       TEXT PRIMARY KEY,
+  session_id    TEXT NOT NULL,
+  tenant_id     TEXT NOT NULL,
+  workspace_id  TEXT,
+  user_id       TEXT,
+  started_at    TEXT NOT NULL,
+  ended_at      TEXT NOT NULL,
+  status        TEXT NOT NULL,                       -- ExecutionStatus enum
+  spans_json    TEXT NOT NULL DEFAULT '[]',          -- ExecutionSpan[]
+  summary       TEXT NOT NULL DEFAULT '',
+  approval_ids_json TEXT NOT NULL DEFAULT '[]',
+  policy_decisions_json TEXT NOT NULL DEFAULT '[]',
+  created_at    TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_traces_session  ON super_agent_traces(session_id);
+CREATE INDEX IF NOT EXISTS idx_sa_traces_tenant   ON super_agent_traces(tenant_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sa_traces_user     ON super_agent_traces(user_id, started_at DESC);
 
 -- ============================================================
 -- SCHEMA MIGRATIONS TRACKING

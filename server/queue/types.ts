@@ -49,9 +49,13 @@ export const JobType = {
 
   // Phase 6 — observability
   SLA_CHECK:               'sla.check',               // check SLA deadlines across cases
+  CHURN_RISK_SCAN:         'churn.risk.scan',         // scan for customers at churn risk
 
   // Phase 7 — agent engine
   AGENT_TRIGGER:           'agent.trigger',            // trigger one or more agents for a case
+  AGENT_EXECUTE:           'agent.execute',            // execute a single agent ad hoc
+  AI_DIAGNOSE:             'ai.diagnose',              // queued AI diagnosis request
+  AI_DRAFT:                'ai.draft',                 // queued AI draft request
 } as const;
 
 export type JobType = typeof JobType[keyof typeof JobType];
@@ -136,13 +140,40 @@ export interface SlaCheckPayload {
   caseId?: string;
 }
 
+export interface ChurnRiskScanPayload {
+  /** If set, only scan this specific customer */
+  customerId?: string;
+}
+
 export interface AgentTriggerPayload {
   /** Which lifecycle event fired this trigger */
-  triggerEvent: 'case_created' | 'message_received' | 'conflicts_detected' | 'case_resolved';
+  triggerEvent: 'case_created' | 'message_received' | 'conflicts_detected' | 'approval_approved' | 'approval_rejected' | 'case_resolved';
   caseId: string;
   /** If set, run only this specific agent (skip routing table) */
   agentSlug?: string;
   /** Extra context passed through to the agent implementation */
+  context?: Record<string, unknown>;
+}
+
+export interface AgentExecutePayload {
+  agentId: string;
+  agentSlug: string;
+  input?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+  isTest?: boolean;
+}
+
+export interface AiDiagnosePayload {
+  caseId: string;
+  profile?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface AiDraftPayload {
+  caseId: string;
+  profile?: string;
+  agentSlug?: string;
+  tone?: string;
   context?: Record<string, unknown>;
 }
 
@@ -162,7 +193,11 @@ export type JobPayloadMap = {
   [JobType.DRAFT_REPLY]:         DraftReplyPayload;
   [JobType.SEND_MESSAGE]:        SendMessagePayload;
   [JobType.SLA_CHECK]:           SlaCheckPayload;
+  [JobType.CHURN_RISK_SCAN]:     ChurnRiskScanPayload;
   [JobType.AGENT_TRIGGER]:       AgentTriggerPayload;
+  [JobType.AGENT_EXECUTE]:       AgentExecutePayload;
+  [JobType.AI_DIAGNOSE]:         AiDiagnosePayload;
+  [JobType.AI_DRAFT]:            AiDraftPayload;
 };
 
 // ── DB row shape (as stored in the `jobs` table) ──────────────────────────────

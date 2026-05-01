@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { connectionCategories } from '../connectionsData';
-import { agentsApi } from '../api/client';
+import { agentsApi, policyRulesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import {
   agentPermissionsConfig,
@@ -11,6 +11,9 @@ import {
   AgentPermissionConfig,
 } from '../agentPermissionsConfig';
 import { cloneJson, ensureArray, ensureBoolean, ensureNumber, ensureRecord, mergeProfile, mergeRecord } from './aiStudioProfileUtils';
+import { MinimalPill } from './MinimalCategoryShell';
+import PolicyActionsBar, { type PolicyActionConfig } from './PolicyActionsBar';
+import StyledSelect from './StyledSelect';
 
 type PermissionProfileState = AgentPermissionConfig & {
   actionPermissions: Record<string, PermissionState>;
@@ -57,6 +60,7 @@ export default function PermissionsView() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [showFullCatalog, setShowFullCatalog] = useState(false);
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState('');
 
   const { data: apiAgents, refetch } = useApi(agentsApi.list, [], []);
   const saveDraft = useMutation((payload: { id: string; body: Record<string, any> }) => agentsApi.updatePolicyDraft(payload.id, payload.body));
@@ -83,6 +87,33 @@ export default function PermissionsView() {
     const persisted = draftBundle?.bundle?.permission_profile ?? selectedApiAgent?.permission_profile ?? null;
     setProfile(createPermissionProfile(baseConfig, persisted));
   }, [baseConfig, draftBundle, selectedApiAgent]);
+
+  // Live policy rules from DB
+  const { data: dbRulesRaw, refetch: refetchRules } = useApi(policyRulesApi.list, [], []);
+  const dbRules: any[] = Array.isArray(dbRulesRaw) ? dbRulesRaw : [];
+  const toggleRule = useMutation((payload: { id: string; is_active: boolean }) =>
+    policyRulesApi.update(payload.id, { is_active: payload.is_active }),
+  );
+  const createRule = useMutation((payload: Record<string, any>) => policyRulesApi.create(payload));
+  const [newRuleName, setNewRuleName] = useState('');
+  const [newRuleEntity, setNewRuleEntity] = useState('payment');
+  const [showNewRuleForm, setShowNewRuleForm] = useState(false);
+
+  const handleCreateRule = async () => {
+    if (!newRuleName.trim()) return;
+    await createRule.mutate({
+      name: newRuleName.trim(),
+      entity_type: newRuleEntity,
+      is_active: true,
+      priority: 500,
+      conditions: [],
+      action_mapping: { action: 'allow', action_types: [] },
+    });
+    setNewRuleName('');
+    setShowNewRuleForm(false);
+    refetchRules();
+    setStatusMessage('Policy rule created and synced with the live catalog.');
+  };
 
   const allActionCategories = Array.from(new Set(Object.values(agentPermissionsConfig).flatMap(config => config.applicableCategories)));
   const uniqueCategories = allActionCategories.filter((cat, index, self) => index === self.findIndex(t => t.name === cat.name));
@@ -165,6 +196,7 @@ export default function PermissionsView() {
     if (publish) await publishDraft.mutate(selectedApiAgent.id);
     refetch();
     refetchBundle();
+    setStatusMessage(publish ? 'Permission profile published to the runtime.' : 'Permission draft saved.');
   };
 
   const handleRollback = async () => {
@@ -172,6 +204,7 @@ export default function PermissionsView() {
     await rollbackDraft.mutate(selectedApiAgent.id);
     refetch();
     refetchBundle();
+    setStatusMessage('Permission draft reset to the last published version.');
   };
 
   const permissionCounts = profile ? {
@@ -180,6 +213,90 @@ export default function PermissionsView() {
     Approval: profile.applicableCategories.reduce((acc, cat) => acc + cat.actions.filter(a => (profile.actionPermissions[a] || 'Blocked') === 'Approval').length, 0),
     Blocked: profile.applicableCategories.reduce((acc, cat) => acc + cat.actions.filter(a => (profile.actionPermissions[a] || 'Blocked') === 'Blocked').length, 0),
   } : { Allowed: 0, Conditional: 0, Approval: 0, Blocked: 0 };
+
+  const policyActions = useMemo<PolicyActionConfig[]>(() => ([
+    {
+      key: 'reset' as const,
+      label: 'Reset',
+      icon: 'restart_alt',
+      variant: 'warning' as const,
+      title: 'Reset permission draft',
+      subtitle: 'Discard draft edits and return to the last published permission profile.',
+      confirmLabel: 'Reset draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Allowed', value: String(permissionCounts.Allowed) },
+        { label: 'Approval', value: String(permissionCounts.Approval) },
+      ],
+      steps: [
+        { text: 'Discard the current draft changes', detail: 'Any unsaved action, tool or approval edits will be lost.' },
+        { text: 'Reload the last published permissions', detail: 'The UI will reflect the runtime profile already in production.' },
+        { text: 'Refresh the permissions catalog', detail: 'Counts, filters and toggles will be recomputed from the published state.' },
+      ],
+      considerations: [
+        { text: 'This only affects the draft version, not the live runtime profile.' },
+        { text: 'Use this when the draft drifted from the intended policy.' },
+      ],
+      onConfirm: handleRollback,
+      loading: rollbackDraft.loading,
+      disabled: !selectedApiAgent,
+      buttonVariant: 'ghost',
+    },
+    {
+      key: 'save' as const,
+      label: 'Save draft',
+      icon: 'save',
+      variant: 'default' as const,
+      title: 'Save permission draft',
+      subtitle: 'Persist the current permission profile as a draft without publishing it.',
+      confirmLabel: 'Save draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Blocked', value: String(permissionCounts.Blocked) },
+        { label: 'Conditional', value: String(permissionCounts.Conditional) },
+      ],
+      steps: [
+        { text: 'Persist the edited profile as a draft', detail: 'The changes remain reviewable before publication.' },
+        { text: 'Keep the runtime untouched', detail: 'Published permissions will continue to govern execution until publish is chosen.' },
+        { text: 'Refresh the agent policy bundle', detail: 'The local agent summary and the draft snapshot stay aligned.' },
+      ],
+      considerations: [
+        { text: 'Saving does not change the live permission behavior yet.' },
+        { text: 'The draft remains editable after saving.' },
+      ],
+      onConfirm: () => saveAndRefresh(false),
+      loading: saveDraft.loading,
+      disabled: !selectedApiAgent || !profile,
+      buttonVariant: 'outline',
+    },
+    {
+      key: 'publish' as const,
+      label: 'Publish changes',
+      icon: 'rocket_launch',
+      variant: 'default' as const,
+      title: 'Publish permission changes',
+      subtitle: 'Push the current permission profile to the runtime and make it effective.',
+      confirmLabel: 'Publish now',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Live access', value: String(permissionCounts.Allowed) },
+        { label: 'Approval gates', value: String(permissionCounts.Approval) },
+      ],
+      steps: [
+        { text: 'Persist the draft to the backend', detail: 'The updated permission profile becomes the published source of truth.' },
+        { text: 'Activate the new permission profile in runtime', detail: 'Agent evaluation and tool access will use the new configuration.' },
+        { text: 'Refresh dependent AI Studio views', detail: 'Other tabs will read the same published policy snapshot.' },
+      ],
+      considerations: [
+        { text: 'Publishing affects live behavior immediately after the backend refresh.' },
+        { text: 'Double-check approval and tool access before confirming.' },
+      ],
+      onConfirm: () => saveAndRefresh(true),
+      loading: saveDraft.loading || publishDraft.loading,
+      disabled: !selectedApiAgent || !profile,
+      buttonVariant: 'solid',
+    },
+  ]), [permissionCounts.Allowed, permissionCounts.Approval, permissionCounts.Blocked, permissionCounts.Conditional, profile, publishDraft.loading, rollbackDraft.loading, saveDraft.loading, selectedAgent, selectedApiAgent]);
 
   return (
     <motion.div key="permissions" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex gap-6 h-full">
@@ -219,7 +336,7 @@ export default function PermissionsView() {
                             <span className="text-[10px] font-bold uppercase tracking-wider">Locked ON</span>
                           </div>
                         ) : (
-                          <div className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                        <div className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
                             <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${agent.active ? 'right-0.5' : 'left-0.5'}`}></div>
                           </div>
                         )}
@@ -255,18 +372,24 @@ export default function PermissionsView() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={handleRollback} className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors">Reset</button>
-                  <button onClick={() => saveAndRefresh(false)} className="px-4 py-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl transition-colors">Save draft</button>
-                  <button onClick={() => saveAndRefresh(true)} className="px-4 py-2 text-sm font-bold text-white bg-black dark:bg-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200 rounded-xl transition-colors shadow-sm">Publish changes</button>
+                  <PolicyActionsBar actions={policyActions} />
                 </div>
               </div>
             </div>
 
-            <div className="bg-blue-50/50 dark:bg-blue-900/10 border-b border-blue-100 dark:border-blue-900/30 p-4 px-6 flex items-start gap-3">
-              <span className="material-symbols-outlined text-blue-500 mt-0.5">info</span>
+            {statusMessage ? (
+              <div className="border-b border-black/5 px-6 py-4 dark:border-white/10">
+                <div className="rounded-[18px] border border-black/5 bg-white px-4 py-3 text-sm text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200">
+                  {statusMessage}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="border-b border-black/5 p-4 px-6 flex items-start gap-3 dark:border-white/10">
+              <span className="material-symbols-outlined text-violet-500 mt-0.5">info</span>
               <div>
-                <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider mb-1">Effective Access Summary</h4>
-                <ul className="text-sm text-blue-800 dark:text-blue-400/80 space-y-1 list-disc list-inside">
+                <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-1">Effective Access Summary</h4>
+                <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1 list-disc list-inside">
                   {ensureArray<string>(profile.effectiveAccessSummary).map((summary, idx) => <li key={idx}>{summary}</li>)}
                 </ul>
               </div>
@@ -275,12 +398,12 @@ export default function PermissionsView() {
             <div className="p-8 space-y-12">
               {conflictMessages.length > 0 && (
                 <section>
-                  <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-xl p-4 flex items-start gap-3">
-                    <span className="material-symbols-outlined text-amber-500 mt-0.5">warning</span>
+                  <div className="bg-white dark:bg-[#171717] border border-black/5 dark:border-white/10 rounded-xl p-4 flex items-start gap-3">
+                    <span className="material-symbols-outlined text-violet-500 mt-0.5">warning</span>
                     <div>
-                      <h4 className="text-sm font-bold text-amber-900 dark:text-amber-300 mb-2">Configuration Conflicts Detected</h4>
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-2">Configuration Conflicts Detected</h4>
                       <ul className="space-y-1">
-                        {conflictMessages.map((conflict, idx) => <li key={idx} className="text-xs text-amber-800 dark:text-amber-400/80 flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-amber-500"></span>{conflict}</li>)}
+                        {conflictMessages.map((conflict, idx) => <li key={idx} className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-violet-500"></span>{conflict}</li>)}
                       </ul>
                     </div>
                   </div>
@@ -290,10 +413,10 @@ export default function PermissionsView() {
               <section>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Permission Overview</h3>
                 <div className="grid grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl border border-green-200 bg-green-50 dark:bg-green-900/10 dark:border-green-900/30"><div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-2"><span className="material-symbols-outlined text-sm">check_circle</span><span className="text-xs font-bold uppercase tracking-wider">Allowed</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Allowed}</p></div>
-                  <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900/30"><div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 mb-2"><span className="material-symbols-outlined text-sm">rule</span><span className="text-xs font-bold uppercase tracking-wider">Conditional</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Conditional}</p></div>
-                  <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/10 dark:border-indigo-900/30"><div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 mb-2"><span className="material-symbols-outlined text-sm">gavel</span><span className="text-xs font-bold uppercase tracking-wider">Approval Req.</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Approval}</p></div>
-                  <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900/30"><div className="flex items-center gap-2 text-red-700 dark:text-red-400 mb-2"><span className="material-symbols-outlined text-sm">block</span><span className="text-xs font-bold uppercase tracking-wider">Blocked</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Blocked}</p></div>
+                  <div className="p-4 rounded-xl border border-black/5 bg-white dark:bg-[#171717] dark:border-white/10"><div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2"><span className="material-symbols-outlined text-sm">check_circle</span><span className="text-xs font-bold uppercase tracking-wider">Allowed</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Allowed}</p></div>
+                  <div className="p-4 rounded-xl border border-black/5 bg-white dark:bg-[#171717] dark:border-white/10"><div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2"><span className="material-symbols-outlined text-sm">rule</span><span className="text-xs font-bold uppercase tracking-wider">Conditional</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Conditional}</p></div>
+                  <div className="p-4 rounded-xl border border-black/5 bg-white dark:bg-[#171717] dark:border-white/10"><div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2"><span className="material-symbols-outlined text-sm">gavel</span><span className="text-xs font-bold uppercase tracking-wider">Approval Req.</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Approval}</p></div>
+                  <div className="p-4 rounded-xl border border-black/5 bg-white dark:bg-[#171717] dark:border-white/10"><div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2"><span className="material-symbols-outlined text-sm">block</span><span className="text-xs font-bold uppercase tracking-wider">Blocked</span></div><p className="text-2xl font-bold text-gray-900 dark:text-white">{permissionCounts.Blocked}</p></div>
                 </div>
               </section>
 
@@ -358,7 +481,7 @@ export default function PermissionsView() {
                                           <div className="space-y-3">
                                             <div className="flex items-center gap-3">
                                               <span className="text-sm text-gray-600 dark:text-gray-400">Only allow if</span>
-                                              <select
+                                              <StyledSelect
                                                 value={ensureArray<string>(profile.conditionalRules[action], [defaultConditionalRule])[0]}
                                                 onChange={(e) => setProfile(prev => prev ? { ...prev, conditionalRules: { ...prev.conditionalRules, [action]: [e.target.value] } } : prev)}
                                                 className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
@@ -367,20 +490,20 @@ export default function PermissionsView() {
                                                 <option>Customer is VIP</option>
                                                 <option>Order value &lt; $100</option>
                                                 <option>Within business hours</option>
-                                              </select>
+                                              </StyledSelect>
                                             </div>
                                           </div>
                                         ) : (
                                           <div className="space-y-3">
                                             <div className="flex items-center gap-3">
                                               <span className="text-sm text-gray-600 dark:text-gray-400">Require approval from</span>
-                                              <select
+                                              <StyledSelect
                                                 value={profile.approvalAssignments[action] || 'Tier 2 Support'}
                                                 onChange={(e) => setProfile(prev => prev ? { ...prev, approvalAssignments: { ...prev.approvalAssignments, [action]: e.target.value } } : prev)}
                                                 className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                               >
                                                 {approverOptions.map(option => <option key={option}>{option}</option>)}
-                                              </select>
+                                              </StyledSelect>
                                             </div>
                                             <div className="flex items-center gap-3">
                                               <span className="text-sm text-gray-600 dark:text-gray-400">Auto-escalate after</span>
@@ -417,7 +540,7 @@ export default function PermissionsView() {
                     return (
                       <div key={idx} className={`border rounded-xl p-4 flex items-center justify-between bg-white dark:bg-card-dark ${isMain ? 'border-indigo-200 dark:border-indigo-800/50' : 'border-gray-200 dark:border-gray-800'}`}>
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isMain ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isMain ? 'bg-black/5 dark:bg-white/5 text-gray-700 dark:text-gray-200' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
                             <span className="material-symbols-outlined text-sm">api</span>
                           </div>
                           <div>
@@ -425,13 +548,13 @@ export default function PermissionsView() {
                             <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">{isMain ? 'Main Tool' : 'Optional'}</span>
                           </div>
                         </div>
-                        <select value={level} onChange={(e) => handleToolAccessChange(tool, e.target.value as ToolAccessLevel)} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                        <StyledSelect value={level} onChange={(e) => handleToolAccessChange(tool, e.target.value as ToolAccessLevel)} className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
                           <option>No access</option>
                           <option>Read only</option>
                           <option>Limited write</option>
                           <option>Approval required</option>
                           <option>Full access</option>
-                        </select>
+                        </StyledSelect>
                       </div>
                     );
                   })}
@@ -474,8 +597,8 @@ export default function PermissionsView() {
                       </div>
                     </div>
                   )}
-                  <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-xl p-6">
-                    <p className="text-sm text-red-800 dark:text-red-300 mb-4">Global policies. These actions are strictly prohibited across the entire system.</p>
+                  <div className="bg-white dark:bg-[#171717] border border-black/5 dark:border-white/10 rounded-xl p-6">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Global policies. These actions are strictly prohibited across the entire system.</p>
                     <div className="space-y-2">
                       {profile.globalHardBlocks.map((block, idx) => (
                         <div key={idx} className="flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg border border-red-100 dark:border-red-900/20 shadow-sm opacity-80">
@@ -499,11 +622,11 @@ export default function PermissionsView() {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Default Approver</label>
-                        <select value={profile.defaultApprover} onChange={(e) => setProfile(prev => prev ? { ...prev, defaultApprover: e.target.value } : prev)} className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                        <StyledSelect value={profile.defaultApprover} onChange={(e) => setProfile(prev => prev ? { ...prev, defaultApprover: e.target.value } : prev)} className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
                           <option>Tier 2 Support Team</option>
                           <option>Shift Manager</option>
                           <option>Finance Department</option>
-                        </select>
+                        </StyledSelect>
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Evidence Requirements</label>
@@ -526,7 +649,7 @@ export default function PermissionsView() {
                         <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Automatic Escalation</label>
                         <button type="button" onClick={() => setProfile(prev => prev ? { ...prev, automaticEscalation: !prev.automaticEscalation } : prev)} className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
                           <span className="text-sm text-gray-700 dark:text-gray-300">Escalate if no response</span>
-                          <div className={`w-10 h-5 rounded-full relative cursor-pointer ${profile.automaticEscalation ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                          <div className={`w-10 h-5 rounded-full relative cursor-pointer ${profile.automaticEscalation ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
                             <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full ${profile.automaticEscalation ? 'right-0.5' : 'left-0.5'}`}></div>
                           </div>
                         </button>
@@ -534,6 +657,128 @@ export default function PermissionsView() {
                     </div>
                   </div>
                 </div>
+              </section>
+
+              {/* â”€â”€ Live DB Policy Rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-indigo-500">policy</span>
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">Live Policy Rules</h3>
+                    <span className="px-2 py-0.5 bg-white dark:bg-[#171717] text-gray-700 dark:text-gray-200 rounded-full text-[10px] font-bold border border-black/10 dark:border-white/10">
+                      {dbRules.filter((r: any) => r.is_active).length} active
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowNewRuleForm(prev => !prev)}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    New rule
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {showNewRuleForm && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mb-4 p-4 bg-white dark:bg-[#171717] border border-black/5 dark:border-white/10 rounded-xl space-y-3"
+                    >
+                      <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">New Policy Rule</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Rule name</label>
+                          <input
+                            value={newRuleName}
+                            onChange={(e) => setNewRuleName(e.target.value)}
+                            placeholder="e.g. Block high-value refunds"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Entity type</label>
+                          <StyledSelect
+                            value={newRuleEntity}
+                            onChange={(e) => setNewRuleEntity(e.target.value)}
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          >
+                            {['payment', 'order', 'case', 'return', 'customer', 'approval', 'knowledge'].map(t => (
+                              <option key={t}>{t}</option>
+                            ))}
+                          </StyledSelect>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={handleCreateRule}
+                          disabled={!newRuleName.trim() || createRule.loading}
+                          className="px-4 py-2 text-sm font-bold text-white bg-black hover:bg-black/90 disabled:opacity-50 rounded-lg transition-colors"
+                        >
+                          {createRule.loading ? 'Creatingâ€¦' : 'Create rule'}
+                        </button>
+                        <button
+                          onClick={() => setShowNewRuleForm(false)}
+                          className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {dbRules.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400 dark:text-gray-600 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                    <span className="material-symbols-outlined text-3xl mb-2 block opacity-40">policy</span>
+                    <p className="text-sm">No policy rules yet. Add one above to enforce live policies on agent actions.</p>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+                    <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-200 dark:border-gray-800 grid grid-cols-[1fr_120px_100px_80px] gap-4">
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Rule</span>
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Entity</span>
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Action</span>
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Active</span>
+                    </div>
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {dbRules.map((rule: any) => (
+                        <div key={rule.id} className="bg-white dark:bg-card-dark px-4 py-3 grid grid-cols-[1fr_120px_100px_80px] gap-4 items-center hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-tight">{rule.name}</p>
+                            {rule.priority != null && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">Priority {rule.priority}</p>
+                            )}
+                          </div>
+                          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-md text-xs font-medium border border-gray-200 dark:border-gray-700">
+                            {rule.entity_type ?? 'â€”'}
+                          </span>
+                          <span className={`px-2 py-1 rounded-md text-xs font-bold border ${
+                            rule.action_mapping?.action === 'block' || rule.action_mapping?.action === 'deny'
+                              ? 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400'
+                              : rule.action_mapping?.action === 'approval_required' || rule.action_mapping?.action === 'require_approval'
+                              ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-400'
+                              : 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400'
+                          }`}>
+                            {rule.action_mapping?.action ?? 'allow'}
+                          </span>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={async () => {
+                                await toggleRule.mutate({ id: rule.id, is_active: !rule.is_active });
+                                refetchRules();
+                              }}
+                              className={`w-10 h-5 rounded-full relative transition-colors ${rule.is_active ? 'bg-violet-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${rule.is_active ? 'right-0.5' : 'left-0.5'}`}></div>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             </div>
           </div>

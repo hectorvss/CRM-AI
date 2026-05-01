@@ -5,6 +5,7 @@ import { agentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import { agentReasoningConfig, defaultReasoningConfig, AgentReasoningConfig } from '../agentReasoningConfig';
 import { cloneJson, ensureArray, mergeProfile } from './aiStudioProfileUtils';
+import PolicyActionsBar, { type PolicyActionConfig } from './PolicyActionsBar';
 
 function createReasoningProfile(base: AgentReasoningConfig, persisted?: Record<string, any> | null): AgentReasoningConfig {
   const merged = mergeProfile(base, persisted);
@@ -81,6 +82,88 @@ export default function ReasoningView() {
     }));
   };
 
+  const policyActions: PolicyActionConfig[] = [
+    {
+      key: 'reset' as const,
+      label: 'Reset',
+      icon: 'restart_alt',
+      variant: 'warning' as const,
+      title: 'Reset reasoning draft',
+      subtitle: 'Discard the draft reasoning profile and restore the last published configuration.',
+      confirmLabel: 'Reset draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Mode', value: agentConfig.coreReasoningMode || 'N/A' },
+        { label: 'Depth', value: agentConfig.depthOfAnalysis || 'N/A' },
+      ],
+      steps: [
+        { text: 'Discard the current reasoning edits', detail: 'Any pending mode, depth or trigger adjustments will be lost.' },
+        { text: 'Reload the published reasoning profile', detail: 'The live runtime settings remain untouched until publish is chosen.' },
+        { text: 'Refresh the reasoning summary cards', detail: 'Visible reasoning controls are recomputed from the published state.' },
+      ],
+      considerations: [
+        { text: 'This resets only the draft profile.' },
+        { text: 'Use it when the reasoning contract should go back to a known safe state.' },
+      ],
+      onConfirm: handleRollback,
+      buttonVariant: 'ghost',
+    },
+    {
+      key: 'save' as const,
+      label: 'Save draft',
+      icon: 'save',
+      variant: 'default' as const,
+      title: 'Save reasoning draft',
+      subtitle: 'Persist the current reasoning profile as a draft without publishing it.',
+      confirmLabel: 'Save draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Strictness', value: agentConfig.decisionStrictness || 'N/A' },
+        { label: 'Verification', value: agentConfig.verificationBehavior || 'N/A' },
+      ],
+      steps: [
+        { text: 'Store the edited reasoning profile as a draft', detail: 'The current reasoning setup stays reviewable before publication.' },
+        { text: 'Keep runtime behavior stable', detail: 'Live agent reasoning continues using the last published configuration.' },
+        { text: 'Refresh the draft snapshot', detail: 'The header summary and radio groups stay aligned with the saved draft.' },
+      ],
+      considerations: [
+        { text: 'Saving does not change live reasoning behavior yet.' },
+        { text: 'The draft can still be revised before publishing.' },
+      ],
+      onConfirm: () => saveAndRefresh(false),
+      loading: saveDraft.loading,
+      disabled: !selectedApiAgent,
+      buttonVariant: 'outline',
+    },
+    {
+      key: 'publish' as const,
+      label: 'Publish changes',
+      icon: 'rocket_launch',
+      variant: 'default' as const,
+      title: 'Publish reasoning changes',
+      subtitle: 'Push the current reasoning profile to runtime.',
+      confirmLabel: 'Publish now',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Context rules', value: String(agentConfig.contextGathering.length) },
+        { label: 'Escalation rules', value: String(agentConfig.escalationToDeeperThinking.length) },
+      ],
+      steps: [
+        { text: 'Persist the draft as the new published reasoning profile', detail: 'The backend becomes the source of truth for decision depth and explanation style.' },
+        { text: 'Activate the new reasoning behavior in runtime', detail: 'Live agent responses will use the published reasoning configuration.' },
+        { text: 'Refresh dependent AI Studio views', detail: 'Other tabs will see the same published reasoning snapshot.' },
+      ],
+      considerations: [
+        { text: 'Publishing changes how the live agent reasons immediately after refresh.' },
+        { text: 'Double-check strictness and escalation thresholds before confirming.' },
+      ],
+      onConfirm: () => saveAndRefresh(true),
+      loading: saveDraft.loading || publishDraft.loading,
+      disabled: !selectedApiAgent,
+      buttonVariant: 'solid',
+    },
+  ];
+
   return (
     <motion.div key="reasoning" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex gap-6 h-full">
       <div className="w-80 flex-shrink-0 flex flex-col h-full overflow-hidden border-r border-gray-200 dark:border-gray-800 pr-4">
@@ -133,11 +216,7 @@ export default function ReasoningView() {
                     <p className="text-sm text-gray-500 dark:text-gray-400">{currentAgent.summary || 'Agent reasoning configuration'}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={handleRollback} className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">Reset</button>
-                  <button onClick={() => saveAndRefresh(false)} className="px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400 rounded-lg transition-colors">Save draft</button>
-                  <button onClick={() => saveAndRefresh(true)} className="px-4 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 rounded-lg transition-colors shadow-sm">Publish</button>
-                </div>
+                <PolicyActionsBar actions={policyActions} />
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700">

@@ -10,6 +10,7 @@ export interface BillingScope {
 export interface BillingRepository {
   getSubscription(scope: BillingScope, orgId: string): Promise<any>;
   getLedger(scope: BillingScope, orgId: string): Promise<any[]>;
+  addLedgerEntry(scope: BillingScope, entry: any): Promise<void>;
 }
 
 async function getSubscriptionSupabase(scope: BillingScope, orgId: string) {
@@ -46,16 +47,42 @@ function getLedgerSqlite(scope: BillingScope, orgId: string) {
   return ledger.map(parseRow);
 }
 
+async function addLedgerEntrySupabase(scope: BillingScope, entry: any) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from('credit_ledger').insert({
+    id: entry.id ?? crypto.randomUUID(),
+    ...entry,
+    org_id: entry.org_id ?? scope.tenantId,
+    occurred_at: entry.occurred_at ?? new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+function addLedgerEntrySqlite(scope: BillingScope, entry: any) {
+  const db = getDb();
+  const payload = {
+    id: entry.id ?? crypto.randomUUID(),
+    ...entry,
+    org_id: entry.org_id ?? scope.tenantId,
+    occurred_at: entry.occurred_at ?? new Date().toISOString(),
+  };
+  const fields = Object.keys(payload);
+  const values = Object.values(payload).map((value) => value && typeof value === 'object' ? JSON.stringify(value) : value);
+  db.prepare(`INSERT INTO credit_ledger (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`).run(...values);
+}
+
 export function createBillingRepository(): BillingRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
       getSubscription: getSubscriptionSupabase,
       getLedger: getLedgerSupabase,
+      addLedgerEntry: addLedgerEntrySupabase,
     };
   }
 
   return {
     getSubscription: async (scope, orgId) => getSubscriptionSqlite(scope, orgId),
     getLedger: async (scope, orgId) => getLedgerSqlite(scope, orgId),
+    addLedgerEntry: async (scope, entry) => addLedgerEntrySqlite(scope, entry),
   };
 }

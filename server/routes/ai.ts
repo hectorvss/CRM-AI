@@ -1,381 +1,378 @@
-import { randomUUID } from 'crypto';
-import { Router } from 'express';
+/**
+ * server/routes/ai.ts
+ *
+ * AI-Assisted Operations API — Refactored to Repository Pattern.
+ * This route handles agent execution, automated diagnosis, and draft generation.
+ */
+
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { withGeminiRetry } from '../ai/geminiRetry.js';
+import { Router } from 'express';
 import { config } from '../config.js';
-import { extractMultiTenant, type MultiTenantRequest } from '../middleware/multiTenant.js';
-import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
-import { getCaseCanonicalState } from '../services/canonicalState.js';
-import { createAIRepository, createKnowledgeRepository } from '../data/index.js';
-import { sendError } from '../http/errors.js';
+import { withGeminiRetry } from '../ai/geminiRetry.js';
+import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { requirePermission } from '../middleware/authorization.js';
+import { enqueue } from '../queue/client.js';
+import { JobType } from '../queue/types.js';
+import { buildCaseState, buildResolveView } from '../data/cases.js';
+import { buildContextWindow } from '../pipeline/contextWindow.js';
+import {
+  createAIRepository,
+  createAgentRepository,
+  createCaseRepository,
+  createPolicyRepository,
+  createKnowledgeRepository,
+} from '../data/index.js';
+import { planEngine } from '../agents/planEngine/index.js';
 
 const router = Router();
-const aiRepo = createAIRepository();
-const knowledgeRepo = createKnowledgeRepository();
-
 router.use(extractMultiTenant);
 
-function getAI() {
-  const apiKey = config.ai.geminiApiKey;
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
-  return new GoogleGenerativeAI(apiKey);
+const aiRepository = createAIRepository();
+const agentRepository = createAgentRepository();
+const caseRepository = createCaseRepository();
+const policyRepository = createPolicyRepository();
+const knowledgeRepository = createKnowledgeRepository();
+
+function normalizeCopilotHistory(history: Array<{ role: string; content: string }> = []) {
+  return history
+    .filter((item) => item && typeof item.content === 'string' && item.content.trim().length > 0)
+    .slice(-8)
+    .map((item) => ({
+      role: item.role === 'assistant' ? 'assistant' : 'user',
+      content: item.content.trim(),
+    }));
 }
 
-function hasAI() {
-  return Boolean(config.ai.geminiApiKey);
-}
-
-async function buildCaseContext(caseId: string, scope: { tenantId: string; workspaceId: string }) {
-  const data = await aiRepo.getCaseContextData(scope, caseId);
-  if (!data) throw new Error('Case not found');
-
-  const { caseRow, customer, messages, orders, payments, returns, conflicts } = data;
-  const canonicalState = getCaseCanonicalState(caseId, scope.tenantId, scope.workspaceId);
-
-  const contextText = `
-CASE: ${caseRow.case_number} | Type: ${caseRow.type} | Status: ${caseRow.status}
-Priority: ${caseRow.priority} | Risk: ${caseRow.risk_level} | SLA: ${caseRow.sla_status}
-Approval State: ${caseRow.approval_state}
-
-CUSTOMER: ${customer.canonical_name} (${customer.canonical_email})
-Segment: ${customer.segment} | LTV: $${customer.lifetime_value ?? 'N/A'}
-Dispute rate: ${customer.dispute_rate} | Refund rate: ${customer.refund_rate}
-
-CONVERSATION (${messages.length} messages):
-${messages.map((message: any) => `[${message.type.toUpperCase()}] ${message.sender_name || message.type}: ${message.content}`).join('\n')}
-
-ORDERS:
-${orders.map((order: any) => `- ${order.external_order_id}: ${order.status} | $${order.total_amount} ${order.currency}
-  System states: ${JSON.stringify(order.system_states)}
-  ${order.conflict_detected ? 'CONFLICT: ' + order.conflict_detected : ''}
-  ${order.recommended_action ? 'Recommended: ' + order.recommended_action : ''}`).join('\n')}
-
-PAYMENTS:
-${payments.map((payment: any) => `- ${payment.external_payment_id || payment.id}: ${payment.status} | $${payment.amount} ${payment.currency}
-  PSP: ${payment.psp || 'N/A'} | Refund: ${payment.refund_status || 'N/A'}
-  ${payment.conflict_detected ? 'CONFLICT: ' + payment.conflict_detected : ''}
-  ${payment.recommended_action ? 'Recommended: ' + payment.recommended_action : ''}`).join('\n')}
-
-RETURNS:
-${returns.map((ret: any) => `- ${ret.external_return_id || ret.id}: ${ret.status} | ${ret.return_reason || 'N/A'}
-  Refund: ${ret.refund_status || 'N/A'} | Carrier: ${ret.carrier_status || 'N/A'}
-  ${ret.conflict_detected ? 'CONFLICT: ' + ret.conflict_detected : ''}
-  ${ret.recommended_action ? 'Recommended: ' + ret.recommended_action : ''}`).join('\n')}
-
-CANONICAL CONFLICT:
-${canonicalState?.conflict.has_conflict ? `${canonicalState.conflict.conflict_type || 'conflict'}: ${canonicalState.conflict.root_cause || canonicalState.conflict.recommended_action}` : 'No active canonical conflict'}
-`.trim();
-
+function summarizeStateForPrompt(state: ReturnType<typeof buildCaseState>, resolve: ReturnType<typeof buildResolveView>) {
   return {
-    caseRow,
-    contextText,
-    caseContext: {
-      type: caseRow.type,
-      intent: caseRow.intent,
-      tags: caseRow.tags ?? [],
-      customerSegment: customer.segment ?? null,
-      conflictDomains: conflicts.map((item: any) => item.conflict_domain).filter(Boolean),
-      latestMessage: messages.at(-1)?.content ?? null,
-      canonicalState,
+    case: {
+      number: state.case.case_number,
+      type: state.case.type,
+      status: state.case.status,
+      priority: state.case.priority,
+      riskLevel: state.case.risk_level,
+      approvalState: state.case.approval_state,
+      executionState: state.case.execution_state,
+      aiDiagnosis: state.case.ai_diagnosis,
+      aiRootCause: state.case.ai_root_cause,
+      aiRecommendedAction: state.case.ai_recommended_action,
     },
+    identifiers: state.identifiers,
+    conflict: state.conflict,
+    branches: Object.values(state.systems).map((branch: any) => ({
+      key: branch.key,
+      label: branch.label,
+      status: branch.status,
+      sourceOfTruth: branch.source_of_truth,
+      summary: branch.summary,
+      identifiers: branch.identifiers,
+      nodeCount: Array.isArray(branch.nodes) ? branch.nodes.length : 0,
+    })),
+    resolve: {
+      blockers: resolve.blockers,
+      execution: resolve.execution,
+      expected: resolve.expected_post_resolution_state,
+    },
+    timelineTail: state.timeline.slice(-12),
   };
 }
 
-function buildFallbackCopilotAnswer(question: string, contextText: string, canonicalState: any, citations: any[] = []) {
-  const conflict = canonicalState?.conflict;
-  const customerName = canonicalState?.customer?.canonical_name || canonicalState?.case?.customer_name || 'the customer';
-  const orderId = canonicalState?.identifiers?.order_ids?.[0] || canonicalState?.case?.case_number || 'the case';
-  const mainIssue = conflict?.root_cause || conflict?.recommended_action || canonicalState?.case?.ai_diagnosis || 'the case is still being analyzed';
-  const recommended = conflict?.recommended_action || canonicalState?.case?.ai_recommended_action || 'continue reviewing the canonical state before taking action';
-  const evidence = citations.length > 0 ? ` I am applying ${citations.length} accessible knowledge source${citations.length === 1 ? '' : 's'}.` : '';
+function buildFallbackCopilotAnswer(state: ReturnType<typeof buildCaseState>) {
+  const branchSummaries = Object.values(state.systems)
+    .filter((branch: any) => ['warning', 'critical', 'blocked'].includes(String(branch.status)))
+    .slice(0, 4)
+    .map((branch: any) => `${branch.label}: ${branch.summary || branch.status}`);
 
-  return {
-    answer: `For ${customerName}, the canonical state says the key issue on ${orderId} is: ${mainIssue}. Recommended next action: ${recommended}.${evidence}\n\nRegarding your question: "${question}"\n\nI would answer using the current customer/case state, avoid promising an action that is blocked by policy, and escalate if the conflict or approval state requires human review.`,
-    mode: 'fallback',
-    context_excerpt: contextText.slice(0, 1200),
-  };
+  return [
+    state.case.ai_diagnosis || 'Copilot is using the canonical case state.',
+    state.case.ai_root_cause ? `Root cause: ${state.case.ai_root_cause}` : null,
+    state.case.ai_recommended_action ? `Recommended action: ${state.case.ai_recommended_action}` : null,
+    branchSummaries.length ? `Active blockers: ${branchSummaries.join(' | ')}` : null,
+  ].filter(Boolean).join('\n');
 }
 
-async function buildKnowledgePrompt(agentSlug: string, scope: { tenantId: string; workspaceId: string }, caseContext: any) {
-  const knowledgeProfile = await aiRepo.getAgentKnowledgeProfile(scope, agentSlug);
-  return resolveAgentKnowledgeBundle({
-    tenantId: scope.tenantId,
-    workspaceId: scope.workspaceId,
-    knowledgeProfile,
-    caseContext,
-  });
-}
+// ── GET /api/ai/studio ────────────────────────────────────────────────────────
+// Master control plane overview for AI Studio. All tabs read from here.
 
-router.post('/diagnose/:caseId', async (req: MultiTenantRequest, res) => {
+router.get('/studio', requirePermission('agents.read'), async (req: MultiTenantRequest, res) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const { caseRow, contextText, caseContext } = await buildCaseContext(req.params.caseId, scope);
-    const knowledgeBundle = await buildKnowledgePrompt('qa-policy-check', scope, caseContext);
-    
-    if (!hasAI()) {
-       return res.status(400).json({ error: 'AI disabled' });
-    }
 
-    const ai = getAI();
-    const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
+    // Fan out to all data sources in parallel
+    const [agents, policyMetrics, knowledgeDomains, knowledgeArticles] = await Promise.allSettled([
+      agentRepository.listAgents(scope),
+      policyRepository.getMetrics(scope),
+      knowledgeRepository.listDomains(scope),
+      knowledgeRepository.listArticles(scope, { status: 'published' }),
+    ]);
 
-    const prompt = `You are an expert AI operations analyst for a support & operations SaaS.
-Analyze the following case and provide a structured diagnosis.
+    const agentList: any[] = agents.status === 'fulfilled' ? agents.value : [];
+    const metrics = policyMetrics.status === 'fulfilled' ? policyMetrics.value : null;
+    const domains: any[] = knowledgeDomains.status === 'fulfilled' ? knowledgeDomains.value : [];
+    const articles: any[] = knowledgeArticles.status === 'fulfilled' ? knowledgeArticles.value : [];
 
-${contextText}
+    // Agent summary
+    const activeAgents = agentList.filter((a) => a.is_active);
+    const byCategory = agentList.reduce((acc: Record<string, number>, a) => {
+      const cat = a.category ?? 'unknown';
+      acc[cat] = (acc[cat] ?? 0) + 1;
+      return acc;
+    }, {});
+    const byMode = agentList.reduce((acc: Record<string, number>, a) => {
+      const mode = a.implementation_mode ?? 'unknown';
+      acc[mode] = (acc[mode] ?? 0) + 1;
+      return acc;
+    }, {});
 
-${knowledgeBundle.promptContext ? `RELEVANT POLICIES:\n${knowledgeBundle.promptContext}\n` : ''}
-
-Provide a JSON response with this exact structure:
-{
-  "summary": "1-2 sentence executive summary of the case situation",
-  "root_cause": "The specific technical or operational root cause",
-  "diagnosis": "Detailed analysis paragraph",
-  "confidence": 0.95,
-  "risk_factors": [{"factor": "name", "detail": "explanation"}],
-  "recommended_action": "Clear, actionable recommendation",
-  "requires_approval": false,
-  "draft_reply": "A professional, empathetic draft reply to the customer"
-}
-
-Return ONLY valid JSON, no markdown or explanation.`;
-
-    const result = await withGeminiRetry(
-      () => model.generateContent(prompt),
-      { label: 'api.ai.diagnose' },
-    );
-    const text = result.response.text().trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
-
-    let parsed;
+    // Plan engine traces (in-memory store — returns 0 when fresh)
+    let recentTraceCount = 0;
     try {
-      parsed = JSON.parse(text);
-    } catch {
-      return res.status(500).json({ error: 'AI response parse failed', raw: text });
-    }
+      // listTraces needs a sessionId; we count via a no-op — fix when traces become DB-backed
+      recentTraceCount = 0;
+    } catch { /* ignore */ }
 
-    await aiRepo.updateCaseAIFields(scope, req.params.caseId, {
-      ...parsed,
-      citations: knowledgeBundle.citations
-    });
+    // Feature flags (env-driven)
+    const llmRoutingEnabled = process.env.SUPER_AGENT_LLM_ROUTING === 'true';
 
     res.json({
-      ...parsed,
-      citations: knowledgeBundle.citations,
-      case_type: caseRow.type,
-    });
-  } catch (err: any) {
-    console.error('AI diagnose error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/draft/:caseId', async (req: MultiTenantRequest, res) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
-    const { tone = 'professional', additional_context = '' } = req.body;
-    const { contextText, caseContext } = await buildCaseContext(req.params.caseId, scope);
-    const knowledgeBundle = await buildKnowledgePrompt('composer-translator', scope, caseContext);
-    
-    if (!hasAI()) {
-       return res.status(400).json({ error: 'AI disabled' });
-    }
-
-    const ai = getAI();
-    const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
-
-    const prompt = `You are an expert customer support agent for an ecommerce operations platform.
-Write a ${tone} reply to the customer based on this case:
-
-${contextText}
-
-${knowledgeBundle.promptContext ? `RELEVANT POLICIES:\n${knowledgeBundle.promptContext}\n` : ''}
-${additional_context ? `Additional context: ${additional_context}` : ''}
-
-Rules:
-- Be empathetic and professional
-- Reference specific order/case details
-- Don't promise things you can't confirm
-- Keep it concise (2-4 paragraphs max)
-- Don't use generic phrases like "I hope this email finds you well"
-
-Return ONLY the reply text, nothing else.`;
-
-    const result = await withGeminiRetry(
-      () => model.generateContent(prompt),
-      { label: 'api.ai.draft' },
-    );
-    const draft = result.response.text().trim();
-
-    const caseData = await buildCaseContext(req.params.caseId, scope);
-    if (caseData.caseRow?.conversation_id) {
-        await aiRepo.createDraftReply(scope, {
-            caseId: req.params.caseId,
-            conversationId: caseData.caseRow.conversation_id,
-            content: draft,
-            model: config.ai.geminiModel,
-            hasPolicies: knowledgeBundle.citations.length > 0,
-            citations: knowledgeBundle.citations
-        });
-    }
-
-    res.json({ draft, citations: knowledgeBundle.citations });
-  } catch (err: any) {
-    console.error('AI draft error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/policy-check', async (req: MultiTenantRequest, res) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const { action, context: actionContext } = req.body;
-    
-    const policies = await knowledgeRepo.listPolicies(scope);
-
-    const caseId = String(actionContext?.caseId ?? '');
-    const fallbackContext = {
-      type: actionContext?.caseType ?? actionContext?.type ?? 'general_support',
-      intent: actionContext?.intent ?? null,
-      tags: Array.isArray(actionContext?.tags) ? actionContext.tags : [],
-      customerSegment: actionContext?.customerSegment ?? null,
-      conflictDomains: Array.isArray(actionContext?.conflictDomains) ? actionContext.conflictDomains : [],
-      latestMessage: actionContext?.latestMessage ?? null,
-    };
-    const { caseContext } = caseId ? await buildCaseContext(caseId, scope) : { caseContext: fallbackContext };
-    const knowledgeBundle = await buildKnowledgePrompt('approval-gatekeeper', scope, caseContext);
-
-    if (!hasAI()) {
-       return res.status(400).json({ error: 'AI disabled' });
-    }
-
-    const ai = getAI();
-    const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
-
-    const prompt = `You are a policy compliance checker for a customer support operations platform.
-
-ACTION TO EVALUATE: ${action}
-CONTEXT: ${JSON.stringify(actionContext)}
-
-ACTIVE POLICY RULES:
-${policies.map((policy) => `- ${policy.name}: conditions=${policy.conditions}`).join('\n')}
-
-${knowledgeBundle.promptContext ? `KNOWLEDGE BASE POLICIES:\n${knowledgeBundle.promptContext}` : 'KNOWLEDGE BASE POLICIES:\nNo accessible policies.'}
-
-Evaluate if this action is compliant and return JSON:
-{
-  "decision": "allow" | "conditional" | "approval_required" | "block",
-  "reason": "explanation",
-  "matched_rule": "rule name if matched",
-  "citation": "article title cited",
-  "risk_level": "low" | "medium" | "high" | "critical"
-}
-
-Return ONLY valid JSON.`;
-
-    const result = await withGeminiRetry(
-      () => model.generateContent(prompt),
-      { label: 'api.ai.policy-check' },
-    );
-    const text = result.response.text().trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
-    const parsed = JSON.parse(text);
-
-    res.json({
-      ...parsed,
-      available_citations: knowledgeBundle.citations,
-      blocked_documents: knowledgeBundle.blockedDocuments.map((doc) => ({
-        id: doc.id,
-        title: doc.title,
-        reason: doc.blocked_reason,
-      })),
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/copilot/:caseId', async (req: MultiTenantRequest, res) => {
-  try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const { question, history = [] } = req.body || {};
-    const cleanQuestion = String(question || '').trim();
-
-    if (!cleanQuestion) {
-      return res.status(400).json({ error: 'Question is required' });
-    }
-
-    const { contextText, caseContext } = await buildCaseContext(req.params.caseId, scope);
-    const canonicalState = getCaseCanonicalState(req.params.caseId, scope.tenantId, scope.workspaceId);
-    const knowledgeBundle = await buildKnowledgePrompt('composer-translator', scope, caseContext);
-
-    if (!hasAI()) {
-      return res.json({
-        ...buildFallbackCopilotAnswer(cleanQuestion, contextText, canonicalState, knowledgeBundle.citations),
-        citations: knowledgeBundle.citations,
-        blocked_documents: knowledgeBundle.blockedDocuments.map((doc) => ({
-          id: doc.id,
-          title: doc.title,
-          reason: doc.blocked_reason,
+      agents: {
+        total: agentList.length,
+        active: activeAgents.length,
+        inactive: agentList.length - activeAgents.length,
+        byCategory,
+        byImplementationMode: byMode,
+        list: agentList.map((a) => ({
+          id: a.id,
+          slug: a.slug,
+          name: a.name,
+          category: a.category,
+          is_active: a.is_active,
+          implementation_mode: a.implementation_mode,
+          version_number: a.version_number ?? null,
+          version_status: a.version_status ?? null,
+          metrics: a.metrics ?? null,
         })),
-      });
-    }
-
-    const ai = getAI();
-    const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
-    const compactHistory = Array.isArray(history)
-      ? history.slice(-8).map((item: any) => `${item.role || 'user'}: ${String(item.content || '').slice(0, 800)}`).join('\n')
-      : '';
-
-    const prompt = `You are CRM AI Copilot inside an ecommerce operations SaaS.
-You answer support operators, not customers directly, unless asked to draft customer-facing copy.
-Use the canonical customer/case state as the source of truth. Respect accessible knowledge policies.
-If an action is blocked by approval/policy/conflict, say that clearly and recommend the safe next step.
-
-CANONICAL CASE CONTEXT:
-${contextText}
-
-${canonicalState ? `FULL CANONICAL STATE JSON:\n${JSON.stringify(canonicalState).slice(0, 14000)}\n` : ''}
-
-${knowledgeBundle.promptContext ? `ACCESSIBLE KNOWLEDGE POLICIES:\n${knowledgeBundle.promptContext}\n` : 'ACCESSIBLE KNOWLEDGE POLICIES:\nNo accessible policies.'}
-
-RECENT COPILOT CHAT:
-${compactHistory || 'No previous Copilot messages in this session.'}
-
-OPERATOR QUESTION:
-${cleanQuestion}
-
-Return a concise, actionable answer in the same language as the operator question.
-Mention the relevant system states and policy/approval blockers when they matter.
-Do not invent SaaS data that is not present in the canonical state.`;
-
-    const result = await withGeminiRetry(
-      () => model.generateContent(prompt),
-      { label: 'api.ai.copilot' },
-    );
-
-    res.json({
-      answer: result.response.text().trim(),
-      mode: 'llm',
-      citations: knowledgeBundle.citations,
-      blocked_documents: knowledgeBundle.blockedDocuments.map((doc) => ({
-        id: doc.id,
-        title: doc.title,
-        reason: doc.blocked_reason,
-      })),
+      },
+      planEngine: {
+        enabled: true,
+        llmRoutingActive: llmRoutingEnabled,
+        shadowModeActive: !llmRoutingEnabled,
+        toolCount: planEngine.catalog.list().length,
+        recentTraceCount,
+        tools: planEngine.catalog.list().map((t) => ({
+          name: t.name,
+          version: t.version,
+          sideEffect: t.sideEffect,
+          risk: t.risk,
+        })),
+      },
+      policy: {
+        metrics,
+        ruleCount: 0, // populated via effective-policy per agent
+      },
+      knowledge: {
+        domainCount: domains.length,
+        articleCount: articles.length,
+        publishedArticles: articles.filter((a) => a.status === 'published').length,
+        domains: domains.map((d) => ({ id: d.id, name: d.name })),
+      },
+      modelConfig: {
+        model: config.ai.geminiModel,
+        apiKeyConfigured: Boolean(config.ai.geminiApiKey),
+      },
+      featureFlags: {
+        llmRouting: llmRoutingEnabled,
+      },
     });
-  } catch (err: any) {
-    console.error('AI copilot error:', err);
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    console.error('AI Studio overview error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-router.get('/stats', async (req: MultiTenantRequest, res) => {
+// ── GET /api/ai/stats ─────────────────────────────────────────────────────────
+
+router.get('/stats', requirePermission('audit.read'), async (req: MultiTenantRequest, res) => {
   try {
-    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
-    const stats = await aiRepo.getStats(scope);
+    const stats = await aiRepository.getStats({ tenantId: req.tenantId!, workspaceId: req.workspaceId! });
     res.json(stats);
   } catch (error) {
-    console.error('Error fetching AI stats:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    console.error('AI stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/ai/diagnose/:caseId ─────────────────────────────────────────────
+
+router.post('/diagnose/:caseId', requirePermission('cases.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    const { caseId } = req.params;
+    const { profile = 'standard' } = req.body;
+
+    const caseData = await aiRepository.getCaseContextData({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, caseId);
+    if (!caseData) {
+      res.status(404).json({ error: 'Case not found' });
+      return;
+    }
+
+    const jobId = enqueue(
+      JobType.AI_DIAGNOSE,
+      { caseId, profile },
+      {
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId!,
+        traceId: `diag-${caseId}-${Date.now()}`,
+        priority: 5,
+      },
+    );
+
+    res.json({ ok: true, jobId, status: 'enqueued' });
+  } catch (error) {
+    console.error('AI diagnosis error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/ai/draft/:caseId ───────────────────────────────────────────────
+
+router.post('/draft/:caseId', requirePermission('cases.write'), async (req: MultiTenantRequest, res) => {
+  try {
+    const { caseId } = req.params;
+    const { profile = 'friendly', agentSlug } = req.body;
+
+    const caseData = await aiRepository.getCaseContextData({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, caseId);
+    if (!caseData) {
+      res.status(404).json({ error: 'Case not found' });
+      return;
+    }
+
+    const jobId = enqueue(
+      JobType.AI_DRAFT,
+      { caseId, profile, agentSlug },
+      {
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId!,
+        traceId: `draft-${caseId}-${Date.now()}`,
+        priority: 5,
+      },
+    );
+
+    res.json({ ok: true, jobId, status: 'enqueued' });
+  } catch (error) {
+    console.error('AI draft error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/ai/runs/stats ────────────────────────────────────────────────────
+
+router.get('/runs/stats', requirePermission('audit.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const stats = await aiRepository.getStats({ tenantId: req.tenantId!, workspaceId: req.workspaceId! });
+    res.json(stats);
+  } catch (error) {
+    console.error('AI run stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/ai/copilot/:caseId ───────────────────────────────────────────────
+
+router.post('/copilot/:caseId', requirePermission('cases.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const { caseId } = req.params;
+    const { question = '', history = [] } = req.body ?? {};
+    const safeHistory = normalizeCopilotHistory(Array.isArray(history) ? history : []);
+
+    const bundle = await caseRepository.getBundle(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId! },
+      caseId,
+    );
+
+    if (!bundle) {
+      res.status(404).json({ error: 'Case not found' });
+      return;
+    }
+
+    const contextWindow = await buildContextWindow(caseId, req.tenantId!, req.workspaceId!);
+    const state = buildCaseState(bundle);
+    const resolve = buildResolveView(bundle);
+    const summary = summarizeStateForPrompt(state, resolve);
+
+    if (!config.ai.geminiApiKey) {
+      res.json({
+        ok: true,
+        source: 'fallback',
+        model: config.ai.geminiModel,
+        answer: buildFallbackCopilotAnswer(state),
+        summary,
+      });
+      return;
+    }
+
+    const gemini = new GoogleGenerativeAI(config.ai.geminiApiKey);
+    const model = gemini.getGenerativeModel({ model: config.ai.geminiModel });
+
+    const prompt = `
+You are an expert support operations copilot embedded inside a CRM case management platform.
+Your personality: sharp, direct, and genuinely helpful — like a senior colleague who has seen it all.
+You have full visibility into every connected system for this case: orders, payments, returns, refunds, approvals, workflows, integrations, and the full event timeline.
+
+Your job is to investigate the global state of this case, connect the dots across systems, surface the real root cause, and tell the agent exactly what to do next. Be specific — use the actual IDs, amounts, statuses, and timestamps from the data. If something doesn't add up between systems, say so clearly.
+
+Tone: conversational but precise. No bullet-point spam — write like a real person explaining the situation. 1-4 short paragraphs max unless the question needs more detail.
+
+---
+FULL CONTEXT WINDOW (all connected systems):
+${contextWindow?.toPromptString() || 'Unavailable'}
+
+CANONICAL STATE SNAPSHOT:
+${JSON.stringify(summary, null, 2)}
+
+RECENT CONVERSATION:
+${safeHistory.length ? safeHistory.map((item) => `${item.role === 'user' ? 'Agent' : 'Copilot'}: ${item.content}`).join('\n') : 'This is the start of the conversation.'}
+
+AGENT QUESTION:
+${String(question).trim()}
+
+Respond in plain text only. No markdown headers or bullet lists unless clarity requires it.
+`.trim();
+
+    const result = await withGeminiRetry(
+      () => model.generateContent(prompt),
+      { label: 'ai.copilot' },
+    );
+
+    const answer = result.response.text().trim();
+
+    res.json({
+      ok: true,
+      source: 'gemini',
+      model: config.ai.geminiModel,
+      answer: answer || buildFallbackCopilotAnswer(state),
+      summary,
+    });
+  } catch (error) {
+    console.error('AI copilot error:', error);
+    try {
+      const { caseId } = req.params;
+      const bundle = await caseRepository.getBundle({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, caseId);
+      if (bundle) {
+        const state = buildCaseState(bundle);
+        const resolve = buildResolveView(bundle);
+        res.json({
+          ok: true,
+          source: 'fallback',
+          model: config.ai.geminiModel,
+          answer: buildFallbackCopilotAnswer(state),
+          summary: summarizeStateForPrompt(state, resolve),
+        });
+        return;
+      }
+    } catch {
+      // ignore secondary fallback errors
+    }
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

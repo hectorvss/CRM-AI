@@ -63,6 +63,8 @@ function getLatestAgentVersionSqlite(db: any, agentId: string, status?: string) 
 }
 
 function getAgentWithVersionSqlite(db: any, agentId: string, tenantId: string) {
+  const catalog = getCatalogEntryBySlug(agentId);
+  const preferredId = catalog?.id ?? agentId;
   let row = db.prepare(`
     SELECT a.*, av.id as version_id, av.version_number, av.status as version_status,
            av.rollout_percentage, av.permission_profile, av.reasoning_profile,
@@ -70,16 +72,29 @@ function getAgentWithVersionSqlite(db: any, agentId: string, tenantId: string) {
     FROM agents a
     LEFT JOIN agent_versions av ON a.current_version_id = av.id
     WHERE a.id = ? AND a.tenant_id = ?
-  `).get(agentId, tenantId) as any;
+  `).get(preferredId, tenantId) as any;
+
+  if (!row) {
+    row = db.prepare(`
+      SELECT a.*, av.id as version_id, av.version_number, av.status as version_status,
+             av.rollout_percentage, av.permission_profile, av.reasoning_profile,
+             av.safety_profile, av.knowledge_profile, av.capabilities, av.published_at
+      FROM agents a
+      LEFT JOIN agent_versions av ON a.current_version_id = av.id
+      WHERE a.slug = ? AND a.tenant_id = ? AND a.is_active = 1
+      ORDER BY a.is_system DESC, a.created_at ASC
+      LIMIT 1
+    `).get(agentId, tenantId) as any;
+  }
 
   if (!row) return null;
 
   if (!row.version_id || row.version_status !== 'published') {
-    const fallback = getLatestAgentVersionSqlite(db, agentId, 'published');
+    const fallback = getLatestAgentVersionSqlite(db, row.id, 'published');
     if (fallback) {
       try {
         db.prepare('UPDATE agents SET current_version_id = ?, updated_at = ? WHERE id = ?')
-          .run(fallback.id, new Date().toISOString(), agentId);
+          .run(fallback.id, new Date().toISOString(), row.id);
       } catch { /* non-critical */ }
       row = { ...row, ...fallback, version_id: fallback.id, version_status: fallback.status };
     }
@@ -104,13 +119,38 @@ async function getLatestAgentVersionSupabase(agentId: string, status?: string) {
 
 async function getAgentWithVersionSupabase(agentId: string, tenantId: string) {
   const supabase = getSupabaseAdmin();
-  const { data: agent, error } = await supabase
-    .from('agents')
-    .select('*')
-    .eq('id', agentId)
-    .eq('tenant_id', tenantId)
-    .maybeSingle();
-  if (error) throw error;
+  let agent: any = null;
+  const catalog = getCatalogEntryBySlug(agentId);
+  const idCandidates = Array.from(new Set([catalog?.id, agentId].filter(Boolean))) as string[];
+
+  for (const id of idCandidates) {
+    const { data, error } = await supabase
+      .from('agents')
+      .select('*')
+      .eq('id', id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) {
+      agent = data;
+      break;
+    }
+  }
+
+  if (!agent) {
+    const { data, error } = await supabase
+      .from('agents')
+      .select('*')
+      .eq('slug', agentId)
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .order('is_system', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (error) throw error;
+    agent = data?.[0] ?? null;
+  }
+
   if (!agent) return null;
 
   let version: any = null;
@@ -125,13 +165,13 @@ async function getAgentWithVersionSupabase(agentId: string, tenantId: string) {
   }
 
   if (!version || version.status !== 'published') {
-    const fallback = await getLatestAgentVersionSupabase(agentId, 'published');
+    const fallback = await getLatestAgentVersionSupabase(agent.id, 'published');
     if (fallback) {
       version = fallback;
       await supabase
         .from('agents')
         .update({ current_version_id: fallback.id, updated_at: new Date().toISOString() })
-        .eq('id', agentId)
+        .eq('id', agent.id)
         .eq('tenant_id', tenantId);
     }
   }
@@ -630,7 +670,7 @@ async function getCaseKnowledgeContextSupabase(scope: AgentScope, caseId: string
   if (!caseRow) return null;
   const [messageRes, conflictsRes] = await Promise.all([
     supabase.from('messages').select('content').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('sent_at', { ascending: false }).limit(1),
-    supabase.from('reconciliation_issues').select('conflict_domain').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }).limit(10),
+    supabase.from('reconciliation_issues').select('conflict_domain').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('detected_at', { ascending: false }).limit(10),
   ]);
   if (messageRes.error) throw messageRes.error;
   if (conflictsRes.error) throw conflictsRes.error;
@@ -680,6 +720,13 @@ function getCaseKnowledgeContextSqlite(scope: AgentScope, caseId: string) {
 
 export interface AgentRepository {
   list(scope: AgentScope): Promise<any[]>;
+  listAgents(scope: Partial<AgentScope> & { tenantId: string }): Promise<any[]>;
+  getAgent(scope: Partial<AgentScope> & { tenantId: string }, idOrSlug: string): Promise<any | null>;
+  createAgent(scope: AgentScope, input: any): Promise<any>;
+  updateAgent(scope: AgentScope, agentId: string, input: any): Promise<any | null>;
+  createVersion(scope: AgentScope, agentId: string, input: any): Promise<any>;
+  activateVersion(scope: AgentScope, agentId: string, versionId: string): Promise<void>;
+  getRun(scope: Partial<AgentScope> & { tenantId: string }, runId: string): Promise<any | null>;
   getPolicyDraft(scope: AgentScope, agentId: string): Promise<any | null>;
   updatePolicyDraft(scope: AgentScope, agentId: string, payload: any): Promise<any>;
   publishPolicyDraft(scope: AgentScope, agentId: string, payload: any): Promise<any>;
@@ -690,10 +737,119 @@ export interface AgentRepository {
   getCaseKnowledgeContext(scope: AgentScope, caseId: string): Promise<any | null>;
 }
 
+async function getAgentGeneric(scope: Partial<AgentScope> & { tenantId: string }, idOrSlug: string) {
+  const byId = getDatabaseProvider() === 'supabase'
+    ? await getAgentDetailSupabase({ tenantId: scope.tenantId, workspaceId: scope.workspaceId ?? 'ws_default' }, idOrSlug)
+    : getAgentDetailSqlite({ tenantId: scope.tenantId, workspaceId: scope.workspaceId ?? 'ws_default' }, idOrSlug);
+  if (byId) return byId;
+
+  if (getDatabaseProvider() === 'supabase') {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.from('agents').select('*').eq('slug', idOrSlug).eq('tenant_id', scope.tenantId).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM agents WHERE slug = ? AND tenant_id = ?').get(idOrSlug, scope.tenantId);
+  return row ? parseRow(row) : null;
+}
+
+async function createAgentGeneric(scope: AgentScope, input: any) {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const payload = {
+    id,
+    tenant_id: scope.tenantId,
+    name: input.name,
+    slug: input.slug,
+    category: input.category ?? 'specialist',
+    description: input.description ?? null,
+    is_system: false,
+    is_locked: false,
+    is_active: true,
+    current_version_id: null,
+    created_at: now,
+    updated_at: now,
+  };
+  if (getDatabaseProvider() === 'supabase') {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('agents').insert(payload);
+    if (error) throw error;
+    return payload;
+  }
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO agents (id, tenant_id, name, slug, category, description, is_system, is_locked, is_active, current_version_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 0, 0, 1, NULL, ?, ?)
+  `).run(id, scope.tenantId, payload.name, payload.slug, payload.category, payload.description, now, now);
+  return payload;
+}
+
+async function updateAgentGeneric(scope: AgentScope, agentId: string, input: any) {
+  const allowed = ['name', 'category', 'description', 'is_active', 'is_locked'];
+  const updates = Object.fromEntries(Object.entries(input).filter(([key]) => allowed.includes(key)));
+  if (!Object.keys(updates).length) return getAgentGeneric(scope, agentId);
+  updates.updated_at = new Date().toISOString();
+  if (getDatabaseProvider() === 'supabase') {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('agents').update(updates).eq('id', agentId).eq('tenant_id', scope.tenantId);
+    if (error) throw error;
+    return getAgentGeneric(scope, agentId);
+  }
+  const db = getDb();
+  const fields = Object.keys(updates).map((key) => `${key} = ?`).join(', ');
+  db.prepare(`UPDATE agents SET ${fields} WHERE id = ? AND tenant_id = ?`).run(...Object.values(updates), agentId, scope.tenantId);
+  return getAgentGeneric(scope, agentId);
+}
+
+async function createVersionGeneric(scope: AgentScope, agentId: string, input: any) {
+  const agent = await getAgentGeneric(scope, agentId);
+  if (!agent) return null;
+  return updatePolicyDraftSupabase
+    ? (getDatabaseProvider() === 'supabase'
+        ? updatePolicyDraftSupabase(scope, agentId, input)
+        : updatePolicyDraftSqlite(scope, agentId, input))
+    : null;
+}
+
+async function activateVersionGeneric(scope: AgentScope, agentId: string, versionId: string) {
+  if (getDatabaseProvider() === 'supabase') {
+    const supabase = getSupabaseAdmin();
+    await supabase.from('agent_versions').update({ status: 'published', published_at: new Date().toISOString(), published_by: scope.userId ?? 'system' }).eq('id', versionId).eq('agent_id', agentId);
+    await supabase.from('agents').update({ current_version_id: versionId, updated_at: new Date().toISOString() }).eq('id', agentId).eq('tenant_id', scope.tenantId);
+    return;
+  }
+  const db = getDb();
+  db.prepare("UPDATE agent_versions SET status = 'published', published_at = ?, published_by = ? WHERE id = ? AND agent_id = ?")
+    .run(new Date().toISOString(), scope.userId ?? 'system', versionId, agentId);
+  db.prepare('UPDATE agents SET current_version_id = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+    .run(versionId, new Date().toISOString(), agentId, scope.tenantId);
+}
+
+async function getRunGeneric(scope: Partial<AgentScope> & { tenantId: string }, runId: string) {
+  if (getDatabaseProvider() === 'supabase') {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.from('agent_runs').select('*').eq('id', runId).eq('tenant_id', scope.tenantId).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM agent_runs WHERE id = ? AND tenant_id = ?').get(runId, scope.tenantId);
+  return row ? parseRow(row) : null;
+}
+
 export function createAgentRepository(): AgentRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
       list: listAgentsSupabase,
+      listAgents: (scope) => listAgentsSupabase({ tenantId: scope.tenantId, workspaceId: scope.workspaceId ?? 'ws_default' }),
+      getAgent: getAgentGeneric,
+      createAgent: createAgentGeneric,
+      updateAgent: updateAgentGeneric,
+      createVersion: createVersionGeneric,
+      activateVersion: activateVersionGeneric,
+      getRun: getRunGeneric,
       getPolicyDraft: getPolicyDraftSupabase,
       updatePolicyDraft: updatePolicyDraftSupabase,
       publishPolicyDraft: publishPolicyDraftSupabase,
@@ -707,6 +863,13 @@ export function createAgentRepository(): AgentRepository {
 
   return {
     list: async (scope) => listAgentsSqlite(scope),
+    listAgents: async (scope) => listAgentsSqlite({ tenantId: scope.tenantId, workspaceId: scope.workspaceId ?? 'ws_default' }),
+    getAgent: getAgentGeneric,
+    createAgent: createAgentGeneric,
+    updateAgent: updateAgentGeneric,
+    createVersion: createVersionGeneric,
+    activateVersion: activateVersionGeneric,
+    getRun: getRunGeneric,
     getPolicyDraft: async (scope, agentId) => getPolicyDraftSqlite(scope, agentId),
     updatePolicyDraft: async (scope, agentId, payload) => updatePolicyDraftSqlite(scope, agentId, payload),
     publishPolicyDraft: async (scope, agentId, payload) => publishPolicyDraftSqlite(scope, agentId, payload),

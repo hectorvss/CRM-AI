@@ -16,6 +16,8 @@ export interface CanonicalRepository {
   getInternalNotes(scope: CanonicalScope, caseId: string, limit?: number): Promise<any[]>;
   getApprovalWithContext(scope: CanonicalScope, approvalId: string): Promise<any>;
   getAuditTrail(scope: CanonicalScope, caseId: string, approvalId: string): Promise<any[]>;
+  getEventByDedupeKey(scope: CanonicalScope, dedupeKey: string): Promise<any | null>;
+  createEvent(scope: CanonicalScope, data: any): Promise<any>;
   updateEventStatus(scope: CanonicalScope, eventId: string, updates: any): Promise<void>;
 }
 
@@ -48,7 +50,7 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     orders, payments, returns,
     approvals, workflowRuns, reconciliationIssues, linkedCases,
     messages, internalNotes, statusHistory, canonicalEvents,
-    orderEvents, returnEvents
+    orderEvents, orderLineItems, returnEvents, webhookEvents, agentRuns
   ] = await Promise.all([
     orderIds.length ? supabase.from('orders').select('*').in('id', orderIds) : Promise.resolve({ data: [] }),
     paymentIds.length ? supabase.from('payments').select('*').in('id', paymentIds) : Promise.resolve({ data: [] }),
@@ -62,8 +64,50 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     supabase.from('case_status_history').select('*').eq('case_id', caseId).order('created_at', { ascending: true }),
     supabase.from('canonical_events').select('*').eq('case_id', caseId).order('occurred_at', { ascending: true }),
     orderIds.length ? supabase.from('order_events').select('*').in('order_id', orderIds).order('time', { ascending: true }) : Promise.resolve({ data: [] }),
-    returnIds.length ? supabase.from('return_events').select('*').in('return_id', returnIds).order('time', { ascending: true }) : Promise.resolve({ data: [] })
+    orderIds.length ? supabase.from('order_line_items').select('*').in('order_id', orderIds).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
+    returnIds.length ? supabase.from('return_events').select('*').in('return_id', returnIds).order('time', { ascending: true }) : Promise.resolve({ data: [] }),
+    supabase.from('webhook_events').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('received_at', { ascending: true }),
+    supabase.from('agent_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('started_at', { ascending: true }),
   ]);
+
+  const [refundsByPaymentRes, refundsByOrderRes, refundsByCustomerRes] = await Promise.all([
+    paymentIds.length ? supabase.from('refunds').select('*').in('payment_id', paymentIds).order('created_at', { ascending: true }) : Promise.resolve({ data: [] } as any),
+    orderIds.length ? supabase.from('refunds').select('*').in('order_id', orderIds).order('created_at', { ascending: true }) : Promise.resolve({ data: [] } as any),
+    caseRow.customer_id ? supabase.from('refunds').select('*').eq('customer_id', caseRow.customer_id).order('created_at', { ascending: true }) : Promise.resolve({ data: [] } as any),
+  ]);
+
+  const [caseKnowledgeLinksRes, connectorsRes, agentsRes, agentVersionsRes] = await Promise.all([
+    supabase.from('case_knowledge_links').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('relevance_score', { ascending: false }),
+    supabase.from('connectors').select('*').eq('tenant_id', scope.tenantId).order('updated_at', { ascending: false }),
+    supabase.from('agents').select('*').eq('tenant_id', scope.tenantId).order('updated_at', { ascending: false }),
+    supabase.from('agent_versions').select('*').eq('tenant_id', scope.tenantId).order('published_at', { ascending: false }).order('version_number', { ascending: false }),
+  ]);
+
+  if (caseKnowledgeLinksRes.error) throw caseKnowledgeLinksRes.error;
+  if (connectorsRes.error) throw connectorsRes.error;
+  if (agentsRes.error) throw agentsRes.error;
+  if (agentVersionsRes.error) throw agentVersionsRes.error;
+  if ((refundsByPaymentRes as any).error) throw (refundsByPaymentRes as any).error;
+  if ((refundsByOrderRes as any).error) throw (refundsByOrderRes as any).error;
+  if ((refundsByCustomerRes as any).error) throw (refundsByCustomerRes as any).error;
+
+  const workflowRunIds = Array.from(new Set((workflowRuns.data || []).map((row: any) => row.id).filter(Boolean)));
+  const workflowRunStepsRes = workflowRunIds.length > 0
+    ? await supabase.from('workflow_run_steps').select('*').in('workflow_run_id', workflowRunIds).order('started_at', { ascending: true })
+    : { data: [], error: null } as any;
+  if (workflowRunStepsRes.error) throw workflowRunStepsRes.error;
+
+  const knowledgeArticleIds = Array.from(new Set((caseKnowledgeLinksRes.data || []).map((link: any) => link.article_id).filter(Boolean)));
+  const knowledgeArticlesRes = knowledgeArticleIds.length > 0
+    ? await supabase
+        .from('knowledge_articles')
+        .select('*')
+        .eq('tenant_id', scope.tenantId)
+        .eq('workspace_id', scope.workspaceId)
+        .in('id', knowledgeArticleIds)
+    : { data: [], error: null } as any;
+
+  if (knowledgeArticlesRes.error) throw knowledgeArticlesRes.error;
 
   return {
     caseRow: {
@@ -97,7 +141,21 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     statusHistory: statusHistory.data || [],
     canonicalEvents: canonicalEvents.data || [],
     orderEvents: orderEvents.data || [],
-    returnEvents: returnEvents.data || []
+    orderLineItems: orderLineItems.data || [],
+    returnEvents: returnEvents.data || [],
+    webhookEvents: webhookEvents.data || [],
+    agentRuns: agentRuns.data || [],
+    workflowRunSteps: workflowRunStepsRes.data || [],
+    refunds: Array.from(new Map([
+      ...(refundsByPaymentRes.data || []),
+      ...(refundsByOrderRes.data || []),
+      ...(refundsByCustomerRes.data || []),
+    ].map((refund: any) => [refund.id, refund])).values()),
+    caseKnowledgeLinks: caseKnowledgeLinksRes.data || [],
+    knowledgeArticles: knowledgeArticlesRes.data || [],
+    connectors: connectorsRes.data || [],
+    agents: agentsRes.data || [],
+    agentVersions: agentVersionsRes.data || [],
   };
 }
 
@@ -154,6 +212,14 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
     WHERE case_id = ? AND tenant_id = ?
     ORDER BY started_at DESC
   `).all(caseId, scope.tenantId).map(parseRow);
+  const workflowRunSteps = workflowRuns.length > 0
+    ? db.prepare(`SELECT * FROM workflow_run_steps WHERE workflow_run_id IN (${workflowRuns.map(() => '?').join(',')}) ORDER BY started_at ASC`).all(...workflowRuns.map((run: any) => run.id)).map(parseRow)
+    : [];
+  const agentRuns = db.prepare(`
+    SELECT * FROM agent_runs
+    WHERE case_id = ? AND tenant_id = ?
+    ORDER BY started_at DESC
+  `).all(caseId, scope.tenantId).map(parseRow);
 
   const reconciliationIssues = db.prepare(`
     SELECT * FROM reconciliation_issues
@@ -204,9 +270,60 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
   const orderEvents = orderIds.length > 0
     ? db.prepare(`SELECT * FROM order_events WHERE tenant_id = ? AND order_id IN (${orderIds.map(() => '?').join(',')}) ORDER BY time ASC`).all(scope.tenantId, ...orderIds).map(parseRow)
     : [];
+  const orderLineItems = orderIds.length > 0
+    ? db.prepare(`SELECT * FROM order_line_items WHERE tenant_id = ? AND workspace_id = ? AND order_id IN (${orderIds.map(() => '?').join(',')}) ORDER BY created_at ASC`).all(scope.tenantId, scope.workspaceId, ...orderIds).map(parseRow)
+    : [];
   const returnEvents = returnIds.length > 0
     ? db.prepare(`SELECT * FROM return_events WHERE tenant_id = ? AND return_id IN (${returnIds.map(() => '?').join(',')}) ORDER BY time ASC`).all(scope.tenantId, ...returnIds).map(parseRow)
     : [];
+  const webhookEvents = db.prepare(`SELECT * FROM webhook_events WHERE tenant_id = ? AND workspace_id = ? AND case_id = ? ORDER BY received_at ASC`).all(scope.tenantId, scope.workspaceId, caseId).map(parseRow);
+
+  const refundsByPayment = paymentIds.length > 0
+    ? db.prepare(`SELECT * FROM refunds WHERE tenant_id = ? AND payment_id IN (${paymentIds.map(() => '?').join(',')}) ORDER BY created_at ASC`).all(scope.tenantId, ...paymentIds).map(parseRow)
+    : [];
+  const refundsByOrder = orderIds.length > 0
+    ? db.prepare(`SELECT * FROM refunds WHERE tenant_id = ? AND order_id IN (${orderIds.map(() => '?').join(',')}) ORDER BY created_at ASC`).all(scope.tenantId, ...orderIds).map(parseRow)
+    : [];
+  const refundsByCustomer = parsedCase.customer_id
+    ? db.prepare(`SELECT * FROM refunds WHERE tenant_id = ? AND customer_id = ? ORDER BY created_at ASC`).all(scope.tenantId, parsedCase.customer_id).map(parseRow)
+    : [];
+
+  const caseKnowledgeLinks = db.prepare(`
+    SELECT ckl.*, ka.title AS article_title, ka.content AS article_content, ka.status AS article_status,
+           ka.type AS article_type, ka.updated_at AS article_updated_at, ka.created_at AS article_created_at
+    FROM case_knowledge_links ckl
+    JOIN knowledge_articles ka ON ka.id = ckl.article_id
+    WHERE ckl.case_id = ? AND ckl.tenant_id = ?
+    ORDER BY ckl.relevance_score DESC, ckl.created_at ASC
+  `).all(caseId, scope.tenantId).map(parseRow);
+
+  const knowledgeArticles = caseKnowledgeLinks.map((link: any) => ({
+    id: link.article_id,
+    title: link.article_title,
+    content: link.article_content,
+    status: link.article_status,
+    type: link.article_type,
+    updated_at: link.article_updated_at,
+    created_at: link.article_created_at,
+  }));
+
+  const connectors = db.prepare(`
+    SELECT * FROM connectors
+    WHERE tenant_id = ?
+    ORDER BY updated_at DESC
+  `).all(scope.tenantId).map(parseRow);
+
+  const agents = db.prepare(`
+    SELECT * FROM agents
+    WHERE tenant_id = ?
+    ORDER BY updated_at DESC
+  `).all(scope.tenantId).map(parseRow);
+
+  const agentVersions = db.prepare(`
+    SELECT * FROM agent_versions
+    WHERE tenant_id = ?
+    ORDER BY published_at DESC, version_number DESC
+  `).all(scope.tenantId).map(parseRow);
 
   return {
     caseRow: parsedCase,
@@ -223,7 +340,17 @@ async function fetchCaseGraphRowsSqlite(scope: CanonicalScope, caseId: string) {
     statusHistory,
     canonicalEvents,
     orderEvents,
+    orderLineItems,
     returnEvents,
+    webhookEvents,
+    workflowRunSteps,
+    agentRuns,
+    refunds: Array.from(new Map([...refundsByPayment, ...refundsByOrder, ...refundsByCustomer].map((refund: any) => [refund.id, refund])).values()),
+    caseKnowledgeLinks,
+    knowledgeArticles,
+    connectors,
+    agents,
+    agentVersions,
   };
 }
 
@@ -350,24 +477,13 @@ async function findCaseByLinkedEntitySupabase(scope: CanonicalScope, entityType:
     .select('id, case_number, type, status, customer_id, conversation_id')
     .eq('tenant_id', scope.tenantId)
     .eq('workspace_id', scope.workspaceId)
-    .filter(column, 'cs', `{"${entityId}"}`) // Assuming jsonb array contains
+    .contains(column, [entityId])
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    // try literal filter if it's text[]
-    const { data: data2, error: error2 } = await supabase
-      .from('cases')
-      .select('id, case_number, type, status, customer_id, conversation_id')
-      .eq('tenant_id', scope.tenantId)
-      .eq('workspace_id', scope.workspaceId)
-      .contains(column, [entityId])
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error2) throw error2;
-    return data2;
+    throw error;
   }
   return data;
 }
@@ -446,6 +562,74 @@ function getAuditTrailSqlite(scope: CanonicalScope, caseId: string, approvalId: 
   `).all(scope.tenantId, caseId, approvalId).map(parseRow);
 }
 
+async function updateEventStatusSupabase(scope: CanonicalScope, eventId: string, updates: any) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('canonical_events')
+    .update({ ...updates, processed_at: new Date().toISOString() })
+    .eq('id', eventId);
+  if (error) throw error;
+}
+
+async function getEventByDedupeKeySupabase(scope: CanonicalScope, dedupeKey: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('canonical_events')
+    .select('*')
+    .eq('dedupe_key', dedupeKey)
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function createEventSupabase(scope: CanonicalScope, data: any) {
+  const supabase = getSupabaseAdmin();
+  const payload = {
+    id: data.id ?? crypto.randomUUID(),
+    ...data,
+    tenant_id: scope.tenantId,
+    workspace_id: data.workspace_id ?? scope.workspaceId,
+    occurred_at: data.occurred_at ?? new Date().toISOString(),
+    ingested_at: data.ingested_at ?? new Date().toISOString(),
+    status: data.status ?? 'received',
+  };
+  const { error } = await supabase.from('canonical_events').insert(payload);
+  if (error) throw error;
+  return payload;
+}
+
+function getEventByDedupeKeySqlite(scope: CanonicalScope, dedupeKey: string) {
+  const db = getDb();
+  return parseRow(db.prepare('SELECT * FROM canonical_events WHERE dedupe_key = ? AND tenant_id = ? AND workspace_id = ?').get(dedupeKey, scope.tenantId, scope.workspaceId));
+}
+
+function createEventSqlite(scope: CanonicalScope, data: any) {
+  const db = getDb();
+  const payload = {
+    id: data.id ?? crypto.randomUUID(),
+    ...data,
+    tenant_id: scope.tenantId,
+    workspace_id: data.workspace_id ?? scope.workspaceId,
+    occurred_at: data.occurred_at ?? new Date().toISOString(),
+    ingested_at: data.ingested_at ?? new Date().toISOString(),
+    status: data.status ?? 'received',
+  };
+  const fields = Object.keys(payload);
+  db.prepare(`INSERT INTO canonical_events (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`)
+    .run(...Object.values(payload).map((value) => value && typeof value === 'object' ? JSON.stringify(value) : value));
+  return payload;
+}
+
+async function updateEventStatusSqlite(scope: CanonicalScope, eventId: string, updates: any) {
+  const db = getDb();
+  const fields = Object.keys(updates).map(k => `${k} = ?`);
+  const params = Object.values(updates);
+  params.push(eventId);
+  db.prepare(`UPDATE canonical_events SET ${fields.join(', ')}, processed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
+}
+
 export function createCanonicalRepository(): CanonicalRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
@@ -456,14 +640,9 @@ export function createCanonicalRepository(): CanonicalRepository {
       getInternalNotes: getInternalNotesSupabase,
       getApprovalWithContext: getApprovalWithContextSupabase,
       getAuditTrail: getAuditTrailSupabase,
-      updateEventStatus: async (scope, eventId, updates) => {
-        const supabase = getSupabaseAdmin();
-        const { error } = await supabase
-          .from('canonical_events')
-          .update({ ...updates, processed_at: new Date().toISOString() })
-          .eq('id', eventId);
-        if (error) throw error;
-      }
+      getEventByDedupeKey: getEventByDedupeKeySupabase,
+      createEvent: createEventSupabase,
+      updateEventStatus: updateEventStatusSupabase,
     };
   }
 
@@ -475,12 +654,8 @@ export function createCanonicalRepository(): CanonicalRepository {
     getInternalNotes: async (scope, caseId, limit) => getInternalNotesSqlite(scope, caseId, limit),
     getApprovalWithContext: async (scope, approvalId) => getApprovalWithContextSqlite(scope, approvalId),
     getAuditTrail: async (scope, caseId, approvalId) => getAuditTrailSqlite(scope, caseId, approvalId),
-    updateEventStatus: async (scope, eventId, updates) => {
-      const db = getDb();
-      const fields = Object.keys(updates).map(k => `${k} = ?`);
-      const params = Object.values(updates);
-      params.push(eventId);
-      db.prepare(`UPDATE canonical_events SET ${fields.join(', ')}, processed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
-    }
+    getEventByDedupeKey: async (scope, dedupeKey) => getEventByDedupeKeySqlite(scope, dedupeKey),
+    createEvent: async (scope, data) => createEventSqlite(scope, data),
+    updateEventStatus: updateEventStatusSqlite,
   };
 }

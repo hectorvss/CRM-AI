@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '../db/supabase.js';
 import { parseRow } from '../db/utils.js';
 import { workerStatus } from '../queue/worker.js';
 import { integrationRegistry } from '../integrations/registry.js';
+import { redactForWorkspacePolicy } from '../services/privacyRedaction.js';
 
 export interface OperationsScope {
   tenantId: string;
@@ -20,6 +21,7 @@ export interface OperationsRepository {
   updateWebhookStatus(scope: OperationsScope, id: string, status: string): Promise<void>;
   listCanonicalEvents(scope: OperationsScope, limit?: number): Promise<any[]>;
   listAgentRuns(scope: OperationsScope, limit?: number): Promise<any[]>;
+  logAudit(scope: OperationsScope, entry: any): Promise<void>;
 }
 
 async function getOverviewSupabase(scope: OperationsScope) {
@@ -242,6 +244,50 @@ function listAgentRunsSqlite(scope: OperationsScope, limit = 100) {
   `).all(scope.tenantId, limit).map(parseRow);
 }
 
+async function logAuditSupabase(scope: OperationsScope, entry: any) {
+  const supabase = getSupabaseAdmin();
+  const redactedEntry = await redactForWorkspacePolicy(scope, entry);
+  const { error } = await supabase.from('audit_events').insert({
+    id: redactedEntry.id ?? crypto.randomUUID(),
+    tenant_id: scope.tenantId,
+    workspace_id: scope.workspaceId,
+    actor_type: redactedEntry.actorType ?? redactedEntry.actor_type ?? 'system',
+    actor_id: redactedEntry.actorId ?? redactedEntry.actor_id ?? 'system',
+    action: redactedEntry.action,
+    entity_type: redactedEntry.entityType ?? redactedEntry.entity_type ?? null,
+    entity_id: redactedEntry.entityId ?? redactedEntry.entity_id ?? null,
+    old_value: redactedEntry.oldValue ?? redactedEntry.old_value ?? null,
+    new_value: redactedEntry.newValue ?? redactedEntry.new_value ?? null,
+    metadata: redactedEntry.metadata ?? null,
+    occurred_at: redactedEntry.occurred_at ?? new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+async function logAuditSqlite(scope: OperationsScope, entry: any) {
+  const db = getDb();
+  const redactedEntry = await redactForWorkspacePolicy(scope, entry);
+  db.prepare(`
+    INSERT INTO audit_events (
+      id, tenant_id, workspace_id, actor_type, actor_id, action,
+      entity_type, entity_id, old_value, new_value, metadata, occurred_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    redactedEntry.id ?? crypto.randomUUID(),
+    scope.tenantId,
+    scope.workspaceId,
+    redactedEntry.actorType ?? redactedEntry.actor_type ?? 'system',
+    redactedEntry.actorId ?? redactedEntry.actor_id ?? 'system',
+    redactedEntry.action,
+    redactedEntry.entityType ?? redactedEntry.entity_type ?? null,
+    redactedEntry.entityId ?? redactedEntry.entity_id ?? null,
+    JSON.stringify(redactedEntry.oldValue ?? redactedEntry.old_value ?? null),
+    JSON.stringify(redactedEntry.newValue ?? redactedEntry.new_value ?? null),
+    JSON.stringify(redactedEntry.metadata ?? null),
+    redactedEntry.occurred_at ?? new Date().toISOString(),
+  );
+}
+
 export function createOperationsRepository(): OperationsRepository {
   if (getDatabaseProvider() === 'supabase') {
     return {
@@ -254,6 +300,7 @@ export function createOperationsRepository(): OperationsRepository {
       updateWebhookStatus: updateWebhookStatusSupabase,
       listCanonicalEvents: listCanonicalEventsSupabase,
       listAgentRuns: listAgentRunsSupabase,
+      logAudit: logAuditSupabase,
     };
   }
 
@@ -267,5 +314,6 @@ export function createOperationsRepository(): OperationsRepository {
     updateWebhookStatus: async (scope, id, status) => updateWebhookStatusSqlite(scope, id, status),
     listCanonicalEvents: async (scope, limit) => listCanonicalEventsSqlite(scope, limit),
     listAgentRuns: async (scope, limit) => listAgentRunsSqlite(scope, limit),
+    logAudit: async (scope, entry) => logAuditSqlite(scope, entry),
   };
 }

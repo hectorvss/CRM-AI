@@ -17,6 +17,8 @@ import type { JobType, JobHandler, JobPayloadMap } from '../types.js';
 import { JobType as JT } from '../types.js';
 import { logger } from '../../utils/logger.js';
 import { agentTriggerHandler } from '../../agents/orchestrator.js';
+import { slaCheckHandler } from './slaCheck.js';
+import { churnRiskScanHandler } from './churnRiskScan.js';
 
 // ── Phase 0: built-in smoke-test handler ─────────────────────────────────────
 
@@ -79,7 +81,8 @@ export function getHandlers(): HandlerMap {
     [JT.SEND_MESSAGE]:        placeholder(JT.SEND_MESSAGE),
 
     // ── Phase 6 — observability ──────────────────────────────────────────────
-    [JT.SLA_CHECK]:           placeholder(JT.SLA_CHECK),
+    [JT.SLA_CHECK]:           slaCheckHandler,
+    [JT.CHURN_RISK_SCAN]:     churnRiskScanHandler,
 
     // ── Phase 7 — agent engine ───────────────────────────────────────────────
     [JT.AGENT_TRIGGER]:       agentTriggerHandler,

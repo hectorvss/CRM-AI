@@ -1,80 +1,197 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useApi } from '../../api/hooks';
+import { iamApi, workspacesApi } from '../../api/client';
+import LoadingState from '../LoadingState';
 
-export default function NotificationsTab() {
+type SaveHandler = (() => Promise<void> | void) | null;
+type Props = { onSaveReady?: (handler: SaveHandler) => void };
+
+const FALLBACK_USER = {
+  preferences: {},
+  name: 'System',
+  email: 'system@crm-ai.local',
+};
+
+function parsePreferences(preferences: any) {
+  if (!preferences) return {};
+  if (typeof preferences === 'string') {
+    try {
+      return JSON.parse(preferences);
+    } catch {
+      return {};
+    }
+  }
+  return preferences;
+}
+
+export default function NotificationsTab({ onSaveReady }: Props) {
+  const { data: user, loading } = useApi<any>(iamApi.me);
+  const { data: workspace } = useApi<any>(workspacesApi.currentContext);
+  const currentUser = user || FALLBACK_USER;
+  const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
+  const workspaceSettings = useMemo(() => {
+    if (!workspace?.settings) return {};
+    if (typeof workspace.settings === 'string') {
+      try {
+        return JSON.parse(workspace.settings);
+      } catch {
+        return {};
+      }
+    }
+    return workspace.settings;
+  }, [workspace]);
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [inAppNotifications, setInAppNotifications] = useState(true);
+  const [approvalRequests, setApprovalRequests] = useState(true);
+  const [caseEscalations, setCaseEscalations] = useState(true);
+  const [mentions, setMentions] = useState(true);
+  const [workflowFailures, setWorkflowFailures] = useState(false);
+  const [securityAlerts, setSecurityAlerts] = useState(true);
+  const [emailDigest, setEmailDigest] = useState('Real-time (Immediate)');
+  const [notifyAssignedCases, setNotifyAssignedCases] = useState(true);
+  const [notifyApprovals, setNotifyApprovals] = useState(true);
+  const [notifyAIFailures, setNotifyAIFailures] = useState(false);
+  const [quietStart, setQuietStart] = useState('10:00 PM');
+  const [quietEnd, setQuietEnd] = useState('07:00 AM');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    const workspaceDefaults = workspaceSettings.notifications || {};
+    setEmailNotifications(preferences.notifications?.email ?? workspaceDefaults.email ?? true);
+    setInAppNotifications(preferences.notifications?.inApp ?? workspaceDefaults.inApp ?? true);
+    setApprovalRequests(preferences.notifications?.approvalRequests ?? workspaceDefaults.approvalRequests ?? true);
+    setCaseEscalations(preferences.notifications?.caseEscalations ?? workspaceDefaults.caseEscalations ?? true);
+    setMentions(preferences.notifications?.mentions ?? workspaceDefaults.mentions ?? true);
+    setWorkflowFailures(preferences.notifications?.workflowFailures ?? workspaceDefaults.workflowFailures ?? false);
+    setSecurityAlerts(preferences.notifications?.securityAlerts ?? workspaceDefaults.securityAlerts ?? true);
+    setEmailDigest(preferences.notifications?.emailDigest ?? workspaceDefaults.emailDigest ?? 'Real-time (Immediate)');
+    setNotifyAssignedCases(preferences.notifications?.personal?.assignedCases ?? workspaceDefaults.personal?.assignedCases ?? true);
+    setNotifyApprovals(preferences.notifications?.personal?.approvals ?? workspaceDefaults.personal?.approvals ?? true);
+    setNotifyAIFailures(preferences.notifications?.personal?.aiFailures ?? workspaceDefaults.personal?.aiFailures ?? false);
+    setQuietStart(preferences.notifications?.quietHours?.start ?? workspaceDefaults.quietHours?.start ?? '10:00 PM');
+    setQuietEnd(preferences.notifications?.quietHours?.end ?? workspaceDefaults.quietHours?.end ?? '07:00 AM');
+  }, [preferences, workspaceSettings]);
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    setStatusMessage(null);
+    try {
+      await iamApi.updateMe({
+        preferences: {
+          ...preferences,
+          notifications: {
+            email: emailNotifications,
+            inApp: inAppNotifications,
+            approvalRequests,
+            caseEscalations,
+            mentions,
+            workflowFailures,
+            securityAlerts,
+            emailDigest,
+            quietHours: { start: quietStart, end: quietEnd },
+            personal: {
+              assignedCases: notifyAssignedCases,
+              approvals: notifyApprovals,
+              aiFailures: notifyAIFailures,
+            },
+          },
+        },
+      });
+      setStatusMessage('Notification preferences saved.');
+    } catch (saveError: any) {
+      setStatusMessage(saveError?.message || 'Unable to save notification preferences.');
+      throw saveError;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    approvalRequests,
+    caseEscalations,
+    emailDigest,
+    emailNotifications,
+    inAppNotifications,
+    mentions,
+    notifyAIFailures,
+    notifyApprovals,
+    notifyAssignedCases,
+    preferences,
+    quietEnd,
+    quietStart,
+    securityAlerts,
+    workflowFailures,
+  ]);
+
+  useEffect(() => {
+    onSaveReady?.(handleSave);
+    return () => onSaveReady?.(null);
+  }, [handleSave, onSaveReady]);
+
+  if (loading) return <LoadingState title="Loading notification settings" message="Fetching your notification preferences." compact />;
+
   return (
     <div className="space-y-8">
-      {/* Channel Preferences */}
+      {statusMessage && (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
+          {statusMessage}
+        </div>
+      )}
+
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Channel Preferences</h2>
           <span className="material-symbols-outlined text-gray-400">notifications</span>
         </div>
-        <div className="p-6">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="p-6 space-y-6">
+          {[
+            ['Email Notifications', 'Receive alerts and digests via email', emailNotifications, setEmailNotifications],
+            ['In-App Notifications', 'Show badges and toasts while using the app', inAppNotifications, setInAppNotifications],
+          ].map(([label, desc, value, setter]) => (
+            <div key={String(label)} className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">Email Notifications</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Receive alerts and digests via email</p>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">{label as string}</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{desc as string}</p>
               </div>
-              <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600 transition-colors focus:outline-none">
-                <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
+              <button
+                type="button"
+                onClick={() => (setter as React.Dispatch<React.SetStateAction<boolean>>)((current) => !current)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${value ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-1">In-App Notifications</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Show badges and toasts while using the app</p>
-              </div>
-              <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600 transition-colors focus:outline-none">
-                <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
       <div className="grid grid-cols-2 gap-8">
-        {/* Alert Preferences */}
         <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Alert Types</h2>
             <span className="material-symbols-outlined text-gray-400">tune</span>
           </div>
           <div className="p-6 space-y-6">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700 dark:text-gray-300">Approval Requests</span>
-              <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600 transition-colors focus:outline-none">
-                <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700 dark:text-gray-300">Case Escalations</span>
-              <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600 transition-colors focus:outline-none">
-                <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700 dark:text-gray-300">Mentions (@alex)</span>
-              <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600 transition-colors focus:outline-none">
-                <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700 dark:text-gray-300">Workflow Failures</span>
-              <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors focus:outline-none">
-                <span className="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700 dark:text-gray-300">Security Alerts</span>
-              <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600 transition-colors focus:outline-none opacity-50 cursor-not-allowed">
-                <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
-              </button>
-            </div>
+            {[
+              ['Approval Requests', approvalRequests, setApprovalRequests],
+              ['Case Escalations', caseEscalations, setCaseEscalations],
+              ['Mentions (@alex)', mentions, setMentions],
+              ['Workflow Failures', workflowFailures, setWorkflowFailures],
+              ['Security Alerts', securityAlerts, setSecurityAlerts],
+            ].map(([label, value, setter]) => (
+              <div key={String(label)} className="flex items-center justify-between">
+                <span className="text-sm text-gray-700 dark:text-gray-300">{label as string}</span>
+                <button
+                  type="button"
+                  onClick={() => (setter as React.Dispatch<React.SetStateAction<boolean>>)((current) => !current)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${value ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* Intensity & Escalation */}
         <div className="space-y-8">
           <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
@@ -82,13 +199,12 @@ export default function NotificationsTab() {
               <span className="material-symbols-outlined text-gray-400">mail</span>
             </div>
             <div className="p-6">
-              <select className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none">
+              <select value={emailDigest} onChange={e => setEmailDigest(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm appearance-none">
                 <option>Real-time (Immediate)</option>
                 <option>Daily Digest (Morning)</option>
                 <option>Important Only</option>
                 <option>Off</option>
               </select>
-              <p className="text-xs text-gray-500 mt-2">Controls how often you receive summary emails for non-critical events.</p>
             </div>
           </section>
 
@@ -98,30 +214,32 @@ export default function NotificationsTab() {
               <span className="material-symbols-outlined text-gray-400">priority_high</span>
             </div>
             <div className="p-6 space-y-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                <div>
-                  <span className="block text-sm font-medium text-gray-900 dark:text-white">Notify me on assigned cases</span>
-                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">When a case is directly assigned to you</span>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                <div>
-                  <span className="block text-sm font-medium text-gray-900 dark:text-white">Notify me on my approvals</span>
-                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">When an approval requires your specific review</span>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input type="checkbox" className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                <div>
-                  <span className="block text-sm font-medium text-gray-900 dark:text-white">Notify me on AI action failures</span>
-                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">When an automated AI action fails on your cases</span>
-                </div>
-              </label>
+              {[
+                ['Notify me on assigned cases', 'When a case is directly assigned to you', notifyAssignedCases, setNotifyAssignedCases],
+                ['Notify me on my approvals', 'When an approval requires your specific review', notifyApprovals, setNotifyApprovals],
+                ['Notify me on AI action failures', 'When an automated AI action fails on your cases', notifyAIFailures, setNotifyAIFailures],
+              ].map(([label, desc, value, setter]) => (
+                <label key={String(label)} className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={Boolean(value)} onChange={() => (setter as React.Dispatch<React.SetStateAction<boolean>>)((current) => !current)} className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
+                  <div>
+                    <span className="block text-sm font-medium text-gray-900 dark:text-white">{label as string}</span>
+                    <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc as string}</span>
+                  </div>
+                </label>
+              ))}
             </div>
           </section>
         </div>
+      </div>
+
+      <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 p-6 flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-bold text-indigo-900 dark:text-indigo-200 mb-1">Personal Notification Policy</h3>
+          <p className="text-xs text-indigo-800/70 dark:text-indigo-300/70">These preferences are stored on your user profile and override workspace defaults only where you choose to change them.</p>
+        </div>
+        <button type="button" onClick={() => void handleSave().catch(() => undefined)} disabled={isSaving} className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold">
+          Save preferences
+        </button>
       </div>
     </div>
   );

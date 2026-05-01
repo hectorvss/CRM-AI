@@ -1,15 +1,75 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { agentsApi } from '../api/client';
+import { aiApi, agentsApi, connectorsApi, operationsApi, reportsApi, workspacesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
-import { connectionCategories } from '../connectionsData';
 import ConnectionsView from './ConnectionsView';
+import { ActionModal } from './ActionModal';
 import PermissionsView from './PermissionsView';
 import KnowledgeView from './KnowledgeView';
 import ReasoningView from './ReasoningView';
 import SafetyView from './SafetyView';
+import { MinimalButton, MinimalCard, MinimalPill, MinimalProgressBar } from './MinimalCategoryShell';
+import { connectionCategories } from '../connectionsData';
+import AgentNetworkGraph from './AgentNetworkGraph';
 
 type AIStudioTab = 'Overview' | 'Agents' | 'Connections' | 'Permissions' | 'Knowledge' | 'Reasoning' | 'Safety';
+
+function parseSettings(settings: any) {
+  if (!settings) return {};
+  if (typeof settings === 'string') {
+    try {
+      return JSON.parse(settings);
+    } catch {
+      return {};
+    }
+  }
+  return settings;
+}
+
+function trendTone(value?: string | null) {
+  if (value === 'up') return 'text-emerald-600';
+  if (value === 'down') return 'text-rose-600';
+  return 'text-gray-400';
+}
+
+function statusPill(status?: string | null) {
+  const normalized = String(status || 'unknown').toLowerCase();
+  if (['completed', 'connected', 'healthy', 'active', 'approved'].includes(normalized)) return 'bg-black/[0.04] text-gray-900 dark:bg-white/[0.08] dark:text-white';
+  if (['failed', 'error', 'disconnected', 'blocked'].includes(normalized)) return 'bg-black/[0.04] text-gray-700 dark:bg-white/[0.08] dark:text-gray-200';
+  return 'bg-black/[0.03] text-gray-600 dark:bg-white/[0.05] dark:text-gray-300';
+}
+
+function formatCompactDate(value?: string | null) {
+  if (!value) return 'N/A';
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function toPercent(value: number) {
+  return `${Math.round(value)}%`;
+}
+
+function safeNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeConnectorStatus(connector: any) {
+  const raw = String(
+    connector?.status ||
+      connector?.health ||
+      connector?.sync_status ||
+      (connector?.is_enabled ? 'connected' : 'disabled'),
+  ).toLowerCase();
+
+  if (['connected', 'healthy', 'active', 'ok', 'enabled'].includes(raw)) return 'connected';
+  if (['error', 'failed', 'degraded', 'blocked'].includes(raw)) return 'attention';
+  return 'disabled';
+}
 
 const originalCategories = [
   {
@@ -314,13 +374,69 @@ export default function AIStudio() {
   const [activeTab, setActiveTab] = useState<AIStudioTab>('Overview');
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
-  const [selectedConnection, setSelectedConnection] = useState<string>('Supervisor');
-  const [expandedConnection, setExpandedConnection] = useState<string | null>(null);
-  const [configTab, setConfigTab] = useState<'Overview' | 'Configure' | 'Test' | 'Logs'>('Configure');
   const [agentSearch, setAgentSearch] = useState('');
   const [agentListFilter, setAgentListFilter] = useState<'All' | 'Needs setup' | 'Enabled' | 'Disabled'>('All');
+  const [overviewMessage, setOverviewMessage] = useState<string>('');
+  const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
+  const [pendingAgentToggle, setPendingAgentToggle] = useState<any | null>(null);
+  const [pendingWorkspaceAction, setPendingWorkspaceAction] = useState<'enable_all' | 'emergency_stop' | null>(null);
+  const [agentActiveOverrides, setAgentActiveOverrides] = useState<Record<string, boolean>>({});
+  const [stableAgentCatalog, setStableAgentCatalog] = useState<any[]>([]);
+  const [savingCostControls, setSavingCostControls] = useState(false);
 
-  const { data: apiAgents, refetch: refetchAgents } = useApi(agentsApi.list);
+  const { data: studioData, refetch: refetchStudio } = useApi(aiApi.studio);
+  const { data: agentCatalog, refetch: refetchAgentCatalog } = useApi(agentsApi.list, [], []);
+  const { data: workspace, refetch: refetchWorkspace } = useApi(workspacesApi.currentContext, [], null);
+  const { data: reportOverview } = useApi(() => reportsApi.overview('7d'), [], null);
+  const { data: reportApprovals } = useApi(() => reportsApi.approvals('7d'), [], null);
+  const { data: reportCosts } = useApi(() => reportsApi.costs('7d'), [], null);
+  const { data: operationsOverview } = useApi(operationsApi.overview, [], null);
+  const { data: recentRuns, refetch: refetchRuns } = useApi(operationsApi.agentRuns, [], []);
+  const { data: connectors } = useApi(connectorsApi.list, [], []);
+
+  useEffect(() => {
+    if (Array.isArray(agentCatalog) && agentCatalog.length > 0) {
+      setStableAgentCatalog(agentCatalog);
+    }
+  }, [agentCatalog]);
+
+  const apiAgents = useMemo(() => {
+    const raw = Array.isArray(agentCatalog) && agentCatalog.length > 0
+      ? agentCatalog
+      : stableAgentCatalog.length > 0
+        ? stableAgentCatalog
+      : Array.isArray(studioData?.agents?.list)
+        ? studioData.agents.list
+          : Array.isArray(studioData?.agents)
+            ? studioData.agents
+            : studioData?.data ?? [];
+    if (!Array.isArray(raw)) return [];
+
+    const byIdentity = new Map<string, any>();
+    raw.forEach((agent: any) => {
+      const key = agent.slug || agent.name || agent.id;
+      const current = byIdentity.get(key);
+      if (!current) {
+        byIdentity.set(key, agent);
+        return;
+      }
+
+      const currentScore =
+        (current.current_version_id ? 4 : 0) +
+        (current.version_status === 'published' ? 2 : 0) +
+        (current.has_registered_impl ? 1 : 0);
+      const candidateScore =
+        (agent.current_version_id ? 4 : 0) +
+        (agent.version_status === 'published' ? 2 : 0) +
+        (agent.has_registered_impl ? 1 : 0);
+
+      if (candidateScore > currentScore) {
+        byIdentity.set(key, agent);
+      }
+    });
+
+    return Array.from(byIdentity.values());
+  }, [agentCatalog, stableAgentCatalog, studioData]);
 
   const CATEGORY_ICONS: Record<string, string> = {
     orchestration: 'supervisor_account', ingest: 'input', resolution: 'build',
@@ -332,34 +448,50 @@ export default function AIStudio() {
     communication: 'text-green-600', observability: 'text-gray-600', connectors: 'text-cyan-600',
   };
 
-  const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Connections', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
+  const tabs: AIStudioTab[] = ['Overview', 'Agents', 'Permissions', 'Knowledge', 'Reasoning', 'Safety'];
+
+  const connectionAgentByName = useMemo(() => {
+    const map = new Map<string, any>();
+    connectionCategories.forEach((category) => {
+      category.agents.forEach((agent: any) => map.set(agent.name, { ...agent, category: category.category }));
+    });
+    return map;
+  }, []);
 
   // Map API agents into the categories structure for rendering
   const mappedCategories = useMemo(() => (
     apiAgents && apiAgents.length > 0
       ? [...new Set(apiAgents.map((a: any) => a.category))].map(cat => ({
           title: String(cat).toUpperCase().replace(/_/g, ' '),
-          agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => ({
-            id: a.id,
-            slug: a.slug,
-            name: a.name,
-            desc: a.description || a.slug,
-            icon: a.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
-            iconColor: a.iconColor || CATEGORY_COLORS[a.category] || 'text-indigo-600',
-            active: !!a.is_active,
-            locked: !!a.is_locked,
-            purpose: a.purpose || a.reasoning_profile?.systemInstruction || a.description || a.slug,
-            triggers: a.triggers?.length ? a.triggers : ['System defined triggers'],
-            dependencies: a.dependencies?.length ? a.dependencies : ['Core routing', 'Context Window'],
-            ioLogic: a.ioLogic || { input: 'Canonical event', output: 'Approved action or Routing' },
-            metrics: a.metrics || {},
-            permissionProfile: a.permission_profile,
-            reasoningProfile: a.reasoning_profile,
-            safetyProfile: a.safety_profile,
-          }))
+          agents: apiAgents.filter((a: any) => a.category === cat).map((a: any) => {
+            const connectionProfile = connectionAgentByName.get(a.name);
+            return {
+              id: a.id,
+              slug: a.slug,
+              category: a.category,
+              name: a.name,
+              desc: connectionProfile?.role || a.description || a.slug,
+              icon: connectionProfile?.icon || a.icon || CATEGORY_ICONS[a.category] || 'smart_toy',
+              iconColor: connectionProfile?.iconColor || a.iconColor || CATEGORY_COLORS[a.category] || 'text-indigo-600',
+              active: a.id && agentActiveOverrides[a.id] !== undefined ? agentActiveOverrides[a.id] : !!a.is_active,
+              locked: !!a.is_locked,
+              purpose: connectionProfile?.role || a.purpose || a.reasoning_profile?.systemInstruction || a.description || a.slug,
+              triggers: connectionProfile?.receivesFrom?.length ? connectionProfile.receivesFrom : a.triggers?.length ? a.triggers : ['System defined triggers'],
+              dependencies: connectionProfile?.reportsTo?.length ? connectionProfile.reportsTo : a.dependencies?.length ? a.dependencies : ['Core routing', 'Context Window'],
+              ioLogic: a.ioLogic || {
+                input: connectionProfile?.receivesFrom?.slice(0, 2).join(', ') || 'Canonical event',
+                output: connectionProfile?.reportsTo?.slice(0, 2).join(', ') || 'Approved action or Routing',
+              },
+              metrics: a.metrics || {},
+              permissionProfile: a.permission_profile,
+              reasoningProfile: a.reasoning_profile,
+              safetyProfile: a.safety_profile,
+              connectionProfile,
+            };
+          })
         }))
       : originalCategories
-  ), [apiAgents]);
+  ), [CATEGORY_COLORS, CATEGORY_ICONS, agentActiveOverrides, apiAgents, connectionAgentByName]);
 
   const activeAgentData = useMemo(
     () => mappedCategories.flatMap(c => c.agents).find(a => a.name === selectedAgent) || mappedCategories[0]?.agents?.[0],
@@ -424,6 +556,93 @@ export default function AIStudio() {
     rollout_policy: policyDraft?.bundle?.rollout_policy || { rollout_percentage: runtimeSummary.rollout },
   }), [activeAgentData, policyDraft?.bundle, runtimeSummary.rollout]);
 
+  const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace?.settings]);
+  const aiStudioSettings = useMemo(() => parseSettings(workspaceSettings?.aiStudio), [workspaceSettings]);
+  const costControls = useMemo(() => ({
+    dailyCap: safeNumber(aiStudioSettings?.costControls?.dailyCap, 20),
+    hardStopEnabled: Boolean(aiStudioSettings?.costControls?.hardStopEnabled),
+    rolloutPercentage: safeNumber(aiStudioSettings?.rolloutPercentage, 10),
+  }), [aiStudioSettings]);
+
+  const costSummary = reportCosts?.summary || {};
+  const overviewKpis = reportOverview?.kpis || [];
+  const approvalsFunnel = reportApprovals?.funnel || [];
+  const approvalsRates = reportApprovals?.rates || {};
+  const pendingApprovals = safeNumber(approvalsFunnel.find((item: any) => item.label === 'Pending')?.val);
+  const deflectionRate = safeNumber(overviewKpis.find((item: any) => item.id === 'auto_resolution')?.value);
+  const escalationRate = Math.max(0, Math.min(100, 100 - safeNumber(approvalsRates.approvalRate, 100)));
+  const toolErrors = safeNumber(operationsOverview?.agent_failures_last_24h);
+  const totalCreditsUsed = safeNumber(costSummary.creditsUsed);
+  const totalCreditsAdded = Math.max(safeNumber(costSummary.creditsAdded), 1);
+  const dailyCapUsage = Math.min(100, Math.round((totalCreditsUsed / Math.max(costControls.dailyCap, 1)) * 100));
+
+  const connectorList = Array.isArray(connectors) ? connectors : [];
+  const connectedConnectors = connectorList.filter((connector: any) => normalizeConnectorStatus(connector) === 'connected').length;
+  const availableConnectors = connectorList.length;
+  const recentRunsList = Array.isArray(recentRuns) ? recentRuns : [];
+
+  const goLiveChecklist = useMemo(() => {
+    const items = [
+      {
+        label: 'LLM provider configured',
+        completed: Boolean(studioData?.modelConfig?.apiKeyConfigured),
+        actionLabel: 'Open Safety',
+        onClick: () => setActiveTab('Safety'),
+      },
+      {
+        label: 'Core agents active',
+        completed: safeNumber(studioData?.agents?.active) > 0,
+        actionLabel: 'Open Agents',
+        onClick: () => setActiveTab('Agents'),
+      },
+      {
+        label: 'At least one connector online',
+        completed: connectedConnectors > 0,
+        actionLabel: 'Review setup',
+        onClick: () => setActiveTab('Overview'),
+      },
+      {
+        label: 'Knowledge imported',
+        completed: safeNumber(studioData?.knowledge?.publishedArticles) > 0,
+        actionLabel: 'Open Knowledge',
+        onClick: () => setActiveTab('Knowledge'),
+      },
+      {
+        label: 'Policy runtime enabled',
+        completed: Boolean(studioData?.planEngine?.enabled),
+        actionLabel: 'Open Permissions',
+        onClick: () => setActiveTab('Permissions'),
+      },
+      {
+        label: 'Recent agent runs observed',
+        completed: recentRunsList.length > 0,
+        actionLabel: 'View runs',
+        onClick: () => setActiveTab('Agents'),
+      },
+      {
+        label: 'Cost controls configured',
+        completed: costControls.dailyCap > 0,
+        actionLabel: 'Review controls',
+        onClick: () => setActiveTab('Overview'),
+      },
+    ];
+    return items;
+  }, [
+    connectedConnectors,
+    costControls.dailyCap,
+    recentRunsList.length,
+    studioData?.agents?.active,
+    studioData?.knowledge?.publishedArticles,
+    studioData?.modelConfig?.apiKeyConfigured,
+    studioData?.planEngine?.enabled,
+  ]);
+
+  const completedChecklist = goLiveChecklist.filter((item) => item.completed).length;
+  const topAgents = useMemo(
+    () => mappedCategories.flatMap((category) => category.agents).slice(0, 5),
+    [mappedCategories],
+  );
+
   const handleSaveDraft = async () => {
     if (!selectedAgentId) return;
     await updateDraft.mutate({
@@ -432,7 +651,7 @@ export default function AIStudio() {
     });
     refetchDraft();
     refetchEffective();
-    refetchAgents();
+    refetchStudio();
   };
 
   const handlePublishDraft = async () => {
@@ -440,7 +659,7 @@ export default function AIStudio() {
     await publishDraft.mutate({ id: selectedAgentId });
     refetchDraft();
     refetchEffective();
-    refetchAgents();
+    refetchStudio();
   };
 
   const handleRollbackDraft = async () => {
@@ -448,17 +667,151 @@ export default function AIStudio() {
     await rollbackDraft.mutate({ id: selectedAgentId });
     refetchDraft();
     refetchEffective();
-    refetchAgents();
+    refetchStudio();
+  };
+
+  const persistAiStudioSettings = async (nextAiStudioSettings: Record<string, any>) => {
+    if (!workspace?.id) return;
+    await workspacesApi.update(workspace.id, {
+      settings: {
+        ...workspaceSettings,
+        aiStudio: nextAiStudioSettings,
+      },
+    });
+    refetchWorkspace();
+  };
+
+  const handleEmergencyStop = async () => {
+    const stoppableAgents = mappedCategories
+      .flatMap((category) => category.agents)
+      .filter((agent: any) => agent.id && agent.active && !agent.locked);
+
+    await Promise.all(
+      stoppableAgents.map((agent: any) =>
+        updateAgentConfig.mutate({
+          id: agent.id,
+          body: { isActive: false },
+        }),
+      ),
+    );
+    setOverviewMessage(`Stopped ${stoppableAgents.length} editable agents.`);
+    setAgentActiveOverrides((current) => {
+      const next = { ...current };
+      stoppableAgents.forEach((agent: any) => { next[agent.id] = false; });
+      return next;
+    });
+    refetchAgentCatalog();
+    refetchStudio();
+    refetchEffective();
+    refetchRuns();
+  };
+
+  const handleEnableAllAgents = async () => {
+    const editableAgents = mappedCategories
+      .flatMap((category) => category.agents)
+      .filter((agent: any) => agent.id && !agent.locked && !agent.active);
+
+    await Promise.all(
+      editableAgents.map((agent: any) =>
+        updateAgentConfig.mutate({
+          id: agent.id,
+          body: { isActive: true },
+        }),
+      ),
+    );
+    setOverviewMessage(`Enabled ${editableAgents.length} editable agents.`);
+    setAgentActiveOverrides((current) => {
+      const next = { ...current };
+      editableAgents.forEach((agent: any) => { next[agent.id] = true; });
+      return next;
+    });
+    refetchAgentCatalog();
+    refetchStudio();
+    refetchEffective();
+    refetchRuns();
+  };
+
+  const confirmWorkspaceAction = async () => {
+    if (pendingWorkspaceAction === 'enable_all') {
+      await handleEnableAllAgents();
+    }
+    if (pendingWorkspaceAction === 'emergency_stop') {
+      await handleEmergencyStop();
+    }
+    setPendingWorkspaceAction(null);
+  };
+
+  const handleCostControlToggle = async () => {
+    setSavingCostControls(true);
+    await persistAiStudioSettings({
+      ...aiStudioSettings,
+      rolloutPercentage: costControls.rolloutPercentage,
+      costControls: {
+        ...costControls,
+        hardStopEnabled: !costControls.hardStopEnabled,
+      },
+    });
+    setSavingCostControls(false);
+    setOverviewMessage(`Hard stop ${!costControls.hardStopEnabled ? 'enabled' : 'disabled'}.`);
+  };
+
+  const handleDailyCapChange = async (delta: number) => {
+    setSavingCostControls(true);
+    const nextDailyCap = Math.max(5, costControls.dailyCap + delta);
+    await persistAiStudioSettings({
+      ...aiStudioSettings,
+      rolloutPercentage: costControls.rolloutPercentage,
+      costControls: {
+        ...costControls,
+        dailyCap: nextDailyCap,
+      },
+    });
+    setSavingCostControls(false);
+    setOverviewMessage(`Daily cap updated to €${nextDailyCap}.`);
   };
 
   const handleToggleAgent = async (agent: any) => {
-    if (!agent?.id || agent.locked) return;
-    await updateAgentConfig.mutate({
+    if (!agent?.id || agent.locked) return false;
+    const nextActive = !agent.active;
+    setPendingAgentId(agent.id);
+    const result = await updateAgentConfig.mutate({
       id: agent.id,
-      body: { isActive: !agent.active },
+      body: { isActive: nextActive },
     });
-    refetchAgents();
+    if (!result) {
+      setOverviewMessage(`Could not ${nextActive ? 'enable' : 'disable'} ${agent.name}. Check permissions or agent configuration.`);
+      setPendingAgentId(null);
+      return false;
+    }
+    setAgentActiveOverrides((current) => ({ ...current, [agent.id]: nextActive }));
+    setOverviewMessage(`${agent.name} ${nextActive ? 'enabled' : 'disabled'}.`);
+    refetchAgentCatalog();
+    refetchStudio();
     refetchEffective();
+    refetchRuns();
+    setPendingAgentId(null);
+    return true;
+  };
+
+  const confirmAgentToggle = async () => {
+    if (!pendingAgentToggle?.agent) return;
+    const changed = await handleToggleAgent(pendingAgentToggle.agent);
+    if (changed) setPendingAgentToggle(null);
+  };
+
+  const agentRoadmapData = (agent: any) => {
+    const profile = agent?.connectionProfile || connectionAgentByName.get(agent?.name) || {};
+    return {
+      receivesFrom: Array.isArray(profile.receivesFrom) && profile.receivesFrom.length ? profile.receivesFrom : agent.triggers || [],
+      uses: Array.isArray(profile.uses) ? profile.uses : [],
+      does: Array.isArray(profile.does) ? profile.does : [],
+      reportsTo: Array.isArray(profile.reportsTo) && profile.reportsTo.length ? profile.reportsTo : agent.dependencies || [],
+      writesTo: Array.isArray(profile.writesTo) ? profile.writesTo : [],
+      blockedBy: Array.isArray(profile.blockedBy) ? profile.blockedBy : [],
+      steps: Array.isArray(profile.steps) ? profile.steps : [],
+      summary: profile.summary || `${(agent.triggers || []).length} inputs - ${(agent.dependencies || []).length} connections`,
+      role: profile.role || agent.purpose || agent.desc,
+    };
   };
 
   return (
@@ -471,21 +824,26 @@ export default function AIStudio() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-semibold text-gray-900 dark:text-white">AI Studio</h1>
-                <div className="bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded-full flex items-center gap-1.5 border border-orange-100 dark:border-orange-800/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                  <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wider">Limited rollout (10%)</span>
-                </div>
               </div>
               <p className="text-xs text-gray-500 mt-0.5">Prebuilt AI agents for support</p>
             </div>
             <div className="flex items-center gap-4">
-              <button className="text-sm font-bold text-red-600 hover:text-red-700 transition-colors">Emergency stop</button>
-              <button className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg text-sm font-bold hover:opacity-90 transition-opacity shadow-sm">
-                Deploy to 25%
+              <button
+                type="button"
+                onClick={() => setPendingWorkspaceAction('enable_all')}
+                disabled={!mappedCategories.some((category) => category.agents.some((agent: any) => agent.id && !agent.locked && !agent.active))}
+                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/5"
+              >
+                Enable all agents
               </button>
-              <div className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full text-[11px] font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
-                Ecommerce Support preset
-              </div>
+              <button
+                type="button"
+                onClick={() => setPendingWorkspaceAction('emergency_stop')}
+                disabled={!mappedCategories.some((category) => category.agents.some((agent: any) => agent.id && agent.active && !agent.locked))}
+                className="inline-flex items-center justify-center rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Emergency stop
+              </button>
             </div>
           </div>
           <div className="px-6 flex items-center space-x-8 border-t border-gray-100 dark:border-gray-800 pt-3">
@@ -515,8 +873,181 @@ export default function AIStudio() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="grid grid-cols-1 xl:grid-cols-12 gap-6"
+              className="space-y-6"
             >
+              {overviewMessage ? (
+                <div className="rounded-[22px] border border-black/5 bg-black/[0.02] px-5 py-4 text-sm text-gray-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-200">
+                  {overviewMessage}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  {
+                    label: 'Deflection Rate',
+                    value: toPercent(deflectionRate),
+                    detail: `${safeNumber(costSummary.autoResolvedCases).toLocaleString()} auto-resolved in the last 7 days`,
+                  },
+                  {
+                    label: 'Escalation Rate',
+                    value: toPercent(escalationRate),
+                    detail: `${safeNumber(approvalsRates.avgDecisionHours, 0).toFixed(1)}h average approval decision`,
+                  },
+                  {
+                    label: 'Pending Approvals',
+                    value: pendingApprovals.toLocaleString(),
+                    detail: pendingApprovals > 0 ? 'Needs operator attention' : 'No pending queues',
+                  },
+                  {
+                    label: 'Tool Errors',
+                    value: toolErrors.toLocaleString(),
+                    detail: 'Last 24h execution failures',
+                  },
+                ].map((kpi) => (
+                  <div key={kpi.label}>
+                    <MinimalCard title={kpi.label} subtitle={kpi.detail}>
+                      <div className="text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">{kpi.value}</div>
+                    </MinimalCard>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_1fr]">
+                <MinimalCard
+                  title="Go live checklist"
+                  subtitle="Operational readiness based on the current workspace, connectors and runtime."
+                  icon="task_alt"
+                  action={<MinimalPill tone="active">{completedChecklist}/{goLiveChecklist.length} complete</MinimalPill>}
+                >
+                  <div className="space-y-5">
+                    <MinimalProgressBar label="Readiness" value={completedChecklist} max={goLiveChecklist.length} />
+                    <div className="space-y-3">
+                      {goLiveChecklist.map((item) => (
+                        <div key={item.label} className="flex items-center justify-between gap-4 rounded-[20px] border border-black/5 px-4 py-4 dark:border-white/10">
+                          <div className="flex items-center gap-3">
+                            <div className={`flex h-8 w-8 items-center justify-center rounded-full border ${item.completed ? 'border-violet-200 bg-violet-500 text-white dark:border-violet-500/30' : 'border-black/10 text-gray-400 dark:border-white/10 dark:text-gray-500'}`}>
+                              <span className="material-symbols-outlined text-[16px]">{item.completed ? 'check' : 'schedule'}</span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-950 dark:text-white">{item.label}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{item.completed ? 'Ready' : 'Still needs setup'}</p>
+                            </div>
+                          </div>
+                          <MinimalButton variant={item.completed ? 'ghost' : 'outline'} onClick={item.onClick}>
+                            {item.actionLabel}
+                          </MinimalButton>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </MinimalCard>
+
+                <div className="space-y-6">
+                  <MinimalCard
+                    title="Agent status"
+                    subtitle="Live activation state for the agents currently loaded in this workspace."
+                    icon="memory"
+                    action={<MinimalButton variant="ghost" onClick={() => setActiveTab('Agents')}>Open agents</MinimalButton>}
+                  >
+                    <div className="space-y-4">
+                      {topAgents.map((agent: any) => (
+                        <div key={agent.id || agent.name} className="flex items-center justify-between gap-4 rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-950 dark:text-white">{agent.name}</p>
+                            <p className="truncate text-xs text-gray-500 dark:text-gray-400">{agent.desc}</p>
+                          </div>
+                          {agent.locked ? (
+                            <MinimalPill tone="neutral">Locked</MinimalPill>
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label={`${agent.active ? 'Disable' : 'Enable'} ${agent.name}`}
+                              onClick={() => setPendingAgentToggle({ agent, nextActive: !agent.active })}
+                              disabled={pendingAgentId === agent.id}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
+                            >
+                              <span className={`absolute h-4 w-4 rounded-full bg-white transition-all ${agent.active ? 'right-1' : 'left-1'}`} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </MinimalCard>
+
+                  <MinimalCard
+                    title="Cost controls"
+                    subtitle="Persistent runtime limits shared with the workspace settings."
+                    icon="tune"
+                    action={<MinimalPill tone="neutral">{dailyCapUsage}% used</MinimalPill>}
+                  >
+                    <div className="space-y-5">
+                      <MinimalProgressBar label="Daily cap" value={totalCreditsUsed} max={Math.max(costControls.dailyCap, totalCreditsUsed, 1)} suffix="credits" />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Limit</p>
+                          <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">€{costControls.dailyCap}</p>
+                        </div>
+                        <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Runtime stop</p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-950 dark:text-white">{costControls.hardStopEnabled ? 'Enabled' : 'Disabled'}</span>
+                            <button
+                              type="button"
+                              onClick={handleCostControlToggle}
+                              disabled={savingCostControls}
+                              className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${costControls.hardStopEnabled ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${savingCostControls ? 'opacity-50' : ''}`}
+                            >
+                              <span className={`absolute h-5 w-5 rounded-full bg-white transition-all ${costControls.hardStopEnabled ? 'right-1' : 'left-1'}`} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(-5)} disabled={savingCostControls}>- €5</MinimalButton>
+                        <MinimalButton variant="outline" onClick={() => handleDailyCapChange(5)} disabled={savingCostControls}>+ €5</MinimalButton>
+                        <MinimalButton variant="ghost" onClick={() => setActiveTab('Safety')}>Open safety</MinimalButton>
+                      </div>
+                    </div>
+                  </MinimalCard>
+                </div>
+              </div>
+
+              <MinimalCard
+                title="Recent runs"
+                subtitle="Latest agent executions pulled from live operations."
+                icon="history"
+                action={<MinimalButton variant="ghost" onClick={() => setActiveTab('Agents')}>View agents</MinimalButton>}
+              >
+                <div className="space-y-3">
+                  {recentRunsList.slice(0, 6).map((run: any) => (
+                    <div key={run.id} className="grid gap-3 rounded-[20px] border border-black/5 px-4 py-4 md:grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr] md:items-center dark:border-white/10">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-950 dark:text-white">{run.agent_name || run.agent_slug || 'Agent run'}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{run.trace_id || run.case_id || run.id}</p>
+                      </div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300">
+                        {run.started_at ? formatCompactDate(run.started_at) : 'Waiting for timestamp'}
+                      </div>
+                      <div>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${statusPill(run.outcome_status)}`}>
+                          {String(run.outcome_status || 'unknown').replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {safeNumber(run.cost_credits).toFixed(2)} cr · {safeNumber(run.tokens_used).toLocaleString()} tok
+                      </div>
+                    </div>
+                  ))}
+                  {!recentRunsList.length ? (
+                    <div className="rounded-[20px] border border-dashed border-black/10 px-4 py-8 text-center text-sm text-gray-500 dark:border-white/10 dark:text-gray-400">
+                      No recent runs yet. As soon as the runtime starts executing agents, they will appear here.
+                    </div>
+                  ) : null}
+                </div>
+              </MinimalCard>
+
+              {false && (
+                <>
               {/* Left Column */}
               <div className="xl:col-span-8 space-y-6">
                 {/* Checklist Card */}
@@ -685,6 +1216,8 @@ export default function AIStudio() {
                   </p>
                 </div>
               </div>
+                </>
+              )}
             </motion.div>
           ) : activeTab === 'Connections' ? (
             <ConnectionsView />
@@ -858,17 +1391,31 @@ export default function AIStudio() {
                                   <span className="text-[10px] font-bold uppercase tracking-wider">Locked ON</span>
                                 </div>
                               ) : (
-                                <div
+                                <button
+                                  type="button"
+                                  aria-label={`${agent.active ? 'Disable' : 'Enable'} ${agent.name}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleToggleAgent(agent);
+                                    setPendingAgentToggle({ agent, nextActive: !agent.active });
                                   }}
-                                  className={`w-8 h-4 rounded-full relative transition-colors ${agent.active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                                  disabled={pendingAgentId === agent.id}
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${agent.active ? 'border-violet-500/20 bg-violet-500' : 'border-black/10 bg-black/10 dark:border-white/10 dark:bg-white/10'} ${pendingAgentId === agent.id ? 'opacity-50' : ''}`}
                                 >
-                                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${agent.active ? 'right-0.5' : 'left-0.5'}`}></div>
-                                </div>
+                                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${agent.active ? 'right-1' : 'left-1'}`}></div>
+                                </button>
                               )}
-                              <span className={`material-symbols-outlined text-gray-400 transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
+                              <button
+                                type="button"
+                                aria-label={`${expandedAgent === agent.name ? 'Collapse' : 'Expand'} ${agent.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedAgent(agent.name);
+                                  setExpandedAgent(expandedAgent === agent.name ? null : agent.name);
+                                }}
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/5 dark:hover:text-gray-200"
+                              >
+                                <span className={`material-symbols-outlined text-[18px] transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
+                              </button>
                             </div>
                           </div>
                           
@@ -881,43 +1428,86 @@ export default function AIStudio() {
                                 exit={{ height: 0, opacity: 0 }}
                                 className="overflow-hidden border-t border-gray-50 dark:border-gray-800"
                               >
-                                <div className="p-6 grid grid-cols-2 gap-8">
-                                  <div className="space-y-4">
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Purpose</p>
-                                      <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                                        {agent.purpose}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Triggers</p>
-                                      <ul className="space-y-1.5">
-                                        {agent.triggers.map((trigger, i) => (
-                                          <li key={i} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                                            {trigger}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  </div>
-                                  <div className="space-y-4">
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Dependencies</p>
-                                      <div className="flex flex-wrap gap-2">
-                                        {agent.dependencies.map(dep => (
-                                          <span key={dep} className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-[10px] font-medium text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">{dep}</span>
-                                        ))}
+                                {(() => {
+                                  const profileMeta = agent.connectionProfile || connectionAgentByName.get(agent.name) || {};
+                                  const fallbackDescription = (agent.desc || agent.purpose || agent.category || 'Operational agent').trim();
+                                  const responsibilities = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
+                                  const receivesFrom = Array.isArray(profileMeta?.receivesFrom) ? profileMeta.receivesFrom : [];
+                                  const reportsTo = Array.isArray(profileMeta?.reportsTo) ? profileMeta.reportsTo : [];
+                                  const writesTo = Array.isArray(profileMeta?.writesTo) ? profileMeta.writesTo : [];
+                                  const blockedBy = Array.isArray(profileMeta?.blockedBy) ? profileMeta.blockedBy : [];
+                                  const uses = Array.isArray(profileMeta?.uses) ? profileMeta.uses : [];
+                                  const joinShort = (items: string[], limit = 2) => items.slice(0, limit).join(' and ');
+                                  const normalizeSentence = (text: string) => {
+                                    const sentence = text.trim().replace(/\.$/, '');
+                                    return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+                                  };
+                                  const detailBullets = responsibilities.length
+                                    ? responsibilities.slice(0, 3).map((item: string, index: number) => {
+                                      const action = normalizeSentence(item);
+                                      if (index === 0 && writesTo.length) {
+                                        return `${action}. This matters because it produces ${joinShort(writesTo)} that downstream modules can trust.`;
+                                      }
+                                      if (index === 1 && reportsTo.length) {
+                                        return `${action}. This keeps ${joinShort(reportsTo)} aligned with the same operational state.`;
+                                      }
+                                      if (index === 2 && blockedBy.length) {
+                                        return `${action}. This helps prevent blockers such as ${joinShort(blockedBy)} before work moves forward.`;
+                                      }
+                                      if (uses.length) {
+                                        return `${action}. It uses ${joinShort(uses)} so the decision is grounded in the configured runtime context.`;
+                                      }
+                                      if (receivesFrom.length) {
+                                        return `${action}. It turns signals from ${joinShort(receivesFrom)} into usable agent context.`;
+                                      }
+                                      return `${action}.`;
+                                    })
+                                    : [fallbackDescription];
+
+                                  return (
+                                    <div className="p-6 space-y-5">
+                                      <div className="rounded-[22px] border border-black/5 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-white/10 dark:bg-[#171717]">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-400">What it does</p>
+                                          </div>
+                                          <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
+                                        </div>
+
+                                        <div className="mt-4">
+                                          <ul className="grid grid-cols-1 gap-2">
+                                            {detailBullets.map((item: string, index: number) => (
+                                              <li key={`${agent.name}-detail-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">
+                                                <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-violet-500/70" />
+                                                <span>{item}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
                                       </div>
                                     </div>
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">I/O Logic</p>
-                                      <div className="flex items-center gap-2">
-                                        <div className="px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700 text-[10px] font-mono">{agent.ioLogic?.input || 'Canonical Event'}</div>
-                                        <span className="material-symbols-outlined text-xs text-gray-400">arrow_forward</span>
-                                        <div className="px-2 py-1 bg-white dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700 text-[10px] font-mono">{agent.ioLogic?.output || 'Routing Decision'}</div>
+                                  );
+                                })()}
+                                <div className="px-6 pb-6">
+                                  <div className="rounded-[22px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Agent network</p>
+                                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                                          Real connections this agent has with the rest of the system.
+                                        </p>
                                       </div>
+                                      <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
                                     </div>
+                                    <AgentNetworkGraph
+                                      agent={{
+                                        name: agent.name,
+                                        icon: agent.icon,
+                                        iconColor: agent.iconColor,
+                                        active: agent.active,
+                                      }}
+                                      roadmap={agentRoadmapData(agent)}
+                                    />
                                   </div>
                                 </div>
                               </motion.div>
@@ -934,6 +1524,80 @@ export default function AIStudio() {
         </AnimatePresence>
       </div>
       </div>
+      <ActionModal
+        open={Boolean(pendingWorkspaceAction)}
+        onClose={() => setPendingWorkspaceAction(null)}
+        loading={false}
+        variant={pendingWorkspaceAction === 'emergency_stop' ? 'danger' : 'warning'}
+        icon={pendingWorkspaceAction === 'emergency_stop' ? 'emergency' : 'toggle_on'}
+        title={pendingWorkspaceAction === 'emergency_stop' ? 'Emergency stop' : 'Enable all agents'}
+        subtitle={pendingWorkspaceAction === 'emergency_stop'
+          ? 'This will stop every editable active agent and prevent new tasks from being routed to them.'
+          : 'This will enable every editable disabled agent so the runtime can route new tasks to them.'}
+        context={pendingWorkspaceAction ? [
+          { label: 'Scope', value: 'Workspace agents' },
+          { label: 'Editable agents', value: pendingWorkspaceAction === 'emergency_stop'
+            ? String(mappedCategories.flatMap((category) => category.agents).filter((agent: any) => agent.id && agent.active && !agent.locked).length)
+            : String(mappedCategories.flatMap((category) => category.agents).filter((agent: any) => agent.id && !agent.locked && !agent.active).length)
+          },
+          { label: 'Current mode', value: pendingWorkspaceAction === 'emergency_stop' ? 'Live to paused' : 'Paused to live' },
+        ] : []}
+        steps={pendingWorkspaceAction === 'emergency_stop' ? [
+          { text: 'Active editable agents are stopped', detail: 'Only unlocked agents currently active will be paused.' },
+          { text: 'Routing is refreshed', detail: 'The runtime map is reloaded so the dashboard reflects the new state.' },
+          { text: 'No configuration is deleted', detail: 'Agent bundles stay intact; only execution state changes.' },
+        ] : [
+          { text: 'Disabled editable agents are activated', detail: 'Only unlocked agents currently paused will be enabled.' },
+          { text: 'Routing becomes available again', detail: 'The runtime can start sending work to those agents.' },
+          { text: 'Live state is synced back to the UI', detail: 'The agent list refreshes to show the new status.' },
+        ]}
+        considerations={pendingWorkspaceAction === 'emergency_stop' ? [
+          { text: 'This will immediately halt routing to live editable agents.' },
+          { text: 'Locked agents are not affected.' },
+        ] : [
+          { text: 'This can expose newly enabled agents to live traffic right away.' },
+          { text: 'If an agent is not fully configured it may still fail on missing tools or connectors.' },
+        ]}
+        confirmLabel={pendingWorkspaceAction === 'emergency_stop' ? 'Stop all agents' : 'Enable all agents'}
+        onConfirm={confirmWorkspaceAction}
+      />
+
+      <ActionModal
+        open={Boolean(pendingAgentToggle?.agent)}
+        onClose={() => setPendingAgentToggle(null)}
+        loading={pendingAgentId === pendingAgentToggle?.agent?.id}
+        variant={pendingAgentToggle?.nextActive ? 'warning' : 'danger'}
+        icon={pendingAgentToggle?.nextActive ? 'toggle_on' : 'toggle_off'}
+        title={pendingAgentToggle?.nextActive ? `Enable ${pendingAgentToggle?.agent?.name || 'agent'}` : `Disable ${pendingAgentToggle?.agent?.name || 'agent'}`}
+        subtitle={pendingAgentToggle?.nextActive
+          ? 'This will activate the agent in the live runtime and let it receive new tasks.'
+          : 'This will pause the agent so it stops receiving new tasks from the runtime.'}
+        context={pendingAgentToggle?.agent ? [
+          { label: 'Agent', value: pendingAgentToggle.agent.name },
+          { label: 'Category', value: pendingAgentToggle.agent.category || 'Workspace agent' },
+          { label: 'Current state', value: pendingAgentToggle.agent.active ? 'Active' : 'Disabled' },
+          { label: 'Next state', value: pendingAgentToggle?.nextActive ? 'Active' : 'Disabled', accent: !pendingAgentToggle?.nextActive },
+        ] : []}
+        steps={pendingAgentToggle?.nextActive ? [
+          { text: 'The agent becomes available to the runtime', detail: 'New tasks can be routed to this agent once the toggle is confirmed.' },
+          { text: 'Any policy bundle stays intact', detail: 'Only the activation state changes; permissions, safety and reasoning profiles remain in place.' },
+          { text: 'Operational routing is refreshed', detail: 'The dashboard refetches agent state so the UI reflects the new live status.' },
+        ] : [
+          { text: 'The agent stops receiving new work', detail: 'The runtime will avoid routing fresh tasks to this agent.' },
+          { text: 'Current policy definitions remain stored', detail: 'No policy or configuration bundle is deleted; only execution is paused.' },
+          { text: 'The workspace agent map is refreshed', detail: 'The list and live status indicators update after the change lands.' },
+        ]}
+        considerations={pendingAgentToggle?.nextActive ? [
+          { text: 'Turning an agent on can immediately expose it to live traffic.' },
+          { text: 'If the agent depends on incomplete setup, it may route but still fail on missing tools or connectors.' },
+        ] : [
+          { text: 'Disabling an agent prevents it from receiving new tasks, which can pause part of the support flow.' },
+          { text: 'Locked agents cannot be toggled from this screen.' },
+        ]}
+        confirmLabel={pendingAgentToggle?.nextActive ? 'Enable agent' : 'Disable agent'}
+        onConfirm={confirmAgentToggle}
+      />
     </div>
   );
 }
+

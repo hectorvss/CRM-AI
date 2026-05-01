@@ -12,7 +12,14 @@ import { getHandlers } from './handlers/index.js';
 import { createJobRepository } from '../data/index.js';
 import type { JobContext, JobType } from './types.js';
 
-const jobRepo = createJobRepository();
+let jobRepo: ReturnType<typeof createJobRepository> | null = null;
+
+function getJobRepo() {
+  if (!jobRepo) {
+    jobRepo = createJobRepository();
+  }
+  return jobRepo;
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -36,7 +43,7 @@ function backoffMs(attempt: number): number {
 async function claimJobs(limit: number): Promise<any[]> {
   const jobs: any[] = [];
   for (let i = 0; i < limit; i++) {
-    const job = await jobRepo.claimJob();
+    const job = await getJobRepo().claimJob();
     if (!job) break;
     jobs.push(job);
   }
@@ -44,7 +51,7 @@ async function claimJobs(limit: number): Promise<any[]> {
 }
 
 async function markCompleted(id: string): Promise<void> {
-  await jobRepo.finishJob(id, {
+  await getJobRepo().finishJob(id, {
     status: 'completed',
     finishedAt: new Date().toISOString()
   });
@@ -56,19 +63,12 @@ async function markFailed(id: string, err: unknown, attempts: number, maxAttempt
 
   if (canRetry) {
     const runAt = new Date(Date.now() + backoffMs(attempts)).toISOString();
-    await jobRepo.finishJob(id, {
-      status: 'failed', // pending in repository logic usually
-      finishedAt: new Date().toISOString(),
-      attempts: attempts,
-      error: message
+    await getJobRepo().rescheduleJob(id, {
+      runAt,
+      error: message,
     });
-    
-    // The repository logic should really handle the retry loop, 
-    // but here we just follow the existing worker logic pattern via repository.
-    // Note: SQLiteJobRepository currently uses status='pending' for retries in finishJob if configured.
-    // I'll ensure the repo implementations match this expectation.
   } else {
-    await jobRepo.finishJob(id, {
+    await getJobRepo().finishJob(id, {
       status: 'dead',
       finishedAt: new Date().toISOString(),
       error: message
@@ -175,7 +175,20 @@ export function startWorker(): void {
     pollIntervalMs: config.queue.pollIntervalMs,
     provider:       config.db.provider
   });
-  tick();
+  void getJobRepo().quarantineOrphanJobs()
+    .then((count) => {
+      if (count > 0) {
+        logger.info('Quarantined orphan jobs at startup', { count });
+      }
+    })
+    .catch((err) => {
+      logger.warn('Failed to quarantine orphan jobs at startup', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    })
+    .finally(() => {
+      tick();
+    });
 }
 
 export function stopWorker(): Promise<void> {

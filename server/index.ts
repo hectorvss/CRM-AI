@@ -3,17 +3,9 @@ import cors from 'cors';
 import path from 'path';
 import { mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-
-// Load env before config so config can read process.env
-dotenv.config({ path: '.env.local' });
-dotenv.config();
 
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { runMigrations, getDb } from './db/client.js';
-import { seedDatabase } from './db/seed.js';
-import { seedAgents } from './agents/seed.js';
 import { startWorker, stopWorker, workerStatus } from './queue/worker.js';
 import { countJobs } from './queue/client.js';
 import { startScheduledJobs, stopScheduledJobs } from './queue/scheduledJobs.js';
@@ -42,10 +34,11 @@ import sseRouter from './routes/sse.js';
 import demoRouter from './routes/demo.js';
 import policyRouter from './routes/policy.js';
 import reconciliationRouter from './routes/reconciliation.js';
+import superAgentRouter from './routes/superAgent.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
-// ── Register job handlers ──
+// ── Register job handlers (must import to trigger side-effect registration) ──
 import './queue/handlers/webhookProcess.js';
 import './pipeline/canonicalizer.js';
 import './pipeline/channelIngest.js';
@@ -59,26 +52,38 @@ import './pipeline/draftReply.js';
 import './pipeline/messageSender.js';
 import './pipeline/slaMonitor.js';
 
+// ── Agent engine (registers AGENT_TRIGGER handler via queue/handlers/index.ts) ──
+// Importing orchestrator ensures the agentTriggerHandler is available
+// to the worker without needing a separate registration call.
 import './agents/orchestrator.js';
+
+// ── Plan Engine — initialise tool registry at startup ───────────────────────
+import { planEngine } from './agents/planEngine/index.js';
+planEngine.init();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
 
-mkdirSync(DATA_DIR, { recursive: true });
+const isServerlessRuntime = Boolean(process.env.VERCEL);
+
+if (!isServerlessRuntime) {
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+  } catch (err) {
+    logger.warn('Failed to create DATA_DIR', { error: err });
+  }
+}
 
 // ── Database Readiness ────────────────────────────────────
-assertDatabaseProviderReady();
-
-// ── Database Initialization ───────────────────────────────
-if (config.db.provider === 'sqlite') {
-  runMigrations();
-  seedAgents(getDb(), 'org_default');
-  seedDatabase();
-} else {
-  logger.info('Running in Supabase mode — Skipping local SQLite migrations and seeding.');
+try {
+  assertDatabaseProviderReady();
+} catch (err: any) {
+  logger.error('Database configuration check failed', { error: err.message });
+  if (!isServerlessRuntime) process.exit(1);
 }
 
 // ── Integrations ──────────────────────────────────────────
+// Non-blocking: adapters that fail to init are logged but don't crash startup
 bootstrapIntegrations().catch(err => {
   logger.error('Integration bootstrap error', err);
 });
@@ -88,14 +93,18 @@ const app = express();
 
 app.use(cors({ origin: config.server.corsOrigins, credentials: true }));
 
+// ⚠️  Webhooks MUST be mounted BEFORE express.json() so that the raw body
+//     bytes are available for HMAC signature verification.
+//     The webhook router uses its own express.raw() middleware internally.
 app.use('/webhooks', webhookRouter);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Multi-tenant context
 app.use('/api', extractMultiTenant);
 
-// Request logger
+// Request logger (replaces raw console.log)
 app.use((req, _res, next) => {
   logger.debug(`${req.method} ${req.path}`);
   next();
@@ -125,11 +134,12 @@ app.use('/api/sse', sseRouter);
 app.use('/api/demo', demoRouter);
 app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
+app.use('/api/super-agent', superAgentRouter);
 
-// ── Health check ─────────────────────────────────────────
+// ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {
   const integrationHealth = await integrationRegistry.healthCheck();
-  const queueCounts       = await countJobs();
+  const queueCounts       = countJobs();
   const worker            = workerStatus();
   const databaseStatus    = await getDatabaseConnectivityStatus();
 
@@ -160,20 +170,35 @@ const server = app.listen(config.server.port, () => {
   });
 });
 
-startWorker();
-startScheduledJobs();
+// Start the background job worker and scheduled jobs only in non-serverless environments.
+// Vercel functions are stateless and short-lived — persistent workers must not run there.
+if (!isServerlessRuntime) {
+  startWorker();
+  startScheduledJobs();
+} else {
+  logger.info('Serverless runtime detected (Vercel) — skipping worker and scheduled jobs');
+}
 
 // ── Graceful shutdown ─────────────────────────────────────
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received — shutting down gracefully`);
+
+  // Stop accepting new HTTP requests
   server.close();
+
+  // Stop scheduled job intervals first
   stopScheduledJobs();
+
+  // Wait for in-flight queue jobs to finish (max 30 s)
   await stopWorker();
+
   logger.info('Shutdown complete');
   process.exit(0);
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+if (!isServerlessRuntime) {
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
 
 export default app;

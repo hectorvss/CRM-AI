@@ -3,23 +3,12 @@
  *
  * Intent Router agent — Phase 2 pipeline step 3.
  *
- * Responsibilities:
- *  1. Load the canonical_event and all linked entity data
- *  2. Call Gemini to classify the customer intent
- *  3. Determine the correct case type, priority and risk level
- *  4. Create or find an existing case via caseFactory
- *  5. Link the case back to all relevant entities (orders, payments, returns)
- *  6. Update canonical_event status to 'linked'
- *  7. Enqueue RECONCILE_CASE to start conflict detection
- *     AND DRAFT_REPLY so the copilot has a suggestion ready immediately
- *
- * Intent classification is done with a structured JSON prompt so the output
- * is machine-readable and deterministic — no free-form text parsing.
+ * Refactored to use repository pattern (provider-agnostic).
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
-import { getDb } from '../db/client.js';
+import { createCommerceRepository, createCustomerRepository, createCaseRepository, createCanonicalRepository } from '../data/index.js';
 import { config } from '../config.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
@@ -28,6 +17,12 @@ import { logger } from '../utils/logger.js';
 import { getOrCreateCase, linkEntityToCase } from './caseFactory.js';
 import { triggerAgents } from '../agents/orchestrator.js';
 import type { IntentRoutePayload, JobContext } from '../queue/types.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
+
+const commerceRepo = createCommerceRepository();
+const customerRepo = createCustomerRepository();
+const caseRepo = createCaseRepository();
+const canonicalRepo = createCanonicalRepository();
 
 // ── Intent taxonomy ────────────────────────────────────────────────────────────
 
@@ -132,32 +127,26 @@ RESPONSE SCHEMA (return only this JSON, no markdown):
 
 // ── Entity context builder ────────────────────────────────────────────────────
 
-function buildEntityContext(
+async function buildEntityContext(
+  scope: { tenantId: string, workspaceId: string },
   canonicalEntityType: string,
   canonicalEntityId: string
-): { context: string; localEntityId: string | null } {
-  const db = getDb();
+): Promise<{ context: string; localEntityId: string | null }> {
   const lines: string[] = [];
   let localEntityId: string | null = null;
 
   if (canonicalEntityType === 'order') {
-    const order = db.prepare(
-      'SELECT * FROM orders WHERE external_order_id = ? OR id = ? LIMIT 1'
-    ).get(canonicalEntityId, canonicalEntityId) as any;
-
+    const order = await commerceRepo.getOrder(scope, canonicalEntityId);
     if (order) {
       localEntityId = order.id;
-      const states = JSON.parse(order.system_states || '{}');
+      const states = order.system_states || {};
       lines.push(`ORDER ${order.external_order_id}: status=${order.status}, amount=${order.total_amount} ${order.currency}`);
       lines.push(`System states: ${JSON.stringify(states)}`);
       if (order.has_conflict) lines.push(`CONFLICT DETECTED: ${order.conflict_detected}`);
     }
 
   } else if (canonicalEntityType === 'payment' || canonicalEntityType === 'refund') {
-    const payment = db.prepare(
-      'SELECT * FROM payments WHERE external_payment_id = ? OR id = ? LIMIT 1'
-    ).get(canonicalEntityId, canonicalEntityId) as any;
-
+    const payment = await commerceRepo.getPayment(scope, canonicalEntityId);
     if (payment) {
       localEntityId = payment.id;
       lines.push(`PAYMENT ${payment.external_payment_id}: status=${payment.status}, amount=${payment.amount} ${payment.currency}`);
@@ -166,14 +155,7 @@ function buildEntityContext(
     }
 
   } else if (canonicalEntityType === 'customer') {
-    const customer = db.prepare(
-      `SELECT c.*, li.external_id as ext_id, li.system
-       FROM customers c
-       JOIN linked_identities li ON li.customer_id = c.id
-       WHERE li.external_id = ? OR c.id = ?
-       LIMIT 1`
-    ).get(canonicalEntityId, canonicalEntityId) as any;
-
+    const customer = await customerRepo.getDetail(scope, canonicalEntityId);
     if (customer) {
       localEntityId = customer.id;
       lines.push(`CUSTOMER: ${customer.canonical_name}, segment=${customer.segment}, risk=${customer.risk_level}`);
@@ -199,14 +181,17 @@ async function handleIntentRoute(
     traceId:         ctx.traceId,
   });
 
-  const db          = getDb();
+  const supabase    = getSupabaseAdmin();
   const tenantId    = ctx.tenantId    ?? 'org_default';
   const workspaceId = ctx.workspaceId ?? 'ws_default';
+  const scope = { tenantId, workspaceId };
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
-  const event = db.prepare(
-    'SELECT * FROM canonical_events WHERE id = ?'
-  ).get(payload.canonicalEventId) as any;
+  const { data: event } = await supabase
+    .from('canonical_events')
+    .select('*')
+    .eq('id', payload.canonicalEventId)
+    .single();
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -222,14 +207,13 @@ async function handleIntentRoute(
   }
 
   // ── 2. Build entity context for Gemini ───────────────────────────────────
-  const { context: entityContext, localEntityId } = buildEntityContext(
+  const { context: entityContext, localEntityId } = await buildEntityContext(
+    scope,
     event.canonical_entity_type,
     event.canonical_entity_id
   );
 
   // ── 3. Find the message content to classify ──────────────────────────────
-  // For channel messages, the content is in the normalized_payload.
-  // For commerce webhooks (order/payment updates), we synthesise a description.
   const normalizedPayload = JSON.parse(event.normalized_payload || '{}');
   const messageContent: string =
     normalizedPayload.messageContent ??
@@ -252,14 +236,18 @@ async function handleIntentRoute(
   if (event.canonical_entity_type === 'customer' && localEntityId) {
     customerId = localEntityId;
   } else if (localEntityId) {
-    // Look up customer via order/payment
-    const entityRow = db.prepare(
-      `SELECT customer_id FROM orders WHERE id = ?
-       UNION ALL
-       SELECT customer_id FROM payments WHERE id = ?
-       LIMIT 1`
-    ).get(localEntityId, localEntityId) as any;
-    customerId = entityRow?.customer_id ?? null;
+    // Look up customer via order/payment/return
+    const eType = event.canonical_entity_type;
+    if (eType === 'order') {
+      const order = await commerceRepo.getOrder(scope, localEntityId);
+      customerId = order?.customer_id ?? null;
+    } else if (eType === 'payment') {
+      const payment = await commerceRepo.getPayment(scope, localEntityId);
+      customerId = payment?.customer_id ?? null;
+    } else if (eType === 'return') {
+      const returnData = await commerceRepo.getReturn(scope, localEntityId);
+      customerId = returnData?.customer_id ?? null;
+    }
   }
 
   // ── 6. Determine priority and risk ───────────────────────────────────────
@@ -269,7 +257,7 @@ async function handleIntentRoute(
   const riskLevel = HIGH_RISK_INTENTS.has(intent)     ? 'high'  : 'low';
 
   // ── 7. Create or find case ───────────────────────────────────────────────
-  const caseResult = getOrCreateCase({
+  const caseResult = await getOrCreateCase({
     tenantId,
     workspaceId,
     customerId,
@@ -288,79 +276,80 @@ async function handleIntentRoute(
   });
 
   if (normalizedPayload.conversationId) {
-    db.prepare(`
-      UPDATE conversations
-      SET case_id = COALESCE(case_id, ?), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(caseResult.id, normalizedPayload.conversationId, tenantId, workspaceId);
+    // Update conversation and messages to link to the case
+    const now = new Date().toISOString();
+    await Promise.all([
+      supabase
+        .from('conversations')
+        .update({ case_id: caseResult.id, updated_at: now })
+        .eq('id', normalizedPayload.conversationId)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .is('case_id', null),
 
-    db.prepare(`
-      UPDATE cases
-      SET conversation_id = COALESCE(conversation_id, ?), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(normalizedPayload.conversationId, caseResult.id, tenantId, workspaceId);
+      supabase
+        .from('cases')
+        .update({ conversation_id: normalizedPayload.conversationId, updated_at: now })
+        .eq('id', caseResult.id)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .is('conversation_id', null),
 
-    db.prepare(`
-      UPDATE messages
-      SET case_id = COALESCE(case_id, ?)
-      WHERE conversation_id = ? AND tenant_id = ?
-    `).run(caseResult.id, normalizedPayload.conversationId, tenantId);
+      supabase
+        .from('messages')
+        .update({ case_id: caseResult.id })
+        .eq('conversation_id', normalizedPayload.conversationId)
+        .eq('tenant_id', tenantId)
+        .is('case_id', null),
+    ]);
   }
 
   // ── 8. Update case with AI classification fields ─────────────────────────
-  db.prepare(`
-    UPDATE cases SET
-      intent            = ?,
-      intent_confidence = ?,
-      sub_type          = ?,
-      updated_at        = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(
-    classification.intent,
-    classification.confidence,
-    classification.subType ?? null,
-    caseResult.id,
-  );
+  await caseRepo.update(scope, caseResult.id, {
+    intent:            classification.intent,
+    intent_confidence: classification.confidence,
+    sub_type:          classification.subType ?? null,
+  });
 
   // ── 9. Link entities to case ─────────────────────────────────────────────
   if (localEntityId) {
     const eType = event.canonical_entity_type as 'order' | 'payment' | 'return';
     if (['order', 'payment', 'return'].includes(eType)) {
-      linkEntityToCase(caseResult.id, eType, localEntityId);
+      await linkEntityToCase(caseResult.id, eType, localEntityId, tenantId, workspaceId);
     }
   }
 
   // ── 10. Store suggested reply draft if we have one ───────────────────────
   if (classification.suggestedReply && caseResult.isNew) {
-    const convRow = normalizedPayload.conversationId
-      ? { id: normalizedPayload.conversationId }
-      : db.prepare(
-          'SELECT id FROM conversations WHERE case_id = ? LIMIT 1'
-        ).get(caseResult.id) as any;
+    const { randomUUID } = await import('crypto');
 
-    if (convRow) {
-      const { randomUUID } = await import('crypto');
-      db.prepare(`
-        INSERT INTO draft_replies
-          (id, case_id, conversation_id, content, generated_by, status, tenant_id)
-        VALUES (?, ?, ?, ?, 'intent_router', 'pending_review', ?)
-      `).run(
-        randomUUID(),
-        caseResult.id,
-        convRow.id,
-        classification.suggestedReply,
-        tenantId,
-      );
+    let convId: string | null = normalizedPayload.conversationId ?? null;
+
+    if (!convId) {
+      const { data: convRow } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('case_id', caseResult.id)
+        .limit(1)
+        .single();
+      convId = convRow?.id ?? null;
+    }
+
+    if (convId) {
+      await supabase.from('draft_replies').insert({
+        id:              randomUUID(),
+        case_id:         caseResult.id,
+        conversation_id: convId,
+        content:         classification.suggestedReply,
+        generated_by:    'intent_router',
+        status:          'pending_review',
+        tenant_id:       tenantId,
+      });
     }
   }
 
   // ── 11. Update canonical_event ────────────────────────────────────────────
-  db.prepare(`
-    UPDATE canonical_events
-    SET status  = 'linked',
-        case_id = ?
-    WHERE id = ?
-  `).run(caseResult.id, payload.canonicalEventId);
+  await canonicalRepo.updateEventStatus(scope, payload.canonicalEventId, { status: 'linked', case_id: caseResult.id });
 
   log.info('Case routed', {
     caseId:     caseResult.id,
@@ -371,21 +360,18 @@ async function handleIntentRoute(
   });
 
   // ── 12. Enqueue downstream jobs ───────────────────────────────────────────
-  // Reconciliation: detect cross-system conflicts
   enqueue(
     JobType.RECONCILE_CASE,
     { caseId: caseResult.id },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 5 }
   );
 
-  // Draft reply: generate a full AI-assisted draft for the inbox copilot
   enqueue(
     JobType.DRAFT_REPLY,
     { caseId: caseResult.id },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 8 }
   );
 
-  // Agent engine: fire the appropriate agent chain
   const agentTrigger = caseResult.isNew ? 'case_created' : 'message_received';
   triggerAgents(agentTrigger, caseResult.id, {
     tenantId, workspaceId, traceId: ctx.traceId, priority: 7,

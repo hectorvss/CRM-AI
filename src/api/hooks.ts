@@ -20,19 +20,24 @@ export function useApi<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [retryTick, setRetryTick] = useState(0);
+  const [attempt, setAttempt] = useState(0);
 
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
     setError(null);
+    setData(fallback ?? null);
 
     fetcher()
       .then(result => {
         if (!cancelled) {
           setData(result);
           setLoading(false);
+          setAttempt(0);
         }
       })
       .catch(err => {
@@ -40,12 +45,23 @@ export function useApi<T>(
           console.warn('[useApi] fetch failed:', err.message);
           setError(err.message);
           setLoading(false);
+          if (attempt < 3) {
+            retryTimer = setTimeout(() => {
+              if (!cancelled) {
+                setAttempt(current => current + 1);
+                setRetryTick(current => current + 1);
+              }
+            }, 750 * (attempt + 1));
+          }
         }
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick]);
+  }, [...deps, tick, retryTick]);
 
   return { data, loading, error, refetch };
 }

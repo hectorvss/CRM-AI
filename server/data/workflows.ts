@@ -177,6 +177,17 @@ class SQLiteWorkflowRepository implements WorkflowRepository {
 
     const total = Number(runs?.total || 0);
     const completed = Number(runs?.completed || 0);
+    const steps = db.prepare(`
+      SELECT wrs.status, wrs.node_type
+      FROM workflow_run_steps wrs
+      JOIN workflow_runs wr ON wrs.workflow_run_id = wr.id
+      WHERE wr.workflow_version_id IN (
+        SELECT id FROM workflow_versions WHERE workflow_id = ?
+      ) AND wr.tenant_id = ?
+    `).all(workflowId, tenantId) as any[];
+    const approvalsCreated = steps.filter((step) => ['waiting', 'waiting_approval'].includes(String(step.status))).length;
+    const actionsBlocked = steps.filter((step) => ['blocked', 'failed'].includes(String(step.status))).length;
+    const agentsInvoked = steps.filter((step) => step.node_type === 'agent').length;
 
     return {
       executions: total,
@@ -185,6 +196,11 @@ class SQLiteWorkflowRepository implements WorkflowRepository {
       running: Number(runs?.running || 0),
       success_rate: total > 0 ? Math.round((completed / total) * 100) : 0,
       avg_time_saved: total > 0 ? `${Math.max(1, Math.round(total / 12))}m` : 'N/A',
+      approvals_created: approvalsCreated,
+      actions_blocked: actionsBlocked,
+      agents_invoked: agentsInvoked,
+      automations_completed: completed,
+      time_saved_minutes: completed * 4,
       last_run_at: runs?.last_run_at || null,
     };
   }
@@ -317,7 +333,7 @@ class SupabaseWorkflowRepository implements WorkflowRepository {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('workflow_runs')
-      .select('*, workflow_versions!inner(workflow_id, workflow_definitions!inner(name)), cases(case_number)')
+      .select('*, workflow_versions!inner(workflow_id, workflow_definitions!workflow_versions_workflow_id_fkey(name)), cases(case_number)')
       .eq('tenant_id', tenantId)
       .order('started_at', { ascending: false })
       .limit(limit);
@@ -351,7 +367,7 @@ class SupabaseWorkflowRepository implements WorkflowRepository {
     // For now, we'll use a simplified version or raw select if possible
     const { data, error } = await supabase
       .from('workflow_runs')
-      .select('status, started_at, workflow_versions!inner(workflow_id)')
+      .select('id, status, started_at, ended_at, workflow_versions!inner(workflow_id)')
       .eq('tenant_id', tenantId)
       .eq('workflow_versions.workflow_id', workflowId);
     
@@ -363,6 +379,24 @@ class SupabaseWorkflowRepository implements WorkflowRepository {
     const failed = runs.filter(r => r.status === 'failed').length;
     const running = runs.filter(r => r.status === 'running').length;
     const lastRunAt = runs.length > 0 ? runs.reduce((max, r) => r.started_at > max ? r.started_at : max, runs[0].started_at) : null;
+    const runIds = runs.map((run: any) => run.id);
+    let approvalsCreated = 0;
+    let actionsBlocked = 0;
+    let agentsInvoked = 0;
+    if (runIds.length) {
+      const { data: steps, error: stepsError } = await supabase
+        .from('workflow_run_steps')
+        .select('status, node_type')
+        .in('workflow_run_id', runIds);
+      if (stepsError) throw stepsError;
+      approvalsCreated = (steps || []).filter((step: any) => ['waiting', 'waiting_approval'].includes(String(step.status))).length;
+      actionsBlocked = (steps || []).filter((step: any) => ['blocked', 'failed'].includes(String(step.status))).length;
+      agentsInvoked = (steps || []).filter((step: any) => step.node_type === 'agent').length;
+    }
+    const durations = runs
+      .filter((run: any) => run.started_at && run.ended_at)
+      .map((run: any) => Math.max(0, new Date(run.ended_at).getTime() - new Date(run.started_at).getTime()));
+    const avgDurationMs = durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : 0;
 
     return {
       executions: total,
@@ -371,6 +405,12 @@ class SupabaseWorkflowRepository implements WorkflowRepository {
       running,
       success_rate: total > 0 ? Math.round((completed / total) * 100) : 0,
       avg_time_saved: total > 0 ? `${Math.max(1, Math.round(total / 12))}m` : 'N/A',
+      avg_duration_ms: avgDurationMs,
+      approvals_created: approvalsCreated,
+      actions_blocked: actionsBlocked,
+      agents_invoked: agentsInvoked,
+      automations_completed: completed,
+      time_saved_minutes: completed * 4,
       last_run_at: lastRunAt,
     };
   }

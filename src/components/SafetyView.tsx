@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { connectionCategories } from '../connectionsData';
 import { agentsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import { agentSafetyConfig, defaultSafetyConfig, AgentSafetyConfig } from '../agentSafetyConfig';
 import { cloneJson, ensureArray, ensureNumber, mergeProfile } from './aiStudioProfileUtils';
+import PolicyActionsBar, { type PolicyActionConfig } from './PolicyActionsBar';
+import StyledSelect from './StyledSelect';
 
 function createSafetyProfile(base: AgentSafetyConfig, persisted?: Record<string, any> | null): AgentSafetyConfig {
   const merged = mergeProfile(base, persisted);
@@ -72,6 +74,88 @@ export default function SafetyView() {
     setAgentConfig(prev => ({ ...prev, [key]: prev[key].includes(value) ? prev[key].filter(item => item !== value) : [...prev[key], value] }));
   };
 
+  const policyActions: PolicyActionConfig[] = [
+    {
+      key: 'reset' as const,
+      label: 'Reset',
+      icon: 'restart_alt',
+      variant: 'warning' as const,
+      title: 'Reset safety draft',
+      subtitle: 'Discard draft edits and restore the last published safety profile.',
+      confirmLabel: 'Reset draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Risk profile', value: agentConfig.riskProfile || 'N/A' },
+        { label: 'Auto-stop rules', value: String(agentConfig.autoStopConditions.length) },
+      ],
+      steps: [
+        { text: 'Discard the current safety edits', detail: 'Any pending rule, trigger or guardrail changes will be lost.' },
+        { text: 'Reload the published safety profile', detail: 'The runtime guardrails remain untouched until publish is chosen.' },
+        { text: 'Refresh the safety summary cards', detail: 'Visible safety controls are recomputed from the published state.' },
+      ],
+      considerations: [
+        { text: 'This resets only the draft profile.' },
+        { text: 'Use it when the guardrail set should return to a known safe baseline.' },
+      ],
+      onConfirm: handleRollback,
+      buttonVariant: 'ghost',
+    },
+    {
+      key: 'save' as const,
+      label: 'Save draft',
+      icon: 'save',
+      variant: 'default' as const,
+      title: 'Save safety draft',
+      subtitle: 'Persist the current safety profile as a draft without publishing it.',
+      confirmLabel: 'Save draft',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Guardrails', value: String(agentConfig.outputAndActionGuardrails.length) },
+        { label: 'Escalations', value: String(agentConfig.escalationTriggers.length) },
+      ],
+      steps: [
+        { text: 'Store the edited safety profile as a draft', detail: 'The current safety setup stays reviewable before publication.' },
+        { text: 'Keep runtime behavior stable', detail: 'Live agent execution continues using the last published configuration.' },
+        { text: 'Refresh the draft snapshot', detail: 'The header summary and rule panels stay aligned with the saved draft.' },
+      ],
+      considerations: [
+        { text: 'Saving does not change live safety behavior yet.' },
+        { text: 'The draft can still be refined before publishing.' },
+      ],
+      onConfirm: () => saveAndRefresh(false),
+      loading: saveDraft.loading,
+      disabled: !selectedApiAgent,
+      buttonVariant: 'outline',
+    },
+    {
+      key: 'publish' as const,
+      label: 'Publish changes',
+      icon: 'rocket_launch',
+      variant: 'default' as const,
+      title: 'Publish safety changes',
+      subtitle: 'Push the current safety profile to runtime.',
+      confirmLabel: 'Publish now',
+      context: [
+        { label: 'Agent', value: selectedAgent || 'N/A' },
+        { label: 'Checks', value: String(agentConfig.preExecutionSafetyChecks.length) },
+        { label: 'Audit triggers', value: String(agentConfig.auditTriggers.length) },
+      ],
+      steps: [
+        { text: 'Persist the draft as the new published safety profile', detail: 'The backend becomes the source of truth for guardrails and thresholds.' },
+        { text: 'Activate the new safety behavior in runtime', detail: 'Live agent execution will use the published safety configuration.' },
+        { text: 'Refresh dependent AI Studio views', detail: 'Other tabs will see the same published safety snapshot.' },
+      ],
+      considerations: [
+        { text: 'Publishing changes the live safety posture immediately after refresh.' },
+        { text: 'Double-check thresholds, blocks and escalation paths before confirming.' },
+      ],
+      onConfirm: () => saveAndRefresh(true),
+      loading: saveDraft.loading || publishDraft.loading,
+      disabled: !selectedApiAgent,
+      buttonVariant: 'solid',
+    },
+  ];
+
   const filteredCategories = connectionCategories.map(category => ({
     ...category,
     agents: category.agents.filter(agent => {
@@ -97,7 +181,7 @@ export default function SafetyView() {
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4"><div className={`w-14 h-14 rounded-2xl ${currentAgent.iconColor} flex items-center justify-center shadow-inner`}><span className="material-symbols-outlined text-2xl">{currentAgent.icon}</span></div><div><div className="flex items-center gap-3 mb-1"><h2 className="text-xl font-bold text-gray-900 dark:text-white">{selectedAgent}</h2><span className="px-2.5 py-0.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-full text-xs font-bold border border-green-200 dark:border-green-900/30">Active</span><span className="px-2.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-bold border border-indigo-200 dark:border-indigo-900/30 flex items-center gap-1"><span className="material-symbols-outlined text-[12px]">security</span>{agentConfig.template}</span></div><p className="text-sm text-gray-500 dark:text-gray-400">{currentAgent.summary || 'Agent safety configuration'}</p></div></div>
-                <div className="flex items-center gap-2"><button onClick={handleRollback} className="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">Reset</button><button onClick={() => saveAndRefresh(false)} className="px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400 rounded-lg transition-colors">Save draft</button><button onClick={() => saveAndRefresh(true)} className="px-4 py-2 text-sm font-bold text-white bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 rounded-lg transition-colors shadow-sm">Publish</button></div>
+                <PolicyActionsBar actions={policyActions} />
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700"><div className="flex items-center gap-2 mb-2"><span className="material-symbols-outlined text-gray-400 text-sm">shield</span><h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Effective Safety Summary</h3></div><ul className="space-y-1">{agentConfig.effectiveSafetySummary.map((summary, idx) => <li key={idx} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2"><span className="material-symbols-outlined text-[14px] text-indigo-500 mt-0.5">check_circle</span>{summary}</li>)}</ul></div>
@@ -123,7 +207,7 @@ export default function SafetyView() {
 
               <section>
                 <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold text-gray-900 dark:text-white">Sensitive Case Guards</h3><button onClick={() => setAgentConfig(prev => ({ ...prev, sensitiveCaseGuards: [...prev.sensitiveCaseGuards, { caseType: 'New sensitive case', action: 'Require human review' }] }))} className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">Add guard</button></div>
-                <div className="space-y-3">{agentConfig.sensitiveCaseGuards.map((guard, idx) => <div key={idx} className="grid grid-cols-[1fr_220px] gap-4 items-center p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30"><input value={guard.caseType} onChange={(e) => setAgentConfig(prev => ({ ...prev, sensitiveCaseGuards: prev.sensitiveCaseGuards.map((item, itemIdx) => itemIdx === idx ? { ...item, caseType: e.target.value } : item) }))} className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white" /><select value={guard.action} onChange={(e) => setAgentConfig(prev => ({ ...prev, sensitiveCaseGuards: prev.sensitiveCaseGuards.map((item, itemIdx) => itemIdx === idx ? { ...item, action: e.target.value as any } : item) }))} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"><option>Allow</option><option>Require extra checks</option><option>Require human review</option><option>Block autonomous handling</option></select></div>)}</div>
+                <div className="space-y-3">{agentConfig.sensitiveCaseGuards.map((guard, idx) => <div key={idx} className="grid grid-cols-[1fr_220px] gap-4 items-center p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30"><input value={guard.caseType} onChange={(e) => setAgentConfig(prev => ({ ...prev, sensitiveCaseGuards: prev.sensitiveCaseGuards.map((item, itemIdx) => itemIdx === idx ? { ...item, caseType: e.target.value } : item) }))} className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white" /><StyledSelect value={guard.action} onChange={(e) => setAgentConfig(prev => ({ ...prev, sensitiveCaseGuards: prev.sensitiveCaseGuards.map((item, itemIdx) => itemIdx === idx ? { ...item, action: e.target.value as any } : item) }))} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"><option>Allow</option><option>Require extra checks</option><option>Require human review</option><option>Block autonomous handling</option></StyledSelect></div>)}</div>
               </section>
 
               <section className="grid grid-cols-2 gap-6">
@@ -133,7 +217,7 @@ export default function SafetyView() {
 
               <section>
                 <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold text-gray-900 dark:text-white">Escalation Triggers</h3><button onClick={() => setAgentConfig(prev => ({ ...prev, escalationTriggers: [...prev.escalationTriggers, { trigger: 'New escalation trigger', action: 'Escalate to human' }] }))} className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">Add trigger</button></div>
-                <div className="space-y-3">{agentConfig.escalationTriggers.map((trigger, idx) => <div key={idx} className="grid grid-cols-[1fr_220px] gap-4 items-center p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30"><input value={trigger.trigger} onChange={(e) => setAgentConfig(prev => ({ ...prev, escalationTriggers: prev.escalationTriggers.map((item, itemIdx) => itemIdx === idx ? { ...item, trigger: e.target.value } : item) }))} className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white" /><select value={trigger.action} onChange={(e) => setAgentConfig(prev => ({ ...prev, escalationTriggers: prev.escalationTriggers.map((item, itemIdx) => itemIdx === idx ? { ...item, action: e.target.value as any } : item) }))} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"><option>Escalate to human</option><option>Escalate to manager</option><option>Send to approval queue</option><option>Re-route to specialist agent</option><option>Freeze case until reviewed</option></select></div>)}</div>
+                <div className="space-y-3">{agentConfig.escalationTriggers.map((trigger, idx) => <div key={idx} className="grid grid-cols-[1fr_220px] gap-4 items-center p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30"><input value={trigger.trigger} onChange={(e) => setAgentConfig(prev => ({ ...prev, escalationTriggers: prev.escalationTriggers.map((item, itemIdx) => itemIdx === idx ? { ...item, trigger: e.target.value } : item) }))} className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white" /><StyledSelect value={trigger.action} onChange={(e) => setAgentConfig(prev => ({ ...prev, escalationTriggers: prev.escalationTriggers.map((item, itemIdx) => itemIdx === idx ? { ...item, action: e.target.value as any } : item) }))} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"><option>Escalate to human</option><option>Escalate to manager</option><option>Send to approval queue</option><option>Re-route to specialist agent</option><option>Freeze case until reviewed</option></StyledSelect></div>)}</div>
               </section>
 
               <section className="grid grid-cols-2 gap-6">

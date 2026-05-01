@@ -1,6 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { getDb } from '../db/client.js';
 import { createHash } from 'crypto';
+import { createIAMRepository } from '../data/iam.js';
+import { createWorkspaceRepository } from '../data/workspaces.js';
+import { logger } from '../utils/logger.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
+import { sendError } from '../http/errors.js';
+import { decodeJwtTimes, evaluateAuthPolicy, type AuthPolicyResult } from '../services/authPolicy.js';
 
 /**
  * Custom Request type to include tenant and workspace context.
@@ -11,12 +16,18 @@ export interface MultiTenantRequest extends Request {
   userId?: string;
   roleId?: string;
   permissions?: string[];
+  authPolicy?: AuthPolicyResult;
 }
 
 const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
+  owner: ['*'],
   workspace_admin: ['*'],
   supervisor: [
     'cases.read', 'cases.write', 'cases.assign',
+    'customers.read', 'customers.write',
+    'orders.read', 'orders.write',
+    'payments.read', 'payments.write',
+    'returns.read', 'returns.write',
     'approvals.read', 'approvals.decide',
     'workflows.read', 'workflows.write', 'workflows.trigger',
     'knowledge.read', 'knowledge.write', 'knowledge.publish',
@@ -27,6 +38,10 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
   ],
   agent: [
     'cases.read', 'cases.write',
+    'customers.read',
+    'orders.read',
+    'payments.read',
+    'returns.read',
     'approvals.read',
     'workflows.read', 'workflows.trigger',
     'knowledge.read',
@@ -35,6 +50,10 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
   ],
   viewer: [
     'cases.read',
+    'customers.read',
+    'orders.read',
+    'payments.read',
+    'returns.read',
     'approvals.read',
     'workflows.read',
     'knowledge.read',
@@ -63,27 +82,19 @@ function normalizePermissions(value: unknown): string[] {
   return [];
 }
 
-function resolvePermissions(
+async function resolvePermissions(
   roleId: string,
   explicitPermissions: unknown,
-): string[] {
-  const db = getDb();
+): Promise<string[]> {
+  const iamRepo = createIAMRepository();
   try {
-    const rows = db.prepare(`
-      SELECT permission_key
-      FROM role_permissions
-      WHERE role_id = ?
-    `).all(roleId) as Array<{ permission_key?: string | null }>;
-
-    const mappedPermissions = rows
-      .map((row) => row.permission_key)
-      .filter((permission): permission is string => typeof permission === 'string' && permission.length > 0);
+    const mappedPermissions = await iamRepo.getPermissionKeys(roleId);
 
     if (mappedPermissions.length > 0) {
       return mappedPermissions;
     }
-  } catch {
-    // Local databases created before normalized permissions may not have this table yet.
+  } catch (error) {
+    // Falls back if role management is not fully initialized or custom roles are missing
   }
 
   const parsedPermissions = normalizePermissions(explicitPermissions);
@@ -98,12 +109,14 @@ export interface ResolvedTenantContext {
   userId?: string;
 }
 
-export function resolveTenantWorkspaceContext(
+export async function resolveTenantWorkspaceContext(
   tenantId?: string | null,
   workspaceId?: string | null,
   userId?: string | null,
-): ResolvedTenantContext {
-  if (tenantId && workspaceId) {
+): Promise<ResolvedTenantContext> {
+  const workspaceRepo = createWorkspaceRepository();
+
+  if (tenantId && workspaceId && workspaceId !== 'ws_default') {
     return {
       tenantId,
       workspaceId,
@@ -111,50 +124,44 @@ export function resolveTenantWorkspaceContext(
     };
   }
 
-  const db = getDb();
+  try {
+    if (tenantId && workspaceId === 'ws_default') {
+      const workspace = await workspaceRepo.getById(workspaceId, tenantId);
+      if (workspace) {
+        return {
+          tenantId: workspace.org_id || tenantId,
+          workspaceId: workspace.id,
+          userId: userId || 'system',
+        };
+      }
+    }
 
-  if (tenantId && !workspaceId) {
-    const matchingWorkspace = db.prepare(`
-      SELECT id, org_id FROM workspaces
-      WHERE org_id = ?
-      ORDER BY created_at ASC
-      LIMIT 1
-    `).get(tenantId) as { id: string; org_id: string } | undefined;
+    if (tenantId && !workspaceId) {
+      const matchingWorkspace = await workspaceRepo.findByOrg(tenantId);
+      if (matchingWorkspace) {
+        return {
+          tenantId: matchingWorkspace.org_id,
+          workspaceId: matchingWorkspace.id,
+          userId: userId || 'system',
+        };
+      }
+    }
 
-    if (matchingWorkspace) {
+    const ws = await workspaceRepo.getFirstWorkspace();
+    if (ws) {
       return {
-        tenantId: matchingWorkspace.org_id,
-        workspaceId: matchingWorkspace.id,
+        tenantId: tenantId || ws.org_id,
+        workspaceId: workspaceId || ws.id,
         userId: userId || 'system',
       };
     }
-  }
-
-  const ws = db.prepare('SELECT id, org_id FROM workspaces ORDER BY created_at ASC LIMIT 1').get() as { id: string, org_id: string } | undefined;
-
-  if (ws) {
-    const seededTenant = db.prepare(`
-      SELECT tenant_id
-      FROM (
-        SELECT tenant_id, created_at FROM cases
-        UNION ALL
-        SELECT tenant_id, created_at FROM customers
-      )
-      WHERE tenant_id IS NOT NULL
-      ORDER BY created_at ASC
-      LIMIT 1
-    `).get() as { tenant_id: string } | undefined;
-
-    return {
-      tenantId: tenantId || seededTenant?.tenant_id || ws.org_id,
-      workspaceId: workspaceId || ws.id,
-      userId: userId || 'system',
-    };
+  } catch {
+    // Fall through to demo defaults if the backing store is not yet ready.
   }
 
   return {
-    tenantId: tenantId || 'tenant_default',
-    workspaceId: workspaceId || 'workspace_default',
+    tenantId: tenantId || 'org_default',
+    workspaceId: workspaceId || 'ws_default',
     userId: userId || 'system',
   };
 }
@@ -164,39 +171,73 @@ export function resolveTenantWorkspaceContext(
  * - Extracts tenant context from headers.
  * - For development, falls back to the first organization/workspace in the DB if none provided.
  */
-export const extractMultiTenant = (req: MultiTenantRequest, res: Response, next: NextFunction) => {
+export const extractMultiTenant = async (req: MultiTenantRequest, res: Response, next: NextFunction) => {
   const tenantHeader = req.headers['x-tenant-id'] as string;
   const workspaceHeader = req.headers['x-workspace-id'] as string;
   const userHeader = req.headers['x-user-id'] as string;
   const authHeader = req.headers.authorization;
 
+  const iamRepo = createIAMRepository();
+  const workspaceRepo = createWorkspaceRepository();
+
   try {
     let resolvedUserId = userHeader || '';
-    let resolved = resolveTenantWorkspaceContext(tenantHeader, workspaceHeader, resolvedUserId);
-    const db = getDb();
+    let resolved = await resolveTenantWorkspaceContext(tenantHeader, workspaceHeader, resolvedUserId);
+    let authContext: Parameters<typeof evaluateAuthPolicy>[0]['auth'] = resolvedUserId === 'system' ? { provider: 'system' } : { provider: userHeader ? 'header' : 'system' };
 
-    if (!resolvedUserId && typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
+    if (typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
       const rawToken = authHeader.slice(7).trim();
       if (rawToken) {
-        const tokenHash = createHash('sha256').update(rawToken).digest('hex');
         try {
-          const session = db.prepare(`
-            SELECT user_id, tenant_id, workspace_id
-            FROM user_sessions
-            WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP
-            LIMIT 1
-          `).get(tokenHash) as { user_id?: string; tenant_id?: string; workspace_id?: string } | undefined;
+          const jwtTimes = decodeJwtTimes(rawToken);
+          const supabase = getSupabaseAdmin();
+          const { data: authData } = await supabase.auth.getUser(rawToken);
 
-          if (session?.user_id) {
-            resolvedUserId = session.user_id;
-            resolved = resolveTenantWorkspaceContext(
-              session.tenant_id || tenantHeader,
-              session.workspace_id || workspaceHeader,
+          if (authData?.user) {
+            resolvedUserId = authData.user.id;
+            authContext = {
+              provider: 'supabase',
+              ...jwtTimes,
+              mfaVerified: Boolean(jwtTimes.mfaVerified || authData.user.app_metadata?.mfa_enabled || authData.user.user_metadata?.mfa_enabled),
+              ssoVerified: Boolean(jwtTimes.ssoVerified || authData.user.app_metadata?.sso || authData.user.user_metadata?.sso),
+            };
+            
+            let claimTenantId = authData.user.app_metadata?.tenant_id || authData.user.user_metadata?.tenant_id;
+            let claimWorkspaceId = authData.user.app_metadata?.workspace_id || authData.user.user_metadata?.workspace_id;
+
+            if (!claimTenantId || !claimWorkspaceId) {
+               const memberships = await iamRepo.listUserMemberships(resolvedUserId);
+               if (memberships?.length > 0) {
+                  claimTenantId = claimTenantId || memberships[0].tenant_id;
+                  claimWorkspaceId = claimWorkspaceId || memberships[0].workspace_id;
+               }
+            }
+
+            resolved = await resolveTenantWorkspaceContext(
+              claimTenantId || tenantHeader,
+              claimWorkspaceId || workspaceHeader,
               resolvedUserId,
             );
+          } else {
+            const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+            const session = await iamRepo.getSession(tokenHash);
+
+            if (session?.user_id) {
+              resolvedUserId = session.user_id;
+              authContext = {
+                provider: 'local_session',
+                sessionExpiresAt: session.expires_at || null,
+                tokenIssuedAt: session.created_at || null,
+              };
+              resolved = await resolveTenantWorkspaceContext(
+                session.tenant_id || tenantHeader,
+                session.workspace_id || workspaceHeader,
+                resolvedUserId,
+              );
+            }
           }
         } catch {
-          // Backward compatibility for environments without user_sessions yet.
+          // Backward compatibility/safety
         }
       }
     }
@@ -205,30 +246,67 @@ export const extractMultiTenant = (req: MultiTenantRequest, res: Response, next:
     req.workspaceId = resolved.workspaceId;
     req.userId = resolved.userId;
 
+    const workspaceForPolicy = await workspaceRepo.getById(req.workspaceId, req.tenantId);
+    const policy = evaluateAuthPolicy({
+      workspaceSettings: workspaceForPolicy?.settings || {},
+      userId: req.userId,
+      request: req,
+      auth: authContext,
+    });
+    req.authPolicy = policy;
+    if (!policy.allowed) {
+      return sendError(res, policy.code === 'IP_NOT_ALLOWED' ? 403 : 401, policy.code!, policy.message!, policy.details);
+    }
+
+    logger.debug('Multi-tenant context established', {
+      tenantId: req.tenantId,
+      workspaceId: req.workspaceId,
+      userId: req.userId,
+      path: req.path
+    });
+
     if (req.userId === 'system') {
       req.roleId = 'workspace_admin';
       req.permissions = ['*'];
       return next();
     }
 
-    const member = db.prepare(`
-      SELECT m.role_id, r.permissions, u.role as legacy_role
-      FROM users u
-      LEFT JOIN members m ON m.user_id = u.id AND m.workspace_id = ? AND m.tenant_id = ?
-      LEFT JOIN roles r ON r.id = m.role_id
-      WHERE u.id = ?
-      LIMIT 1
-    `).get(req.workspaceId, req.tenantId, req.userId) as
-      | { role_id?: string | null; permissions?: unknown; legacy_role?: string | null }
-      | undefined;
+    try {
+      const member = await iamRepo.getMember(req.userId || '', req.tenantId || '', req.workspaceId || '');
+      let legacyRole = null;
+      let permissions = null;
 
-    const roleId = member?.role_id || member?.legacy_role || 'viewer';
-    req.roleId = roleId;
-    req.permissions = resolvePermissions(roleId, member?.permissions);
+      if (!member) {
+        // Check for legacy user role if not a member yet (e.g. global user)
+        const user = await iamRepo.getUserById(req.userId || '');
+        legacyRole = user?.role;
+      }
 
-    next();
+      const roleId = member?.role_id || legacyRole || 'viewer';
+      req.roleId = roleId;
+      req.permissions = await resolvePermissions(roleId, member?.permissions || permissions);
+
+      next();
+    } catch (memberError) {
+      logger.warn('Falling back to demo tenant context', {
+        path: req.path,
+        error: memberError instanceof Error ? memberError.message : String(memberError),
+      });
+      req.userId = req.userId || 'system';
+      req.roleId = 'workspace_admin';
+      req.permissions = ['*'];
+      next();
+    }
   } catch (error) {
-    console.error('Multi-tenant middleware error:', error);
-    res.status(500).json({ error: 'Failed to establish multi-tenant context' });
+    logger.warn('Multi-tenant middleware fallback triggered', {
+      path: req.path,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    req.tenantId = req.tenantId || 'org_default';
+    req.workspaceId = req.workspaceId || 'ws_default';
+    req.userId = req.userId || 'system';
+    req.roleId = 'workspace_admin';
+    req.permissions = ['*'];
+    next();
   }
 };
