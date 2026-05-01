@@ -146,6 +146,7 @@ function buildSuperAgentResolutionDraft(input: {
 export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange: (target: NavigateInput) => void; focusCaseId?: string | null }) {
   const [rightTab, setRightTab] = useState<RightTab>('copilot');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [caseFilter, setCaseFilter] = useState<'all' | 'active' | 'resolved'>('all');
   const [graphView, setGraphView] = useState<'tree' | 'timeline' | 'resolve'>('tree');
   // ResolveTab state removed — new flat layout doesn't use tabs.
   const [executingStepId, setExecutingStepId] = useState<string | null>(null);
@@ -205,9 +206,34 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
     ],
   })), [apiCases]);
 
+  const activeCases = useMemo(
+    () => cases.filter((c) => !['resolved', 'closed', 'cancelled'].includes(String(c.status || '').toLowerCase())),
+    [cases],
+  );
+
+  const resolvedCases = useMemo(
+    () => cases.filter((c) => ['resolved', 'closed'].includes(String(c.status || '').toLowerCase())),
+    [cases],
+  );
+
+  const visibleCases = useMemo(() => {
+    if (caseFilter === 'active') return activeCases;
+    if (caseFilter === 'resolved') return resolvedCases;
+    return cases;
+  }, [activeCases, caseFilter, cases, resolvedCases]);
+
   useEffect(() => {
-    if (!selectedId && cases.length > 0) setSelectedId(cases[0].id);
-  }, [cases, selectedId]);
+    if (!selectedId && visibleCases.length > 0) setSelectedId(visibleCases[0].id);
+  }, [selectedId, visibleCases]);
+
+  useEffect(() => {
+    if (!visibleCases.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (selectedId && visibleCases.some((item) => item.id === selectedId)) return;
+    setSelectedId(visibleCases[0].id);
+  }, [selectedId, visibleCases]);
 
   useEffect(() => {
     if (!focusCaseId || !cases.length) return;
@@ -625,13 +651,26 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
           <div className="flex items-center space-x-4">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Case Graph</h1>
             <div className="flex space-x-1">
-              <span className="px-3 py-1 text-sm font-medium rounded-full bg-black text-white">All cases ({cases.length})</span>
-              <span className="px-3 py-1 text-sm font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                Active ({cases.filter(c => !['resolved', 'closed', 'cancelled'].includes(c.status)).length})
-              </span>
-              <span className="px-3 py-1 text-sm font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                Resolved ({cases.filter(c => c.status === 'resolved' || c.status === 'closed').length})
-              </span>
+              {[
+                { key: 'all' as const, label: 'All cases', count: cases.length },
+                { key: 'active' as const, label: 'Active', count: activeCases.length },
+                { key: 'resolved' as const, label: 'Resolved', count: resolvedCases.length },
+              ].map((filter) => {
+                const active = caseFilter === filter.key;
+                return (
+                  <button
+                    key={filter.key}
+                    onClick={() => setCaseFilter(filter.key)}
+                    className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                      active
+                        ? 'bg-black text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {filter.label} ({filter.count})
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="flex items-center space-x-3">
@@ -649,17 +688,17 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
           {/* ── Left Panel: Case List ────────────────────────────── */}
           <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
             <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
-              {casesLoading && cases.length === 0 && (
+              {casesLoading && visibleCases.length === 0 && (
                 <LoadingState title="Loading cases" message="Fetching canonical case data from Supabase." compact />
               )}
-              {cases.length === 0 && !casesLoading && (
+              {visibleCases.length === 0 && !casesLoading && (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                   <span className="material-symbols-outlined text-4xl mb-3">inbox</span>
-                  <p className="text-sm font-medium">No cases yet</p>
-                  <p className="text-xs mt-1">Run a demo scenario to generate cases</p>
+                  <p className="text-sm font-medium">No cases in this view</p>
+                  <p className="text-xs mt-1">Try another status chip or run a demo scenario</p>
                 </div>
               )}
-              {cases.map(c => (
+              {visibleCases.map(c => (
                 <div
                   key={c.id}
                   onClick={() => setSelectedId(c.id)}
