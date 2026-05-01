@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { aiApi, agentsApi, connectorsApi, operationsApi, reportsApi, workspacesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
@@ -379,6 +379,7 @@ export default function AIStudio() {
   const [overviewMessage, setOverviewMessage] = useState<string>('');
   const [pendingAgentId, setPendingAgentId] = useState<string | null>(null);
   const [pendingAgentToggle, setPendingAgentToggle] = useState<any | null>(null);
+  const [pendingWorkspaceAction, setPendingWorkspaceAction] = useState<'enable_all' | 'emergency_stop' | null>(null);
   const [agentActiveOverrides, setAgentActiveOverrides] = useState<Record<string, boolean>>({});
   const [stableAgentCatalog, setStableAgentCatalog] = useState<any[]>([]);
   const [savingCostControls, setSavingCostControls] = useState(false);
@@ -705,6 +706,41 @@ export default function AIStudio() {
     refetchRuns();
   };
 
+  const handleEnableAllAgents = async () => {
+    const editableAgents = mappedCategories
+      .flatMap((category) => category.agents)
+      .filter((agent: any) => agent.id && !agent.locked && !agent.active);
+
+    await Promise.all(
+      editableAgents.map((agent: any) =>
+        updateAgentConfig.mutate({
+          id: agent.id,
+          body: { isActive: true },
+        }),
+      ),
+    );
+    setOverviewMessage(`Enabled ${editableAgents.length} editable agents.`);
+    setAgentActiveOverrides((current) => {
+      const next = { ...current };
+      editableAgents.forEach((agent: any) => { next[agent.id] = true; });
+      return next;
+    });
+    refetchAgentCatalog();
+    refetchStudio();
+    refetchEffective();
+    refetchRuns();
+  };
+
+  const confirmWorkspaceAction = async () => {
+    if (pendingWorkspaceAction === 'enable_all') {
+      await handleEnableAllAgents();
+    }
+    if (pendingWorkspaceAction === 'emergency_stop') {
+      await handleEmergencyStop();
+    }
+    setPendingWorkspaceAction(null);
+  };
+
   const handleCostControlToggle = async () => {
     setSavingCostControls(true);
     await persistAiStudioSettings({
@@ -794,7 +830,16 @@ export default function AIStudio() {
             <div className="flex items-center gap-4">
               <button
                 type="button"
-                onClick={handleEmergencyStop}
+                onClick={() => setPendingWorkspaceAction('enable_all')}
+                disabled={!mappedCategories.some((category) => category.agents.some((agent: any) => agent.id && !agent.locked && !agent.active))}
+                className="inline-flex items-center justify-center rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/5"
+              >
+                Enable all agents
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingWorkspaceAction('emergency_stop')}
+                disabled={!mappedCategories.some((category) => category.agents.some((agent: any) => agent.id && agent.active && !agent.locked))}
                 className="inline-flex items-center justify-center rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Emergency stop
@@ -1384,159 +1429,60 @@ export default function AIStudio() {
                                 className="overflow-hidden border-t border-gray-50 dark:border-gray-800"
                               >
                                 {(() => {
-                                  // ── Parse purpose into mandate / does / doesn't ──
-                                  const purposeText: string = agent.purpose || '';
-                                  const sentences = purposeText
-                                    .split(/(?<=\.)\s+/)
-                                    .map((s: string) => s.trim().replace(/\.$/, ''))
-                                    .filter(Boolean);
-                                  const mandate = sentences[0] || agent.desc || '';
-                                  const remaining = sentences.slice(1);
-                                  const doesNotItems = remaining
-                                    .filter((s: string) => /^Does\s*NOT\b/i.test(s) || /^Does\s*not\b/i.test(s))
-                                    .map((s: string) => s.replace(/^Does\s*NOT\s*/i, '').replace(/^Does\s*not\s*/i, ''));
-
-                                  // Prefer the richer `does` array from connectionsData when available
                                   const profileMeta = agent.connectionProfile || connectionAgentByName.get(agent.name) || {};
-                                  const profileDoes: string[] = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
-                                  const parsedDoes = remaining.filter((s: string) => !/^Does\s*NOT\b/i.test(s) && !/^Does\s*not\b/i.test(s));
-                                  const doesItems: string[] = profileDoes.length > 0 ? profileDoes : parsedDoes;
-
-                                  const ioInput = agent.ioLogic?.input || 'Canonical event';
-                                  const ioOutput = agent.ioLogic?.output || 'Routing decision';
+                                  const fallbackDescription = (agent.desc || agent.purpose || agent.category || 'Operational agent').trim();
+                                  const responsibilities = Array.isArray(profileMeta?.does) ? profileMeta.does : [];
+                                  const receivesFrom = Array.isArray(profileMeta?.receivesFrom) ? profileMeta.receivesFrom : [];
+                                  const reportsTo = Array.isArray(profileMeta?.reportsTo) ? profileMeta.reportsTo : [];
+                                  const writesTo = Array.isArray(profileMeta?.writesTo) ? profileMeta.writesTo : [];
+                                  const blockedBy = Array.isArray(profileMeta?.blockedBy) ? profileMeta.blockedBy : [];
+                                  const uses = Array.isArray(profileMeta?.uses) ? profileMeta.uses : [];
+                                  const joinShort = (items: string[], limit = 2) => items.slice(0, limit).join(' and ');
+                                  const normalizeSentence = (text: string) => {
+                                    const sentence = text.trim().replace(/\.$/, '');
+                                    return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+                                  };
+                                  const detailBullets = responsibilities.length
+                                    ? responsibilities.slice(0, 3).map((item: string, index: number) => {
+                                      const action = normalizeSentence(item);
+                                      if (index === 0 && writesTo.length) {
+                                        return `${action}. This matters because it produces ${joinShort(writesTo)} that downstream modules can trust.`;
+                                      }
+                                      if (index === 1 && reportsTo.length) {
+                                        return `${action}. This keeps ${joinShort(reportsTo)} aligned with the same operational state.`;
+                                      }
+                                      if (index === 2 && blockedBy.length) {
+                                        return `${action}. This helps prevent blockers such as ${joinShort(blockedBy)} before work moves forward.`;
+                                      }
+                                      if (uses.length) {
+                                        return `${action}. It uses ${joinShort(uses)} so the decision is grounded in the configured runtime context.`;
+                                      }
+                                      if (receivesFrom.length) {
+                                        return `${action}. It turns signals from ${joinShort(receivesFrom)} into usable agent context.`;
+                                      }
+                                      return `${action}.`;
+                                    })
+                                    : [fallbackDescription];
 
                                   return (
                                     <div className="p-6 space-y-5">
-                                      {/* Mandate strip — minimalist */}
-                                      <div className="rounded-xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-800 dark:bg-[#171717]">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Primary mandate</p>
-                                        <p className="mt-1 text-sm font-medium text-gray-900 dark:text-white leading-snug">
-                                          {mandate}
-                                        </p>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                                        {/* ── WHAT IT DOES ── */}
-                                        <div className="rounded-xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-[#171717]">
-                                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">What it does</p>
-
-                                          {/* Detailed paragraph */}
-                                          <p className="text-[13px] text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                                            {profileMeta?.role || mandate}
-                                          </p>
-
-                                          {/* Responsibilities list */}
-                                          {doesItems.length > 0 && (
-                                            <div className="mb-4">
-                                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Responsibilities</p>
-                                              <ul className="space-y-1.5">
-                                                {doesItems.map((item: string, i: number) => (
-                                                  <li key={i} className="flex items-start gap-2 text-[12px] text-gray-700 dark:text-gray-300 leading-snug">
-                                                    <span className="mt-[7px] flex h-1 w-1 flex-none rounded-full bg-gray-400" />
-                                                    <span>{item}</span>
-                                                  </li>
-                                                ))}
-                                              </ul>
-                                            </div>
-                                          )}
-
-                                          {/* Boundaries */}
-                                          {doesNotItems.length > 0 && (
-                                            <div className="border-t border-gray-100 dark:border-gray-800 pt-3 mt-3">
-                                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Boundaries · does not</p>
-                                              <ul className="space-y-1.5">
-                                                {doesNotItems.map((item: string, i: number) => (
-                                                  <li key={i} className="flex items-start gap-2 text-[11px] text-gray-500 dark:text-gray-500 leading-snug">
-                                                    <span className="mt-[7px] flex h-1 w-1 flex-none rounded-full bg-gray-300 dark:bg-gray-600" />
-                                                    <span>{item}</span>
-                                                  </li>
-                                                ))}
-                                              </ul>
-                                            </div>
-                                          )}
-
-                                          {/* Footnote summary */}
-                                          {profileMeta?.summary && (
-                                            <p className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-400 dark:text-gray-500">
-                                              {profileMeta.summary}
-                                            </p>
-                                          )}
+                                      <div className="rounded-[22px] border border-black/5 bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-white/10 dark:bg-[#171717]">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-400">What it does</p>
+                                          </div>
+                                          <MinimalPill tone="subtle">{agent.active ? 'Live' : 'Paused'}</MinimalPill>
                                         </div>
 
-                                        {/* ── TRIGGERS ── */}
-                                        <div className="rounded-xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-[#171717]">
-                                          <div className="flex items-center justify-between mb-3">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Triggers</p>
-                                            <span className="text-[10px] font-medium text-gray-400">{agent.triggers.length} event{agent.triggers.length !== 1 ? 's' : ''}</span>
-                                          </div>
-                                          <div className="space-y-2">
-                                            {agent.triggers.map((trigger: string, i: number) => (
-                                              <div key={i} className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/20">
-                                                <div className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-[#1f1f1f] dark:text-gray-400">
-                                                  <span className="text-[10px] font-semibold">{i + 1}</span>
-                                                </div>
-                                                <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300 leading-snug">
-                                                  {trigger}
-                                                </p>
-                                              </div>
+                                        <div className="mt-4">
+                                          <ul className="grid grid-cols-1 gap-2">
+                                            {detailBullets.map((item: string, index: number) => (
+                                              <li key={`${agent.name}-detail-${index}`} className="flex items-start gap-2 text-[13px] leading-6 text-gray-700 dark:text-gray-300">
+                                                <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-violet-500/70" />
+                                                <span>{item}</span>
+                                              </li>
                                             ))}
-                                          </div>
-                                          <p className="mt-4 text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">
-                                            Any of these events fires the agent automatically through the runtime orchestrator.
-                                          </p>
-                                        </div>
-
-                                        {/* ── DEPENDENCIES ── */}
-                                        <div className="rounded-xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-[#171717]">
-                                          <div className="flex items-center justify-between mb-3">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Dependencies</p>
-                                            <span className="text-[10px] font-medium text-gray-400">{agent.dependencies.length} link{agent.dependencies.length !== 1 ? 's' : ''}</span>
-                                          </div>
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                            {agent.dependencies.map((dep: string) => {
-                                              const linked = connectionAgentByName.get(dep);
-                                              const role = linked?.role || 'External link / module';
-                                              return (
-                                                <div key={dep} className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/20">
-                                                  <p className="text-[11px] font-semibold text-gray-800 dark:text-gray-200 truncate">{dep}</p>
-                                                  <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-snug">
-                                                    {role}
-                                                  </p>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-
-                                        {/* ── I/O LOGIC ── */}
-                                        <div className="rounded-xl border border-gray-100 bg-white p-5 dark:border-gray-800 dark:bg-[#171717]">
-                                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">I/O Logic</p>
-                                          <div className="space-y-3">
-                                            <div>
-                                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Input</p>
-                                              <div className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/20">
-                                                <p className="font-mono text-[11px] font-semibold text-gray-800 dark:text-gray-200">{ioInput}</p>
-                                                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 leading-snug">
-                                                  Structured payload received from upstream agent or runtime event bus.
-                                                </p>
-                                              </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-center gap-2">
-                                              <span className="text-[9px] font-semibold uppercase tracking-widest text-gray-400">Deterministic transform</span>
-                                              <span className="material-symbols-outlined text-[14px] text-gray-400">arrow_downward</span>
-                                            </div>
-
-                                            <div>
-                                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Output</p>
-                                              <div className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2 dark:border-gray-800 dark:bg-gray-900/20">
-                                                <p className="font-mono text-[11px] font-semibold text-gray-800 dark:text-gray-200">{ioOutput}</p>
-                                                <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400 leading-snug">
-                                                  Result handed off to downstream agents, written to the canonical state, or surfaced to the operator.
-                                                </p>
-                                              </div>
-                                            </div>
-                                          </div>
+                                          </ul>
                                         </div>
                                       </div>
                                     </div>
@@ -1579,6 +1525,44 @@ export default function AIStudio() {
       </div>
       </div>
       <ActionModal
+        open={Boolean(pendingWorkspaceAction)}
+        onClose={() => setPendingWorkspaceAction(null)}
+        loading={false}
+        variant={pendingWorkspaceAction === 'emergency_stop' ? 'danger' : 'warning'}
+        icon={pendingWorkspaceAction === 'emergency_stop' ? 'emergency' : 'toggle_on'}
+        title={pendingWorkspaceAction === 'emergency_stop' ? 'Emergency stop' : 'Enable all agents'}
+        subtitle={pendingWorkspaceAction === 'emergency_stop'
+          ? 'This will stop every editable active agent and prevent new tasks from being routed to them.'
+          : 'This will enable every editable disabled agent so the runtime can route new tasks to them.'}
+        context={pendingWorkspaceAction ? [
+          { label: 'Scope', value: 'Workspace agents' },
+          { label: 'Editable agents', value: pendingWorkspaceAction === 'emergency_stop'
+            ? String(mappedCategories.flatMap((category) => category.agents).filter((agent: any) => agent.id && agent.active && !agent.locked).length)
+            : String(mappedCategories.flatMap((category) => category.agents).filter((agent: any) => agent.id && !agent.locked && !agent.active).length)
+          },
+          { label: 'Current mode', value: pendingWorkspaceAction === 'emergency_stop' ? 'Live to paused' : 'Paused to live' },
+        ] : []}
+        steps={pendingWorkspaceAction === 'emergency_stop' ? [
+          { text: 'Active editable agents are stopped', detail: 'Only unlocked agents currently active will be paused.' },
+          { text: 'Routing is refreshed', detail: 'The runtime map is reloaded so the dashboard reflects the new state.' },
+          { text: 'No configuration is deleted', detail: 'Agent bundles stay intact; only execution state changes.' },
+        ] : [
+          { text: 'Disabled editable agents are activated', detail: 'Only unlocked agents currently paused will be enabled.' },
+          { text: 'Routing becomes available again', detail: 'The runtime can start sending work to those agents.' },
+          { text: 'Live state is synced back to the UI', detail: 'The agent list refreshes to show the new status.' },
+        ]}
+        considerations={pendingWorkspaceAction === 'emergency_stop' ? [
+          { text: 'This will immediately halt routing to live editable agents.' },
+          { text: 'Locked agents are not affected.' },
+        ] : [
+          { text: 'This can expose newly enabled agents to live traffic right away.' },
+          { text: 'If an agent is not fully configured it may still fail on missing tools or connectors.' },
+        ]}
+        confirmLabel={pendingWorkspaceAction === 'emergency_stop' ? 'Stop all agents' : 'Enable all agents'}
+        onConfirm={confirmWorkspaceAction}
+      />
+
+      <ActionModal
         open={Boolean(pendingAgentToggle?.agent)}
         onClose={() => setPendingAgentToggle(null)}
         loading={pendingAgentId === pendingAgentToggle?.agent?.id}
@@ -1616,3 +1600,4 @@ export default function AIStudio() {
     </div>
   );
 }
+

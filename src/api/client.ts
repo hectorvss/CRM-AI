@@ -221,6 +221,12 @@ export const knowledgeApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request<any>(`/knowledge/articles${qs}`).then(unwrapList);
   },
+  gaps: () => request<any>('/knowledge/gaps'),
+  test: (payload: Record<string, any>) =>
+    request<any>('/knowledge/test', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   getArticle: (id: string) => request<any>(`/knowledge/articles/${id}`),
   createArticle: (payload: Record<string, any>) =>
     request<any>('/knowledge/articles', {
@@ -481,12 +487,14 @@ export const billingApi = {
 
 // ── Reports ──────────────────────────────────────────────
 export const reportsApi = {
-  overview: (period = '7d') => request<any>(`/reports/overview?period=${period}`),
-  intents: (period = '7d') => request<any>(`/reports/intents?period=${period}`),
-  agents: (period = '7d') => request<any>(`/reports/agents?period=${period}`),
-  approvals: (period = '7d') => request<any>(`/reports/approvals?period=${period}`),
-  costs: (period = '7d') => request<any>(`/reports/costs?period=${period}`),
-  sla: (period = '7d') => request<any>(`/reports/sla?period=${period}`),
+  overview: (period = '7d', channel = 'all') => request<any>(`/reports/overview?${new URLSearchParams({ period, channel }).toString()}`),
+  intents: (period = '7d', channel = 'all') => request<any>(`/reports/intents?${new URLSearchParams({ period, channel }).toString()}`),
+  agents: (period = '7d', channel = 'all') => request<any>(`/reports/agents?${new URLSearchParams({ period, channel }).toString()}`),
+  approvals: (period = '7d', channel = 'all') => request<any>(`/reports/approvals?${new URLSearchParams({ period, channel }).toString()}`),
+  costs: (period = '7d', channel = 'all') => request<any>(`/reports/costs?${new URLSearchParams({ period, channel }).toString()}`),
+  sla: (period = '7d', channel = 'all') => request<any>(`/reports/sla?${new URLSearchParams({ period, channel }).toString()}`),
+  summary: (period = '7d', channel = 'all', audience = 'Executive / C-Suite') =>
+    request<any>(`/reports/summary?${new URLSearchParams({ period, channel, audience }).toString()}`),
 };
 
 export const operationsApi = {

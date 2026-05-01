@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { knowledgeApi } from '../api/client';
+import { agentsApi, knowledgeApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import LoadingState from './LoadingState';
+import { ActionModal } from './ActionModal';
+import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
+import StyledSelect from './StyledSelect';
 
 type KnowledgeTab = 'library' | 'gaps' | 'test';
 
@@ -46,6 +49,79 @@ type ImportedFileState = {
   name: string;
   kind: ImportedFileKind;
   characters: number;
+};
+
+type GapRecord = {
+  topic: string;
+  frequency: number;
+  unresolvedCases: number;
+  escalations: number;
+  pendingApprovals: number;
+  riskCases: number;
+  sampleCases: string[];
+  suggestedDomain: string;
+  status: 'missing' | 'stale' | 'weak' | 'covered';
+  recommendedAction: string;
+  whyItMatters: string;
+  relatedArticles: Array<{ id: string; title: string; status: string; outdated: boolean }>;
+};
+
+type KnowledgeGapsPayload = {
+  stats: {
+    unanswered: number;
+    escalations: number;
+    staleCoverage: number;
+    coverageScore: number;
+    topDemandDomain: string;
+  };
+  alerts: Array<{ id: string; title: string; detail: string }>;
+  gaps: GapRecord[];
+  problemArticles: Array<{
+    id: string;
+    title: string;
+    domain: string;
+    status: string;
+    citationCount: number;
+    issue: string;
+  }>;
+};
+
+type KnowledgeTestPayload = {
+  ok: boolean;
+  query: string;
+  agent?: { id: string; name: string; slug: string; isActive: boolean };
+  agentHealth?: {
+    implementationMode: string;
+    hasRegisteredImpl: boolean;
+    blockedDocuments: number;
+    accessibleDocuments: number;
+  };
+  summary: {
+    verdict: 'missing' | 'partial' | 'strong';
+    matchedSources: number;
+    blockedSources: number;
+    healthySources: number;
+    suggestedNextStep: string;
+  };
+  accessibleResults: Array<{
+    id: string;
+    title: string;
+    domain_name: string | null;
+    status: string;
+    outdated_flag: number;
+    excerpt: string;
+    whyMatched: string;
+    relevance_score: number;
+  }>;
+  blockedResults: Array<{
+    id: string;
+    title: string;
+    domain_name: string | null;
+    blocked_reason: string;
+    relevance_score: number;
+  }>;
+  citations: Array<{ id: string; title: string; domain_name: string | null }>;
+  answerPreview: string;
 };
 
 const emptyDraft: KnowledgeDraftState = {
@@ -245,6 +321,7 @@ const parseMarkdownTitle = (content: string) => {
 export default function Knowledge() {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>('library');
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -263,11 +340,17 @@ export default function Knowledge() {
 
   // Knowledge test
   const [testQuery, setTestQuery] = useState('refund annual plan');
+  const [testAgentId, setTestAgentId] = useState<string>('all');
   const [isTestRunning, setIsTestRunning] = useState(false);
-  const [testResults, setTestResults] = useState<KnowledgeItem[]>([]);
+  const [testResults, setTestResults] = useState<any>(null);
   const [testRan, setTestRan] = useState(false);
+  const [knowledgeNotice, setKnowledgeNotice] = useState<{ tone: 'success' | 'warning' | 'neutral'; message: string } | null>(null);
+  const [activeGapDraft, setActiveGapDraft] = useState<GapRecord | null>(null);
+  const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
 
   const { data: apiArticles, loading: articlesLoading, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const { data: gapsData, loading: gapsLoading, refetch: refetchGaps } = useApi<KnowledgeGapsPayload>(() => knowledgeApi.gaps(), [], null);
+  const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
   const { data: apiDomains } = useApi(() => knowledgeApi.listDomains(), [], []);
   const { data: selectedArticle, loading: selectedArticleLoading, refetch: refetchSelectedArticle } = useApi(
     () => (selectedArticleId ? knowledgeApi.getArticle(selectedArticleId) : Promise.resolve(null)),
@@ -278,6 +361,7 @@ export default function Knowledge() {
   const updateArticle = useMutation((payload: { id: string; body: Record<string, any> }) => knowledgeApi.updateArticle(payload.id, payload.body));
   const publishArticle = useMutation((id: string) => knowledgeApi.publishArticle(id));
   const domains = Array.isArray(apiDomains) ? apiDomains : [];
+  const agents = Array.isArray(agentsData) ? agentsData : [];
   const domainOptions = useMemo(() => domains.map((domain: any) => ({ id: domain.id, name: domain.name })), [domains]);
 
   const mapApiArticle = (a: any): KnowledgeItem => ({
@@ -316,18 +400,62 @@ export default function Knowledge() {
     });
   }, [library, librarySearch, libraryTypeFilter, libraryStatusFilter, libraryHealthFilter]);
 
+  const selectedLibraryItems = useMemo(
+    () => filteredLibrary.filter((item) => selectedLibraryIds.includes(item.id)),
+    [filteredLibrary, selectedLibraryIds],
+  );
+  const allFilteredSelected = filteredLibrary.length > 0 && filteredLibrary.every((item) => selectedLibraryIds.includes(item.id));
+  const anySelected = selectedLibraryIds.length > 0;
+
   const handleRunTest = async () => {
     if (!testQuery.trim() || isTestRunning) return;
     setIsTestRunning(true);
-    await new Promise(r => setTimeout(r, 800));
-    const q = testQuery.toLowerCase();
-    const results = library.filter(item =>
-      item.title.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q)
-    ).slice(0, 4);
-    setTestResults(results);
-    setTestRan(true);
+    const payload = await knowledgeApi.test({
+      query: testQuery.trim(),
+      agentId: testAgentId === 'all' ? null : testAgentId,
+      selectedArticleIds: selectedLibraryIds,
+    }).catch((error) => {
+      setKnowledgeNotice({
+        tone: 'warning',
+        message: error instanceof Error ? error.message : 'No hemos podido ejecutar la prueba.',
+      });
+      return null;
+    });
+    setTestResults(payload);
+    setTestRan(Boolean(payload));
     setIsTestRunning(false);
+  };
+
+  const toggleLibrarySelection = (id: string) => {
+    setSelectedLibraryIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedLibraryIds((current) => {
+      if (allFilteredSelected) {
+        return current.filter((id) => !filteredLibrary.some((item) => item.id === id));
+      }
+      const next = new Set(current);
+      filteredLibrary.forEach((item) => next.add(item.id));
+      return Array.from(next);
+    });
+  };
+
+  const handleBulkPublish = async () => {
+    const drafts = selectedLibraryItems.filter((item) => item.status === 'Draft');
+    if (!drafts.length) {
+      setKnowledgeNotice({ tone: 'warning', message: 'No hay borradores seleccionados para publicar.' });
+      setBulkPublishOpen(false);
+      return;
+    }
+    for (const draftItem of drafts) {
+      await publishArticle.mutate(draftItem.id);
+    }
+    setSelectedLibraryIds([]);
+    setBulkPublishOpen(false);
+    setKnowledgeNotice({ tone: 'success', message: `${drafts.length} artículo(s) publicados correctamente.` });
+    refetch();
+    refetchGaps();
   };
 
   const openCreateEditorWithTopic = (topic: string) => {
@@ -569,12 +697,6 @@ export default function Knowledge() {
             </div>
           ))}
           {/* Legacy filter buttons replaced — keeping map so old 'Category','Visibility','Owner' appear as stubs */}
-          {['Category', 'Visibility', 'Owner'].map(filter => (
-            <button key={filter} className="flex items-center px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm">
-              {filter}
-              <span className="material-symbols-outlined text-gray-400 text-sm ml-1">arrow_drop_down</span>
-            </button>
-          ))}
           <div className="flex-1"></div>
           <button
             onClick={() => { setLibrarySearch(''); setLibraryTypeFilter('All'); setLibraryStatusFilter('All'); setLibraryHealthFilter('All'); }}
@@ -584,12 +706,55 @@ export default function Knowledge() {
             <span className="material-symbols-outlined text-lg">filter_list_off</span>
           </button>
         </div>
+        {anySelected && (
+          <div className="border-b border-gray-100 bg-white px-6 py-3 dark:border-gray-800 dark:bg-card-dark">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MinimalPill tone="active">{selectedLibraryIds.length} selected</MinimalPill>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Publish drafts or run a focused coverage test with this selection.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <MinimalButton
+                  variant="outline"
+                  onClick={() => {
+                    const firstId = selectedLibraryIds[0];
+                    if (firstId) setSelectedArticleId(firstId);
+                  }}
+                >
+                  Open first
+                </MinimalButton>
+                <MinimalButton
+                  variant="outline"
+                  onClick={() => {
+                    setActiveTab('test');
+                    setKnowledgeNotice({ tone: 'neutral', message: 'La prueba se lanzará solo contra los artículos seleccionados.' });
+                  }}
+                >
+                  Test selected
+                </MinimalButton>
+                <MinimalButton
+                  onClick={() => setBulkPublishOpen(true)}
+                  disabled={!selectedLibraryItems.some((item) => item.status === 'Draft')}
+                >
+                  Publish selected
+                </MinimalButton>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex-1 overflow-auto min-h-[420px]">
           <table className="w-full border-collapse">
             <thead className="bg-white dark:bg-card-dark sticky top-0 z-10">
               <tr className="text-left border-b border-gray-100 dark:border-gray-800">
                 <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-8">
-                  <input className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900" type="checkbox"/>
+                  <input
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAllFiltered}
+                  />
                 </th>
                 <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Title</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Category</th>
@@ -607,7 +772,13 @@ export default function Knowledge() {
                   onClick={() => setSelectedArticleId(item.id)}
                 >
                   <td className="px-6 py-4 w-8">
-                    <input className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900" type="checkbox" onClick={(e) => e.stopPropagation()}/>
+                    <input
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
+                      type="checkbox"
+                      checked={selectedLibraryIds.includes(item.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleLibrarySelection(item.id)}
+                    />
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center">
@@ -954,7 +1125,7 @@ export default function Knowledge() {
   };
 
 
-  const renderGaps = () => (
+  const renderGapsLegacy = () => (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-8">
       <div className="grid grid-cols-4 gap-6">
         {[
@@ -1111,7 +1282,7 @@ export default function Knowledge() {
     </div>
   );
 
-  const renderTest = () => (
+  const renderTestLegacy = () => (
     <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-8">
       <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
         <div className="p-8">
@@ -1310,6 +1481,319 @@ export default function Knowledge() {
     </div>
   );
 
+  const renderGaps = () => {
+    const payload = gapsData;
+    const stats = payload?.stats;
+
+    return (
+      <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-6">
+        <div className="grid gap-4 lg:grid-cols-5">
+          {[
+            { label: 'Unanswered demand', value: stats?.unanswered ?? 0, icon: 'help' },
+            { label: 'Escalations linked', value: stats?.escalations ?? 0, icon: 'warning' },
+            { label: 'Stale clusters', value: stats?.staleCoverage ?? 0, icon: 'schedule' },
+            { label: 'Coverage score', value: `${stats?.coverageScore ?? 0}%`, icon: 'monitoring' },
+            { label: 'Top pressure domain', value: stats?.topDemandDomain ?? 'General', icon: 'folder' },
+          ].map((stat) => (
+            <div key={stat.label}>
+              <MinimalCard title={stat.label} icon={stat.icon}>
+                <div className="text-2xl font-semibold text-gray-950 dark:text-white">{stat.value}</div>
+              </MinimalCard>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
+          <MinimalCard
+            title="Demand gaps"
+            subtitle="Live demand clusters that are missing, weak, or stale in the knowledge layer."
+            icon="rule"
+            action={<MinimalButton variant="outline" onClick={refetchGaps}>Refresh</MinimalButton>}
+          >
+            {gapsLoading && !payload ? (
+              <LoadingState title="Loading gaps" message="Inspecting live demand against the knowledge library." compact />
+            ) : (
+              <div className="space-y-4">
+                {(payload?.gaps ?? []).map((gap) => (
+                  <div key={gap.topic} className="rounded-[20px] border border-black/5 bg-white p-4 dark:border-white/10 dark:bg-[#1b1b1b]">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-950 dark:text-white">{gap.topic}</h3>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{gap.whyItMatters}</p>
+                      </div>
+                      <MinimalPill tone={gap.status === 'missing' ? 'active' : 'neutral'}>{gap.status}</MinimalPill>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                      <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                        <p className="text-[10px] uppercase tracking-wide text-gray-400">Demand</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{gap.frequency} cases</p>
+                      </div>
+                      <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                        <p className="text-[10px] uppercase tracking-wide text-gray-400">Unresolved</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{gap.unresolvedCases}</p>
+                      </div>
+                      <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                        <p className="text-[10px] uppercase tracking-wide text-gray-400">Escalations</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{gap.escalations}</p>
+                      </div>
+                      <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                        <p className="text-[10px] uppercase tracking-wide text-gray-400">Suggested domain</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{gap.suggestedDomain}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">What to do next</p>
+                      <ul className="space-y-2">
+                        <li className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                          <span className="mt-1 h-1.5 w-1.5 rounded-full bg-violet-500" />
+                          <span>{gap.recommendedAction}</span>
+                        </li>
+                        {!!gap.sampleCases.length && (
+                          <li className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <span className="mt-1 h-1.5 w-1.5 rounded-full bg-violet-500" />
+                            <span>Recent case pressure: {gap.sampleCases.join(', ')}</span>
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <MinimalButton variant="outline" onClick={() => {
+                        setActiveTab('library');
+                        setLibrarySearch(gap.topic);
+                      }}>
+                        Review sources
+                      </MinimalButton>
+                      <MinimalButton onClick={() => setActiveGapDraft(gap)}>
+                        Create draft
+                      </MinimalButton>
+                    </div>
+                  </div>
+                ))}
+                {!payload?.gaps?.length && (
+                  <div className="rounded-[20px] border border-dashed border-black/10 px-4 py-8 text-center text-sm text-gray-500 dark:border-white/10 dark:text-gray-400">
+                    No critical knowledge gaps detected right now.
+                  </div>
+                )}
+              </div>
+            )}
+          </MinimalCard>
+
+          <div className="space-y-6">
+            <MinimalCard title="Coverage alerts" subtitle="Signals worth reviewing before the next wave of customer demand." icon="notification_important">
+              <div className="space-y-3">
+                {(payload?.alerts ?? []).map((alert) => (
+                  <div key={alert.id} className="rounded-[20px] border border-black/5 px-4 py-4 dark:border-white/10">
+                    <p className="text-sm font-semibold text-gray-950 dark:text-white">{alert.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{alert.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </MinimalCard>
+
+            <MinimalCard title="Problem articles" subtitle="Documents with low trust, low usage, or stale state." icon="description">
+              <div className="space-y-3">
+                {(payload?.problemArticles ?? []).map((article) => (
+                  <button
+                    key={article.id}
+                    type="button"
+                    onClick={() => setSelectedArticleId(article.id)}
+                    className="flex w-full items-start justify-between rounded-[20px] border border-black/5 px-4 py-4 text-left transition-colors hover:bg-black/[0.02] dark:border-white/10 dark:hover:bg-white/[0.03]"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-gray-950 dark:text-white">{article.title}</p>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{article.domain} · {article.status} · {article.citationCount} citations</p>
+                    </div>
+                    <MinimalPill tone="neutral">{article.issue}</MinimalPill>
+                  </button>
+                ))}
+              </div>
+            </MinimalCard>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTest = () => (
+    <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-6">
+      <MinimalCard title="Run knowledge test" subtitle="Probe what an agent can really access and whether that coverage is enough." icon="science">
+        <div className="grid gap-4 lg:grid-cols-[1.5fr_0.8fr_auto]">
+          <div>
+            <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Query</label>
+            <input
+              className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-black dark:border-white/10 dark:bg-[#171717] dark:text-white"
+              placeholder="Ask the kind of question customers or agents are struggling with"
+              type="text"
+              value={testQuery}
+              onChange={(e) => setTestQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleRunTest(); }}
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Agent</label>
+            <StyledSelect
+              value={testAgentId}
+              onChange={(e) => setTestAgentId(e.target.value)}
+              className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-gray-900 outline-none hover:bg-white dark:border-white/10 dark:bg-[#171717] dark:text-white dark:hover:bg-[#171717]"
+              menuWidth={460}
+              columns={2}
+              wrapLabels
+            >
+              <option value="all">All library access</option>
+              {agents.map((agent: any) => (
+                <option key={agent.id} value={agent.id}>{agent.name}</option>
+              ))}
+            </StyledSelect>
+          </div>
+          <div className="flex items-end">
+            <MinimalButton onClick={() => void handleRunTest()} disabled={isTestRunning || !testQuery.trim()}>
+              {isTestRunning ? 'Running…' : 'Run test'}
+            </MinimalButton>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {['Refund outside policy window', 'Chargeback dispute evidence', 'Reset 2FA for workspace owner', 'Shipping delay after label creation'].map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => {
+                setTestQuery(preset);
+                setTestRan(false);
+              }}
+              className="rounded-full border border-black/10 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-black/[0.03] hover:text-gray-950 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.04] dark:hover:text-white"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      </MinimalCard>
+
+      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.9fr]">
+        <MinimalCard title="Coverage result" subtitle="What the test can actually retrieve and rely on." icon="search">
+          {isTestRunning ? (
+            <LoadingState title="Running test" message="Checking coverage and agent access against live knowledge." compact />
+          ) : !testRan || !testResults ? (
+            <div className="rounded-[20px] border border-dashed border-black/10 px-4 py-8 text-center text-sm text-gray-500 dark:border-white/10 dark:text-gray-400">
+              Run a test to inspect whether the selected agent can answer this topic safely.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Verdict</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-950 capitalize dark:text-white">{testResults.summary.verdict}</p>
+                </div>
+                <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Matched</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{testResults.summary.matchedSources}</p>
+                </div>
+                <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Healthy</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{testResults.summary.healthySources}</p>
+                </div>
+                <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Blocked</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{testResults.summary.blockedSources}</p>
+                </div>
+              </div>
+
+              <div className="rounded-[20px] border border-black/5 px-4 py-4 dark:border-white/10">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Answer preview</p>
+                <p className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">{testResults.answerPreview}</p>
+                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{testResults.summary.suggestedNextStep}</p>
+              </div>
+
+              <div className="space-y-3">
+                {testResults.accessibleResults.map((result) => (
+                  <button
+                    key={result.id}
+                    type="button"
+                    onClick={() => setSelectedArticleId(result.id)}
+                    className="flex w-full items-start justify-between rounded-[20px] border border-black/5 px-4 py-4 text-left transition-colors hover:bg-black/[0.02] dark:border-white/10 dark:hover:bg-white/[0.03]"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-gray-950 dark:text-white">{result.title}</p>
+                        {result.outdated_flag === 1 ? <MinimalPill tone="neutral">stale</MinimalPill> : null}
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{result.domain_name ?? 'General'} · {result.status}</p>
+                      <p className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">{result.whyMatched}</p>
+                    </div>
+                    <span className="ml-4 text-xs font-semibold text-gray-500 dark:text-gray-400">{result.relevance_score}</span>
+                  </button>
+                ))}
+                {testResults.accessibleResults.length === 0 && (
+                  <div className="rounded-[20px] border border-dashed border-black/10 px-4 py-8 text-center text-sm text-gray-500 dark:border-white/10 dark:text-gray-400">
+                    No accessible source matched this query.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </MinimalCard>
+
+        <div className="space-y-6">
+          <MinimalCard title="Agent health" subtitle="What the selected agent exposes through its knowledge policy." icon="smart_toy">
+            {testResults?.agent ? (
+              <div className="space-y-3">
+                <div className="rounded-[20px] border border-black/5 px-4 py-4 dark:border-white/10">
+                  <p className="text-sm font-semibold text-gray-950 dark:text-white">{testResults.agent.name}</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{testResults.agent.slug} · {testResults.agent.isActive ? 'active' : 'inactive'}</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Accessible docs</p>
+                    <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{testResults.agentHealth?.accessibleDocuments ?? 0}</p>
+                  </div>
+                  <div className="rounded-2xl border border-black/5 px-3 py-3 dark:border-white/10">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400">Blocked docs</p>
+                    <p className="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{testResults.agentHealth?.blockedDocuments ?? 0}</p>
+                  </div>
+                </div>
+                {!!testResults.blockedResults.length && (
+                  <div className="space-y-2">
+                    {testResults.blockedResults.map((blocked) => (
+                      <div key={blocked.id} className="rounded-[20px] border border-black/5 px-4 py-4 dark:border-white/10">
+                        <p className="text-sm font-semibold text-gray-950 dark:text-white">{blocked.title}</p>
+                        <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{blocked.blocked_reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Choose an agent to verify the exact knowledge perimeter it can use.
+              </p>
+            )}
+          </MinimalCard>
+
+          <MinimalCard title="Citations" subtitle="The documents this run would cite first." icon="format_quote">
+            <div className="space-y-3">
+              {(testResults?.citations ?? []).map((citation) => (
+                <button
+                  key={citation.id}
+                  type="button"
+                  onClick={() => setSelectedArticleId(citation.id)}
+                  className="flex w-full items-center justify-between rounded-[20px] border border-black/5 px-4 py-3 text-left transition-colors hover:bg-black/[0.02] dark:border-white/10 dark:hover:bg-white/[0.03]"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-950 dark:text-white">{citation.title}</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{citation.domain_name ?? 'General'}</p>
+                  </div>
+                  <span className="material-symbols-outlined text-gray-400">open_in_new</span>
+                </button>
+              ))}
+              {!testResults?.citations?.length && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No citations yet for this run.</p>
+              )}
+            </div>
+          </MinimalCard>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
@@ -1399,6 +1883,28 @@ export default function Knowledge() {
 
             {/* Tab Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
+              {knowledgeNotice && (
+                <div className="px-6 pt-4">
+                  <div className={`rounded-[20px] border px-4 py-3 text-sm ${
+                    knowledgeNotice.tone === 'success'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
+                      : knowledgeNotice.tone === 'warning'
+                        ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300'
+                        : 'border-black/10 bg-white text-gray-700 dark:border-white/10 dark:bg-[#171717] dark:text-gray-300'
+                  }`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <p>{knowledgeNotice.message}</p>
+                      <button
+                        type="button"
+                        onClick={() => setKnowledgeNotice(null)}
+                        className="text-xs font-semibold opacity-70 hover:opacity-100"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               {activeTab === 'library' && renderLibrary()}
               {activeTab === 'gaps' && renderGaps()}
               {activeTab === 'test' && renderTest()}
@@ -1407,6 +1913,58 @@ export default function Knowledge() {
         )}
       </AnimatePresence>
       </div>
+      <ActionModal
+        open={bulkPublishOpen}
+        onClose={() => setBulkPublishOpen(false)}
+        onConfirm={() => void handleBulkPublish()}
+        loading={publishArticle.loading}
+        icon="publish"
+        title="Publish selected knowledge"
+        subtitle="This will publish the selected draft articles and make them available to agents and workflows."
+        context={[
+          { label: 'Selected', value: `${selectedLibraryIds.length} articles` },
+          { label: 'Drafts', value: `${selectedLibraryItems.filter((item) => item.status === 'Draft').length}` },
+        ]}
+        steps={[
+          { text: 'Publish each selected draft article.', detail: 'Only drafts in the current selection will be updated.' },
+          { text: 'Refresh the knowledge library and gap analysis.', detail: 'Coverage stats will be recalculated after publication.' },
+        ]}
+        considerations={[
+          { text: 'Published articles become available to agents, retrieval tests, and linked workflow reasoning.' },
+        ]}
+        confirmLabel="Publish selected"
+      />
+      <ActionModal
+        open={Boolean(activeGapDraft)}
+        onClose={() => setActiveGapDraft(null)}
+        onConfirm={() => {
+          if (!activeGapDraft) return;
+          openCreateEditorWithTopic(activeGapDraft.topic);
+          setDraft((current) => ({
+            ...current,
+            title: activeGapDraft.topic,
+            content: `# ${activeGapDraft.topic}\n\n## Summary\n${activeGapDraft.whyItMatters}\n\n## Policy\n${activeGapDraft.recommendedAction}\n\n## Evidence\n- Recent cases: ${activeGapDraft.sampleCases.join(', ') || 'Add supporting examples'}\n\n## Agent Notes\n- Suggested domain: ${activeGapDraft.suggestedDomain}\n- Pending approvals linked: ${activeGapDraft.pendingApprovals}\n`,
+          }));
+          setKnowledgeNotice({ tone: 'success', message: `Se ha preparado un borrador inicial para "${activeGapDraft.topic}".` });
+          setActiveGapDraft(null);
+        }}
+        icon="edit_note"
+        title={activeGapDraft ? `Create draft for ${activeGapDraft.topic}` : 'Create knowledge draft'}
+        subtitle="A starter article will be created from the demand signal so the team can refine it before publishing."
+        context={activeGapDraft ? [
+          { label: 'Demand', value: `${activeGapDraft.frequency} cases` },
+          { label: 'Escalations', value: `${activeGapDraft.escalations}` },
+          { label: 'Domain', value: activeGapDraft.suggestedDomain },
+        ] : []}
+        steps={[
+          { text: 'Open the narrative editor with a starter structure.', detail: 'The draft will include the gap topic, recommended action, and live case pressure.' },
+          { text: 'Let the team refine the policy before publishing it to agents.', detail: 'This keeps the flow safe while still moving quickly from insight to coverage.' },
+        ]}
+        considerations={[
+          { text: 'The draft is intentionally conservative. Review the examples and policy wording before publishing.' },
+        ]}
+        confirmLabel="Create draft"
+      />
       <AnimatePresence>
         {editorOpen && (
           <motion.div
