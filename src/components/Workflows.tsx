@@ -179,6 +179,8 @@ interface NodeSpec {
   requiresConfig?: boolean;
   sensitive?: boolean;
   description?: string;
+  /** Pre-filled config applied when this node is inserted onto the canvas (e.g. agent slug for agent.run) */
+  defaultConfig?: Record<string, any>;
 }
 
 type WorkflowActionDialogState =
@@ -299,11 +301,11 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'integration', key: 'message.outlook', label: 'Microsoft Outlook', category: 'Human review', icon: 'mark_email_unread', requiresConfig: true, description: 'Send an email through your Outlook / Microsoft 365 account. Requires Outlook OAuth in Integrations.' },
   { type: 'integration', key: 'message.teams', label: 'Microsoft Teams', category: 'Human review', icon: 'groups', requiresConfig: true, description: 'Post a message to a Teams channel. Requires Microsoft Teams configured in Integrations.' },
   { type: 'integration', key: 'message.google_chat', label: 'Google Chat', category: 'Human review', icon: 'chat_bubble', requiresConfig: true, description: 'Post a message to a Google Chat space. Requires Google Workspace configured in Integrations.' },
-  { type: 'agent', key: 'agent.run', label: 'AI Agent', category: 'AI', icon: 'smart_toy', requiresConfig: true, description: 'Run a specialist CRM-AI agent.' },
-  { type: 'agent', key: 'agent.classify', label: 'Classify case', category: 'AI', icon: 'category', requiresConfig: true, description: 'Classify intent, priority, or risk from context.' },
-  { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'AI', icon: 'sentiment_satisfied', requiresConfig: true, description: 'Detect sentiment and frustration signals.' },
-  { type: 'agent', key: 'agent.summarize', label: 'Summarize context', category: 'AI', icon: 'summarize', requiresConfig: true, description: 'Create a concise operational summary.' },
-  { type: 'agent', key: 'agent.draft_reply', label: 'Draft reply', category: 'AI', icon: 'edit_square', requiresConfig: true, description: 'Draft a customer-ready response.' },
+  { type: 'agent', key: 'agent.run', label: 'Run AI Agent', category: 'AI Agent', icon: 'smart_toy', requiresConfig: true, description: 'Pick an AI Studio agent and run it as a workflow step. Configure agents in AI Studio → Agents.' },
+  { type: 'agent', key: 'agent.classify', label: 'Classify case', category: 'AI Agent', icon: 'category', requiresConfig: true, description: 'Classify intent, priority, or risk from a text field.' },
+  { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'AI Agent', icon: 'sentiment_satisfied', requiresConfig: true, description: 'Detect sentiment and frustration signals in customer text.' },
+  { type: 'agent', key: 'agent.summarize', label: 'Summarize context', category: 'AI Agent', icon: 'summarize', requiresConfig: true, description: 'Create a concise operational summary of the workflow context.' },
+  { type: 'agent', key: 'agent.draft_reply', label: 'Draft reply', category: 'AI Agent', icon: 'edit_square', requiresConfig: true, description: 'Draft a customer-ready response from context.' },
   { type: 'agent', key: 'ai.generate_text', label: 'Generate text (LLM)', category: 'AI', icon: 'auto_awesome', requiresConfig: true, description: 'Generate text using Gemini LLM from a prompt.' },
   { type: 'agent', key: 'ai.gemini', label: 'Google Gemini', category: 'AI', icon: 'diamond', requiresConfig: true, description: 'Interact with Google Gemini models (chat, completion, structured output).' },
   { type: 'agent', key: 'ai.anthropic', label: 'Anthropic Claude', category: 'AI', icon: 'auto_awesome_motion', requiresConfig: true, description: 'Interact with Anthropic Claude models. Requires ANTHROPIC_API_KEY in Integrations.' },
@@ -908,10 +910,11 @@ const EDITOR_TABS = [
   { id: 'runs', label: 'Executions' },
   { id: 'evaluations', label: 'Evaluations' },
 ] as const;
-const ADD_GROUPS = ['AI', 'Action', 'Data transformation', 'Flow', 'Core', 'Human review', 'Integration', 'Knowledge', 'Trigger'] as const;
+const ADD_GROUPS = ['AI Agent', 'AI', 'Action', 'Data transformation', 'Flow', 'Core', 'Human review', 'Integration', 'Knowledge', 'Trigger'] as const;
 
 const CATEGORY_META: Record<string, { title: string; subtitle: string; icon: string }> = {
-  AI: { title: 'AI', subtitle: 'Build specialist agents and context-aware assistive steps.', icon: 'smart_toy' },
+  'AI Agent': { title: 'AI Agent', subtitle: 'Connect pre-configured AI Studio agents directly into your workflows.', icon: 'smart_toy' },
+  AI: { title: 'AI', subtitle: 'LLM providers, extractors, and safety guardrails for AI-powered steps.', icon: 'auto_awesome' },
   Action: { title: 'Action', subtitle: 'Write into cases, orders, payments, returns, and more.', icon: 'bolt' },
   'Data transformation': { title: 'Data transformation', subtitle: 'Map, clean, reshape, and prepare workflow data.', icon: 'transform' },
   Flow: { title: 'Flow', subtitle: 'Branch, merge, loop, wait, and coordinate execution.', icon: 'account_tree' },
@@ -1260,7 +1263,10 @@ function categoryForSpec(spec: NodeSpec) {
   if (spec.key.startsWith('data.')) return 'Data transformation';
   if (spec.key.startsWith('message.')) return 'Human review';
   if (spec.key.startsWith('core.')) return 'Core';
-  if (spec.type === 'agent') return 'AI';
+  // agent.* keys → dedicated "AI Agent" category; ai.* keys → "AI" (LLM providers)
+  if (spec.key.startsWith('agent.')) return 'AI Agent';
+  if (spec.key.startsWith('ai.')) return 'AI';
+  if (spec.type === 'agent') return 'AI';  // fallback for any remaining agent-typed node
   if (spec.type === 'condition' || spec.type === 'utility') return 'Flow';
   if (spec.type === 'action') return spec.key.startsWith('approval.') ? 'Human review' : 'Action';
   if (spec.type === 'policy') return 'Core';
@@ -1286,6 +1292,10 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
   const pick = (keys: string[]) => keys.map((key) => byKey.get(key)).filter(Boolean) as NodeSpec[];
 
   const sectionsByCategory: Record<string, AddPanelSection[]> = {
+    'AI Agent': [
+      { title: 'Run an agent', items: pick(['agent.run']) },
+      { title: 'Inline AI steps', items: pick(['agent.classify', 'agent.draft_reply', 'agent.sentiment', 'agent.summarize']) },
+    ],
     Flow: [
       { title: 'Popular', items: pick(['flow.filter', 'flow.if', 'flow.loop', 'flow.merge']) },
       { title: 'Other', items: pick(['flow.compare', 'flow.branch', 'flow.switch', 'flow.wait', 'flow.subworkflow', 'flow.stop_error', 'flow.noop']) },
@@ -1297,10 +1307,9 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Other', items: pick(['data.rename_fields', 'data.calculate', 'data.extract_json', 'data.normalize_text', 'data.format_date']) },
     ],
     AI: [
-      { title: 'Popular', items: pick(['agent.run', 'agent.classify', 'agent.draft_reply', 'ai.generate_text', 'ai.information_extractor']) },
+      { title: 'Popular', items: pick(['ai.generate_text', 'ai.information_extractor', 'ai.gemini']) },
       { title: 'AI providers', items: pick(['ai.gemini', 'ai.anthropic', 'ai.openai', 'ai.ollama']) },
       { title: 'Safety', items: pick(['ai.guardrails']) },
-      { title: 'Other', items: pick(['agent.sentiment', 'agent.summarize', 'knowledge.search']) },
     ],
     Action: [
       { title: 'Cases', items: pick(['case.assign', 'case.update_status', 'case.set_priority', 'case.add_tag', 'case.reply', 'case.note']) },
@@ -1341,11 +1350,13 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
   })).filter((section) => section.items.length > 0);
 }
 
-function getCategoryOverview(catalog: NodeSpec[]) {
+function getCategoryOverview(catalog: NodeSpec[], studioAgentCount = 0) {
   return ADD_GROUPS.map((category) => {
     const items = catalog.filter((spec) => categoryForSpec(spec) === category);
     const meta = CATEGORY_META[category] ?? { title: category, subtitle: 'Browse available blocks.', icon: 'grid_view' };
-    return { category, ...meta, count: items.length, items };
+    // For the AI Agent category, add the live AI Studio agent count on top of the static spec count
+    const count = category === 'AI Agent' ? items.length + studioAgentCount : items.length;
+    return { category, ...meta, count, items };
   });
 }
 
@@ -1664,7 +1675,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const [addPanel, setAddPanel] = useState<AddPanelMode>(null);
   const [addPanelView, setAddPanelView] = useState<'categories' | 'category'>('categories');
   const [addSearch, setAddSearch] = useState('');
-  const [addCategory, setAddCategory] = useState<string>('AI');
+  const [addCategory, setAddCategory] = useState<string>('AI Agent');
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const [editorNodeId, setEditorNodeId] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState<'parameters' | 'settings'>('parameters');
@@ -1678,6 +1689,7 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
 
   const { data: apiWorkflows, loading, error } = useApi(() => workflowsApi.list(), [], []);
   const { data: catalogPayload } = useApi(() => workflowsApi.catalog(), [], null);
+  const { data: agentCatalogData } = useApi(() => workflowsApi.agentCatalog(), [], []);
   const { data: connectorsPayload } = useApi(() => connectorsApi.list(), [], []);
   const { data: recentRunsPayload } = useApi(() => workflowsApi.recentRuns(), [], []);
   const { data: workspaceContext, refetch: refetchWorkspaceContext } = useApi(() => workspacesApi.currentContext(), [], null);
@@ -1950,7 +1962,11 @@ function loadBuilderState(workflow: Workflow) {
   function addNode(spec: NodeSpec, mode: AddPanelMode = addPanel) {
     const sourceNode = mode?.sourceNodeId ? workflowNodes.find((node) => node.id === mode.sourceNodeId) : selectedNode ?? workflowNodes.at(-1);
     const sourcePosition = sourceNode?.position ?? { x: 120, y: 220 };
-    const node = makeNode({ ...spec, position: { x: sourcePosition.x + 340, y: sourcePosition.y + (mode?.sourceHandle === 'false' ? 160 : 0) } }, workflowNodes.length);
+    const node = makeNode({
+      ...spec,
+      config: spec.defaultConfig ?? {},
+      position: { x: sourcePosition.x + 340, y: sourcePosition.y + (mode?.sourceHandle === 'false' ? 160 : 0) },
+    }, workflowNodes.length);
     let nextEdges = workflowEdges;
     if (mode?.edgeId) {
       const edge = workflowEdges.find((item) => item.id === mode.edgeId);
@@ -2568,7 +2584,10 @@ function loadBuilderState(workflow: Workflow) {
     setWorkflowNodes((items) => items.map((item) => item.id === node.id ? { ...item, position: node.position } : item));
   }
 
-  const addCategories = useMemo(() => getCategoryOverview(catalog), [catalog]);
+  const addCategories = useMemo(
+    () => getCategoryOverview(catalog, Array.isArray(agentCatalogData) ? agentCatalogData.length : 0),
+    [catalog, agentCatalogData],
+  );
   const addSections = useMemo(() => getAddPanelSections(addCategory, catalog, addSearch), [catalog, addCategory, addSearch]);
 
   if (loading && workflows.length === 0) {
@@ -2705,6 +2724,7 @@ function loadBuilderState(workflow: Workflow) {
                         setSearch={setAddSearch}
                         onClose={() => setAddPanel(null)}
                         onSelect={(spec) => addNode(spec)}
+                        agentCatalog={Array.isArray(agentCatalogData) ? agentCatalogData : []}
                       />
                     )}
 
@@ -3818,6 +3838,8 @@ function WorkflowAddNodePanel(props: {
   setSearch: (search: string) => void;
   onClose: () => void;
   onSelect: (spec: NodeSpec) => void;
+  /** Pre-loaded AI Studio agents to show in the "AI Agent" category */
+  agentCatalog?: Array<{ id: string; slug: string; name: string; description?: string; status?: string }>;
 }) {
   return (
     <aside className="absolute right-0 top-0 z-30 h-full w-[420px] border-l border-gray-200 bg-white shadow-xl">
@@ -3906,6 +3928,51 @@ function WorkflowAddNodePanel(props: {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
+              {/* AI Agent category: show real AI Studio agents as the first section */}
+              {props.activeCategory === 'AI Agent' && props.agentCatalog && props.agentCatalog.length > 0 && !props.search && (
+                <section className="mb-5">
+                  <div className="flex items-center justify-between border-b border-orange-100 pb-2">
+                    <h4 className="text-sm font-bold text-orange-700">Your AI Studio Agents</h4>
+                    <span className="text-[11px] uppercase tracking-[0.24em] text-orange-400">{props.agentCatalog.length}</span>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {props.agentCatalog.map((agent) => (
+                      <button
+                        key={agent.id}
+                        onClick={() => props.onSelect({
+                          type: 'agent',
+                          key: 'agent.run',
+                          label: agent.name,
+                          category: 'AI Agent',
+                          icon: 'smart_toy',
+                          requiresConfig: false,
+                          description: agent.description ?? `Run the ${agent.name} agent`,
+                          defaultConfig: { agent: agent.slug, agentId: agent.id },
+                        })}
+                        className="flex w-full items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/50 px-3 py-3 text-left transition hover:bg-orange-50"
+                      >
+                        <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 text-orange-600 shadow-sm">
+                          <span className="material-symbols-outlined text-lg">smart_toy</span>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className="block text-sm font-semibold text-gray-900">{agent.name}</span>
+                            {agent.status && agent.status !== 'active' && (
+                              <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">{agent.status}</span>
+                            )}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] text-orange-700/70">{agent.slug}</span>
+                          {agent.description && (
+                            <span className="mt-1 block text-xs leading-4 text-gray-500 line-clamp-1">{agent.description}</span>
+                          )}
+                        </span>
+                        <span className="material-symbols-outlined mt-1 text-base text-orange-400">arrow_forward</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] text-gray-400">Configure agents in AI Studio → Agents. Each agent runs with its own persona, tools, and knowledge.</p>
+                </section>
+              )}
               {props.sections.length > 0 ? (
                 <div className="space-y-5">
                   {props.sections.map((section) => (
@@ -3931,8 +3998,11 @@ function WorkflowAddNodePanel(props: {
                     </section>
                   ))}
                 </div>
-              ) : (
+              ) : props.activeCategory !== 'AI Agent' ? (
                 <div className="flex h-full items-center justify-center text-sm text-gray-500">No nodes found.</div>
+              ) : null}
+              {props.activeCategory === 'AI Agent' && props.sections.length === 0 && (!props.agentCatalog || props.agentCatalog.length === 0) && (
+                <div className="flex h-full items-center justify-center text-sm text-gray-500">No AI agents found. Create one in AI Studio → Agents.</div>
               )}
             </div>
           </motion.div>

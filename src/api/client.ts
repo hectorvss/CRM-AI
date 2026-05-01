@@ -319,6 +319,17 @@ export const workflowsApi = {
     }),
   getRun: (runId: string) => request<any>(`/workflows/runs/${runId}`),
   recentRuns: () => request<any>('/workflows/runs/recent').then(unwrapList),
+  agentCatalog: () => request<any>('/workflows/agent-catalog').then((d: any) => {
+    const nodes = Array.isArray(d?.nodes) ? d.nodes : Array.isArray(d) ? d : [];
+    // Normalize to { id, slug, name, description, status } shape expected by WorkflowAddNodePanel
+    return nodes.map((n: any) => ({
+      id: n.agentId ?? n.id ?? n.agentSlug ?? '',
+      slug: n.agentSlug ?? n.slug ?? '',
+      name: n.label ?? n.name ?? n.agentSlug ?? 'Unknown agent',
+      description: n.description,
+      status: n.status,
+    }));
+  }),
 };
 
 // ── Agents ────────────────────────────────────────────────
