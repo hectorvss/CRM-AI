@@ -108,4 +108,49 @@ router.get('/:id/activity', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
+// ── PATCH /api/customers/:id ─────────────────────────────────
+// Update mutable fields: segment, risk_level, preferred_channel, fraud_flag, name, email, phone
+router.patch('/:id', requirePermission('customers.write'), async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+
+    const existing = await customerRepository.getDetail(scope, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Customer not found' });
+
+    const ALLOWED_FIELDS = ['segment', 'risk_level', 'preferred_channel', 'fraud_flag', 'canonical_name', 'canonical_email', 'phone'];
+    const body = req.body ?? {};
+    const updates: Record<string, any> = {};
+    for (const field of ALLOWED_FIELDS) {
+      if (field in body) updates[field] = body[field];
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        error: `At least one updatable field required: ${ALLOWED_FIELDS.join(', ')}`,
+      });
+    }
+
+    await customerRepository.update(scope, req.params.id, {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    });
+
+    await auditRepository.log(scope, {
+      actorId: req.userId || 'system',
+      action: 'CUSTOMER_UPDATED',
+      entityType: 'customer',
+      entityId: req.params.id,
+      oldValue: Object.fromEntries(Object.keys(updates).map((k) => [k, (existing as any)[k] ?? null])),
+      newValue: updates,
+      metadata: { source: 'customers_api' },
+    });
+
+    const updated = await customerRepository.getDetail(scope, req.params.id);
+    res.json(updated ?? { id: req.params.id, ...updates });
+  } catch (error) {
+    console.error('Error updating customer:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

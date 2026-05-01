@@ -132,6 +132,19 @@ export const customersApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  update: (id: string, payload: {
+    segment?: string;
+    risk_level?: string;
+    preferred_channel?: string;
+    fraud_flag?: boolean;
+    canonical_name?: string;
+    canonical_email?: string;
+    phone?: string;
+  }) =>
+    request<any>(`/customers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
 };
 
 // ── Orders ────────────────────────────────────────────────
@@ -146,6 +159,11 @@ export const ordersApi = {
     request<any>(`/orders/${id}/cancel`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
+    }),
+  updateStatus: (id: string, status: string, note?: string) =>
+    request<any>(`/orders/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, note }),
     }),
 };
 

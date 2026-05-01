@@ -5,6 +5,9 @@ import { requirePermission } from '../middleware/authorization.js';
 import { createAuditRepository } from '../data/index.js';
 import { createCommerceRepository } from '../data/commerce.js';
 import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
+import { integrationRegistry } from '../integrations/registry.js';
+import { logger } from '../utils/logger.js';
+import type { WritableRefunds } from '../integrations/types.js';
 
 const router = Router();
 const commerceRepo = createCommerceRepository();
@@ -116,12 +119,40 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
       return res.status(202).json({ success: true, requiresApproval: true, paymentId: req.params.id, amount });
     }
 
+    // ── Attempt live Stripe refund if adapter is configured ──────────────
+    let stripeRefundId: string | null = null;
+    let executedVia: 'stripe' | 'db-only' = 'db-only';
+    const stripeAdapter = integrationRegistry.get('stripe') as unknown as (WritableRefunds & { createRefund?: Function }) | null;
+    const externalPaymentId: string | null = (payment as any).external_payment_id ?? (payment as any).psp_reference ?? null;
+    const idempotencyKey = `rest-refund-${req.params.id}-${Date.now()}`;
+
+    if (stripeAdapter && typeof stripeAdapter.createRefund === 'function' && externalPaymentId) {
+      try {
+        const refund = await stripeAdapter.createRefund({
+          paymentExternalId: externalPaymentId,
+          amount,
+          currency: (payment as any).currency ?? 'USD',
+          reason,
+          idempotencyKey,
+        });
+        stripeRefundId = (refund as any)?.id ?? null;
+        executedVia = 'stripe';
+        logger.info('payments.refund: Stripe refund created', { paymentId: req.params.id, stripeRefundId, amount });
+      } catch (stripeErr) {
+        logger.warn('payments.refund: Stripe call failed, proceeding with DB-only update', {
+          paymentId: req.params.id,
+          error: stripeErr instanceof Error ? stripeErr.message : String(stripeErr),
+        });
+      }
+    }
+
+    const newRefundId = stripeRefundId ?? `rf_${crypto.randomUUID()}`;
     await commerceRepo.updatePayment(scope, req.params.id, {
       status: 'refunded',
       refund_amount: amount,
       refund_type: amount >= Number(payment.amount ?? 0) ? 'full' : 'partial',
       approval_status: 'approved',
-      refund_ids: [...(Array.isArray(payment.refund_ids) ? payment.refund_ids : []), `rf_${crypto.randomUUID()}`],
+      refund_ids: [...(Array.isArray(payment.refund_ids) ? payment.refund_ids : []), newRefundId],
       system_states: { ...(payment.system_states ?? {}), canonical: 'refunded', crm_ai: 'refunded' },
       last_update: reason,
     });
@@ -131,16 +162,16 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
       entityType: 'payment',
       entityId: req.params.id,
       oldValue: { status: payment.status, refund_amount: payment.refund_amount },
-      newValue: { status: 'refunded', refund_amount: amount },
-      metadata: { reason },
+      newValue: { status: 'refunded', refund_amount: amount, executedVia, stripeRefundId },
+      metadata: { reason, executedVia },
     });
     const updated = await commerceRepo.getPayment(scope, req.params.id);
     fireWorkflowEvent(
       { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-      'payment.dispute.created',
-      { paymentId: req.params.id, status: 'refunded', amount, reason, riskLevel: payment.risk_level },
+      'payment.refunded',
+      { paymentId: req.params.id, status: 'refunded', amount, reason, riskLevel: payment.risk_level, executedVia },
     );
-    res.json({ success: true, payment: updated });
+    res.json({ success: true, payment: updated, executedVia });
   } catch (error) {
     console.error('Error refunding payment:', error);
     res.status(500).json({ error: 'Internal server error' });

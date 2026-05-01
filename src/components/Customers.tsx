@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { customersApi, paymentsApi, policyApi } from '../api/client';
 import { useApi } from '../api/hooks';
@@ -163,6 +163,18 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     company: '',
     source: 'manual',
     externalId: '',
+  });
+
+  // ── Edit customer state ───────────────────────────────────────────────────
+  const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
+  const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
+  const [editCustomerForm, setEditCustomerForm] = useState({
+    canonical_name: '',
+    canonical_email: '',
+    phone: '',
+    segment: '',
+    risk_level: '',
+    preferred_channel: '',
   });
 
   // Fetch canonical customers from the backend — no mock data used.
@@ -441,6 +453,44 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
       if (result?.approval_request_id) onNavigate?.('approvals');
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : 'Failed to create approval.');
+    }
+  };
+
+  const openEditCustomer = useCallback(() => {
+    if (!selectedCustomer) return;
+    const raw = apiSelectedState?.customer ?? {};
+    setEditCustomerForm({
+      canonical_name: raw.canonical_name ?? selectedCustomer.name ?? '',
+      canonical_email: raw.canonical_email ?? selectedCustomer.email ?? '',
+      phone: raw.phone ?? '',
+      segment: raw.segment ?? (selectedCustomer.segment === 'VIP Enterprise' ? 'vip' : 'standard'),
+      risk_level: raw.risk_level ?? 'low',
+      preferred_channel: raw.preferred_channel ?? 'email',
+    });
+    setIsEditCustomerOpen(true);
+  }, [selectedCustomer, apiSelectedState]);
+
+  const handleUpdateCustomer = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedCustomerId) return;
+    setIsUpdatingCustomer(true);
+    setActionMessage(null);
+    try {
+      const payload: Record<string, any> = {};
+      if (editCustomerForm.canonical_name.trim()) payload.canonical_name = editCustomerForm.canonical_name.trim();
+      if (editCustomerForm.canonical_email.trim()) payload.canonical_email = editCustomerForm.canonical_email.trim();
+      if (editCustomerForm.phone.trim()) payload.phone = editCustomerForm.phone.trim();
+      if (editCustomerForm.segment) payload.segment = editCustomerForm.segment;
+      if (editCustomerForm.risk_level) payload.risk_level = editCustomerForm.risk_level;
+      if (editCustomerForm.preferred_channel) payload.preferred_channel = editCustomerForm.preferred_channel;
+
+      await customersApi.update(selectedCustomerId, payload);
+      setActionMessage('Customer profile updated successfully.');
+      setIsEditCustomerOpen(false);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : 'Failed to update customer.');
+    } finally {
+      setIsUpdatingCustomer(false);
     }
   };
 
@@ -864,6 +914,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
             {customerActionsOpen && (
               <div className="absolute right-0 top-full mt-2 w-52 rounded-[16px] border border-black/5 dark:border-white/10 bg-white dark:bg-[#1b1b1b] shadow-2xl z-20 p-1.5">
                 {[
+                  { icon: 'edit', label: 'Edit profile', action: openEditCustomer },
                   { icon: 'timeline', label: 'View analysis', action: () => openCustomerCase('case_graph') },
                   { icon: 'assignment_turned_in', label: 'Create approval', action: handleCreateApproval },
                   { icon: 'currency_exchange', label: 'Start refund', action: handleStartRefund },
@@ -1429,6 +1480,121 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                 </button>
               </div>
             </form>
+          </motion.div>
+        )}
+
+        {/* ── Edit Customer Modal ───────────────────────────────────── */}
+        {isEditCustomerOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setIsEditCustomerOpen(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 8 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="w-full max-w-md rounded-2xl bg-white dark:bg-[#1c1c1e] border border-black/8 dark:border-white/10 shadow-2xl p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-base font-bold text-gray-900 dark:text-white">Edit customer profile</h2>
+                <button onClick={() => setIsEditCustomerOpen(false)} className="rounded-lg p-1.5 hover:bg-black/5 dark:hover:bg-white/5 text-gray-400">
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+              <form onSubmit={handleUpdateCustomer} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="space-y-1 col-span-2 text-sm">
+                    <span className="text-gray-600 dark:text-gray-300 font-medium">Full name</span>
+                    <input
+                      value={editCustomerForm.canonical_name}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, canonical_name: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                      placeholder="Customer name"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="text-gray-600 dark:text-gray-300 font-medium">Email</span>
+                    <input
+                      type="email"
+                      value={editCustomerForm.canonical_email}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, canonical_email: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                      placeholder="email@example.com"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="text-gray-600 dark:text-gray-300 font-medium">Phone</span>
+                    <input
+                      value={editCustomerForm.phone}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, phone: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                      placeholder="+1 555 000 0000"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="text-gray-600 dark:text-gray-300 font-medium">Segment</span>
+                    <select
+                      value={editCustomerForm.segment}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, segment: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                    >
+                      <option value="consumer">Consumer</option>
+                      <option value="smb">SMB</option>
+                      <option value="enterprise">Enterprise</option>
+                      <option value="vip">VIP</option>
+                      <option value="at_risk">At Risk</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="text-gray-600 dark:text-gray-300 font-medium">Risk level</span>
+                    <select
+                      value={editCustomerForm.risk_level}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, risk_level: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-sm col-span-2">
+                    <span className="text-gray-600 dark:text-gray-300 font-medium">Preferred channel</span>
+                    <select
+                      value={editCustomerForm.preferred_channel}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, preferred_channel: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                    >
+                      <option value="email">Email</option>
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="sms">SMS</option>
+                      <option value="web_chat">Web Chat</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditCustomerOpen(false)}
+                    className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingCustomer}
+                    className="px-4 py-2 rounded-lg bg-black dark:bg-white text-white dark:text-black text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+                  >
+                    {isUpdatingCustomer ? 'Saving...' : 'Save changes'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
