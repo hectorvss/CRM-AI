@@ -3314,28 +3314,40 @@ function WorkflowVariablesSection(props: {
 }) {
   const rows = props.variables.filter((item) => !props.query.trim() || `${item.key} ${item.workflowNames.join(' ')}`.toLowerCase().includes(props.query.trim().toLowerCase()));
   const workflowById = new Map(props.workflows.map((workflow) => [workflow.id, workflow]));
+  const visibleStoredVariables = props.storedVariables
+    .filter((item) => !props.query.trim() || `${item.key} ${item.value} ${item.scope}`.toLowerCase().includes(props.query.trim().toLowerCase()));
 
   return (
     <div className="space-y-5">
       {props.storedVariables.length > 0 && (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {props.storedVariables
-            .filter((item) => !props.query.trim() || `${item.key} ${item.value} ${item.scope}`.toLowerCase().includes(props.query.trim().toLowerCase()))
-            .map((item) => (
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Workspace Variables</h3>
+            <button
+              onClick={props.onCreate}
+              className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90"
+            >
+              <span className="material-symbols-outlined text-base">add</span>
+              New Variable
+            </button>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            {visibleStoredVariables.map((item) => (
               <button
                 key={item.id}
                 onClick={() => props.onEditVariable(item)}
-                className="rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300"
+                className="rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300 hover:shadow-lg"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold text-gray-900">{item.key}</div>
                     <div className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">{item.value || 'No value yet'}</div>
                   </div>
-                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{item.scope}</span>
+                  <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold uppercase text-blue-700">{item.scope}</span>
                 </div>
               </button>
             ))}
+          </div>
         </div>
       )}
 
@@ -3347,36 +3359,39 @@ function WorkflowVariablesSection(props: {
           onAction={props.onCreate}
         />
       ) : rows.length > 0 ? (
-        <div className="space-y-4">
-          {rows.map((item) => (
-        <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm font-semibold text-gray-900">{item.key}</div>
-              <div className="mt-1 text-xs text-gray-500">Used in {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
-            </div>
-            <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">Shared variable</span>
-          </div>
-          <div className="mt-4 space-y-2">
-            {item.workflowIds.map((workflowId, index) => {
-              const workflow = workflowById.get(workflowId);
-              return (
-                <button
-                  key={`${workflowId}-${index}`}
-                  onClick={() => workflow && props.onOpenWorkflow(workflow)}
-                  className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:bg-gray-50"
-                >
+        <div>
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">Referenced Variables</h3>
+          <div className="space-y-4">
+            {rows.map((item) => (
+              <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-sm font-medium text-gray-900">{item.workflowNames[index] || workflow?.name || 'Workflow'}</div>
-                    <div className="mt-1 text-xs text-gray-500">{item.examples[0] || '{{variables.example}}'}</div>
+                    <div className="text-sm font-semibold text-gray-900">{item.key}</div>
+                    <div className="mt-1 text-xs text-gray-500">Used in {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
                   </div>
-                  <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
-                </button>
-              );
-            })}
+                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">Shared variable</span>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {item.workflowIds.map((workflowId, index) => {
+                    const workflow = workflowById.get(workflowId);
+                    return (
+                      <button
+                        key={`${workflowId}-${index}`}
+                        onClick={() => workflow && props.onOpenWorkflow(workflow)}
+                        className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:bg-gray-50"
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{item.workflowNames[index] || workflow?.name || 'Workflow'}</div>
+                          <div className="mt-1 text-xs text-gray-500">{item.examples[0] || '{{variables.example}}'}</div>
+                        </div>
+                        <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-          ))}
         </div>
       ) : null}
     </div>
@@ -3413,22 +3428,38 @@ function WorkflowDataTablesSection(props: {
   return (
     <div className="space-y-5">
       {visibleStoredTables.length > 0 && (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {visibleStoredTables.map((table) => (
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Data Tables</h3>
             <button
-              key={table.id}
-              onClick={() => props.onOpenTable(table.id)}
-              className="rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300"
+              onClick={props.onCreate}
+              className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">{table.name}</div>
-                  <div className="mt-1 text-xs text-gray-500">{table.rows.length} rows · {table.columns.length} custom columns</div>
-                </div>
-                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{table.source}</span>
-              </div>
+              <span className="material-symbols-outlined text-base">add</span>
+              Create Data Table
             </button>
-          ))}
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            {visibleStoredTables.map((table) => (
+              <button
+                key={table.id}
+                onClick={() => props.onOpenTable(table.id)}
+                className="rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300 hover:shadow-lg"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-gray-900">{table.name}</div>
+                    <div className="mt-1 text-xs text-gray-500">{table.rows.length} rows · {table.columns.length} custom columns</div>
+                  </div>
+                  <span className="rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-bold uppercase text-green-700">{table.source}</span>
+                </div>
+                <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+                  <span className="material-symbols-outlined text-sm">edit</span>
+                  Click to edit
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -3440,33 +3471,36 @@ function WorkflowDataTablesSection(props: {
           onAction={props.onCreate}
         />
       ) : rows.length > 0 ? (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {rows.map((item) => (
-            <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
-              <div className="text-sm font-semibold text-gray-900">{item.key}</div>
-              <div className="mt-1 text-xs text-gray-500">Referenced by {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {item.sources.map((source) => (
-                  <span key={source} className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{source}</span>
-                ))}
+        <div>
+          <h3 className="mb-4 text-lg font-semibold text-gray-900">Referenced Data Tables</h3>
+          <div className="grid gap-4 xl:grid-cols-2">
+            {rows.map((item) => (
+              <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
+                <div className="text-sm font-semibold text-gray-900">{item.key}</div>
+                <div className="mt-1 text-xs text-gray-500">Referenced by {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {item.sources.map((source) => (
+                    <span key={source} className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{source}</span>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-2">
+                  {item.workflowIds.map((workflowId, index) => {
+                    const workflow = workflowById.get(workflowId);
+                    return (
+                      <button
+                        key={`${workflowId}-${index}`}
+                        onClick={() => workflow && props.onOpenWorkflow(workflow)}
+                        className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:bg-gray-50"
+                      >
+                        <span className="text-sm font-medium text-gray-900">{item.workflowNames[index] || workflow?.name || 'Workflow'}</span>
+                        <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="mt-4 space-y-2">
-                {item.workflowIds.map((workflowId, index) => {
-                  const workflow = workflowById.get(workflowId);
-                  return (
-                    <button
-                      key={`${workflowId}-${index}`}
-                      onClick={() => workflow && props.onOpenWorkflow(workflow)}
-                      className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:bg-gray-50"
-                    >
-                      <span className="text-sm font-medium text-gray-900">{item.workflowNames[index] || workflow?.name || 'Workflow'}</span>
-                      <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       ) : null}
     </div>
@@ -3552,9 +3586,9 @@ function WorkflowVariableModal(props: {
             </label>
           </div>
           <div className="mt-8 flex justify-end gap-3">
-            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={() => void props.onSave({ key: key.trim(), value, scope })} disabled={!key.trim()} className="rounded-lg bg-[#ff8b7f] px-4 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50">
-              Save
+            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">Cancel</button>
+            <button onClick={() => void props.onSave({ key: key.trim(), value, scope })} disabled={!key.trim()} className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+              Save Variable
             </button>
           </div>
         </motion.div>
@@ -3619,9 +3653,9 @@ function WorkflowDataTableCreateModal(props: {
             )}
           </div>
           <div className="mt-8 flex justify-end gap-3">
-            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={() => void props.onCreate({ name: name.trim(), source, csvText })} disabled={!name.trim() || (source === 'csv' && !csvText.trim())} className="rounded-lg bg-[#ff5a46] px-5 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50">
-              Create
+            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">Cancel</button>
+            <button onClick={() => void props.onCreate({ name: name.trim(), source, csvText })} disabled={!name.trim() || (source === 'csv' && !csvText.trim())} className="rounded-lg bg-black px-5 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+              Create Table
             </button>
           </div>
         </motion.div>
@@ -3694,19 +3728,24 @@ function WorkflowDataTableEditor(props: {
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white shadow-card">
-      <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-5 py-4">
-        <div className="min-w-0">
-          <button onClick={props.onBack} className="text-sm text-gray-500 hover:text-gray-900">Workflows / Data tables /</button>
-          <div className="mt-1 text-xl font-semibold text-gray-900">{draft.name}</div>
+      <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-6 py-5">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex items-center gap-1">
+            <button onClick={props.onBack} className="flex items-center gap-1 rounded px-2 py-1 text-sm text-gray-500 transition hover:bg-gray-100 hover:text-gray-900">
+              <span className="material-symbols-outlined text-base">arrow_back</span>
+              <span>Back to Data Tables</span>
+            </button>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">{draft.name}</div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2">
             <span className="material-symbols-outlined text-base text-gray-400">search</span>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" className="w-48 bg-transparent text-sm outline-none" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search rows" className="w-48 bg-transparent text-sm outline-none" />
           </div>
-          <button onClick={addRow} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white">Add Row</button>
-          <button onClick={() => setColumnEditorOpen((open) => !open)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Add Column</button>
-          <button onClick={() => void props.onSave({ ...draft, updatedAt: new Date().toISOString() })} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Save</button>
+          <button onClick={addRow} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90">Add Row</button>
+          <button onClick={() => setColumnEditorOpen((open) => !open)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">Add Column</button>
+          <button onClick={() => void props.onSave({ ...draft, updatedAt: new Date().toISOString() })} className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90">Save</button>
         </div>
       </div>
 
