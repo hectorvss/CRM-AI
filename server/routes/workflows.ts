@@ -1853,12 +1853,27 @@ Write ONLY the reply text, no subject line, no JSON.`;
   }
 
   // ── External AI providers (Anthropic / OpenAI / Ollama / Guardrails) ────────
-  // Each provider validates that its credentials are present in config (set via
-  // env in Integrations) and fails closed with a clear pointer otherwise.
+  // Key resolution order: connector auth_config (per-workspace) → env var (global)
+  // Users configure connector keys via Integrations → Connect (modal) in the UI.
+  async function resolveAiProviderKey(system: string, envFallback: string | undefined): Promise<string | null> {
+    try {
+      const allConnectors = await integrationRepository.listConnectors({ tenantId: scope.tenantId });
+      const connector = allConnectors.find((c: any) => String(c.system || '').toLowerCase() === system);
+      if (connector) {
+        const auth = typeof connector.auth_config === 'object' && connector.auth_config
+          ? connector.auth_config as Record<string, any>
+          : {};
+        const fromConnector = auth.api_key || auth.access_token || auth.secret_key || auth.token || auth.apiKey;
+        if (fromConnector) return String(fromConnector);
+      }
+    } catch { /* ignore — fall through to env */ }
+    return envFallback || null;
+  }
+
   if (node.key === 'ai.anthropic') {
-    const apiKey = appConfig.ai.anthropicApiKey;
+    const apiKey = await resolveAiProviderKey('anthropic', appConfig.ai.anthropicApiKey);
     if (!apiKey) {
-      return { status: 'failed', error: 'ai.anthropic: ANTHROPIC_API_KEY not configured. Add it under Integrations → AI providers.' };
+      return { status: 'failed', error: 'ai.anthropic: API key not configured. Go to Integrations → Connect Anthropic Claude and enter your API key.' };
     }
     const operation = String(config.operation || 'message');
     const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
@@ -1903,9 +1918,9 @@ Write ONLY the reply text, no subject line, no JSON.`;
   }
 
   if (node.key === 'ai.openai') {
-    const apiKey = appConfig.ai.openaiApiKey;
+    const apiKey = await resolveAiProviderKey('openai', appConfig.ai.openaiApiKey);
     if (!apiKey) {
-      return { status: 'failed', error: 'ai.openai: OPENAI_API_KEY not configured. Add it under Integrations → AI providers.' };
+      return { status: 'failed', error: 'ai.openai: API key not configured. Go to Integrations → Connect OpenAI and enter your API key.' };
     }
     const operation = String(config.operation || 'chat');
     const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
@@ -1957,9 +1972,20 @@ Write ONLY the reply text, no subject line, no JSON.`;
   }
 
   if (node.key === 'ai.ollama') {
-    const baseUrl = appConfig.ai.ollamaBaseUrl;
+    // For Ollama, check connector for base_url or api_key (some hosted Ollama instances need a key)
+    let baseUrl = appConfig.ai.ollamaBaseUrl;
+    try {
+      const allConnectors = await integrationRepository.listConnectors({ tenantId: scope.tenantId });
+      const ollamaConnector = allConnectors.find((c: any) => String(c.system || '').toLowerCase() === 'ollama');
+      if (ollamaConnector) {
+        const auth = typeof ollamaConnector.auth_config === 'object' && ollamaConnector.auth_config
+          ? ollamaConnector.auth_config as Record<string, any>
+          : {};
+        if (auth.base_url) baseUrl = String(auth.base_url);
+      }
+    } catch { /* ignore */ }
     if (!baseUrl) {
-      return { status: 'failed', error: 'ai.ollama: OLLAMA_BASE_URL not configured. Set it under Integrations → AI providers.' };
+      return { status: 'failed', error: 'ai.ollama: base URL not configured. Go to Integrations → Connect Ollama and enter your Ollama server URL.' };
     }
     const prompt = resolveTemplateValue(config.prompt || '', context);
     const model = String(config.model || '');

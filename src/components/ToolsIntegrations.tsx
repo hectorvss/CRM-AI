@@ -61,6 +61,19 @@ const CONNECTOR_CREDENTIAL_SCHEMAS: Record<string, CredentialField[]> = {
   hubspot: [
     { key: 'api_key', label: 'Private App Token', type: 'password', placeholder: 'pat-na1-...', hint: 'From HubSpot → Settings → Private Apps', required: true },
   ],
+  // AI providers — per-workspace keys override the global env var
+  anthropic: [
+    { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'sk-ant-...', hint: 'From console.anthropic.com → API Keys. Overrides ANTHROPIC_API_KEY env var.', required: true },
+  ],
+  openai: [
+    { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'sk-...', hint: 'From platform.openai.com → API keys. Overrides OPENAI_API_KEY env var.', required: true },
+  ],
+  ollama: [
+    { key: 'base_url', label: 'Ollama server URL', type: 'url', placeholder: 'http://localhost:11434', hint: 'URL of your Ollama server. Overrides OLLAMA_BASE_URL env var.', required: true },
+  ],
+  gemini: [
+    { key: 'api_key', label: 'API Key', type: 'password', placeholder: 'AIzaSy...', hint: 'From aistudio.google.com → Get API key. Overrides GEMINI_API_KEY env var.', required: true },
+  ],
 };
 
 // Fallback: generic api_key + base_url fields for unrecognized connectors
@@ -69,7 +82,7 @@ const GENERIC_CREDENTIAL_FIELDS: CredentialField[] = [
   { key: 'base_url', label: 'Base URL (optional)', type: 'url', placeholder: 'https://api.example.com' },
 ];
 
-type IntegrationCategory = 'All Apps' | 'Support' | 'Commerce' | 'Communication' | 'CRM' | 'Knowledge' | 'Productivity' | 'Automation';
+type IntegrationCategory = 'All Apps' | 'Support' | 'Commerce' | 'Communication' | 'CRM' | 'Knowledge' | 'Productivity' | 'Automation' | 'AI';
 
 interface Integration {
   id: string;
@@ -125,7 +138,13 @@ const allIntegrations: Integration[] = [
 
   // Automation
   { id: 'zapier', name: 'Zapier', category: 'Automation', description: 'Automate workflows across apps.', powers: 'Automation', status: 'Connected', icon: 'bolt', color: 'bg-orange-600' },
-  { id: 'customapp', name: 'Custom App / Webhooks', category: 'Automation', description: 'Connect private APIs and internal systems.', powers: 'Custom Actions', status: 'Connected', icon: 'webhook', color: 'bg-gray-800' }
+  { id: 'customapp', name: 'Custom App / Webhooks', category: 'Automation', description: 'Connect private APIs and internal systems.', powers: 'Custom Actions', status: 'Connected', icon: 'webhook', color: 'bg-gray-800' },
+
+  // AI providers — per-workspace API keys for workflow ai.* nodes
+  { id: 'anthropic', name: 'Anthropic Claude', category: 'AI', description: 'Anthropic Claude models for AI workflow nodes (claude-3-5-sonnet, claude-opus-4, etc).', powers: 'ai.anthropic node', status: 'Not Connected', icon: 'auto_awesome_motion', color: 'bg-orange-800' },
+  { id: 'openai', name: 'OpenAI', category: 'AI', description: 'OpenAI GPT-4o, embeddings, and DALL·E for AI workflow nodes.', powers: 'ai.openai node', status: 'Not Connected', icon: 'memory', color: 'bg-gray-900' },
+  { id: 'gemini', name: 'Google Gemini', category: 'AI', description: 'Google Gemini Pro/Flash models for AI workflow nodes.', powers: 'ai.gemini node', status: 'Not Connected', icon: 'diamond', color: 'bg-blue-600' },
+  { id: 'ollama', name: 'Ollama (local AI)', category: 'AI', description: 'Connect a self-hosted Ollama server to run open-source models locally.', powers: 'ai.ollama node', status: 'Not Connected', icon: 'computer', color: 'bg-gray-700' },
 ];
 
 const topCriticalIds = [
@@ -181,7 +200,7 @@ export default function ToolsIntegrations() {
     }
   }
 
-  const categories: IntegrationCategory[] = ['All Apps', 'Support', 'Commerce', 'Communication', 'CRM', 'Knowledge', 'Productivity', 'Automation'];
+  const categories: IntegrationCategory[] = ['All Apps', 'Support', 'Commerce', 'Communication', 'CRM', 'Knowledge', 'Productivity', 'Automation', 'AI'];
 
   const integrations = apiConnectors && apiConnectors.length > 0 
     ? apiConnectors.map(c => ({
