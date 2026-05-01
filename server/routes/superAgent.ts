@@ -3524,6 +3524,31 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
       return;
     }
 
+    // ── Fire trigger.chat_message for any workflows listening ─────────────────
+    // Dispatched asynchronously (fire-and-forget) so it doesn't block the
+    // SuperAgent response. Workflows whose start node has channel='superagent'
+    // (or 'any') will receive the message as triggerPayload.
+    void (async () => {
+      try {
+        const { executeWorkflowsByEvent } = await import('./workflows.js');
+        await executeWorkflowsByEvent(
+          { tenantId: scope.tenantId, workspaceId: scope.workspaceId || '', userId: req.userId },
+          'trigger.chat_message',
+          {
+            channel: 'superagent',
+            message: input,
+            sessionId,
+            runId,
+            userId: req.userId || null,
+          },
+        );
+      } catch (err: any) {
+        logger.warn('SuperAgent: trigger.chat_message dispatch failed', {
+          sessionId, error: String(err?.message ?? err),
+        });
+      }
+    })();
+
     emitSuperAgentEvent(scope, 'run_started', { runId, input });
     emitSuperAgentEvent(scope, 'step_started', {
       runId,

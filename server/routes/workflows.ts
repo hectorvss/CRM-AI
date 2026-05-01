@@ -2380,13 +2380,62 @@ async function executeWorkflowNodeWithRetry(scope: { tenantId: string; workspace
   while (attempt <= retries) {
     const result = await executeWorkflowNode(scope, node, context);
     lastResult = { ...result, attempt, maxRetries: retries };
-    if (!['failed'].includes(String(result.status))) return lastResult;
-    if (attempt >= retries) return lastResult;
+    if (!['failed'].includes(String(result.status))) break;
+    if (attempt >= retries) break;
     if (backoffMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, Math.min(backoffMs, 1_500)));
     }
     attempt += 1;
   }
+
+  // ── Step-level audit (Phase 6 — deep SaaS sync) ─────────────────────────────
+  // Every node whose contract declares a write or external side-effect generates
+  // an audit_log entry identical to the one produced by the equivalent UI action.
+  // This means: a workflow that runs case.update_status leaves the same trail as
+  // a supervisor clicking "Update status" in the case panel.
+  try {
+    const contract = getNodeContract(node.key);
+    const sideEffects = contract.sideEffects ?? 'none';
+    if (sideEffects === 'write' || sideEffects === 'external') {
+      const finalResult = lastResult ?? { status: 'failed' };
+      const action = `WORKFLOW_${String(node.key).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+      const entityType = node.key.startsWith('case.') ? 'case'
+        : node.key.startsWith('order.') ? 'order'
+        : node.key.startsWith('payment.') ? 'payment'
+        : node.key.startsWith('return.') ? 'return'
+        : node.key.startsWith('approval.') ? 'approval'
+        : node.key.startsWith('customer.') ? 'customer'
+        : node.key.startsWith('message.') ? 'integration'
+        : node.key.startsWith('ai.') || node.key.startsWith('agent.') ? 'agent_run'
+        : 'workflow';
+      const entityId = (
+        context?.case?.id || context?.order?.id || context?.payment?.id ||
+        context?.return?.id || context?.customer?.id || node.id
+      );
+      await auditRepository.logEvent(
+        { tenantId: scope.tenantId, workspaceId: scope.workspaceId },
+        {
+          actorId: scope.userId ?? 'workflow',
+          action,
+          entityType,
+          entityId,
+          metadata: {
+            nodeKey: node.key,
+            nodeLabel: node.label ?? null,
+            nodeId: node.id,
+            status: finalResult.status,
+            error: finalResult.error ?? null,
+            sideEffects,
+            risk: contract.risk ?? 'low',
+            attempt,
+          },
+        },
+      ).catch(() => undefined);
+    }
+  } catch (auditErr: any) {
+    logger.warn('workflow step audit failed', { nodeId: node.id, key: node.key, error: String(auditErr?.message ?? auditErr) });
+  }
+
   return lastResult ?? { status: 'failed', error: 'Node execution failed before producing a result', attempt, maxRetries: retries };
 }
 
