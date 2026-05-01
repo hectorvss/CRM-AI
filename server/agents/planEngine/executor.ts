@@ -27,7 +27,7 @@ import type {
   RiskLevel,
 } from './types.js';
 import { toolRegistry } from './registry.js';
-import { evaluatePlan, aggregateDecision } from './policy.js';
+import { evaluatePlan, aggregateDecision, evaluateStep, loadActiveRules } from './policy.js';
 import { logger } from '../../utils/logger.js';
 import { classifyRiskFromArgs, classifyRiskFromPlanSignal, isToolBlocked } from './safety.js';
 
@@ -82,20 +82,42 @@ function topoSort(steps: PlanStep[]): PlanStep[] {
  */
 function interpolateArgs(args: unknown, completed: Map<string, ExecutionSpan>): unknown {
   if (args === null || args === undefined) return args;
+
   if (typeof args === 'string') {
-    const match = /^\{\{([a-zA-Z0-9_.]+)\}\}$/.exec(args);
-    if (!match) return args;
-    const [stepId, ...path] = match[1].split('.');
-    const span = completed.get(stepId);
-    if (!span || !span.result.ok) return args;
-    let cursor: any = span.result.value;
-    for (const key of path) {
-      if (cursor === null || cursor === undefined) return undefined;
-      cursor = cursor[key];
+    // Match all occurrences of {{stepId.path}}
+    const pattern = /\{\{([a-zA-Z0-9_.]+)\}\}/g;
+    
+    // Check if it's a "pure" reference (the entire string is one reference)
+    // This allows returning the exact type (number, object) from the source instead of just a stringified version.
+    const pureMatch = /^\{\{([a-zA-Z0-9_.]+)\}\}$/.exec(args);
+    if (pureMatch) {
+      const [stepId, ...path] = pureMatch[1].split('.');
+      const span = completed.get(stepId);
+      if (!span || !span.result.ok) return args;
+      let cursor: any = span.result.value;
+      for (const key of path) {
+        if (cursor === null || cursor === undefined) return undefined;
+        cursor = cursor[key];
+      }
+      return cursor;
     }
-    return cursor;
+
+    // Otherwise, perform string substitution for all matches
+    return args.replace(pattern, (match, expression) => {
+      const [stepId, ...path] = expression.split('.');
+      const span = completed.get(stepId);
+      if (!span || !span.result.ok) return match;
+      let cursor: any = span.result.value;
+      for (const key of path) {
+        if (cursor === null || cursor === undefined) return 'undefined';
+        cursor = cursor[key];
+      }
+      return String(cursor ?? '');
+    });
   }
+
   if (Array.isArray(args)) return args.map((v) => interpolateArgs(v, completed));
+  
   if (typeof args === 'object') {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
@@ -103,6 +125,7 @@ function interpolateArgs(args: unknown, completed: Map<string, ExecutionSpan>): 
     }
     return out;
   }
+
   return args;
 }
 
@@ -127,6 +150,30 @@ async function runStepWithTimeout(
       ),
     ),
   ]);
+}
+
+/**
+ * Executes a compensation tool with a basic retry policy (max 3 attempts).
+ */
+async function runCompensateWithRetry(
+  tool: any,
+  args: any,
+  context: ToolExecutionContext,
+  maxAttempts = 3
+): Promise<ToolResult> {
+  let lastError: any;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await tool.run({ args, context });
+      if (res.ok) return res;
+      lastError = res.error;
+    } catch (err) {
+      lastError = err;
+    }
+    // Exponential backoff: 500ms, 1000ms, 2000ms
+    if (i < maxAttempts - 1) await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)));
+  }
+  return { ok: false, error: `Compensation failed after ${maxAttempts} attempts: ${lastError}`, errorCode: 'COMPENSATION_FAILED' };
 }
 
 function elevateRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
@@ -160,7 +207,8 @@ export async function executePlan(
     summary: '',
   };
 
-  // 1. Evaluate policy for the entire plan upfront (async — may read DB rules).
+  // 1. Evaluate policy for the entire plan upfront (static check).
+  const activeRules = await loadActiveRules(context);
   const decisions = await evaluatePlan(plan, toolRegistry, {
     tenantId: context.tenantId,
     workspaceId: context.workspaceId,
@@ -191,204 +239,211 @@ export async function executePlan(
     return trace;
   }
 
-  // 3. Execute step by step, respecting per-step decisions.
+  // 3. Execute in waves based on dependency resolution.
   let anyFailed = false;
   let anyPendingApproval = false;
+  const remaining = new Set(ordered.map(s => s.id));
+  const inProgress = new Set<string>();
 
-  for (const step of ordered) {
-    const decision = decisions.find((d) => d.stepId === step.id);
-    if (!decision) {
-      anyFailed = true;
-      spans.push(makeSyntheticSpan(step, 'unknown', {
-        ok: false,
-        error: 'No policy decision produced for step',
-        errorCode: 'POLICY_MISSING',
-      }));
-      break;
-    }
-
-    const tool = toolRegistry.get(step.tool);
-    if (!tool) {
-      anyFailed = true;
-      spans.push(makeSyntheticSpan(step, decision.riskLevel, {
-        ok: false,
-        error: `Tool ${step.tool} not registered`,
-        errorCode: 'TOOL_NOT_FOUND',
-      }));
-      break;
-    }
-
-    if (isToolBlocked(tool.name)) {
-      anyFailed = true;
-      spans.push(makeSyntheticSpan(step, decision.riskLevel, {
-        ok: false,
-        error: `Tool ${tool.name} is disabled by Super Agent kill-switch`,
-        errorCode: 'TOOL_BLOCKED',
-      }));
-      break;
-    }
-
-    // Step-level approval gate
-    if (decision.action === 'require_approval') {
-      if (options.skipApprovals) {
-        spans.push(makeSyntheticSpan(step, decision.riskLevel, {
-          ok: false,
-          error: 'Skipped (approval required but skipApprovals=true)',
-          errorCode: 'APPROVAL_SKIPPED',
-        }));
-        break;
-      }
-      try {
-        const approvalId = await deps.createApproval({ plan, step, decision, context });
-        approvalIds.push(approvalId);
-        anyPendingApproval = true;
-        spans.push(makeSyntheticSpan(step, decision.riskLevel, {
-          ok: true,
-          value: { approvalId, status: 'pending_approval' },
-        }));
-        break; // Stop executing; downstream steps depend on the approval outcome
-      } catch (err) {
-        anyFailed = true;
-        spans.push(makeSyntheticSpan(step, decision.riskLevel, {
-          ok: false,
-          error: `Failed to create approval: ${err instanceof Error ? err.message : String(err)}`,
-          errorCode: 'APPROVAL_CREATE_FAILED',
-        }));
-        break;
-      }
-    }
-
-    // Dry-run short-circuit for writes/externals
-    if (options.dryRun && tool.sideEffect !== 'read') {
-      spans.push(makeSyntheticSpan(step, decision.riskLevel, {
-        ok: true,
-        value: { skipped: true, reason: 'dry-run' },
-      }));
-      continue;
-    }
-
-    // Validate args
-    const interpolated = interpolateArgs(step.args, completed);
-    const parsed = tool.args.parse(interpolated);
-    if (!parsed.ok) {
-      anyFailed = true;
-      spans.push(makeSyntheticSpan(step, decision.riskLevel, {
-        ok: false,
-        error: `Invalid args: ${(parsed as { ok: false; error: string }).error}`,
-        errorCode: 'INVALID_ARGS',
-      }));
-      break;
-    }
-
-    const runtimeRisk = elevateRisk(
-      decision.riskLevel,
-      elevateRisk(
-        classifyRiskFromPlanSignal(tool.name, interpolated),
-        classifyRiskFromArgs(tool.name, interpolated),
-      ),
+  while (remaining.size > 0 && !anyFailed && !anyPendingApproval) {
+    // Find all steps that are ready (all dependencies completed successfully)
+    const readySteps = ordered.filter(step => 
+      remaining.has(step.id) && 
+      !inProgress.has(step.id) &&
+      step.dependsOn.every(depId => completed.has(depId) && completed.get(depId)!.result.ok)
     );
 
-    // Execute
-    const stepStart = Date.now();
-    const stepStartIso = new Date(stepStart).toISOString();
-    let result: ToolResult;
-    try {
-      result = await runStepWithTimeout(
-        step,
-        parsed.value,
-        { ...context, dryRun: options.dryRun === true },
-        tool.timeoutMs ?? 10_000,
-        (args) => tool.run({ args, context: { ...context, dryRun: options.dryRun === true } }),
-      );
-    } catch (err) {
-      result = {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-        errorCode: 'TOOL_THREW',
-      };
-    }
-    const stepEnd = Date.now();
-
-    const span: ExecutionSpan = {
-      stepId: step.id,
-      tool: step.tool,
-      version: tool.version,
-      startedAt: stepStartIso,
-      endedAt: new Date(stepEnd).toISOString(),
-      latencyMs: stepEnd - stepStart,
-      args: parsed.value,
-      result,
-      riskLevel: runtimeRisk,
-      dryRun: options.dryRun === true,
-      compensations: result.ok && tool.compensate
-        ? [{ tool: tool.compensate, args: parsed.value }]
-        : result.compensations,
-    };
-    spans.push(span);
-    completed.set(step.id, span);
-
-    if (!result.ok) {
-      anyFailed = true;
-      logger.warn('PlanEngine step failed', {
-        planId: plan.planId,
-        stepId: step.id,
-        tool: step.tool,
-        error: result.error,
+    if (readySteps.length === 0) {
+      // Check if there are any remaining steps that depend on failed steps
+      const blocked = [...remaining].filter(id => {
+        const step = ordered.find(s => s.id === id);
+        return step?.dependsOn.some(depId => completed.has(depId) && !completed.get(depId)!.result.ok);
       });
 
-      // Auto-rollback: execute compensation tools for previously completed write steps
-      if (!options.dryRun) {
-        const toCompensate = [...completed.values()]
-          .filter((s) => s.result.ok && s.compensations && s.compensations.length > 0)
-          .reverse(); // Last-in, first-out
+      if (blocked.length > 0) {
+        for (const id of blocked) {
+          const step = ordered.find(s => s.id === id)!;
+          spans.push(makeSyntheticSpan(step, 'none', {
+            ok: false,
+            error: 'Dependency failed',
+            errorCode: 'DEPENDENCY_FAILED',
+          }));
+          remaining.delete(id);
+        }
+        anyFailed = true;
+      }
+      break;
+    }
 
-        for (const prevSpan of toCompensate) {
-          for (const comp of (prevSpan.compensations ?? [])) {
-            const compTool = toolRegistry.get(comp.tool);
-            if (!compTool) {
-              logger.warn('PlanEngine auto-rollback: compensation tool not found', { tool: comp.tool });
-              continue;
-            }
-            try {
-              const compResult = await compTool.run({
-                args: comp.args,
-                context: { ...context, dryRun: false },
-              });
-              const compSpan: ExecutionSpan = {
-                stepId: `compensate_${prevSpan.stepId}`,
-                tool: comp.tool,
-                version: compTool.version,
-                startedAt: new Date().toISOString(),
-                endedAt: new Date().toISOString(),
-                latencyMs: 0,
-                args: comp.args,
-                result: compResult,
-                riskLevel: 'none',
-                dryRun: false,
-                compensations: [],
-              };
-              spans.push(compSpan);
-              logger.info('PlanEngine auto-rollback executed', {
-                planId: plan.planId,
-                compensatedStep: prevSpan.stepId,
-                compensationTool: comp.tool,
-                ok: compResult.ok,
-              });
-            } catch (compErr) {
-              logger.error(
-                'PlanEngine auto-rollback failed',
-                compErr instanceof Error ? compErr : new Error(String(compErr)),
-                { planId: plan.planId, compensatedStep: prevSpan.stepId, compensationTool: comp.tool },
-              );
-            }
-          }
+    // Execute the current wave of ready steps in parallel
+    const waveResults = await Promise.all(readySteps.map(async (step) => {
+      inProgress.add(step.id);
+      
+      const tool = toolRegistry.get(step.tool);
+      
+      // Interpolate args BEFORE policy evaluation to allow Just-in-Time guardrails
+      const interpolated = interpolateArgs(step.args, completed);
+
+      // Perform JIT Policy Check
+      const decision = evaluateStep(step, tool, interpolated, context, activeRules);
+      
+      if (decision.action === 'deny') {
+        return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
+          ok: false,
+          error: `Policy denied: ${decision.reason}`,
+          errorCode: 'POLICY_DENIED',
+        }), stop: true };
+      }
+      if (!tool) {
+        return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
+          ok: false,
+          error: `Tool ${step.tool} not registered`,
+          errorCode: 'TOOL_NOT_FOUND',
+        }), stop: true };
+      }
+
+      if (isToolBlocked(tool.name)) {
+        return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
+          ok: false,
+          error: `Tool ${tool.name} is disabled by Super Agent kill-switch`,
+          errorCode: 'TOOL_BLOCKED',
+        }), stop: true };
+      }
+
+      // Step-level approval gate
+      if (decision.action === 'require_approval') {
+        if (options.skipApprovals) {
+          return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
+            ok: false,
+            error: 'Skipped (approval required but skipApprovals=true)',
+            errorCode: 'APPROVAL_SKIPPED',
+          }), stop: true };
+        }
+        try {
+          const approvalId = await deps.createApproval({ plan, step, decision, context });
+          approvalIds.push(approvalId);
+          return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
+            ok: true,
+            value: { approvalId, status: 'pending_approval' },
+          }), stop: true, pendingApproval: true };
+        } catch (err) {
+          return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
+            ok: false,
+            error: `Failed to create approval: ${err instanceof Error ? err.message : String(err)}`,
+            errorCode: 'APPROVAL_CREATE_FAILED',
+          }), stop: true };
         }
       }
 
-      if (step.continueOnFailure) {
-        continue;
+      // Dry-run short-circuit
+      if (options.dryRun && tool.sideEffect !== 'read') {
+        return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
+          ok: true,
+          value: { skipped: true, reason: 'dry-run' },
+        }) };
       }
-      break;
+
+      // Validate args
+      const parsed = tool!.args.parse(interpolated);
+      if (!parsed.ok) {
+        return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
+          ok: false,
+          error: `Invalid args: ${(parsed as { ok: false; error: string }).error}`,
+          errorCode: 'INVALID_ARGS',
+        }), stop: true };
+      }
+
+      const runtimeRisk = elevateRisk(
+        decision.riskLevel,
+        elevateRisk(
+          classifyRiskFromPlanSignal(tool.name, interpolated),
+          classifyRiskFromArgs(tool.name, interpolated),
+        ),
+      );
+
+      // Execute
+      const stepStart = Date.now();
+      const stepStartIso = new Date(stepStart).toISOString();
+      let result: ToolResult;
+      try {
+        result = await runStepWithTimeout(
+          step,
+          parsed.value,
+          { ...context, dryRun: options.dryRun === true },
+          tool.timeoutMs ?? 10_000,
+          (args) => tool.run({ args, context: { ...context, dryRun: options.dryRun === true } }),
+        );
+      } catch (err) {
+        result = {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          errorCode: 'TOOL_THREW',
+        };
+      }
+      const stepEnd = Date.now();
+
+      return {
+        stepId: step.id,
+        span: {
+          stepId: step.id,
+          tool: step.tool,
+          version: tool.version,
+          startedAt: stepStartIso,
+          endedAt: new Date(stepEnd).toISOString(),
+          latencyMs: stepEnd - stepStart,
+          args: parsed.value,
+          result,
+          riskLevel: runtimeRisk,
+          dryRun: options.dryRun === true,
+          compensations: result.ok && tool.compensate
+            ? [{ tool: tool.compensate, args: parsed.value }]
+            : result.compensations,
+        } as ExecutionSpan
+      };
+    }));
+
+    // Process wave results
+    for (const res of waveResults) {
+      spans.push(res.span);
+      remaining.delete(res.stepId);
+      inProgress.delete(res.stepId);
+      
+      if (res.span.result.ok) {
+        completed.set(res.stepId, res.span);
+      }
+
+      if (res.stop) {
+        anyFailed = !res.span.result.ok;
+        if (res.pendingApproval) anyPendingApproval = true;
+      }
+      
+      if (!res.span.result.ok && !ordered.find(s => s.id === res.stepId)?.continueOnFailure) {
+        anyFailed = true;
+      }
+    }
+
+    // 3.5 Auto-rollback if wave failed
+    if (anyFailed && !options.dryRun) {
+      const toCompensate = [...completed.values()]
+        .filter((s) => s.result.ok && s.compensations && s.compensations.length > 0)
+        .reverse();
+
+      for (const prevSpan of toCompensate) {
+        for (const comp of (prevSpan.compensations ?? [])) {
+          const compTool = toolRegistry.get(comp.tool);
+          if (!compTool) continue;
+          try {
+            const compResult = await runCompensateWithRetry(
+              compTool,
+              comp.args,
+              { ...context, dryRun: false }
+            );
+            spans.push(makeSyntheticSpan(ordered.find(s => s.id === prevSpan.stepId) || { id: prevSpan.stepId, tool: comp.tool, args: comp.args, dependsOn: [] }, 'none', compResult));
+          } catch (compErr) {
+            logger.error('PlanEngine auto-rollback failed after retries', compErr instanceof Error ? compErr : new Error(String(compErr)));
+          }
+        }
+      }
     }
   }
 

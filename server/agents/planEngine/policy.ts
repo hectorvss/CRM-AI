@@ -460,16 +460,54 @@ export function registerPolicyRule(rule: PolicyRule): void {
 }
 
 /**
- * Evaluate a full plan against all rules. Returns one PolicyDecision per step.
- * Merges hardcoded baseline rules with active DB policy_rules for this tenant.
- * Does NOT mutate the plan.
+ * Evaluate a single step against the policy rules.
+ * This can be used for Just-in-Time guardrails after args have been interpolated.
  */
-export async function evaluatePlan(
-  plan: Plan,
-  registry: typeof ToolRegistry,
+export function evaluateStep(
+  step: PlanStep,
+  tool: ToolSpec | undefined,
+  args: unknown,
   context: Pick<ToolExecutionContext, 'tenantId' | 'workspaceId' | 'userId' | 'hasPermission'>,
-): Promise<PolicyDecision[]> {
-  // Load tenant DB rules (non-fatal — fall back to baseline only if DB is unavailable)
+  rules: PolicyRule[]
+): PolicyDecision {
+  let decision: PolicyDecision = {
+    stepId: step.id,
+    tool: step.tool,
+    action: 'deny',
+    riskLevel: tool?.risk ?? 'high',
+    reason: 'No rule allowed this step',
+  };
+
+  for (const rule of rules) {
+    const result = rule.evaluate({
+      step,
+      tool: tool as ToolSpec,
+      args,
+      context,
+    });
+    if (!result) continue;
+
+    decision = {
+      stepId: step.id,
+      tool: step.tool,
+      action: result.action,
+      riskLevel: result.riskElevation
+        ?? classifyRiskFromPlanSignal(step.tool, args)
+        ?? tool?.risk
+        ?? 'medium',
+      reason: result.reason,
+      ruleId: rule.id,
+    };
+    break;
+  }
+
+  return decision;
+}
+
+/**
+ * Load and combine all active policy rules for a tenant.
+ */
+export async function loadActiveRules(context: Pick<ToolExecutionContext, 'tenantId' | 'workspaceId'>): Promise<PolicyRule[]> {
   let dbRules: PolicyRule[] = [];
   try {
     const policyRepo = createPolicyRepository();
@@ -483,43 +521,25 @@ export async function evaluatePlan(
     logger.warn('PlanEngine policy: failed to load DB rules, using baseline only', { error: String(err) });
   }
 
-  const rules = [...baselineRules, ...dbRules, ...customRules].sort((a, b) => b.priority - a.priority);
+  return [...baselineRules, ...dbRules, ...customRules].sort((a, b) => b.priority - a.priority);
+}
+
+/**
+ * Evaluate a full plan against all rules. Returns one PolicyDecision per step.
+ * Merges hardcoded baseline rules with active DB policy_rules for this tenant.
+ * Does NOT mutate the plan.
+ */
+export async function evaluatePlan(
+  plan: Plan,
+  registry: typeof ToolRegistry,
+  context: Pick<ToolExecutionContext, 'tenantId' | 'workspaceId' | 'userId' | 'hasPermission'>,
+): Promise<PolicyDecision[]> {
+  const rules = await loadActiveRules(context);
   const decisions: PolicyDecision[] = [];
 
   for (const step of plan.steps) {
     const tool = registry.get(step.tool);
-    let decision: PolicyDecision = {
-      stepId: step.id,
-      tool: step.tool,
-      action: 'deny',
-      riskLevel: tool?.risk ?? 'high',
-      reason: 'No rule allowed this step',
-    };
-
-    for (const rule of rules) {
-      const result = rule.evaluate({
-        step,
-        tool: tool as ToolSpec,
-        args: step.args,
-        context,
-      });
-      if (!result) continue;
-
-      decision = {
-        stepId: step.id,
-        tool: step.tool,
-        action: result.action,
-        riskLevel: result.riskElevation
-          ?? classifyRiskFromPlanSignal(step.tool, step.args)
-          ?? tool?.risk
-          ?? 'medium',
-        reason: result.reason,
-        ruleId: rule.id,
-      };
-      break;
-    }
-
-    decisions.push(decision);
+    decisions.push(evaluateStep(step, tool as ToolSpec, step.args, context, rules));
   }
 
   return decisions;
