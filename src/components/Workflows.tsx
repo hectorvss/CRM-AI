@@ -2996,12 +2996,14 @@ function WorkflowList(props: {
                   <button onClick={props.onCreate} className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90 dark:bg-white dark:text-black">New workflow</button>
                 </>
               ) : props.section === 'credentials' ? (
-                <button
-                  onClick={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', sourceContext: 'workflow_credentials' })}
-                  className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90 dark:bg-white dark:text-black"
-                >
-                  Open integrations
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', sourceContext: 'workflow_credentials' })}
+                    className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white shadow-card hover:opacity-90 dark:bg-white dark:text-black"
+                  >
+                    Open integrations
+                  </button>
+                </div>
               ) : (
                 <button onClick={props.onCreate} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Create workflow</button>
               )}
@@ -3064,7 +3066,21 @@ function WorkflowList(props: {
             ))}
           </div>
         ) : props.section === 'credentials' ? (
-          <WorkflowCredentialsSection connectors={props.connectors} query={props.query} onNavigate={props.onNavigate} />
+          <div className="space-y-3">
+            {/* Sort + filter bar */}
+            <div className="flex items-center justify-end gap-2">
+              <select className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm outline-none hover:border-gray-300 focus:ring-1 focus:ring-black/10">
+                <option>Sort by last updated</option>
+                <option>Sort by name</option>
+                <option>Sort by type</option>
+                <option>Sort by created</option>
+              </select>
+              <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 shadow-sm hover:bg-gray-50 hover:text-gray-700 transition">
+                <span className="material-symbols-outlined text-base">filter_list</span>
+              </button>
+            </div>
+            <WorkflowCredentialsSection connectors={props.connectors} workflows={props.workflows} query={props.query} onNavigate={props.onNavigate} />
+          </div>
         ) : props.section === 'executions' ? (
           <WorkflowExecutionsSection runs={props.recentRuns} query={props.query} workflows={props.workflows} onOpen={props.onOpen} />
         ) : props.section === 'variables' ? (
@@ -3096,51 +3112,194 @@ function WorkflowList(props: {
   );
 }
 
-function WorkflowCredentialsSection(props: { connectors: any[]; query: string; onNavigate?: NavigateFn }) {
+// ── Icon/color map for known connector systems ────────────────────────────────
+const CONNECTOR_ICON_MAP: Record<string, { icon: string; color: string }> = {
+  slack:         { icon: 'tag',                color: 'bg-purple-100 text-purple-700' },
+  discord:       { icon: 'forum',              color: 'bg-indigo-100 text-indigo-700' },
+  telegram:      { icon: 'send',               color: 'bg-sky-100 text-sky-700' },
+  teams:         { icon: 'groups',             color: 'bg-blue-100 text-blue-700' },
+  google_chat:   { icon: 'chat_bubble',        color: 'bg-green-100 text-green-700' },
+  shopify:       { icon: 'shopping_bag',       color: 'bg-green-100 text-green-700' },
+  stripe:        { icon: 'payments',           color: 'bg-violet-100 text-violet-700' },
+  zendesk:       { icon: 'support_agent',      color: 'bg-emerald-100 text-emerald-700' },
+  intercom:      { icon: 'chat',               color: 'bg-blue-100 text-blue-700' },
+  gmail:         { icon: 'mail',               color: 'bg-red-100 text-red-700' },
+  outlook:       { icon: 'mark_email_unread',  color: 'bg-blue-100 text-blue-700' },
+  whatsapp:      { icon: 'chat_bubble',        color: 'bg-green-100 text-green-700' },
+  anthropic:     { icon: 'auto_awesome_motion',color: 'bg-orange-100 text-orange-700' },
+  openai:        { icon: 'memory',             color: 'bg-gray-100 text-gray-700' },
+  gemini:        { icon: 'diamond',            color: 'bg-blue-100 text-blue-700' },
+  ollama:        { icon: 'computer',           color: 'bg-gray-100 text-gray-700' },
+  hubspot:       { icon: 'hub',                color: 'bg-orange-100 text-orange-700' },
+  notion:        { icon: 'description',        color: 'bg-gray-100 text-gray-700' },
+  zapier:        { icon: 'bolt',               color: 'bg-orange-100 text-orange-700' },
+};
+
+function connectorIcon(system: string | undefined | null): { icon: string; color: string } {
+  return CONNECTOR_ICON_MAP[String(system ?? '').toLowerCase()] ?? { icon: 'link', color: 'bg-gray-100 text-gray-500' };
+}
+
+function formatRelativeDate(iso: string | undefined | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const diffMs = Date.now() - d.getTime();
+  const diffDays = Math.floor(diffMs / 86_400_000);
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 30) return `${diffDays} days ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+  return `${Math.floor(diffDays / 365)} years ago`;
+}
+
+function WorkflowCredentialsSection(props: {
+  connectors: any[];
+  workflows: Workflow[];
+  query: string;
+  onNavigate?: NavigateFn;
+}) {
+  const [menuOpenId, setMenuOpenId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!menuOpenId) return;
+    const handler = () => setMenuOpenId(null);
+    document.addEventListener('click', handler, { capture: true });
+    return () => document.removeEventListener('click', handler, { capture: true });
+  }, [menuOpenId]);
+
   const rows = props.connectors.filter((connector) => {
-    const haystack = `${connector?.name ?? ''} ${connector?.status ?? ''} ${connector?.auth_type ?? ''}`.toLowerCase();
+    const haystack = `${connector?.name ?? ''} ${connector?.system ?? ''} ${connector?.status ?? ''} ${connector?.auth_type ?? ''}`.toLowerCase();
     return !props.query.trim() || haystack.includes(props.query.trim().toLowerCase());
   });
 
+  // Count linked workflows per connector
+  const linkedCounts = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const wf of props.workflows as any[]) {
+      const nodes: any[] = Array.isArray(wf.nodes) ? wf.nodes : [];
+      for (const node of nodes) {
+        const ref = node.credentialsRef ?? node.credentials_ref ?? node.config?.connector ?? node.config?.connector_id;
+        if (ref) map.set(String(ref), (map.get(String(ref)) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [props.workflows]);
+
+  if (rows.length === 0) {
+    return (
+      <WorkflowEmptySection
+        title="No credentials found"
+        description="Connectors and credentials configured in Integrations appear here and can be referenced by workflow nodes."
+        actionLabel="Open Integrations"
+        onAction={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', sourceContext: 'workflow_credentials_empty' })}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-4">
-      {rows.length === 0 ? (
-        <WorkflowEmptySection
-          title="No credentials found"
-          description="Connectors and credentials will appear here once integrations are configured."
-          actionLabel="Open integrations"
-          onAction={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', sourceContext: 'workflow_credentials_empty' })}
-        />
-      ) : rows.map((connector) => (
-        <div key={connector.id} className="rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-card">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm font-semibold text-gray-900">{connector.name || 'Connector'}</div>
-              <div className="mt-1 text-xs text-gray-500">
-                {connector.auth_type ? `${String(connector.auth_type).toUpperCase()} credential` : 'Credential not configured yet'}
+    <div className="rounded-2xl border border-gray-200 bg-white shadow-card overflow-hidden">
+      {/* Table header */}
+      <div className="grid grid-cols-[2fr_1.2fr_1fr_auto] items-center gap-4 border-b border-gray-100 px-5 py-3">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Name</div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Type</div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Last updated</div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 w-32 text-right">Workflows</div>
+      </div>
+
+      {/* Rows */}
+      {rows.map((connector, idx) => {
+        const { icon, color } = connectorIcon(connector.system);
+        const system = String(connector.system || connector.name || '').toLowerCase();
+        const authTypeLabel = connector.auth_type
+          ? `${String(connector.auth_type).replace(/_/g, ' ')} · ${system || 'connector'}`
+          : system || 'Connector';
+        const statusOk = ['active', 'connected', 'healthy'].includes(String(connector.status ?? '').toLowerCase());
+        const statusError = ['error', 'failed'].includes(String(connector.status ?? '').toLowerCase());
+        const linked = linkedCounts.get(connector.id) ?? 0;
+        const isLastRow = idx === rows.length - 1;
+
+        return (
+          <div
+            key={connector.id}
+            className={`grid grid-cols-[2fr_1.2fr_1fr_auto] items-center gap-4 px-5 py-3.5 transition hover:bg-gray-50 ${!isLastRow ? 'border-b border-gray-100' : ''}`}
+          >
+            {/* Name + icon */}
+            <div className="flex items-center gap-3 min-w-0">
+              <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${color}`}>
+                <span className="material-symbols-outlined text-base">{icon}</span>
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-gray-900">{connector.name || system || 'Connector'}</div>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${statusOk ? 'bg-green-500' : statusError ? 'bg-red-500' : 'bg-gray-300'}`} />
+                  <span className="text-[11px] text-gray-400 capitalize">
+                    {statusOk ? 'Connected' : statusError ? 'Error' : (connector.status || 'Not connected')}
+                  </span>
+                </div>
               </div>
             </div>
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
-              connector.status === 'connected' ? 'bg-green-50 text-green-700' : connector.status === 'error' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'
-            }`}>
-              {connector.status || 'draft'}
-            </span>
+
+            {/* Type */}
+            <div className="min-w-0">
+              <div className="truncate text-sm text-gray-700 capitalize">{authTypeLabel}</div>
+              <div className="mt-0.5 text-[11px] text-gray-400">
+                Created {formatRelativeDate(connector.created_at)}
+              </div>
+            </div>
+
+            {/* Last updated */}
+            <div className="text-sm text-gray-600">
+              {connector.updated_at ? formatRelativeDate(connector.updated_at) : '—'}
+            </div>
+
+            {/* Linked count + scope + menu */}
+            <div className="flex items-center justify-end gap-2 w-32">
+              {linked > 0 && (
+                <span className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 shadow-sm">
+                  <span className="material-symbols-outlined text-[12px] text-gray-400">link</span>
+                  {linked}
+                </span>
+              )}
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                Workspace
+              </span>
+              <div className="relative">
+                <button
+                  onClick={() => setMenuOpenId(menuOpenId === connector.id ? null : connector.id)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition"
+                >
+                  <span className="material-symbols-outlined text-base">more_horiz</span>
+                </button>
+                {menuOpenId === connector.id && (
+                  <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl">
+                    <button
+                      onClick={() => { props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', entityId: connector.id, sourceContext: 'workflow_credentials' }); setMenuOpenId(null); }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <span className="material-symbols-outlined text-base text-gray-400">open_in_new</span>
+                      Open in Integrations
+                    </button>
+                    <button
+                      onClick={() => { setMenuOpenId(null); }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <span className="material-symbols-outlined text-base text-gray-400">edit</span>
+                      Edit credential
+                    </button>
+                    <div className="my-1 border-t border-gray-100" />
+                    <button
+                      onClick={() => { setMenuOpenId(null); }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <span className="material-symbols-outlined text-base">delete_outline</span>
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <StatTile label="Capabilities" value={String(Array.isArray(connector.capabilities) ? connector.capabilities.length : 0)} />
-            <StatTile label="Last health check" value={connector.last_health_check_at ? new Date(connector.last_health_check_at).toLocaleDateString() : 'Pending'} />
-            <StatTile label="Webhook status" value={connector.webhook_enabled ? 'Enabled' : 'Not configured'} />
-          </div>
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={() => props.onNavigate?.({ page: 'tools_integrations', entityType: 'workspace', section: 'connectors', entityId: connector.id, sourceContext: 'workflow_credentials' })}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-            >
-              Open connector
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
