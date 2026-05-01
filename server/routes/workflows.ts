@@ -51,6 +51,11 @@ const NODE_CATALOG = [
   { type: 'trigger', key: 'shipment.updated', label: 'Shipment updated', category: 'Trigger', icon: 'local_shipping', requiresConfig: false },
   { type: 'trigger', key: 'manual.run', label: 'Manual run', category: 'Trigger', icon: 'play_arrow', requiresConfig: false },
   { type: 'trigger', key: 'trigger.schedule', label: 'Schedule (cron)', category: 'Trigger', icon: 'event_repeat', requiresConfig: true },
+  { type: 'trigger', key: 'trigger.form_submission', label: 'On form submission', category: 'Trigger', icon: 'description', requiresConfig: true },
+  { type: 'trigger', key: 'trigger.chat_message', label: 'On chat message', category: 'Trigger', icon: 'forum', requiresConfig: true },
+  { type: 'trigger', key: 'trigger.workflow_error', label: 'On workflow error', category: 'Trigger', icon: 'error_outline', requiresConfig: false },
+  { type: 'trigger', key: 'trigger.subworkflow_called', label: 'When called by another workflow', category: 'Trigger', icon: 'login', requiresConfig: false },
+  { type: 'trigger', key: 'trigger.evaluation_run', label: 'When running evaluation', category: 'Trigger', icon: 'science', requiresConfig: false },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Condition', icon: 'attach_money', requiresConfig: true },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Condition', icon: 'rule', requiresConfig: true },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Condition', icon: 'gpp_maybe', requiresConfig: true },
@@ -149,6 +154,11 @@ type WorkflowNodeContract = {
 
 const NODE_CONTRACTS: Record<string, WorkflowNodeContract> = {
   'webhook.received': { required: ['event'], optional: ['secret', 'source'], sideEffects: 'none' },
+  'trigger.form_submission': { required: ['formSlug'], optional: ['redirectUrl', 'allowAnonymous'], sideEffects: 'none' },
+  'trigger.chat_message': { required: ['channel'], optional: ['agentId'], sideEffects: 'none' },
+  'trigger.workflow_error': { optional: ['sourceWorkflowId', 'severity'], sideEffects: 'none' },
+  'trigger.subworkflow_called': { optional: ['expectedInputs'], sideEffects: 'none' },
+  'trigger.evaluation_run': { optional: ['datasetId'], sideEffects: 'none' },
   'amount.threshold': { required: ['field', 'operator', 'amount'], branchLabels: ['true', 'false'], sideEffects: 'none' },
   'status.matches': { required: ['field', 'value'], optional: ['operator'], branchLabels: ['true', 'false'], sideEffects: 'none' },
   'risk.level': { required: ['field', 'value'], optional: ['operator'], branchLabels: ['true', 'false'], sideEffects: 'none' },
@@ -743,6 +753,11 @@ function workflowMatchesTrigger(version: any, eventType: string) {
     'payment.dispute.created': ['payment.dispute.created', 'payment_dispute_created', 'dispute.created'],
     'shipment.updated': ['shipment.updated', 'shipment_updated', 'fulfillment.updated'],
     'manual.run': ['manual.run', 'manual'],
+    'trigger.form_submission': ['trigger.form.submission', 'form.submitted', 'form_submitted'],
+    'trigger.chat_message': ['trigger.chat.message', 'chat.message', 'chat_message'],
+    'trigger.workflow_error': ['trigger.workflow.error', 'workflow.error', 'workflow_failed'],
+    'trigger.subworkflow_called': ['trigger.subworkflow.called', 'subworkflow.called', 'subworkflow'],
+    'trigger.evaluation_run': ['trigger.evaluation.run', 'evaluation.run', 'eval.run'],
   };
   const accepted = new Set([normalizedEvent, ...(aliases[normalizedEvent] ?? []).map(normalizeTriggerName)]);
   return accepted.has(triggerType) || accepted.has(nodeTrigger);
@@ -2214,6 +2229,27 @@ async function executeWorkflowVersion({
     endedAt: new Date().toISOString(),
   });
 
+  // Dispatch trigger.workflow_error event so error-handler workflows can react.
+  // Skipped on retries to avoid loops.
+  if (finalStatus === 'failed' && triggerType !== 'workflow.error' && !retryOfRunId) {
+    try {
+      await executeWorkflowsByEvent(
+        { tenantId, workspaceId, userId },
+        'trigger.workflow_error',
+        {
+          sourceWorkflowId: workflowId,
+          sourceRunId: runId,
+          severity: 'error',
+          error: finalError,
+          failedNodeId: steps.find((s) => s.status === 'failed')?.node_id ?? null,
+          failedNodeKey: steps.find((s) => s.status === 'failed')?.node_id ?? null,
+        },
+      );
+    } catch (dispatchErr: any) {
+      logger.warn('workflow_error event dispatch failed', { runId, error: String(dispatchErr?.message ?? dispatchErr) });
+    }
+  }
+
   return { id: runId, status: finalStatus, error: finalError, steps, retryOfRunId };
 }
 
@@ -2701,6 +2737,79 @@ router.post('/events/trigger', requirePermission('workflows.trigger'), async (re
   } catch (error) {
     console.error('Error triggering workflows by event:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /forms/:slug
+ * Public form-submission endpoint that fires `trigger.form_submission` for any
+ * workflow whose start node matches the slug. Workflows opt-in by setting
+ * `formSlug` on the trigger config; only those with `allowAnonymous=true` can
+ * be reached without auth.
+ *
+ * The endpoint resolves the tenant/workspace by scanning all published workflows
+ * across tenants for the matching slug. To prevent enumeration we return a
+ * generic 404 if nothing matches.
+ */
+router.post('/forms/:slug', async (req, res) => {
+  try {
+    const slug = String(req.params.slug || '').trim();
+    if (!slug) return res.status(404).json({ error: 'Form not found' });
+
+    const supabase = getSupabaseAdmin();
+    const { data: rows, error: rowsError } = await supabase
+      .from('workflow_versions')
+      .select('id, workflow_id, tenant_id, workspace_id, nodes, trigger')
+      .eq('status', 'published')
+      .limit(500);
+    if (rowsError) {
+      logger.warn('forms endpoint: query failed', { slug, error: String(rowsError) });
+      return res.status(500).json({ error: 'Internal error' });
+    }
+    const matches = (rows ?? []).filter((row: any) => {
+      const nodes = parseMaybeJsonArray(row.nodes);
+      const start = getStartNode(normalizeNodes(nodes));
+      if (start?.key !== 'trigger.form_submission') return false;
+      const cfg = (start.config && typeof start.config === 'object' ? start.config : {}) as any;
+      return String(cfg.formSlug || cfg.slug || '').trim() === slug;
+    });
+    if (matches.length === 0) return res.status(404).json({ error: 'Form not found' });
+
+    // Verify allowAnonymous on the matched workflow
+    const allowed = matches.filter((row: any) => {
+      const nodes = parseMaybeJsonArray(row.nodes);
+      const start = getStartNode(normalizeNodes(nodes));
+      const cfg = (start?.config && typeof start.config === 'object' ? start.config : {}) as any;
+      return String(cfg.allowAnonymous ?? 'true').toLowerCase() !== 'false';
+    });
+    if (allowed.length === 0) {
+      return res.status(401).json({ error: 'Form requires authentication' });
+    }
+
+    const results = [] as any[];
+    for (const row of allowed) {
+      try {
+        const versions = await workflowRepository.getVersion(row.id);
+        if (!versions) continue;
+        const result = await executeWorkflowVersion({
+          tenantId: row.tenant_id,
+          workspaceId: row.workspace_id,
+          userId: undefined,
+          workflowId: row.workflow_id,
+          version: versions,
+          triggerPayload: { formSlug: slug, body: req.body ?? {}, headers: { 'user-agent': req.headers['user-agent'] || '' } },
+          triggerType: 'trigger.form_submission',
+        });
+        results.push({ workflowId: row.workflow_id, runId: result.id, status: result.status });
+      } catch (err: any) {
+        logger.warn('forms endpoint: workflow execution failed', { slug, workflowId: row.workflow_id, error: String(err?.message ?? err) });
+      }
+    }
+
+    return res.status(202).json({ formSlug: slug, matched: results.length, runs: results });
+  } catch (error: any) {
+    logger.warn('forms endpoint: unexpected error', { error: String(error?.message ?? error) });
+    return res.status(500).json({ error: 'Internal error' });
   }
 });
 

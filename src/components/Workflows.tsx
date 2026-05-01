@@ -231,6 +231,11 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'trigger', key: 'webhook.received', label: 'Webhook received', category: 'Trigger', icon: 'webhook', requiresConfig: true, description: 'Starts from an inbound external webhook.' },
   { type: 'trigger', key: 'shipment.updated', label: 'Shipment updated', category: 'Trigger', icon: 'local_shipping', description: 'Starts when shipment status changes.' },
   { type: 'trigger', key: 'manual.run', label: 'Manual run', category: 'Trigger', icon: 'play_arrow', description: 'Starts when a user runs it.' },
+  { type: 'trigger', key: 'trigger.form_submission', label: 'On form submission', category: 'Trigger', icon: 'description', requiresConfig: true, description: 'Starts when a public CRM-AI form is submitted.' },
+  { type: 'trigger', key: 'trigger.chat_message', label: 'On chat message', category: 'Trigger', icon: 'forum', requiresConfig: true, description: 'Starts when a user sends a message to the chat surface.' },
+  { type: 'trigger', key: 'trigger.workflow_error', label: 'On workflow error', category: 'Trigger', icon: 'error_outline', requiresConfig: true, description: 'Starts when another workflow fails. Use this to handle errors centrally.' },
+  { type: 'trigger', key: 'trigger.subworkflow_called', label: 'When called by another workflow', category: 'Trigger', icon: 'login', requiresConfig: false, description: 'Starts when another workflow invokes this one via Execute sub-workflow.' },
+  { type: 'trigger', key: 'trigger.evaluation_run', label: 'When running evaluation', category: 'Trigger', icon: 'science', requiresConfig: false, description: 'Starts when this workflow is invoked by an Evaluations dataset run.' },
   { type: 'condition', key: 'amount.threshold', label: 'Amount threshold', category: 'Flow', icon: 'alt_route', requiresConfig: true, description: 'Branch based on a numeric amount.' },
   { type: 'condition', key: 'status.matches', label: 'Status matches', category: 'Flow', icon: 'rule', requiresConfig: true, description: 'Branch based on status.' },
   { type: 'condition', key: 'risk.level', label: 'Risk level', category: 'Flow', icon: 'gpp_maybe', requiresConfig: true, description: 'Branch based on risk.' },
@@ -832,6 +837,25 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'path', label: 'Webhook path', type: 'text', placeholder: 'e.g. /hooks/myworkflow' },
   ],
   'case.created': [{ key: 'filter', label: 'Filter expression (optional)', type: 'text', placeholder: 'e.g. case.priority == high' }],
+  'trigger.form_submission': [
+    { key: 'formSlug', label: 'Form slug', type: 'text', placeholder: 'e.g. contact-us', hint: 'Public form URL becomes /forms/<slug>' },
+    { key: 'redirectUrl', label: 'Redirect URL after submit (optional)', type: 'text', placeholder: 'https://yoursite.com/thanks' },
+    { key: 'allowAnonymous', label: 'Allow anonymous submissions', type: 'select', options: ['true', 'false'] },
+  ],
+  'trigger.chat_message': [
+    { key: 'channel', label: 'Source channel', type: 'select', options: ['superagent', 'web_chat', 'whatsapp', 'any'], hint: 'Where the chat message comes from' },
+    { key: 'agentId', label: 'Restrict to agent (optional)', type: 'agent-picker' },
+  ],
+  'trigger.workflow_error': [
+    { key: 'sourceWorkflowId', label: 'Source workflow id (optional)', type: 'text', placeholder: 'leave blank to handle errors from any workflow', hint: 'Leave empty to act as a global error handler' },
+    { key: 'severity', label: 'Severity threshold', type: 'select', options: ['', 'warning', 'error', 'critical'] },
+  ],
+  'trigger.subworkflow_called': [
+    { key: 'expectedInputs', label: 'Expected input fields (comma-separated, optional)', type: 'text', placeholder: 'caseId, customerId' },
+  ],
+  'trigger.evaluation_run': [
+    { key: 'datasetId', label: 'Dataset id (optional)', type: 'text', placeholder: 'evaluations dataset id' },
+  ],
   // ── Scheduled trigger ─────────────────────────────────────────────────────
   'trigger.schedule': [
     { key: 'cron', label: 'Cron expression', type: 'text', placeholder: '0 9 * * 1-5', hint: 'Standard cron (min hour day month weekday). E.g. "0 9 * * 1-5" = every weekday at 9 AM' },
@@ -1263,9 +1287,10 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Knowledge', items: pick(['knowledge.search', 'knowledge.validate_policy', 'knowledge.attach_evidence']) },
     ],
     Trigger: [
-      { title: 'Support', items: pick(['manual.run', 'case.created', 'case.updated', 'message.received', 'sla.breached']) },
+      { title: 'Popular', items: pick(['manual.run', 'webhook.received', 'trigger.schedule', 'trigger.form_submission', 'trigger.chat_message']) },
+      { title: 'Support', items: pick(['case.created', 'case.updated', 'message.received', 'sla.breached']) },
       { title: 'Commerce', items: pick(['order.updated', 'shipment.updated', 'payment.failed', 'payment.dispute.created', 'return.created']) },
-      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'webhook.received', 'trigger.schedule']) },
+      { title: 'System', items: pick(['customer.updated', 'approval.decided', 'trigger.workflow_error', 'trigger.subworkflow_called', 'trigger.evaluation_run']) },
     ],
   };
 
