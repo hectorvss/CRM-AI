@@ -261,6 +261,12 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'utility', key: 'data.aggregate', label: 'Aggregate', category: 'Data transformation', icon: 'list_alt', requiresConfig: true, description: 'Combine a field from many items into a list, sum, average, min or max.' },
   { type: 'utility', key: 'data.limit', label: 'Limit', category: 'Data transformation', icon: 'crop', requiresConfig: true, description: 'Restrict the number of items passed downstream.' },
   { type: 'utility', key: 'data.split_out', label: 'Split out', category: 'Data transformation', icon: 'call_split', requiresConfig: true, description: 'Turn a list inside an item into separate items.' },
+  { type: 'utility', key: 'data.ai_transform', label: 'AI Transform', category: 'Data transformation', icon: 'magic_button', requiresConfig: true, description: 'Modify data with plain-English instructions using Gemini.' },
+  // ── Core nodes ──────────────────────────────────────────────────────────
+  { type: 'utility', key: 'core.code', label: 'Code', category: 'Core', icon: 'code', requiresConfig: true, description: 'Run custom JavaScript code in a sandbox.' },
+  { type: 'utility', key: 'core.data_table_op', label: 'Data table', category: 'Core', icon: 'table_view', requiresConfig: true, description: 'Read or write rows in a workspace data table.' },
+  { type: 'utility', key: 'core.respond_webhook', label: 'Respond to webhook', category: 'Core', icon: 'reply_all', requiresConfig: true, description: 'Return a custom HTTP response to the originating webhook trigger.' },
+  { type: 'agent', key: 'ai.information_extractor', label: 'Information Extractor', category: 'AI', icon: 'fact_check', requiresConfig: true, description: 'Extract structured information from free text using Gemini.' },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true, description: 'Assign a case to a user or team.' },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true, description: 'Send a customer reply.' },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true, description: 'Add a private note to the case.' },
@@ -566,6 +572,38 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
   'data.split_out': [
     { key: 'source', label: 'Items path', type: 'text', placeholder: 'e.g. data.lineItems', hint: 'Array inside the current item' },
     { key: 'target', label: 'Output variable', type: 'text', placeholder: 'splitItems', hint: 'Each entry becomes its own item under context.data.<target>' },
+  ],
+  'data.ai_transform': [
+    { key: 'instruction', label: 'Instruction (plain English)', type: 'textarea', placeholder: 'Convert the customer message into a JSON object with intent, sentiment and priority fields' },
+    { key: 'source', label: 'Input path (optional)', type: 'text', placeholder: 'data', hint: 'Defaults to the entire workflow context' },
+    { key: 'target', label: 'Output variable', type: 'text', placeholder: 'transformed' },
+    { key: 'model', label: 'Model (optional)', type: 'select', options: ['', 'gemini-2.5-flash', 'gemini-2.5-pro'] },
+  ],
+  // ── Core nodes ────────────────────────────────────────────────────────────
+  'core.code': [
+    { key: 'language', label: 'Language', type: 'select', options: ['javascript'], hint: 'Python coming in a future release.' },
+    { key: 'code', label: 'Code', type: 'textarea', placeholder: '// "context" is available read-only.\n// "data" is the current data payload.\n// Return the value you want to store.\n\nreturn data.items.map(i => ({ ...i, total: i.qty * i.price }));' },
+    { key: 'target', label: 'Store result as', type: 'text', placeholder: 'codeResult' },
+    { key: 'timeoutMs', label: 'Timeout (ms)', type: 'number', placeholder: '2000' },
+  ],
+  'core.data_table_op': [
+    { key: 'tableId', label: 'Data table', type: 'text', placeholder: 'pick a data table id from the Data tables tab' },
+    { key: 'operation', label: 'Operation', type: 'select', options: ['list', 'find', 'insert', 'update', 'upsert', 'delete'] },
+    { key: 'matchField', label: 'Match field (find/update/delete/upsert)', type: 'text', placeholder: 'id' },
+    { key: 'matchValue', label: 'Match value', type: 'text', placeholder: '{{trigger.id}}' },
+    { key: 'row', label: 'Row data (JSON, for insert/update/upsert)', type: 'textarea', placeholder: '{"id":"{{order.id}}","status":"open"}' },
+    { key: 'target', label: 'Store result as', type: 'text', placeholder: 'tableResult' },
+  ],
+  'core.respond_webhook': [
+    { key: 'statusCode', label: 'HTTP status code', type: 'number', placeholder: '200' },
+    { key: 'body', label: 'Response body (JSON or text)', type: 'textarea', placeholder: '{"ok":true,"id":"{{trigger.id}}"}' },
+    { key: 'contentType', label: 'Content type', type: 'select', options: ['application/json', 'text/plain', 'text/html'] },
+  ],
+  'ai.information_extractor': [
+    { key: 'text', label: 'Text to extract from', type: 'textarea', placeholder: '{{trigger.message}} or {{case.description}}' },
+    { key: 'schema', label: 'JSON schema describing the output', type: 'textarea', placeholder: '{"type":"object","properties":{"intent":{"type":"string"},"orderId":{"type":"string"},"sentiment":{"type":"string","enum":["positive","neutral","negative"]}}}' },
+    { key: 'target', label: 'Output variable', type: 'text', placeholder: 'extracted' },
+    { key: 'model', label: 'Model', type: 'select', options: ['', 'gemini-2.5-flash', 'gemini-2.5-pro'] },
   ],
   // ── Case actions ──────────────────────────────────────────────────────────
   'case.assign': [
@@ -1161,6 +1199,7 @@ function nodeTone(type: NodeType) {
 function categoryForSpec(spec: NodeSpec) {
   if (spec.key.startsWith('data.')) return 'Data transformation';
   if (spec.key.startsWith('message.')) return 'Human review';
+  if (spec.key.startsWith('core.')) return 'Core';
   if (spec.type === 'agent') return 'AI';
   if (spec.type === 'condition' || spec.type === 'utility') return 'Flow';
   if (spec.type === 'action') return spec.key.startsWith('approval.') ? 'Human review' : 'Action';
@@ -1192,13 +1231,13 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Other', items: pick(['flow.compare', 'flow.branch', 'flow.switch', 'flow.wait', 'flow.subworkflow', 'flow.stop_error', 'flow.noop']) },
     ],
     'Data transformation': [
-      { title: 'Popular', items: pick(['data.set_fields', 'data.pick_fields', 'data.map_fields', 'data.validate_required']) },
+      { title: 'Popular', items: pick(['data.ai_transform', 'data.set_fields', 'data.pick_fields', 'data.map_fields', 'data.validate_required']) },
       { title: 'Add or remove items', items: pick(['data.limit', 'data.dedupe', 'data.split_out', 'data.split_items']) },
       { title: 'Combine items', items: pick(['data.aggregate', 'data.merge_objects']) },
       { title: 'Other', items: pick(['data.rename_fields', 'data.calculate', 'data.extract_json', 'data.normalize_text', 'data.format_date']) },
     ],
     AI: [
-      { title: 'Popular', items: pick(['agent.run', 'agent.classify', 'agent.draft_reply', 'ai.generate_text']) },
+      { title: 'Popular', items: pick(['agent.run', 'agent.classify', 'agent.draft_reply', 'ai.generate_text', 'ai.information_extractor']) },
       { title: 'AI providers', items: pick(['ai.gemini']) },
       { title: 'Other', items: pick(['agent.sentiment', 'agent.summarize', 'knowledge.search']) },
     ],
@@ -1213,6 +1252,7 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
       { title: 'Send and wait for response', items: pick(['message.slack', 'message.discord', 'message.gmail', 'message.outlook', 'message.teams', 'message.google_chat', 'message.telegram', 'notification.email']) },
     ],
     Core: [
+      { title: 'Popular', items: pick(['core.code', 'core.data_table_op', 'core.respond_webhook']) },
       { title: 'Policy', items: pick(['policy.evaluate', 'core.idempotency_check', 'core.rate_limit']) },
       { title: 'Runtime', items: pick(['core.audit_log', 'stop', 'retry', 'delay']) },
     ],

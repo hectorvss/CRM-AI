@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import vm from 'node:vm';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
 import {
@@ -11,6 +12,7 @@ import {
   createIntegrationRepository,
   createKnowledgeRepository,
   createWorkflowRepository,
+  createWorkspaceRepository,
 } from '../data/index.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { runAgent } from '../agents/runner.js';
@@ -30,6 +32,7 @@ const conversationRepository = createConversationRepository();
 const approvalRepository = createApprovalRepository();
 const knowledgeRepository = createKnowledgeRepository();
 const integrationRepository = createIntegrationRepository();
+const workspaceRepository = createWorkspaceRepository();
 
 router.use(extractMultiTenant);
 
@@ -78,6 +81,11 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'data.aggregate', label: 'Aggregate', category: 'Data transformation', icon: 'list_alt', requiresConfig: true },
   { type: 'utility', key: 'data.limit', label: 'Limit', category: 'Data transformation', icon: 'crop', requiresConfig: true },
   { type: 'utility', key: 'data.split_out', label: 'Split out', category: 'Data transformation', icon: 'call_split', requiresConfig: true },
+  { type: 'utility', key: 'data.ai_transform', label: 'AI Transform', category: 'Data transformation', icon: 'magic_button', requiresConfig: true },
+  { type: 'utility', key: 'core.code', label: 'Code', category: 'Core', icon: 'code', requiresConfig: true },
+  { type: 'utility', key: 'core.data_table_op', label: 'Data table', category: 'Core', icon: 'table_view', requiresConfig: true },
+  { type: 'utility', key: 'core.respond_webhook', label: 'Respond to webhook', category: 'Core', icon: 'reply_all', requiresConfig: true },
+  { type: 'agent', key: 'ai.information_extractor', label: 'Information Extractor', category: 'Agent', icon: 'fact_check', requiresConfig: true },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true },
@@ -169,6 +177,11 @@ const NODE_CONTRACTS: Record<string, WorkflowNodeContract> = {
   'data.aggregate': { required: ['source', 'operation'], optional: ['field', 'target'], sideEffects: 'none' },
   'data.limit': { required: ['source', 'limit'], optional: ['mode', 'target'], sideEffects: 'none' },
   'data.split_out': { required: ['source'], optional: ['target'], sideEffects: 'none' },
+  'data.ai_transform': { required: ['instruction'], optional: ['source', 'target', 'model'], sideEffects: 'external', risk: 'low' },
+  'core.code': { required: ['code'], optional: ['language', 'target', 'timeoutMs'], sideEffects: 'none', risk: 'medium' },
+  'core.data_table_op': { required: ['tableId', 'operation'], optional: ['matchField', 'matchValue', 'row', 'target'], sideEffects: 'write', risk: 'low' },
+  'core.respond_webhook': { required: ['statusCode'], optional: ['body', 'contentType'], sideEffects: 'external', risk: 'low' },
+  'ai.information_extractor': { required: ['text', 'schema'], optional: ['target', 'model'], sideEffects: 'external', risk: 'low' },
   'message.slack': { required: ['channel', 'content'], optional: ['thread_ts'], sideEffects: 'external', risk: 'medium' },
   'message.discord': { required: ['channel', 'content'], optional: ['username'], sideEffects: 'external', risk: 'medium' },
   'message.telegram': { required: ['chatId', 'content'], optional: ['parseMode'], sideEffects: 'external', risk: 'medium' },
@@ -1014,6 +1027,31 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
       return { status: 'completed', output: { data: context.data, count: items.length, target } };
     }
 
+    if (node.key === 'data.ai_transform') {
+      const instruction = resolveTemplateValue(config.instruction || config.prompt || '', context);
+      if (!instruction) return { status: 'failed', error: 'data.ai_transform: instruction is required' };
+      const geminiKey = appConfig.ai.geminiApiKey;
+      if (!geminiKey) return { status: 'failed', error: 'data.ai_transform: GEMINI_API_KEY not configured' };
+      const sourceValue = readContextPath(context, config.source || 'data') ?? context.data ?? {};
+      const target = String(config.target || 'transformed');
+      const modelName = String(config.model || appConfig.ai.geminiModel || 'gemini-2.5-flash');
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const fullPrompt = `You are a JSON transformer. Apply the following instruction to the input and return ONLY the transformed JSON output (no commentary, no code fences).\n\nInstruction: ${instruction}\n\nInput JSON:\n${JSON.stringify(sourceValue)}`;
+      const result = await withGeminiRetry(
+        () => model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+          generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 2048 },
+        }),
+        { label: 'workflow.data.ai_transform' },
+      );
+      const text = result.response.text().trim();
+      let parsed: any = text;
+      try { parsed = JSON.parse(text); } catch { /* keep as text */ }
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: parsed };
+      return { status: 'completed', output: { data: context.data, target, model: modelName } };
+    }
+
     context.data = base;
     return { status: 'completed', output: { data: base, transformed: true } };
   }
@@ -1627,6 +1665,168 @@ Write ONLY the reply text, no subject line, no JSON.`;
     context.agent = { ...(context.agent ?? {}), [target]: text };
     context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: text };
     return { status: 'completed', output: { text, target, length: text.length } };
+  }
+
+  // ── Core: Code (sandboxed JavaScript) ───────────────────────────────────────
+  if (node.key === 'core.code') {
+    const language = String(config.language || 'javascript').toLowerCase();
+    if (language !== 'javascript') {
+      return { status: 'failed', error: `core.code: language '${language}' not supported. Only 'javascript' is available.` };
+    }
+    const code = String(config.code || '').trim();
+    if (!code) return { status: 'failed', error: 'core.code: code is required' };
+    const timeoutMs = Math.min(30_000, Math.max(50, Number(config.timeoutMs || 2000)));
+    const target = String(config.target || 'codeResult');
+    try {
+      const sandboxContext = {
+        // Read-only snapshot of workflow context — code can mutate locally without
+        // affecting the real context object.
+        context: cloneJson(context ?? {}),
+        data: cloneJson(context.data ?? {}),
+        trigger: cloneJson(context.trigger ?? {}),
+        // Safe globals
+        JSON,
+        Math,
+        Date,
+        Number,
+        String,
+        Array,
+        Object,
+        Boolean,
+        console: {
+          log: (...args: any[]) => logger.info('core.code log', { nodeId: node.id, args }),
+        },
+      };
+      const wrappedSource = `(function userCode() { ${code} })()`;
+      const script = new vm.Script(wrappedSource, { filename: `workflow-node-${node.id}.js` });
+      const ctx = vm.createContext(sandboxContext);
+      const value = script.runInContext(ctx, { timeout: timeoutMs, breakOnSigint: true });
+      const safeValue = (() => {
+        try { return JSON.parse(JSON.stringify(value ?? null)); } catch { return null; }
+      })();
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: safeValue };
+      return { status: 'completed', output: { data: context.data, target, value: safeValue } };
+    } catch (err: any) {
+      return { status: 'failed', error: `core.code execution failed: ${err?.message ?? String(err)}` };
+    }
+  }
+
+  // ── Core: Data table CRUD ───────────────────────────────────────────────────
+  if (node.key === 'core.data_table_op') {
+    const tableId = String(config.tableId || config.table_id || '');
+    if (!tableId) return { status: 'failed', error: 'core.data_table_op: tableId is required' };
+    const operation = String(config.operation || 'list');
+    const target = String(config.target || 'tableResult');
+
+    // Load workspace and read tables from settings.workflows.dataTables
+    const workspace = await workspaceRepository.getById(scope.workspaceId, scope.tenantId);
+    if (!workspace) return { status: 'failed', error: 'core.data_table_op: workspace not found' };
+    const settings = (workspace.settings && typeof workspace.settings === 'object' ? workspace.settings : {}) as any;
+    const wfSettings = (settings.workflows && typeof settings.workflows === 'object' ? settings.workflows : {}) as any;
+    const tables: any[] = Array.isArray(wfSettings.dataTables) ? wfSettings.dataTables : [];
+    const table = tables.find((t) => t && t.id === tableId);
+    if (!table) {
+      return { status: 'failed', error: `core.data_table_op: data table '${tableId}' not found in workspace. Create it under Workflows → Data tables.` };
+    }
+    const rows: any[] = Array.isArray(table.rows) ? table.rows : [];
+    const matchField = config.matchField ? String(config.matchField) : 'id';
+    const matchValueRaw = config.matchValue !== undefined ? resolveTemplateValue(String(config.matchValue), context) : undefined;
+
+    const persistTables = async (nextRows: any[]) => {
+      const updatedTables = tables.map((t) => (t.id === tableId ? { ...t, rows: nextRows, updated_at: new Date().toISOString() } : t));
+      const nextSettings = {
+        ...settings,
+        workflows: { ...wfSettings, dataTables: updatedTables },
+      };
+      await workspaceRepository.updateSettings(scope.workspaceId, nextSettings);
+    };
+
+    if (operation === 'list') {
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: rows };
+      return { status: 'completed', output: { data: context.data, count: rows.length, target } };
+    }
+    if (operation === 'find') {
+      const found = rows.find((r) => String(r?.[matchField] ?? '') === String(matchValueRaw ?? ''));
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: found ?? null };
+      return { status: 'completed', output: { data: context.data, found: !!found, target } };
+    }
+    if (operation === 'insert') {
+      const row = parseMaybeJsonObject(config.row);
+      if (Object.keys(row).length === 0) return { status: 'failed', error: 'core.data_table_op insert: row data is required' };
+      const nextRows = [...rows, row];
+      await persistTables(nextRows);
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: row };
+      return { status: 'completed', output: { data: context.data, target, inserted: true } };
+    }
+    if (operation === 'update') {
+      const row = parseMaybeJsonObject(config.row);
+      const nextRows = rows.map((r) => (String(r?.[matchField] ?? '') === String(matchValueRaw ?? '') ? { ...r, ...row } : r));
+      const updatedCount = nextRows.filter((r, i) => r !== rows[i]).length;
+      if (updatedCount > 0) await persistTables(nextRows);
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: { updated: updatedCount } };
+      return { status: 'completed', output: { data: context.data, target, updated: updatedCount } };
+    }
+    if (operation === 'upsert') {
+      const row = parseMaybeJsonObject(config.row);
+      const idx = rows.findIndex((r) => String(r?.[matchField] ?? '') === String(matchValueRaw ?? ''));
+      const nextRows = idx >= 0 ? rows.map((r, i) => (i === idx ? { ...r, ...row } : r)) : [...rows, row];
+      await persistTables(nextRows);
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: row };
+      return { status: 'completed', output: { data: context.data, target, mode: idx >= 0 ? 'updated' : 'inserted' } };
+    }
+    if (operation === 'delete') {
+      const before = rows.length;
+      const nextRows = rows.filter((r) => String(r?.[matchField] ?? '') !== String(matchValueRaw ?? ''));
+      const deleted = before - nextRows.length;
+      if (deleted > 0) await persistTables(nextRows);
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: { deleted } };
+      return { status: 'completed', output: { data: context.data, target, deleted } };
+    }
+    return { status: 'failed', error: `core.data_table_op: unsupported operation '${operation}'` };
+  }
+
+  // ── Core: Respond to webhook ────────────────────────────────────────────────
+  if (node.key === 'core.respond_webhook') {
+    const statusCode = Math.max(100, Math.min(599, Number(config.statusCode || 200)));
+    const contentType = String(config.contentType || 'application/json');
+    const bodyTemplate = config.body || '';
+    const resolvedBody = resolveTemplateValue(bodyTemplate, context);
+    let payload: any = resolvedBody;
+    if (contentType === 'application/json') {
+      try { payload = JSON.parse(resolvedBody); } catch { /* keep raw */ }
+    }
+    // Stash the response on the context. The webhook trigger handler reads this
+    // when finalizing the run and uses it as the actual HTTP response body.
+    context.webhookResponse = { statusCode, contentType, body: payload };
+    return { status: 'completed', output: { statusCode, contentType, body: payload } };
+  }
+
+  // ── AI: Information extractor (structured output) ───────────────────────────
+  if (node.key === 'ai.information_extractor') {
+    const text = resolveTemplateValue(config.text || '', context);
+    if (!text) return { status: 'failed', error: 'ai.information_extractor: text is required' };
+    const schemaRaw = config.schema || '';
+    const schema = parseMaybeJsonObject(schemaRaw);
+    if (Object.keys(schema).length === 0) return { status: 'failed', error: 'ai.information_extractor: a JSON schema is required' };
+    const geminiKey = appConfig.ai.geminiApiKey;
+    if (!geminiKey) return { status: 'failed', error: 'ai.information_extractor: GEMINI_API_KEY not configured' };
+    const target = String(config.target || 'extracted');
+    const modelName = String(config.model || appConfig.ai.geminiModel || 'gemini-2.5-flash');
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const prompt = `Extract structured information from the following text and return ONLY a JSON object that matches this schema:\n\nSchema: ${JSON.stringify(schema)}\n\nText:\n${text}\n\nReturn valid JSON only.`;
+    const result = await withGeminiRetry(
+      () => model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1024 },
+      }),
+      { label: 'workflow.ai.information_extractor' },
+    );
+    const raw = result.response.text().trim();
+    let extracted: any = {};
+    try { extracted = JSON.parse(raw); } catch { extracted = { _raw: raw, _error: 'Model did not return valid JSON' }; }
+    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: extracted };
+    return { status: 'completed', output: { data: context.data, target, model: modelName } };
   }
 
   // ── Google Gemini (explicit AI provider node) ───────────────────────────────
