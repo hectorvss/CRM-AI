@@ -2096,14 +2096,15 @@ Write ONLY the reply text, no subject line, no JSON.`;
     return { status: 'completed', output: { result: parsed, model: modelName, operation, target, length: text.length } };
   }
 
-  // ── External messaging wrappers ─────────────────────────────────────────────
-  // Each message.* node validates that the corresponding integration is connected,
-  // then emits a canonical event. Real transport (sending the actual message via
-  // Slack/Discord/etc API) is owned by Phase 5 — for now we record the intent and
-  // return success when the connector is healthy, blocked when it's not.
+  // ── External messaging wrappers (real transport) ────────────────────────────
+  // Each message.* node:
+  //   1. Validates that a connector for the system is configured + healthy
+  //   2. Reads auth_config (bot tokens, webhook URLs) from the connector
+  //   3. Calls the provider API to send the message
+  //   4. Records a canonical event in the integration timeline regardless of
+  //      success or failure so admins can audit attempts
   if (node.key.startsWith('message.')) {
     const system = node.key.split('.')[1]; // slack, discord, telegram, gmail, outlook, teams, google_chat
-    // Find a connector for this system in this tenant
     const allConnectors = await integrationRepository.listConnectors({ tenantId: scope.tenantId });
     const connector = allConnectors.find((c: any) => String(c.system || '').toLowerCase() === system);
     if (!connector) {
@@ -2119,49 +2120,146 @@ Write ONLY the reply text, no subject line, no JSON.`;
         output: { reason: `${system} connector is in '${status}' state. Reconnect it in Integrations.`, connectorId: connector.id, system },
       };
     }
-    // Resolve the per-channel destination + message body
+    const auth = (() => {
+      const raw = connector.auth_config;
+      if (!raw) return {} as Record<string, any>;
+      if (typeof raw === 'object') return raw as Record<string, any>;
+      try { return JSON.parse(String(raw)); } catch { return {}; }
+    })();
+
     const dest = resolveTemplateValue(
       config.channel || config.chatId || config.to || config.space || '',
       context,
     );
     const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
-    if (!dest) {
-      return { status: 'failed', error: `${node.key}: destination (channel / to / chatId / space) is required.` };
+    if (!dest) return { status: 'failed', error: `${node.key}: destination (channel / to / chatId / space) is required.` };
+    if (!content) return { status: 'failed', error: `${node.key}: message content is required.` };
+
+    // ── Provider-specific transport ──
+    let delivery: { ok: boolean; messageId?: string; error?: string } = { ok: false };
+    try {
+      if (system === 'slack') {
+        const token = auth.bot_token || auth.access_token || auth.token;
+        if (!token) {
+          delivery = { ok: false, error: 'Slack: bot_token not in connector auth_config. Reconnect Slack in Integrations.' };
+        } else {
+          const slackBody: any = { channel: dest, text: content };
+          if (config.thread_ts) slackBody.thread_ts = resolveTemplateValue(String(config.thread_ts), context);
+          const resp = await fetch('https://slack.com/api/chat.postMessage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=utf-8', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(slackBody),
+            signal: AbortSignal.timeout(15_000),
+          });
+          const json: any = await resp.json().catch(() => ({}));
+          delivery = json.ok ? { ok: true, messageId: json.ts } : { ok: false, error: `Slack: ${json.error ?? resp.statusText}` };
+        }
+      } else if (system === 'discord') {
+        // Discord uses webhook URLs. The user can pass it as `channel` or store it in auth_config.webhook_url.
+        const webhookUrl = /^https?:\/\//i.test(dest) ? dest : (auth.webhook_url || '');
+        if (!webhookUrl) {
+          delivery = { ok: false, error: 'Discord: provide a webhook URL as the channel field or store it in connector auth_config.webhook_url.' };
+        } else {
+          const body: any = { content };
+          if (config.username) body.username = String(config.username);
+          const resp = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(15_000),
+          });
+          delivery = resp.ok ? { ok: true } : { ok: false, error: `Discord: ${resp.status} ${resp.statusText}` };
+        }
+      } else if (system === 'telegram') {
+        const token = auth.bot_token || auth.token;
+        if (!token) {
+          delivery = { ok: false, error: 'Telegram: bot_token not in connector auth_config.' };
+        } else {
+          const body: any = { chat_id: dest, text: content };
+          if (config.parseMode) body.parse_mode = String(config.parseMode);
+          const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(15_000),
+          });
+          const json: any = await resp.json().catch(() => ({}));
+          delivery = json.ok ? { ok: true, messageId: String(json.result?.message_id ?? '') } : { ok: false, error: `Telegram: ${json.description ?? resp.statusText}` };
+        }
+      } else if (system === 'teams') {
+        // Teams uses incoming webhook URLs (per channel). Either the user passes
+        // it in the channel field, or it's stored in auth_config.webhook_url.
+        const webhookUrl = /^https?:\/\//i.test(dest) ? dest : (auth.webhook_url || '');
+        if (!webhookUrl) {
+          delivery = { ok: false, error: 'Teams: provide a channel webhook URL.' };
+        } else {
+          const card: any = {
+            '@type': 'MessageCard',
+            '@context': 'https://schema.org/extensions',
+            summary: config.title || 'CRM-AI alert',
+            themeColor: '0078D4',
+            title: config.title || undefined,
+            text: content,
+          };
+          const resp = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(card),
+            signal: AbortSignal.timeout(15_000),
+          });
+          delivery = resp.ok ? { ok: true } : { ok: false, error: `Teams: ${resp.status} ${resp.statusText}` };
+        }
+      } else if (system === 'google_chat') {
+        const webhookUrl = /^https?:\/\//i.test(dest) ? dest : (auth.webhook_url || '');
+        if (!webhookUrl) {
+          delivery = { ok: false, error: 'Google Chat: provide a space webhook URL.' };
+        } else {
+          const resp = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+            body: JSON.stringify({ text: content }),
+            signal: AbortSignal.timeout(15_000),
+          });
+          delivery = resp.ok ? { ok: true } : { ok: false, error: `Google Chat: ${resp.status} ${resp.statusText}` };
+        }
+      } else if (system === 'gmail' || system === 'outlook') {
+        // Gmail/Outlook require OAuth2 with refresh-token rotation; we expose the
+        // node and validate the connector but defer the actual send to a future
+        // OAuth pipeline. For now we record the intent so admins see the queued send.
+        delivery = {
+          ok: false,
+          error: `${system}: OAuth-based send is pending — connector validated, but transport requires the OAuth refresh-token pipeline (planned in next iteration). Use notification.email for transactional email in the meantime.`,
+        };
+      } else {
+        delivery = { ok: false, error: `${system}: unsupported messaging system` };
+      }
+    } catch (err: any) {
+      delivery = { ok: false, error: `${system} transport exception: ${err?.message ?? String(err)}` };
     }
-    if (!content) {
-      return { status: 'failed', error: `${node.key}: message content is required.` };
-    }
-    // Record the send intent as a canonical event so it appears in the integration timeline
+
+    // Always log a canonical event so the integration timeline shows what happened.
     const canonicalEvent = await integrationRepository.createCanonicalEvent({ tenantId: scope.tenantId }, {
       sourceSystem: system,
       sourceEntityType: 'workflow',
       sourceEntityId: node.id,
-      eventType: `${system}.message.sent`,
+      eventType: delivery.ok ? `${system}.message.sent` : `${system}.message.failed`,
       eventCategory: 'workflow',
       canonicalEntityType: context.case ? 'case' : 'workflow',
       canonicalEntityId: context.case?.id || node.id,
-      normalizedPayload: {
-        nodeId: node.id,
-        destination: dest,
-        content,
-        config,
-      },
+      normalizedPayload: { nodeId: node.id, destination: dest, content, delivery },
       dedupeKey: `${node.id}:${system}:${Date.now()}`,
       caseId: context.case?.id ?? null,
       workspaceId: scope.workspaceId,
-      status: 'processed',
+      status: delivery.ok ? 'processed' : 'failed',
     });
-    context.integration = { connectorId: connector.id, system, destination: dest, canonicalEventId: canonicalEvent.id };
+    context.integration = { connectorId: connector.id, system, destination: dest, canonicalEventId: canonicalEvent.id, delivered: delivery.ok };
+
+    if (!delivery.ok) {
+      return { status: 'failed', error: delivery.error || `${system}: send failed`, output: { system, connectorId: connector.id, destination: dest, canonicalEventId: canonicalEvent.id } };
+    }
     return {
       status: 'completed',
-      output: {
-        system,
-        connectorId: connector.id,
-        destination: dest,
-        canonicalEventId: canonicalEvent.id,
-        // Phase 1 records the intent — Phase 5 will replace this with real transport.
-        delivery: 'recorded',
-      },
+      output: { system, connectorId: connector.id, destination: dest, messageId: delivery.messageId, canonicalEventId: canonicalEvent.id, delivered: true },
     };
   }
 
