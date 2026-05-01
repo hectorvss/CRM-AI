@@ -258,6 +258,9 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'utility', key: 'data.merge_objects', label: 'Merge objects', category: 'Data transformation', icon: 'join_inner', requiresConfig: true, description: 'Merge multiple objects into one payload.' },
   { type: 'utility', key: 'data.validate_required', label: 'Validate required fields', category: 'Data transformation', icon: 'fact_check', requiresConfig: true, description: 'Block the flow if required fields are missing.' },
   { type: 'utility', key: 'data.calculate', label: 'Calculate value', category: 'Data transformation', icon: 'calculate', requiresConfig: true, description: 'Compute a numeric value from workflow data.' },
+  { type: 'utility', key: 'data.aggregate', label: 'Aggregate', category: 'Data transformation', icon: 'list_alt', requiresConfig: true, description: 'Combine a field from many items into a list, sum, average, min or max.' },
+  { type: 'utility', key: 'data.limit', label: 'Limit', category: 'Data transformation', icon: 'crop', requiresConfig: true, description: 'Restrict the number of items passed downstream.' },
+  { type: 'utility', key: 'data.split_out', label: 'Split out', category: 'Data transformation', icon: 'call_split', requiresConfig: true, description: 'Turn a list inside an item into separate items.' },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true, description: 'Assign a case to a user or team.' },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true, description: 'Send a customer reply.' },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true, description: 'Add a private note to the case.' },
@@ -277,12 +280,21 @@ const FALLBACK_CATALOG: NodeSpec[] = [
   { type: 'action', key: 'notification.email', label: 'Send email', category: 'Action', icon: 'mail', requiresConfig: true, description: 'Send an email directly to the customer.' },
   { type: 'action', key: 'notification.whatsapp', label: 'Send WhatsApp', category: 'Action', icon: 'chat', requiresConfig: true, description: 'Send a WhatsApp message to the customer.' },
   { type: 'action', key: 'notification.sms', label: 'Send SMS', category: 'Action', icon: 'sms', requiresConfig: true, description: 'Send an SMS to the customer.' },
+  // ── External messaging (channel wrappers — require connector configured in Integrations) ──
+  { type: 'integration', key: 'message.slack', label: 'Slack', category: 'Human review', icon: 'tag', requiresConfig: true, description: 'Send a message to a Slack channel or user. Requires Slack configured in Integrations.' },
+  { type: 'integration', key: 'message.discord', label: 'Discord', category: 'Human review', icon: 'forum', requiresConfig: true, description: 'Send a message to a Discord channel via webhook. Requires Discord configured in Integrations.' },
+  { type: 'integration', key: 'message.telegram', label: 'Telegram', category: 'Human review', icon: 'send', requiresConfig: true, description: 'Send a message via Telegram Bot. Requires Telegram configured in Integrations.' },
+  { type: 'integration', key: 'message.gmail', label: 'Gmail', category: 'Human review', icon: 'mail', requiresConfig: true, description: 'Send an email through your Gmail account. Requires Gmail OAuth in Integrations.' },
+  { type: 'integration', key: 'message.outlook', label: 'Microsoft Outlook', category: 'Human review', icon: 'mark_email_unread', requiresConfig: true, description: 'Send an email through your Outlook / Microsoft 365 account. Requires Outlook OAuth in Integrations.' },
+  { type: 'integration', key: 'message.teams', label: 'Microsoft Teams', category: 'Human review', icon: 'groups', requiresConfig: true, description: 'Post a message to a Teams channel. Requires Microsoft Teams configured in Integrations.' },
+  { type: 'integration', key: 'message.google_chat', label: 'Google Chat', category: 'Human review', icon: 'chat_bubble', requiresConfig: true, description: 'Post a message to a Google Chat space. Requires Google Workspace configured in Integrations.' },
   { type: 'agent', key: 'agent.run', label: 'AI Agent', category: 'AI', icon: 'smart_toy', requiresConfig: true, description: 'Run a specialist CRM-AI agent.' },
   { type: 'agent', key: 'agent.classify', label: 'Classify case', category: 'AI', icon: 'category', requiresConfig: true, description: 'Classify intent, priority, or risk from context.' },
   { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'AI', icon: 'sentiment_satisfied', requiresConfig: true, description: 'Detect sentiment and frustration signals.' },
   { type: 'agent', key: 'agent.summarize', label: 'Summarize context', category: 'AI', icon: 'summarize', requiresConfig: true, description: 'Create a concise operational summary.' },
   { type: 'agent', key: 'agent.draft_reply', label: 'Draft reply', category: 'AI', icon: 'edit_square', requiresConfig: true, description: 'Draft a customer-ready response.' },
   { type: 'agent', key: 'ai.generate_text', label: 'Generate text (LLM)', category: 'AI', icon: 'auto_awesome', requiresConfig: true, description: 'Generate text using Gemini LLM from a prompt.' },
+  { type: 'agent', key: 'ai.gemini', label: 'Google Gemini', category: 'AI', icon: 'diamond', requiresConfig: true, description: 'Interact with Google Gemini models (chat, completion, structured output).' },
   { type: 'utility', key: 'data.http_request', label: 'HTTP request', category: 'Integration', icon: 'http', requiresConfig: true, description: 'Make an outbound HTTP request and capture the response.' },
   { type: 'policy', key: 'policy.evaluate', label: 'Evaluate policy', category: 'Core', icon: 'shield', requiresConfig: true, description: 'Apply a policy decision.' },
   { type: 'policy', key: 'core.audit_log', label: 'Write audit log', category: 'Core', icon: 'receipt_long', requiresConfig: true, description: 'Write an explicit audit event.' },
@@ -539,6 +551,22 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'right', label: 'Right operand path or value', type: 'text', placeholder: 'e.g. data.fee or 0.1' },
     { key: 'target', label: 'Store result as', type: 'text', placeholder: 'e.g. total' },
   ],
+  'data.aggregate': [
+    { key: 'source', label: 'Items path', type: 'text', placeholder: 'e.g. data.items', hint: 'Array to aggregate from' },
+    { key: 'field', label: 'Field to aggregate', type: 'text', placeholder: 'e.g. amount', hint: 'Path within each item' },
+    { key: 'operation', label: 'Operation', type: 'select', options: ['list', 'sum', 'average', 'min', 'max', 'count'] },
+    { key: 'target', label: 'Store result as', type: 'text', placeholder: 'e.g. totalAmount', hint: 'Saved into context.data.<target>' },
+  ],
+  'data.limit': [
+    { key: 'source', label: 'Items path', type: 'text', placeholder: 'e.g. data.items' },
+    { key: 'limit', label: 'Max items', type: 'number', placeholder: '10' },
+    { key: 'mode', label: 'Mode', type: 'select', options: ['first', 'last'] },
+    { key: 'target', label: 'Store result as', type: 'text', placeholder: 'limitedItems' },
+  ],
+  'data.split_out': [
+    { key: 'source', label: 'Items path', type: 'text', placeholder: 'e.g. data.lineItems', hint: 'Array inside the current item' },
+    { key: 'target', label: 'Output variable', type: 'text', placeholder: 'splitItems', hint: 'Each entry becomes its own item under context.data.<target>' },
+  ],
   // ── Case actions ──────────────────────────────────────────────────────────
   'case.assign': [
     { key: 'userId', label: 'Assign to user ID', type: 'text', placeholder: 'e.g. {{trigger.userId}} or a fixed ID' },
@@ -628,6 +656,44 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'to', label: 'Phone number', type: 'text', placeholder: '{{customer.phone}} or +34...' },
     { key: 'content', label: 'Message (160 char max)', type: 'textarea', placeholder: 'Case update: your request has been processed.' },
   ],
+  // ── External messaging (channel wrappers) ─────────────────────────────────
+  'message.slack': [
+    { key: 'channel', label: 'Channel or user', type: 'text', placeholder: '#alerts or @user.name', hint: 'Channel must exist in your Slack workspace' },
+    { key: 'content', label: 'Message', type: 'textarea', placeholder: 'New high-priority case opened: {{case.case_number}}' },
+    { key: 'thread_ts', label: 'Reply in thread (optional)', type: 'text', placeholder: '{{previous.thread_ts}}' },
+  ],
+  'message.discord': [
+    { key: 'channel', label: 'Channel ID or webhook URL', type: 'text', placeholder: 'channel id, or https://discord.com/api/webhooks/...' },
+    { key: 'content', label: 'Message', type: 'textarea', placeholder: 'Hello team — {{trigger.summary}}' },
+    { key: 'username', label: 'Bot display name (optional)', type: 'text', placeholder: 'CRM-AI Bot' },
+  ],
+  'message.telegram': [
+    { key: 'chatId', label: 'Chat ID', type: 'text', placeholder: '@your_channel or numeric chat id', hint: 'Your bot must already be added to this chat' },
+    { key: 'content', label: 'Message', type: 'textarea', placeholder: 'Update on case {{case.case_number}}' },
+    { key: 'parseMode', label: 'Parse mode (optional)', type: 'select', options: ['', 'Markdown', 'HTML'] },
+  ],
+  'message.gmail': [
+    { key: 'to', label: 'To email', type: 'text', placeholder: '{{customer.email}} or alice@company.com' },
+    { key: 'subject', label: 'Subject', type: 'text', placeholder: 'Following up on your case' },
+    { key: 'content', label: 'Body', type: 'textarea', placeholder: 'Hi {{customer.name}}, ...' },
+    { key: 'cc', label: 'Cc (optional)', type: 'text' },
+    { key: 'replyToCaseId', label: 'Link reply to case (optional)', type: 'text', placeholder: '{{case.id}}' },
+  ],
+  'message.outlook': [
+    { key: 'to', label: 'To email', type: 'text', placeholder: '{{customer.email}}' },
+    { key: 'subject', label: 'Subject', type: 'text' },
+    { key: 'content', label: 'Body (HTML allowed)', type: 'textarea' },
+    { key: 'importance', label: 'Importance', type: 'select', options: ['normal', 'high', 'low'] },
+  ],
+  'message.teams': [
+    { key: 'channel', label: 'Channel webhook URL or channel id', type: 'text', placeholder: 'https://outlook.office.com/webhook/... or team:channel' },
+    { key: 'content', label: 'Message', type: 'textarea', placeholder: 'Heads-up: {{trigger.summary}}' },
+    { key: 'title', label: 'Card title (optional)', type: 'text', placeholder: 'Workflow alert' },
+  ],
+  'message.google_chat': [
+    { key: 'space', label: 'Space ID or webhook URL', type: 'text', placeholder: 'spaces/AAAA... or https://chat.googleapis.com/v1/spaces/.../messages?key=...&token=...' },
+    { key: 'content', label: 'Message', type: 'textarea' },
+  ],
   // ── AI ────────────────────────────────────────────────────────────────────
   'agent.run': [
     { key: 'agent', label: 'Agent', type: 'agent-picker', placeholder: 'Select an AI Studio agent…' },
@@ -705,6 +771,15 @@ const NODE_FIELD_SCHEMAS: Record<string, NodeFieldDef[]> = {
     { key: 'target', label: 'Output variable', type: 'text', placeholder: 'generatedText', hint: 'Result stored as context.agent.<variable> and context.data.<variable>' },
     { key: 'maxTokens', label: 'Max tokens (optional)', type: 'number', placeholder: '512' },
     { key: 'model', label: 'Model override (optional)', type: 'text', placeholder: 'e.g. gemini-2.5-pro' },
+  ],
+  'ai.gemini': [
+    { key: 'operation', label: 'Operation', type: 'select', options: ['generate_text', 'chat', 'extract_structured'], hint: 'Pick the Gemini call style' },
+    { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'Summarize this conversation: {{trigger.message}}' },
+    { key: 'systemInstruction', label: 'System instruction (optional)', type: 'textarea', placeholder: 'You are a helpful customer support assistant.' },
+    { key: 'model', label: 'Model', type: 'select', options: ['', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'] },
+    { key: 'temperature', label: 'Temperature (0-1)', type: 'number', placeholder: '0.7' },
+    { key: 'maxTokens', label: 'Max tokens', type: 'number', placeholder: '1024' },
+    { key: 'target', label: 'Output variable', type: 'text', placeholder: 'geminiResult' },
   ],
   // ── HTTP ──────────────────────────────────────────────────────────────────
   'data.http_request': [
@@ -1085,6 +1160,7 @@ function nodeTone(type: NodeType) {
 
 function categoryForSpec(spec: NodeSpec) {
   if (spec.key.startsWith('data.')) return 'Data transformation';
+  if (spec.key.startsWith('message.')) return 'Human review';
   if (spec.type === 'agent') return 'AI';
   if (spec.type === 'condition' || spec.type === 'utility') return 'Flow';
   if (spec.type === 'action') return spec.key.startsWith('approval.') ? 'Human review' : 'Action';
@@ -1117,10 +1193,13 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
     ],
     'Data transformation': [
       { title: 'Popular', items: pick(['data.set_fields', 'data.pick_fields', 'data.map_fields', 'data.validate_required']) },
-      { title: 'Other', items: pick(['data.rename_fields', 'data.merge_objects', 'data.calculate', 'data.extract_json', 'data.normalize_text', 'data.format_date', 'data.split_items', 'data.dedupe']) },
+      { title: 'Add or remove items', items: pick(['data.limit', 'data.dedupe', 'data.split_out', 'data.split_items']) },
+      { title: 'Combine items', items: pick(['data.aggregate', 'data.merge_objects']) },
+      { title: 'Other', items: pick(['data.rename_fields', 'data.calculate', 'data.extract_json', 'data.normalize_text', 'data.format_date']) },
     ],
     AI: [
       { title: 'Popular', items: pick(['agent.run', 'agent.classify', 'agent.draft_reply', 'ai.generate_text']) },
+      { title: 'AI providers', items: pick(['ai.gemini']) },
       { title: 'Other', items: pick(['agent.sentiment', 'agent.summarize', 'knowledge.search']) },
     ],
     Action: [
@@ -1131,6 +1210,7 @@ function getAddPanelSections(category: string, catalog: NodeSpec[], search: stri
     ],
     'Human review': [
       { title: 'Approvals', items: pick(['approval.create', 'approval.escalate']) },
+      { title: 'Send and wait for response', items: pick(['message.slack', 'message.discord', 'message.gmail', 'message.outlook', 'message.teams', 'message.google_chat', 'message.telegram', 'notification.email']) },
     ],
     Core: [
       { title: 'Policy', items: pick(['policy.evaluate', 'core.idempotency_check', 'core.rate_limit']) },

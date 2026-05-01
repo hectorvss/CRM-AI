@@ -75,6 +75,9 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'data.merge_objects', label: 'Merge objects', category: 'Data transformation', icon: 'join_inner', requiresConfig: true },
   { type: 'utility', key: 'data.validate_required', label: 'Validate required fields', category: 'Data transformation', icon: 'fact_check', requiresConfig: true },
   { type: 'utility', key: 'data.calculate', label: 'Calculate value', category: 'Data transformation', icon: 'calculate', requiresConfig: true },
+  { type: 'utility', key: 'data.aggregate', label: 'Aggregate', category: 'Data transformation', icon: 'list_alt', requiresConfig: true },
+  { type: 'utility', key: 'data.limit', label: 'Limit', category: 'Data transformation', icon: 'crop', requiresConfig: true },
+  { type: 'utility', key: 'data.split_out', label: 'Split out', category: 'Data transformation', icon: 'call_split', requiresConfig: true },
   { type: 'action', key: 'case.assign', label: 'Assign case', category: 'Action', icon: 'person_add', requiresConfig: true },
   { type: 'action', key: 'case.reply', label: 'Send reply', category: 'Action', icon: 'reply', requiresConfig: true },
   { type: 'action', key: 'case.note', label: 'Create internal note', category: 'Action', icon: 'note_add', requiresConfig: true },
@@ -94,6 +97,13 @@ const NODE_CATALOG = [
   { type: 'action', key: 'notification.email', label: 'Send email', category: 'Notification', icon: 'mail', requiresConfig: true },
   { type: 'action', key: 'notification.whatsapp', label: 'Send WhatsApp', category: 'Notification', icon: 'chat', requiresConfig: true },
   { type: 'action', key: 'notification.sms', label: 'Send SMS', category: 'Notification', icon: 'sms', requiresConfig: true },
+  { type: 'integration', key: 'message.slack', label: 'Slack', category: 'Human review', icon: 'tag', requiresConfig: true },
+  { type: 'integration', key: 'message.discord', label: 'Discord', category: 'Human review', icon: 'forum', requiresConfig: true },
+  { type: 'integration', key: 'message.telegram', label: 'Telegram', category: 'Human review', icon: 'send', requiresConfig: true },
+  { type: 'integration', key: 'message.gmail', label: 'Gmail', category: 'Human review', icon: 'mail', requiresConfig: true },
+  { type: 'integration', key: 'message.outlook', label: 'Microsoft Outlook', category: 'Human review', icon: 'mark_email_unread', requiresConfig: true },
+  { type: 'integration', key: 'message.teams', label: 'Microsoft Teams', category: 'Human review', icon: 'groups', requiresConfig: true },
+  { type: 'integration', key: 'message.google_chat', label: 'Google Chat', category: 'Human review', icon: 'chat_bubble', requiresConfig: true },
   { type: 'agent', key: 'agent.run', label: 'Run specialist agent', category: 'Agent', icon: 'smart_toy', requiresConfig: true },
   { type: 'agent', key: 'agent.classify', label: 'Classify case', category: 'Agent', icon: 'category', requiresConfig: true },
   { type: 'agent', key: 'agent.sentiment', label: 'Analyze sentiment', category: 'Agent', icon: 'sentiment_satisfied', requiresConfig: true },
@@ -113,6 +123,7 @@ const NODE_CATALOG = [
   { type: 'utility', key: 'retry', label: 'Retry', category: 'Utility', icon: 'refresh', requiresConfig: true },
   { type: 'utility', key: 'stop', label: 'Stop workflow', category: 'Utility', icon: 'stop_circle', requiresConfig: false },
   { type: 'agent', key: 'ai.generate_text', label: 'Generate text (AI)', category: 'Agent', icon: 'auto_awesome', requiresConfig: true },
+  { type: 'agent', key: 'ai.gemini', label: 'Google Gemini', category: 'Agent', icon: 'diamond', requiresConfig: true },
   { type: 'utility', key: 'data.http_request', label: 'HTTP request', category: 'Data transformation', icon: 'http', requiresConfig: true },
 ];
 
@@ -155,6 +166,18 @@ const NODE_CONTRACTS: Record<string, WorkflowNodeContract> = {
   'data.merge_objects': { required: ['left', 'right'], sideEffects: 'none' },
   'data.validate_required': { required: ['fields'], sideEffects: 'none' },
   'data.calculate': { required: ['left', 'operation', 'right', 'target'], sideEffects: 'none' },
+  'data.aggregate': { required: ['source', 'operation'], optional: ['field', 'target'], sideEffects: 'none' },
+  'data.limit': { required: ['source', 'limit'], optional: ['mode', 'target'], sideEffects: 'none' },
+  'data.split_out': { required: ['source'], optional: ['target'], sideEffects: 'none' },
+  'message.slack': { required: ['channel', 'content'], optional: ['thread_ts'], sideEffects: 'external', risk: 'medium' },
+  'message.discord': { required: ['channel', 'content'], optional: ['username'], sideEffects: 'external', risk: 'medium' },
+  'message.telegram': { required: ['chatId', 'content'], optional: ['parseMode'], sideEffects: 'external', risk: 'medium' },
+  'message.gmail': { required: ['to', 'subject', 'content'], optional: ['cc', 'replyToCaseId'], sideEffects: 'external', risk: 'medium' },
+  'message.outlook': { required: ['to', 'subject', 'content'], optional: ['importance'], sideEffects: 'external', risk: 'medium' },
+  'message.teams': { required: ['channel', 'content'], optional: ['title'], sideEffects: 'external', risk: 'medium' },
+  'message.google_chat': { required: ['space', 'content'], sideEffects: 'external', risk: 'medium' },
+  'ai.gemini': { required: ['prompt'], optional: ['operation', 'systemInstruction', 'model', 'temperature', 'maxTokens', 'target'], sideEffects: 'external', risk: 'low' },
+  'ai.generate_text': { required: ['prompt'], optional: ['target', 'maxTokens', 'model'], sideEffects: 'external', risk: 'low' },
   'case.assign': { required: ['user_id'], optional: ['team_id'], sideEffects: 'write', risk: 'medium' },
   'case.reply': { required: ['content'], sideEffects: 'write', risk: 'medium' },
   'case.note': { required: ['content'], sideEffects: 'write', risk: 'low' },
@@ -955,6 +978,42 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
       return { status: 'completed', output: { data: context.data, result, operation, target } };
     }
 
+    if (node.key === 'data.aggregate') {
+      const items = asArray(readContextPath(context, config.source || 'data.items'));
+      const field = config.field ? String(config.field) : '';
+      const operation = String(config.operation || 'list');
+      const target = String(config.target || 'aggregated');
+      const values = field
+        ? items.map((item: any) => readContextPath(item, field) ?? (item && typeof item === 'object' ? item[field] : item))
+        : items;
+      let result: any;
+      if (operation === 'sum') result = values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0);
+      else if (operation === 'average') result = values.length ? values.reduce((acc: number, v: any) => acc + (Number(v) || 0), 0) / values.length : 0;
+      else if (operation === 'min') result = values.length ? Math.min(...values.map((v: any) => Number(v) || 0)) : null;
+      else if (operation === 'max') result = values.length ? Math.max(...values.map((v: any) => Number(v) || 0)) : null;
+      else if (operation === 'count') result = values.length;
+      else result = values; // 'list'
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: result };
+      return { status: 'completed', output: { data: context.data, result, operation, count: values.length, target } };
+    }
+
+    if (node.key === 'data.limit') {
+      const items = asArray(readContextPath(context, config.source || 'data.items'));
+      const limit = Math.max(0, Number(config.limit ?? config.max ?? 10) || 0);
+      const mode = String(config.mode || 'first');
+      const result = mode === 'last' ? items.slice(-limit) : items.slice(0, limit);
+      const target = String(config.target || 'items');
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: result };
+      return { status: 'completed', output: { data: context.data, count: result.length, originalCount: items.length, target } };
+    }
+
+    if (node.key === 'data.split_out') {
+      const items = asArray(readContextPath(context, config.source || 'data.items'));
+      const target = String(config.target || 'splitItems');
+      context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: items, currentBatch: items };
+      return { status: 'completed', output: { data: context.data, count: items.length, target } };
+    }
+
     context.data = base;
     return { status: 'completed', output: { data: base, transformed: true } };
   }
@@ -1568,6 +1627,113 @@ Write ONLY the reply text, no subject line, no JSON.`;
     context.agent = { ...(context.agent ?? {}), [target]: text };
     context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: text };
     return { status: 'completed', output: { text, target, length: text.length } };
+  }
+
+  // ── Google Gemini (explicit AI provider node) ───────────────────────────────
+  if (node.key === 'ai.gemini') {
+    const prompt = resolveTemplateValue(config.prompt || config.content || config.input || '', context);
+    if (!prompt) return { status: 'failed', error: 'ai.gemini: prompt is required' };
+    const geminiKey = appConfig.ai.geminiApiKey;
+    if (!geminiKey) {
+      return { status: 'failed', error: 'ai.gemini: GEMINI_API_KEY not configured. Add it under Integrations → AI providers.' };
+    }
+    const operation = String(config.operation || 'generate_text');
+    const systemInstruction = resolveTemplateValue(config.systemInstruction || config.system || '', context);
+    const modelName = String(config.model || appConfig.ai.geminiModel || 'gemini-2.5-pro');
+    const temperature = config.temperature !== undefined && config.temperature !== '' ? Number(config.temperature) : undefined;
+    const maxTokens = Number(config.maxTokens || config.max_tokens || 1024);
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      ...(systemInstruction ? { systemInstruction } : {}),
+    });
+    const generationConfig: any = { maxOutputTokens: maxTokens };
+    if (temperature !== undefined && Number.isFinite(temperature)) generationConfig.temperature = temperature;
+    if (operation === 'extract_structured') {
+      generationConfig.responseMimeType = 'application/json';
+    }
+    const result = await withGeminiRetry(
+      () => model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig }),
+      { label: `workflow.ai.gemini.${operation}` },
+    );
+    const text = result.response.text().trim();
+    let parsed: any = text;
+    if (operation === 'extract_structured') {
+      try { parsed = JSON.parse(text); } catch { /* keep as text */ }
+    }
+    const target = String(config.target || 'geminiResult');
+    context.agent = { ...(context.agent ?? {}), [target]: parsed };
+    context.data = { ...(context.data && typeof context.data === 'object' ? context.data : {}), [target]: parsed };
+    return { status: 'completed', output: { result: parsed, model: modelName, operation, target, length: text.length } };
+  }
+
+  // ── External messaging wrappers ─────────────────────────────────────────────
+  // Each message.* node validates that the corresponding integration is connected,
+  // then emits a canonical event. Real transport (sending the actual message via
+  // Slack/Discord/etc API) is owned by Phase 5 — for now we record the intent and
+  // return success when the connector is healthy, blocked when it's not.
+  if (node.key.startsWith('message.')) {
+    const system = node.key.split('.')[1]; // slack, discord, telegram, gmail, outlook, teams, google_chat
+    // Find a connector for this system in this tenant
+    const allConnectors = await integrationRepository.listConnectors({ tenantId: scope.tenantId });
+    const connector = allConnectors.find((c: any) => String(c.system || '').toLowerCase() === system);
+    if (!connector) {
+      return {
+        status: 'failed',
+        error: `${node.label || node.key}: ${system} is not configured. Open Integrations and connect ${system} first.`,
+      };
+    }
+    const status = String(connector.status || connector.health_status || '').toLowerCase();
+    if (['error', 'failed', 'disabled'].includes(status)) {
+      return {
+        status: 'blocked',
+        output: { reason: `${system} connector is in '${status}' state. Reconnect it in Integrations.`, connectorId: connector.id, system },
+      };
+    }
+    // Resolve the per-channel destination + message body
+    const dest = resolveTemplateValue(
+      config.channel || config.chatId || config.to || config.space || '',
+      context,
+    );
+    const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
+    if (!dest) {
+      return { status: 'failed', error: `${node.key}: destination (channel / to / chatId / space) is required.` };
+    }
+    if (!content) {
+      return { status: 'failed', error: `${node.key}: message content is required.` };
+    }
+    // Record the send intent as a canonical event so it appears in the integration timeline
+    const canonicalEvent = await integrationRepository.createCanonicalEvent({ tenantId: scope.tenantId }, {
+      sourceSystem: system,
+      sourceEntityType: 'workflow',
+      sourceEntityId: node.id,
+      eventType: `${system}.message.sent`,
+      eventCategory: 'workflow',
+      canonicalEntityType: context.case ? 'case' : 'workflow',
+      canonicalEntityId: context.case?.id || node.id,
+      normalizedPayload: {
+        nodeId: node.id,
+        destination: dest,
+        content,
+        config,
+      },
+      dedupeKey: `${node.id}:${system}:${Date.now()}`,
+      caseId: context.case?.id ?? null,
+      workspaceId: scope.workspaceId,
+      status: 'processed',
+    });
+    context.integration = { connectorId: connector.id, system, destination: dest, canonicalEventId: canonicalEvent.id };
+    return {
+      status: 'completed',
+      output: {
+        system,
+        connectorId: connector.id,
+        destination: dest,
+        canonicalEventId: canonicalEvent.id,
+        // Phase 1 records the intent — Phase 5 will replace this with real transport.
+        delivery: 'recorded',
+      },
+    };
   }
 
   // ── HTTP request (outbound) ──────────────────────────────────────────────────
