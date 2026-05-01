@@ -21,7 +21,7 @@ import {
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { connectorsApi, workflowsApi } from '../api/client';
+import { connectorsApi, workflowsApi, workspacesApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import type { NavigateFn } from '../types';
 import LoadingState from './LoadingState';
@@ -125,6 +125,42 @@ interface WorkflowVariableReference {
   workflowIds: string[];
   workflowNames: string[];
   examples: string[];
+}
+
+type WorkflowVariableScope = 'workspace' | 'workflow' | 'secure';
+
+interface WorkflowVariableRecord {
+  id: string;
+  key: string;
+  value: string;
+  scope: WorkflowVariableScope;
+  createdAt: string;
+  updatedAt: string;
+}
+
+type WorkflowColumnType = 'string' | 'number' | 'boolean' | 'datetime';
+
+interface WorkflowDataTableColumn {
+  id: string;
+  name: string;
+  type: WorkflowColumnType;
+}
+
+interface WorkflowDataTableRow {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  values: Record<string, string | number | boolean | null>;
+}
+
+interface WorkflowDataTableRecord {
+  id: string;
+  name: string;
+  source: 'scratch' | 'csv';
+  columns: WorkflowDataTableColumn[];
+  rows: WorkflowDataTableRow[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface WorkflowTableReference {
@@ -883,6 +919,62 @@ function extractWorkflowTableReferences(workflows: Workflow[]): WorkflowTableRef
   return [...registry.values()].sort((a, b) => b.workflowIds.length - a.workflowIds.length || a.key.localeCompare(b.key));
 }
 
+function parseWorkspaceWorkflowSettings(settings: any): { variables: WorkflowVariableRecord[]; dataTables: WorkflowDataTableRecord[] } {
+  const root = parseMaybeJsonObject(settings);
+  const workflowsSettings = parseMaybeJsonObject(root.workflows);
+  const variables = parseMaybeJsonArray(workflowsSettings.variables).map((item: any) => ({
+    id: String(item?.id ?? crypto.randomUUID()),
+    key: String(item?.key ?? ''),
+    value: String(item?.value ?? ''),
+    scope: (['workspace', 'workflow', 'secure'].includes(String(item?.scope)) ? item.scope : 'workspace') as WorkflowVariableScope,
+    createdAt: String(item?.createdAt ?? item?.created_at ?? new Date().toISOString()),
+    updatedAt: String(item?.updatedAt ?? item?.updated_at ?? new Date().toISOString()),
+  })).filter((item: WorkflowVariableRecord) => item.key.trim());
+
+  const dataTables = parseMaybeJsonArray(workflowsSettings.dataTables).map((item: any) => ({
+    id: String(item?.id ?? crypto.randomUUID()),
+    name: String(item?.name ?? 'Untitled table'),
+    source: (item?.source === 'csv' ? 'csv' : 'scratch') as 'scratch' | 'csv',
+    columns: parseMaybeJsonArray(item?.columns).map((column: any) => ({
+      id: String(column?.id ?? crypto.randomUUID()),
+      name: String(column?.name ?? ''),
+      type: (['string', 'number', 'boolean', 'datetime'].includes(String(column?.type)) ? column.type : 'string') as WorkflowColumnType,
+    })).filter((column: WorkflowDataTableColumn) => column.name.trim()),
+    rows: parseMaybeJsonArray(item?.rows).map((row: any, index: number) => ({
+      id: String(row?.id ?? index + 1),
+      createdAt: String(row?.createdAt ?? row?.created_at ?? new Date().toISOString()),
+      updatedAt: String(row?.updatedAt ?? row?.updated_at ?? new Date().toISOString()),
+      values: parseMaybeJsonObject(row?.values),
+    })),
+    createdAt: String(item?.createdAt ?? item?.created_at ?? new Date().toISOString()),
+    updatedAt: String(item?.updatedAt ?? item?.updated_at ?? new Date().toISOString()),
+  }));
+
+  return { variables, dataTables };
+}
+
+function mergeWorkspaceWorkflowSettings(existingSettings: any, patch: { variables?: WorkflowVariableRecord[]; dataTables?: WorkflowDataTableRecord[] }) {
+  const root = parseMaybeJsonObject(existingSettings);
+  const workflowsSettings = parseMaybeJsonObject(root.workflows);
+  return {
+    ...root,
+    workflows: {
+      ...workflowsSettings,
+      ...(patch.variables ? { variables: patch.variables } : {}),
+      ...(patch.dataTables ? { dataTables: patch.dataTables } : {}),
+    },
+  };
+}
+
+function parseCsvText(text: string) {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return { headers: [] as string[], rows: [] as string[][] };
+  const split = (line: string) => line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, ''));
+  const headers = split(lines[0]).filter(Boolean);
+  const rows = lines.slice(1).map(split);
+  return { headers, rows };
+}
+
 function makeNode(spec: Pick<WorkflowNode, 'type' | 'key' | 'label'> & { config?: Record<string, any>; position?: { x: number; y: number } }, index: number): WorkflowNode {
   return {
     id: `node_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 7)}`,
@@ -1397,12 +1489,18 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const [actionDialog, setActionDialog] = useState<WorkflowActionDialogState | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingCardAction, setPendingCardAction] = useState<string | null>(null);
+  const [variableModalOpen, setVariableModalOpen] = useState(false);
+  const [editingVariable, setEditingVariable] = useState<WorkflowVariableRecord | null>(null);
+  const [dataTableModalOpen, setDataTableModalOpen] = useState(false);
+  const [selectedDataTableId, setSelectedDataTableId] = useState<string | null>(null);
 
   const { data: apiWorkflows, loading, error } = useApi(() => workflowsApi.list(), [], []);
   const { data: catalogPayload } = useApi(() => workflowsApi.catalog(), [], null);
   const { data: connectorsPayload } = useApi(() => connectorsApi.list(), [], []);
   const { data: recentRunsPayload } = useApi(() => workflowsApi.recentRuns(), [], []);
+  const { data: workspaceContext, refetch: refetchWorkspaceContext } = useApi(() => workspacesApi.currentContext(), [], null);
   const createWorkflow = useMutation((payload: Record<string, any>) => workflowsApi.create(payload));
+  const updateWorkspaceSettings = useMutation((payload: { id: string; settings: Record<string, any> }) => workspacesApi.updateSettings(payload.id, payload.settings));
   const updateWorkflow = useMutation((payload: { id: string; body: Record<string, any> }) => workflowsApi.update(payload.id, payload.body));
   const validateWorkflow = useMutation((payload: { id: string; body: Record<string, any> }) => workflowsApi.validate(payload.id, payload.body));
   const publishWorkflow = useMutation((id: string) => workflowsApi.publish(id));
@@ -1430,6 +1528,9 @@ export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId }: 
   const recentRuns = useMemo(() => (Array.isArray(recentRunsPayload) ? recentRunsPayload : []), [recentRunsPayload]);
   const variableReferences = useMemo(() => extractWorkflowVariableReferences(workflows), [workflows]);
   const tableReferences = useMemo(() => extractWorkflowTableReferences(workflows), [workflows]);
+  const workspaceWorkflowSettings = useMemo(() => parseWorkspaceWorkflowSettings(workspaceContext?.settings), [workspaceContext?.settings]);
+  const storedVariables = workspaceWorkflowSettings.variables;
+  const storedDataTables = workspaceWorkflowSettings.dataTables;
 
   const filtered = useMemo(() => workflows.filter((workflow) => {
     const haystack = `${workflow.name} ${workflow.description} ${workflow.category} ${workflow.status}`.toLowerCase();
@@ -2128,6 +2229,84 @@ function loadBuilderState(workflow: Workflow) {
     }
   }
 
+  async function persistWorkspaceWorkflowLibrary(patch: { variables?: WorkflowVariableRecord[]; dataTables?: WorkflowDataTableRecord[] }) {
+    if (!workspaceContext?.id) {
+      setMessage('Workspace context is not available yet.');
+      return false;
+    }
+    const settings = mergeWorkspaceWorkflowSettings(workspaceContext.settings, patch);
+    await updateWorkspaceSettings.mutate({ id: workspaceContext.id, settings });
+    await refetchWorkspaceContext();
+    return true;
+  }
+
+  async function handleSaveVariable(input: { key: string; value: string; scope: WorkflowVariableScope }) {
+    const now = new Date().toISOString();
+    const nextVariable: WorkflowVariableRecord = editingVariable
+      ? { ...editingVariable, ...input, updatedAt: now }
+      : { id: crypto.randomUUID(), ...input, createdAt: now, updatedAt: now };
+    const variables = editingVariable
+      ? storedVariables.map((item) => (item.id === editingVariable.id ? nextVariable : item))
+      : [...storedVariables, nextVariable];
+    const ok = await persistWorkspaceWorkflowLibrary({ variables });
+    if (!ok) return;
+    setVariableModalOpen(false);
+    setEditingVariable(null);
+    setMessage(editingVariable ? `Variable ${input.key} updated.` : `Variable ${input.key} created.`);
+  }
+
+  async function handleCreateDataTable(input: { name: string; source: 'scratch' | 'csv'; csvText?: string }) {
+    const now = new Date().toISOString();
+    let columns: WorkflowDataTableColumn[] = [];
+    let rows: WorkflowDataTableRow[] = [];
+
+    if (input.source === 'csv' && input.csvText) {
+      const parsed = parseCsvText(input.csvText);
+      columns = parsed.headers.map((header) => ({ id: crypto.randomUUID(), name: header, type: 'string' as WorkflowColumnType }));
+      rows = parsed.rows.map((cells, index) => {
+        const values: Record<string, string> = {};
+        parsed.headers.forEach((header, headerIndex) => {
+          values[header] = cells[headerIndex] ?? '';
+        });
+        return {
+          id: String(index + 1),
+          createdAt: now,
+          updatedAt: now,
+          values,
+        };
+      });
+    }
+
+    const table: WorkflowDataTableRecord = {
+      id: crypto.randomUUID(),
+      name: input.name,
+      source: input.source,
+      columns,
+      rows,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const ok = await persistWorkspaceWorkflowLibrary({ dataTables: [...storedDataTables, table] });
+    if (!ok) return;
+    setSelectedDataTableId(table.id);
+    setDataTableModalOpen(false);
+    setMessage(`Data table ${table.name} created.`);
+  }
+
+  async function handleUpdateDataTable(table: WorkflowDataTableRecord) {
+    const ok = await persistWorkspaceWorkflowLibrary({
+      dataTables: storedDataTables.map((item) => (item.id === table.id ? table : item)),
+    });
+    if (!ok) return;
+    setMessage(`Data table ${table.name} updated.`);
+  }
+
+  const selectedDataTable = useMemo(
+    () => storedDataTables.find((table) => table.id === selectedDataTableId) ?? null,
+    [selectedDataTableId, storedDataTables],
+  );
+
   async function confirmWorkflowActionDialog() {
     if (!selectedWorkflow || !actionDialog) return;
 
@@ -2230,11 +2409,26 @@ function loadBuilderState(workflow: Workflow) {
               recentRuns={recentRuns}
               variableReferences={variableReferences}
               tableReferences={tableReferences}
+              storedVariables={storedVariables}
+              storedDataTables={storedDataTables}
+              selectedDataTable={selectedDataTable}
               onOpen={openWorkflow}
               onCardAction={handleCardAction}
               onTemplate={() => setTemplateOpen(true)}
               onCreate={() => createFromTemplate(TEMPLATES[0])}
               onNavigate={onNavigate}
+              onNewVariable={() => {
+                setEditingVariable(null);
+                setVariableModalOpen(true);
+              }}
+              onEditVariable={(variable) => {
+                setEditingVariable(variable);
+                setVariableModalOpen(true);
+              }}
+              onCreateDataTable={() => setDataTableModalOpen(true)}
+              onOpenDataTable={(tableId) => setSelectedDataTableId(tableId)}
+              onCloseDataTable={() => setSelectedDataTableId(null)}
+              onSaveDataTable={handleUpdateDataTable}
             />
           ) : (
             <motion.div key="builder" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col overflow-hidden">
@@ -2372,6 +2566,20 @@ function loadBuilderState(workflow: Workflow) {
           onChange={(value) => setActionDialog((current) => current && 'value' in current ? { ...current, value } as WorkflowActionDialogState : current)}
           onConfirm={() => void confirmWorkflowActionDialog()}
         />
+        <WorkflowVariableModal
+          open={variableModalOpen}
+          variable={editingVariable}
+          onClose={() => {
+            setVariableModalOpen(false);
+            setEditingVariable(null);
+          }}
+          onSave={handleSaveVariable}
+        />
+        <WorkflowDataTableCreateModal
+          open={dataTableModalOpen}
+          onClose={() => setDataTableModalOpen(false)}
+          onCreate={handleCreateDataTable}
+        />
         <TemplateModal open={templateOpen} onClose={() => setTemplateOpen(false)} onCreate={createFromTemplate} />
         {editorNode && (
           <WorkflowNodeEditorModal
@@ -2415,6 +2623,19 @@ const WORKFLOW_LIBRARY_SECTIONS: Array<{ key: WorkflowLibrarySection; label: str
   { key: 'executions', label: 'Executions' },
   { key: 'variables', label: 'Variables' },
   { key: 'data_tables', label: 'Data tables' },
+];
+
+const WORKFLOW_VARIABLE_SCOPE_OPTIONS: Array<{ value: WorkflowVariableScope; label: string }> = [
+  { value: 'workspace', label: 'Workspace' },
+  { value: 'workflow', label: 'Workflow' },
+  { value: 'secure', label: 'Secure' },
+];
+
+const WORKFLOW_COLUMN_TYPE_OPTIONS: Array<{ value: WorkflowColumnType; label: string; icon: string }> = [
+  { value: 'string', label: 'string', icon: 'text_fields' },
+  { value: 'number', label: 'number', icon: 'pin' },
+  { value: 'boolean', label: 'boolean', icon: 'check_box' },
+  { value: 'datetime', label: 'datetime', icon: 'calendar_month' },
 ];
 
 const CARD_RUN_ITEMS: Array<{ action: string; label: string; icon: string }> = [
@@ -2525,11 +2746,20 @@ function WorkflowList(props: {
   recentRuns: any[];
   variableReferences: WorkflowVariableReference[];
   tableReferences: WorkflowTableReference[];
+  storedVariables: WorkflowVariableRecord[];
+  storedDataTables: WorkflowDataTableRecord[];
+  selectedDataTable: WorkflowDataTableRecord | null;
   onOpen: (workflow: Workflow) => void;
   onCardAction: (workflow: Workflow, action: string) => void;
   onTemplate: () => void;
   onCreate: () => void;
   onNavigate?: NavigateFn;
+  onNewVariable: () => void;
+  onEditVariable: (variable: WorkflowVariableRecord) => void;
+  onCreateDataTable: () => void;
+  onOpenDataTable: (tableId: string) => void;
+  onCloseDataTable: () => void;
+  onSaveDataTable: (table: WorkflowDataTableRecord) => Promise<void>;
 }) {
   const searchPlaceholder = props.section === 'credentials'
     ? 'Search credentials...'
@@ -2636,9 +2866,28 @@ function WorkflowList(props: {
         ) : props.section === 'executions' ? (
           <WorkflowExecutionsSection runs={props.recentRuns} query={props.query} workflows={props.workflows} onOpen={props.onOpen} />
         ) : props.section === 'variables' ? (
-          <WorkflowVariablesSection variables={props.variableReferences} query={props.query} onOpenWorkflow={props.onOpen} workflows={props.workflows} onCreate={props.onCreate} />
+          <WorkflowVariablesSection
+            variables={props.variableReferences}
+            storedVariables={props.storedVariables}
+            query={props.query}
+            onOpenWorkflow={props.onOpen}
+            workflows={props.workflows}
+            onCreate={props.onNewVariable}
+            onEditVariable={props.onEditVariable}
+          />
         ) : (
-          <WorkflowDataTablesSection tables={props.tableReferences} query={props.query} onOpenWorkflow={props.onOpen} workflows={props.workflows} onCreate={props.onCreate} />
+          <WorkflowDataTablesSection
+            tables={props.tableReferences}
+            storedTables={props.storedDataTables}
+            selectedTable={props.selectedDataTable}
+            query={props.query}
+            onOpenWorkflow={props.onOpen}
+            workflows={props.workflows}
+            onCreate={props.onCreateDataTable}
+            onOpenTable={props.onOpenDataTable}
+            onCloseTable={props.onCloseDataTable}
+            onSaveTable={props.onSaveDataTable}
+          />
         )}
       </div>
     </motion.div>
@@ -2756,20 +3005,58 @@ function WorkflowExecutionsSection(props: { runs: any[]; query: string; workflow
   );
 }
 
-function WorkflowVariablesSection(props: { variables: WorkflowVariableReference[]; query: string; workflows: Workflow[]; onOpenWorkflow: (workflow: Workflow) => void; onCreate: () => void }) {
+function WorkflowVariablesSection(props: {
+  variables: WorkflowVariableReference[];
+  storedVariables: WorkflowVariableRecord[];
+  query: string;
+  workflows: Workflow[];
+  onOpenWorkflow: (workflow: Workflow) => void;
+  onCreate: () => void;
+  onEditVariable: (variable: WorkflowVariableRecord) => void;
+}) {
   const rows = props.variables.filter((item) => !props.query.trim() || `${item.key} ${item.workflowNames.join(' ')}`.toLowerCase().includes(props.query.trim().toLowerCase()));
   const workflowById = new Map(props.workflows.map((workflow) => [workflow.id, workflow]));
 
-  return rows.length === 0 ? (
-    <WorkflowEmptySection
-      title="No workflow variables discovered"
-      description="This workspace is not referencing shared workflow variables yet. Add reusable variables inside workflow prompts or data-mapping nodes to make flows easier to maintain."
-      actionLabel="Create workflow"
-      onAction={props.onCreate}
-    />
-  ) : (
-    <div className="space-y-4">
-      {rows.map((item) => (
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-end">
+        <button onClick={props.onCreate} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90">
+          New variable
+        </button>
+      </div>
+
+      {props.storedVariables.length > 0 && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {props.storedVariables
+            .filter((item) => !props.query.trim() || `${item.key} ${item.value} ${item.scope}`.toLowerCase().includes(props.query.trim().toLowerCase()))
+            .map((item) => (
+              <button
+                key={item.id}
+                onClick={() => props.onEditVariable(item)}
+                className="rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-900">{item.key}</div>
+                    <div className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">{item.value || 'No value yet'}</div>
+                  </div>
+                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{item.scope}</span>
+                </div>
+              </button>
+            ))}
+        </div>
+      )}
+
+      {rows.length === 0 ? (
+        <WorkflowEmptySection
+          title="No workflow variables discovered"
+          description="This workspace is not referencing shared workflow variables yet. Add reusable variables inside workflow prompts or data-mapping nodes to make flows easier to maintain."
+          actionLabel="New variable"
+          onAction={props.onCreate}
+        />
+      ) : (
+        <div className="space-y-4">
+          {rows.map((item) => (
         <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -2797,50 +3084,105 @@ function WorkflowVariablesSection(props: { variables: WorkflowVariableReference[
             })}
           </div>
         </div>
-      ))}
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function WorkflowDataTablesSection(props: { tables: WorkflowTableReference[]; query: string; workflows: Workflow[]; onOpenWorkflow: (workflow: Workflow) => void; onCreate: () => void }) {
+function WorkflowDataTablesSection(props: {
+  tables: WorkflowTableReference[];
+  storedTables: WorkflowDataTableRecord[];
+  selectedTable: WorkflowDataTableRecord | null;
+  query: string;
+  workflows: Workflow[];
+  onOpenWorkflow: (workflow: Workflow) => void;
+  onCreate: () => void;
+  onOpenTable: (tableId: string) => void;
+  onCloseTable: () => void;
+  onSaveTable: (table: WorkflowDataTableRecord) => Promise<void>;
+}) {
   const rows = props.tables.filter((item) => !props.query.trim() || `${item.key} ${item.workflowNames.join(' ')}`.toLowerCase().includes(props.query.trim().toLowerCase()));
   const workflowById = new Map(props.workflows.map((workflow) => [workflow.id, workflow]));
 
-  return rows.length === 0 ? (
-    <WorkflowEmptySection
-      title="No data tables configured"
-      description="No workflow node is referencing a shared data table yet. Use data-aware workflows when you want durable records, evaluation datasets, or shared execution context."
-      actionLabel="Create workflow"
-      onAction={props.onCreate}
-    />
-  ) : (
-    <div className="grid gap-4 xl:grid-cols-2">
-      {rows.map((item) => (
-        <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
-          <div className="text-sm font-semibold text-gray-900">{item.key}</div>
-          <div className="mt-1 text-xs text-gray-500">Referenced by {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {item.sources.map((source) => (
-              <span key={source} className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{source}</span>
-            ))}
-          </div>
-          <div className="mt-4 space-y-2">
-            {item.workflowIds.map((workflowId, index) => {
-              const workflow = workflowById.get(workflowId);
-              return (
-                <button
-                  key={`${workflowId}-${index}`}
-                  onClick={() => workflow && props.onOpenWorkflow(workflow)}
-                  className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:bg-gray-50"
-                >
-                  <span className="text-sm font-medium text-gray-900">{item.workflowNames[index] || workflow?.name || 'Workflow'}</span>
-                  <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
-                </button>
-              );
-            })}
-          </div>
+  if (props.selectedTable) {
+    return (
+      <WorkflowDataTableEditor
+        table={props.selectedTable}
+        onBack={props.onCloseTable}
+        onSave={props.onSaveTable}
+      />
+    );
+  }
+
+  const visibleStoredTables = props.storedTables.filter((table) => !props.query.trim() || `${table.name}`.toLowerCase().includes(props.query.trim().toLowerCase()));
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-end">
+        <button onClick={props.onCreate} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90">
+          Create data table
+        </button>
+      </div>
+
+      {visibleStoredTables.length > 0 && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {visibleStoredTables.map((table) => (
+            <button
+              key={table.id}
+              onClick={() => props.onOpenTable(table.id)}
+              className="rounded-2xl border border-gray-200 bg-white p-5 text-left shadow-card transition hover:border-gray-300"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">{table.name}</div>
+                  <div className="mt-1 text-xs text-gray-500">{table.rows.length} rows · {table.columns.length} custom columns</div>
+                </div>
+                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{table.source}</span>
+              </div>
+            </button>
+          ))}
         </div>
-      ))}
+      )}
+
+      {rows.length === 0 ? (
+        <WorkflowEmptySection
+          title="No data tables configured"
+          description="No workflow node is referencing a shared data table yet. Use data-aware workflows when you want durable records, evaluation datasets, or shared execution context."
+          actionLabel="Create data table"
+          onAction={props.onCreate}
+        />
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {rows.map((item) => (
+            <div key={item.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-card">
+              <div className="text-sm font-semibold text-gray-900">{item.key}</div>
+              <div className="mt-1 text-xs text-gray-500">Referenced by {item.workflowIds.length} workflow{item.workflowIds.length === 1 ? '' : 's'}</div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {item.sources.map((source) => (
+                  <span key={source} className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase text-gray-600">{source}</span>
+                ))}
+              </div>
+              <div className="mt-4 space-y-2">
+                {item.workflowIds.map((workflowId, index) => {
+                  const workflow = workflowById.get(workflowId);
+                  return (
+                    <button
+                      key={`${workflowId}-${index}`}
+                      onClick={() => workflow && props.onOpenWorkflow(workflow)}
+                      className="flex w-full items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left transition hover:bg-gray-50"
+                    >
+                      <span className="text-sm font-medium text-gray-900">{item.workflowNames[index] || workflow?.name || 'Workflow'}</span>
+                      <span className="material-symbols-outlined text-base text-gray-400">chevron_right</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2869,6 +3211,274 @@ function StatTile(props: { label: string; value: string }) {
     <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
       <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{props.label}</div>
       <div className="mt-2 text-sm font-semibold text-gray-900">{props.value}</div>
+    </div>
+  );
+}
+
+function WorkflowVariableModal(props: {
+  open: boolean;
+  variable: WorkflowVariableRecord | null;
+  onClose: () => void;
+  onSave: (input: { key: string; value: string; scope: WorkflowVariableScope }) => Promise<void>;
+}) {
+  const [key, setKey] = useState('');
+  const [value, setValue] = useState('');
+  const [scope, setScope] = useState<WorkflowVariableScope>('workspace');
+
+  useEffect(() => {
+    if (!props.open) return;
+    setKey(props.variable?.key ?? '');
+    setValue(props.variable?.value ?? '');
+    setScope(props.variable?.scope ?? 'workspace');
+  }, [props.open, props.variable]);
+
+  if (!props.open) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-2xl font-medium text-gray-900">{props.variable ? 'Edit variable' : 'New variable'}</h3>
+            </div>
+            <button onClick={props.onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div className="mt-6 space-y-5">
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Key <span className="text-[#ff5a46]">*</span></span>
+              <input value={key} onChange={(event) => setKey(event.target.value)} placeholder="Enter a name" className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Value</span>
+              <textarea value={value} onChange={(event) => setValue(event.target.value)} placeholder="Enter a value" className="mt-2 min-h-28 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Scope</span>
+              <select value={scope} onChange={(event) => setScope(event.target.value as WorkflowVariableScope)} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10">
+                <option value="">Select</option>
+                {WORKFLOW_VARIABLE_SCOPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="mt-8 flex justify-end gap-3">
+            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button onClick={() => void props.onSave({ key: key.trim(), value, scope })} disabled={!key.trim()} className="rounded-lg bg-[#ff8b7f] px-4 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50">
+              Save
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+function WorkflowDataTableCreateModal(props: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (input: { name: string; source: 'scratch' | 'csv'; csvText?: string }) => Promise<void>;
+}) {
+  const [name, setName] = useState('');
+  const [source, setSource] = useState<'scratch' | 'csv'>('scratch');
+  const [csvText, setCsvText] = useState('');
+
+  useEffect(() => {
+    if (!props.open) return;
+    setName('');
+    setSource('scratch');
+    setCsvText('');
+  }, [props.open]);
+
+  if (!props.open) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-2xl font-medium text-gray-900">Create new data table</h3>
+            </div>
+            <button onClick={props.onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div className="mt-6 space-y-5">
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Data table name <span className="text-[#ff5a46]">*</span></span>
+              <input value={name} onChange={(event) => setName(event.target.value)} className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
+            </label>
+
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 text-lg text-gray-700">
+                <input type="radio" checked={source === 'scratch'} onChange={() => setSource('scratch')} />
+                <span>From scratch</span>
+              </label>
+              <label className="flex items-center gap-3 text-lg text-gray-400">
+                <input type="radio" checked={source === 'csv'} onChange={() => setSource('csv')} />
+                <span>Import CSV</span>
+              </label>
+            </div>
+
+            {source === 'csv' && (
+              <label className="block">
+                <span className="text-sm font-medium text-gray-700">CSV content</span>
+                <textarea value={csvText} onChange={(event) => setCsvText(event.target.value)} placeholder="name,email&#10;Aurora,aurora@example.com" className="mt-2 min-h-36 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#675cff] focus:ring-2 focus:ring-[#675cff]/10" />
+              </label>
+            )}
+          </div>
+          <div className="mt-8 flex justify-end gap-3">
+            <button onClick={props.onClose} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button onClick={() => void props.onCreate({ name: name.trim(), source, csvText })} disabled={!name.trim() || (source === 'csv' && !csvText.trim())} className="rounded-lg bg-[#ff5a46] px-5 py-2 text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50">
+              Create
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+function WorkflowDataTableEditor(props: {
+  table: WorkflowDataTableRecord;
+  onBack: () => void;
+  onSave: (table: WorkflowDataTableRecord) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<WorkflowDataTableRecord>(props.table);
+  const [search, setSearch] = useState('');
+  const [columnEditorOpen, setColumnEditorOpen] = useState(false);
+  const [columnName, setColumnName] = useState('');
+  const [columnType, setColumnType] = useState<WorkflowColumnType>('string');
+
+  useEffect(() => {
+    setDraft(props.table);
+  }, [props.table]);
+
+  const visibleRows = useMemo(() => {
+    if (!search.trim()) return draft.rows;
+    const needle = search.trim().toLowerCase();
+    return draft.rows.filter((row) =>
+      `${row.id} ${Object.values(row.values).join(' ')}`.toLowerCase().includes(needle),
+    );
+  }, [draft.rows, search]);
+
+  const addRow = () => {
+    const now = new Date().toISOString();
+    const values = Object.fromEntries(draft.columns.map((column) => [column.name, '']));
+    setDraft((current) => ({
+      ...current,
+      updatedAt: now,
+      rows: [...current.rows, { id: String(current.rows.length + 1), createdAt: now, updatedAt: now, values }],
+    }));
+  };
+
+  const addColumn = () => {
+    if (!columnName.trim()) return;
+    const nextColumn: WorkflowDataTableColumn = { id: crypto.randomUUID(), name: columnName.trim(), type: columnType };
+    const now = new Date().toISOString();
+    setDraft((current) => ({
+      ...current,
+      updatedAt: now,
+      columns: [...current.columns, nextColumn],
+      rows: current.rows.map((row) => ({
+        ...row,
+        updatedAt: now,
+        values: { ...row.values, [nextColumn.name]: '' },
+      })),
+    }));
+    setColumnName('');
+    setColumnType('string');
+    setColumnEditorOpen(false);
+  };
+
+  const updateCell = (rowId: string, columnNameToUpdate: string, value: string) => {
+    const now = new Date().toISOString();
+    setDraft((current) => ({
+      ...current,
+      updatedAt: now,
+      rows: current.rows.map((row) => row.id === rowId ? { ...row, updatedAt: now, values: { ...row.values, [columnNameToUpdate]: value } } : row),
+    }));
+  };
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white shadow-card">
+      <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-5 py-4">
+        <div className="min-w-0">
+          <button onClick={props.onBack} className="text-sm text-gray-500 hover:text-gray-900">Workflows / Data tables /</button>
+          <div className="mt-1 text-xl font-semibold text-gray-900">{draft.name}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2">
+            <span className="material-symbols-outlined text-base text-gray-400">search</span>
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" className="w-48 bg-transparent text-sm outline-none" />
+          </div>
+          <button onClick={addRow} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white">Add Row</button>
+          <button onClick={() => setColumnEditorOpen((open) => !open)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Add Column</button>
+          <button onClick={() => void props.onSave({ ...draft, updatedAt: new Date().toISOString() })} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Save</button>
+        </div>
+      </div>
+
+      <div className="relative overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-gray-50">
+              <th className="border-b border-r border-gray-200 px-4 py-3 text-left font-medium text-gray-500">id</th>
+              <th className="border-b border-r border-gray-200 px-4 py-3 text-left font-medium text-gray-500">createdAt</th>
+              <th className="border-b border-r border-gray-200 px-4 py-3 text-left font-medium text-gray-500">updatedAt</th>
+              {draft.columns.map((column) => (
+                <th key={column.id} className="border-b border-r border-gray-200 px-4 py-3 text-left font-medium text-gray-500">{column.name}</th>
+              ))}
+              <th className="border-b border-gray-200 px-4 py-3 text-left font-medium text-gray-500">
+                <button onClick={() => setColumnEditorOpen((open) => !open)}>+</button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.map((row) => (
+              <tr key={row.id}>
+                <td className="border-b border-r border-gray-200 px-4 py-3 text-gray-700">{row.id}</td>
+                <td className="border-b border-r border-gray-200 px-4 py-3 text-gray-500">{row.createdAt}</td>
+                <td className="border-b border-r border-gray-200 px-4 py-3 text-gray-500">{row.updatedAt}</td>
+                {draft.columns.map((column) => (
+                  <td key={column.id} className="border-b border-r border-gray-200 px-2 py-2">
+                    <input value={String(row.values[column.name] ?? '')} onChange={(event) => updateCell(row.id, column.name, event.target.value)} className="w-full rounded-lg border border-transparent px-2 py-1.5 outline-none focus:border-gray-200 focus:bg-gray-50" />
+                  </td>
+                ))}
+                <td className="border-b border-gray-200 px-4 py-3" />
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={draft.columns.length + 4} className="px-4 py-3">
+                <button onClick={addRow} className="text-xl text-gray-700">+</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {columnEditorOpen && (
+          <div className="absolute left-[37%] top-14 z-10 w-[300px] rounded-xl border border-gray-200 bg-white p-4 shadow-2xl">
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Name <span className="text-[#ff5a46]">*</span></span>
+              <input value={columnName} onChange={(event) => setColumnName(event.target.value)} placeholder="Enter column name" className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#675cff]" />
+            </label>
+            <label className="mt-5 block">
+              <span className="text-sm font-medium text-gray-700">Type <span className="text-[#ff5a46]">*</span></span>
+              <select value={columnType} onChange={(event) => setColumnType(event.target.value as WorkflowColumnType)} className="mt-2 w-full rounded-xl border border-[#675cff] px-3 py-2.5 text-sm outline-none">
+                {WORKFLOW_COLUMN_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <button onClick={addColumn} className="mt-8 rounded-lg bg-[#ff8b7f] px-4 py-2 text-sm font-bold text-white">Add Column</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
