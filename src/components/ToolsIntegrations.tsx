@@ -2,6 +2,73 @@ import React, { useState } from 'react';
 import { connectorsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 
+// ── Credential field schemas per connector system ────────────────────────────
+// These define which auth_config fields are shown in the "Connect" modal.
+interface CredentialField {
+  key: string;
+  label: string;
+  type: 'text' | 'password' | 'url';
+  placeholder?: string;
+  hint?: string;
+  required?: boolean;
+}
+
+const CONNECTOR_CREDENTIAL_SCHEMAS: Record<string, CredentialField[]> = {
+  slack: [
+    { key: 'bot_token', label: 'Bot Token', type: 'password', placeholder: 'xoxb-...', hint: 'From your Slack App → OAuth & Permissions → Bot User OAuth Token', required: true },
+    { key: 'channel', label: 'Default channel (optional)', type: 'text', placeholder: '#support-alerts', hint: 'Can be overridden per workflow node' },
+  ],
+  discord: [
+    { key: 'webhook_url', label: 'Webhook URL', type: 'url', placeholder: 'https://discord.com/api/webhooks/...', hint: 'From Discord Server Settings → Integrations → Webhooks', required: true },
+  ],
+  telegram: [
+    { key: 'bot_token', label: 'Bot Token', type: 'password', placeholder: '123456:ABC-...', hint: 'From @BotFather on Telegram', required: true },
+    { key: 'default_chat_id', label: 'Default chat ID (optional)', type: 'text', placeholder: '-100xxxxxxxxxx', hint: 'Numeric chat or channel ID (can be overridden per node)' },
+  ],
+  teams: [
+    { key: 'webhook_url', label: 'Incoming Webhook URL', type: 'url', placeholder: 'https://outlook.office.com/webhook/...', hint: 'From Teams channel → Connectors → Incoming Webhook', required: true },
+  ],
+  google_chat: [
+    { key: 'webhook_url', label: 'Chat Space Webhook URL', type: 'url', placeholder: 'https://chat.googleapis.com/v1/spaces/.../messages?key=...', hint: 'From Google Chat space → Manage webhooks', required: true },
+  ],
+  shopify: [
+    { key: 'shop_domain', label: 'Shop domain', type: 'text', placeholder: 'your-store.myshopify.com', required: true },
+    { key: 'admin_api_token', label: 'Admin API access token', type: 'password', placeholder: 'shpat_...', hint: 'From Shopify Admin → Apps → Private apps', required: true },
+    { key: 'webhook_secret', label: 'Webhook secret (optional)', type: 'password', placeholder: 'HMAC secret for webhook validation' },
+  ],
+  stripe: [
+    { key: 'secret_key', label: 'Secret key', type: 'password', placeholder: 'sk_live_...', hint: 'From Stripe Dashboard → Developers → API keys', required: true },
+    { key: 'webhook_secret', label: 'Webhook secret', type: 'password', placeholder: 'whsec_...', hint: 'From Stripe Dashboard → Webhooks → Signing secret' },
+  ],
+  zendesk: [
+    { key: 'subdomain', label: 'Subdomain', type: 'text', placeholder: 'your-company', hint: 'e.g. "your-company" from your-company.zendesk.com', required: true },
+    { key: 'email', label: 'Agent email', type: 'text', placeholder: 'agent@yourcompany.com', required: true },
+    { key: 'api_token', label: 'API token', type: 'password', placeholder: 'Zendesk API token', required: true },
+  ],
+  intercom: [
+    { key: 'access_token', label: 'Access token', type: 'password', placeholder: 'dG9rO...', hint: 'From Intercom Developer Hub → Your Apps → Access token', required: true },
+  ],
+  whatsapp: [
+    { key: 'phone_number_id', label: 'Phone number ID', type: 'text', placeholder: '1234567890', hint: 'From Meta Business Platform → WhatsApp → Phone numbers', required: true },
+    { key: 'access_token', label: 'Access token', type: 'password', placeholder: 'EAAB...', hint: 'Permanent access token from Meta', required: true },
+    { key: 'verify_token', label: 'Webhook verify token', type: 'text', placeholder: 'my-secret-token', hint: 'Custom token you set for webhook verification' },
+  ],
+  gmail: [
+    { key: 'client_id', label: 'OAuth Client ID', type: 'text', placeholder: 'xxx.apps.googleusercontent.com', hint: 'From Google Cloud Console → Credentials', required: true },
+    { key: 'client_secret', label: 'OAuth Client Secret', type: 'password', placeholder: 'GOCSPX-...', required: true },
+    { key: 'refresh_token', label: 'Refresh token', type: 'password', placeholder: 'From OAuth flow', required: true },
+  ],
+  hubspot: [
+    { key: 'api_key', label: 'Private App Token', type: 'password', placeholder: 'pat-na1-...', hint: 'From HubSpot → Settings → Private Apps', required: true },
+  ],
+};
+
+// Fallback: generic api_key + base_url fields for unrecognized connectors
+const GENERIC_CREDENTIAL_FIELDS: CredentialField[] = [
+  { key: 'api_key', label: 'API Key / Token', type: 'password', placeholder: 'Your API key or access token', required: true },
+  { key: 'base_url', label: 'Base URL (optional)', type: 'url', placeholder: 'https://api.example.com' },
+];
+
 type IntegrationCategory = 'All Apps' | 'Support' | 'Commerce' | 'Communication' | 'CRM' | 'Knowledge' | 'Productivity' | 'Automation';
 
 interface Integration {
@@ -69,10 +136,50 @@ const topCriticalIds = [
 export default function ToolsIntegrations() {
   const [activeCategory, setActiveCategory] = useState<IntegrationCategory>('All Apps');
   const [searchQuery, setSearchQuery] = useState('');
+  const [configModal, setConfigModal] = useState<{
+    connectorId: string;
+    system: string;
+    name: string;
+    fields: CredentialField[];
+    values: Record<string, string>;
+  } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const { data: apiConnectors, refetch } = useApi(connectorsApi.list);
   const testConnector = useMutation((id: string) => connectorsApi.test(id));
   const updateConnector = useMutation((payload: { id: string; body: Record<string, any> }) => connectorsApi.update(payload.id, payload.body));
+
+  function openConfigModal(integration: Integration) {
+    const apiConnector = (apiConnectors as any[])?.find((c: any) => c.system.toLowerCase() === integration.id);
+    if (!apiConnector) return;
+    const fields = CONNECTOR_CREDENTIAL_SCHEMAS[integration.id] ?? GENERIC_CREDENTIAL_FIELDS;
+    const existing: Record<string, string> = {};
+    if (apiConnector.auth_config && typeof apiConnector.auth_config === 'object') {
+      for (const f of fields) {
+        if (apiConnector.auth_config[f.key] !== undefined) {
+          existing[f.key] = String(apiConnector.auth_config[f.key]);
+        }
+      }
+    }
+    setSaveStatus('idle');
+    setConfigModal({ connectorId: apiConnector.id, system: integration.id, name: integration.name, fields, values: existing });
+  }
+
+  async function saveConfigModal() {
+    if (!configModal) return;
+    setSaveStatus('saving');
+    try {
+      await updateConnector.mutate({
+        id: configModal.connectorId,
+        body: { auth_config: configModal.values, status: 'active' },
+      });
+      setSaveStatus('saved');
+      refetch();
+      setTimeout(() => { setConfigModal(null); setSaveStatus('idle'); }, 1200);
+    } catch {
+      setSaveStatus('error');
+    }
+  }
 
   const categories: IntegrationCategory[] = ['All Apps', 'Support', 'Commerce', 'Communication', 'CRM', 'Knowledge', 'Productivity', 'Automation'];
 
@@ -144,26 +251,13 @@ export default function ToolsIntegrations() {
         )}
         
         <button
-          onClick={async () => {
-            const apiConnector = apiConnectors?.find((c: any) => c.system.toLowerCase() === integration.id);
-            if (!apiConnector) return;
-
-            if (integration.status === 'Error' || integration.status === 'Reconnect Required') {
-              await testConnector.mutate(apiConnector.id);
-            } else {
-              await updateConnector.mutate({
-                id: apiConnector.id,
-                body: { status: apiConnector.status === 'active' ? 'inactive' : 'active' },
-              });
-            }
-            refetch();
-          }}
+          onClick={() => openConfigModal(integration)}
           className={`text-sm font-semibold px-5 py-2 rounded-xl transition-colors shadow-card min-w-[100px] border ${
           integration.status === 'Connected' || integration.status === 'Syncing' ? 'text-gray-700 dark:text-white border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700' :
           integration.status === 'Error' || integration.status === 'Reconnect Required' ? 'text-red-600 bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900 hover:bg-red-100 dark:hover:bg-red-900/40' :
           'text-white bg-gray-900 dark:bg-white dark:text-black hover:bg-black dark:hover:bg-gray-200'
         }`}>
-          {integration.status === 'Connected' ? 'Manage' : 
+          {integration.status === 'Connected' ? 'Manage' :
            integration.status === 'Syncing' ? 'Configure' :
            integration.status === 'Error' || integration.status === 'Reconnect Required' ? 'Reconnect' : 'Connect'}
         </button>
@@ -172,7 +266,7 @@ export default function ToolsIntegrations() {
   );
 
   const renderMiniCard = (app: Integration) => (
-    <div key={app.id} className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-card p-5 flex items-center gap-4 group hover:shadow-md transition-all cursor-pointer">
+    <div key={app.id} onClick={() => openConfigModal(app)} className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200/80 dark:border-gray-700 shadow-card p-5 flex items-center gap-4 group hover:shadow-md transition-all cursor-pointer">
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-white shadow-card ring-1 ring-white/20 ${app.color}`}>
         {app.icon === 'Z' ? (
           <span className="font-bold text-xl tracking-tight">Z</span>
@@ -498,6 +592,85 @@ export default function ToolsIntegrations() {
           </div>
         </div>
       </div>
+
+      {/* ── Connector configuration modal ── */}
+      {configModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Configure {configModal.name}</h2>
+                <p className="mt-0.5 text-xs text-gray-500">Enter your credentials. They are stored encrypted in your workspace.</p>
+              </div>
+              <button onClick={() => setConfigModal(null)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Fields */}
+            <div className="space-y-4 px-6 py-5">
+              {configModal.fields.map((field) => (
+                <label key={field.key} className="block">
+                  <div className="mb-1 flex items-center gap-1">
+                    <span className="text-sm font-semibold text-gray-700">{field.label}</span>
+                    {field.required && <span className="text-red-500 text-xs">*</span>}
+                  </div>
+                  {field.hint && <p className="mb-1.5 text-[11px] text-gray-400">{field.hint}</p>}
+                  <input
+                    type={field.type === 'password' ? 'password' : field.type === 'url' ? 'url' : 'text'}
+                    value={configModal.values[field.key] ?? ''}
+                    onChange={(e) => setConfigModal((m) => m ? { ...m, values: { ...m.values, [field.key]: e.target.value } } : m)}
+                    placeholder={field.placeholder ?? ''}
+                    className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-500 focus:bg-white focus:ring-1 focus:ring-gray-400 transition-all"
+                  />
+                </label>
+              ))}
+
+              {/* Workflow node usage hint for messaging connectors */}
+              {['slack', 'discord', 'telegram', 'teams', 'google_chat'].includes(configModal.system) && (
+                <div className="flex items-start gap-2 rounded-xl bg-blue-50 border border-blue-100 px-3 py-3">
+                  <span className="material-symbols-outlined text-base text-blue-500 mt-0.5">info</span>
+                  <p className="text-xs text-blue-700">
+                    These credentials are used automatically by <strong>{configModal.name}</strong> workflow nodes.
+                    Go to <strong>Workflows → Add Node → Human review</strong> to use them in an automation.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-gray-100 px-6 py-4">
+              <button
+                onClick={() => setConfigModal(null)}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveConfigModal}
+                disabled={saveStatus === 'saving'}
+                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-bold transition-colors ${
+                  saveStatus === 'saved' ? 'bg-green-500 text-white' :
+                  saveStatus === 'error' ? 'bg-red-500 text-white' :
+                  saveStatus === 'saving' ? 'bg-gray-400 text-white cursor-not-allowed' :
+                  'bg-black text-white hover:bg-gray-800'
+                }`}
+              >
+                {saveStatus === 'saving' ? (
+                  <><span className="material-symbols-outlined animate-spin text-base">sync</span> Saving…</>
+                ) : saveStatus === 'saved' ? (
+                  <><span className="material-symbols-outlined text-base">check_circle</span> Connected!</>
+                ) : saveStatus === 'error' ? (
+                  <><span className="material-symbols-outlined text-base">error</span> Error — retry</>
+                ) : (
+                  'Save & Connect'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
