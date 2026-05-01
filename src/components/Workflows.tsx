@@ -2765,6 +2765,7 @@ function loadBuilderState(workflow: Workflow) {
         <WorkflowActionDialog
           open={Boolean(actionDialog)}
           state={actionDialog}
+          workflow={selectedWorkflow}
           onClose={() => setActionDialog(null)}
           onChange={(value) => setActionDialog((current) => current && 'value' in current ? { ...current, value } as WorkflowActionDialogState : current)}
           onConfirm={() => void confirmWorkflowActionDialog()}
@@ -4192,9 +4193,9 @@ function WorkflowAddNodePanel(props: {
               {/* AI Agent category: show real AI Studio agents as the first section */}
               {props.activeCategory === 'AI Agent' && props.agentCatalog && props.agentCatalog.length > 0 && !props.search && (
                 <section className="mb-5">
-                  <div className="flex items-center justify-between border-b border-orange-100 pb-2">
-                    <h4 className="text-sm font-bold text-orange-700">Your AI Studio Agents</h4>
-                    <span className="text-[11px] uppercase tracking-[0.24em] text-orange-400">{props.agentCatalog.length}</span>
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                    <h4 className="text-sm font-bold text-gray-700">Your AI Studio Agents</h4>
+                    <span className="text-[11px] uppercase tracking-[0.24em] text-gray-400">{props.agentCatalog.length}</span>
                   </div>
                   <div className="mt-2 space-y-1">
                     {props.agentCatalog.map((agent) => (
@@ -4210,9 +4211,9 @@ function WorkflowAddNodePanel(props: {
                           description: agent.description ?? `Run the ${agent.name} agent`,
                           defaultConfig: { agent: agent.slug, agentId: agent.id },
                         })}
-                        className="flex w-full items-start gap-3 rounded-2xl border border-orange-100 bg-orange-50/50 px-3 py-3 text-left transition hover:bg-orange-50"
+                        className="flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition hover:bg-gray-50"
                       >
-                        <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 text-orange-600 shadow-sm">
+                        <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm">
                           <span className="material-symbols-outlined text-lg">smart_toy</span>
                         </span>
                         <span className="min-w-0 flex-1">
@@ -4222,12 +4223,11 @@ function WorkflowAddNodePanel(props: {
                               <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">{agent.status}</span>
                             )}
                           </span>
-                          <span className="mt-0.5 block text-[11px] text-orange-700/70">{agent.slug}</span>
                           {agent.description && (
                             <span className="mt-1 block text-xs leading-4 text-gray-500 line-clamp-1">{agent.description}</span>
                           )}
                         </span>
-                        <span className="material-symbols-outlined mt-1 text-base text-orange-400">arrow_forward</span>
+                        <span className="material-symbols-outlined mt-1 text-base text-gray-400">arrow_forward</span>
                       </button>
                     ))}
                   </div>
@@ -4925,6 +4925,7 @@ function WorkflowEvaluations({ workflow }: { workflow: Workflow | null }) {
 function WorkflowActionDialog(props: {
   open: boolean;
   state: WorkflowActionDialogState | null;
+  workflow: Workflow | null;
   onClose: () => void;
   onChange: (value: string) => void;
   onConfirm: () => void;
@@ -4946,6 +4947,101 @@ function WorkflowActionDialog(props: {
     import_url: 'Load a workflow JSON document from a direct URL.',
     archive: 'Archive this workflow version and keep the audit trail in place.',
   };
+
+  if (props.state.kind === 'archive') {
+    const workflow = props.workflow;
+    return (
+      <AnimatePresence>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }} className="w-full max-w-xl overflow-hidden rounded-[32px] bg-white shadow-2xl">
+            <div className="relative border-b border-gray-100 p-8">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                  <span className="material-symbols-outlined text-2xl">inventory_2</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Archive Workflow</h3>
+                  <p className="mt-1 text-sm text-gray-500">Permanently disable this workflow version while preserving history.</p>
+                </div>
+              </div>
+              <button onClick={props.onClose} className="absolute right-6 top-6 rounded-full p-2 text-gray-400 transition hover:bg-gray-100">
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <div className="p-8">
+              <div className="rounded-2xl bg-gray-50/50 p-6">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Current State</div>
+                <div className="mt-4 grid grid-cols-2 gap-y-6">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Workflow ID</div>
+                    <div className="mt-1 text-sm font-bold text-gray-900">{workflow?.id.slice(0, 8) ?? 'N/A'}...</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Name</div>
+                    <div className="mt-1 text-sm font-bold text-gray-900">{workflow?.name ?? 'Untitled'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Category</div>
+                    <div className="mt-1 text-sm font-bold text-gray-900">{workflow?.category ?? 'General'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</div>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                      <span className="text-sm font-bold text-gray-900">Active</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">What will happen</div>
+                <div className="mt-4 space-y-4">
+                  {[
+                    { title: 'Disable all triggers', desc: 'This workflow will no longer respond to events or schedules.' },
+                    { title: 'Release resources', desc: 'Any pending executions or queue items will be cancelled.' },
+                    { title: 'Preserve audit trail', desc: 'Historical runs and version history will remain available for compliance.' },
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex gap-4">
+                      <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
+                        {idx + 1}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{item.title}</div>
+                        <div className="mt-0.5 text-xs text-gray-500">{item.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 rounded-2xl bg-indigo-50/50 p-4">
+                <div className="flex gap-3">
+                  <span className="material-symbols-outlined text-indigo-600">info</span>
+                  <div className="flex-1">
+                    <div className="text-xs font-bold text-indigo-900">KEEP IN MIND</div>
+                    <div className="mt-1 text-[11px] leading-relaxed text-indigo-700">
+                      Archiving is reversible, but may disrupt ongoing operations if other systems depend on this workflow's outputs.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex items-center justify-between">
+                <button onClick={props.onClose} className="rounded-xl border border-gray-200 px-6 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-50">
+                  ← Back
+                </button>
+                <button onClick={props.onConfirm} className="rounded-xl bg-gray-900 px-8 py-2.5 text-sm font-bold text-white transition hover:bg-black">
+                  Archive Workflow
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
 
   return (
     <AnimatePresence>
@@ -5011,24 +5107,16 @@ function WorkflowActionDialog(props: {
             </div>
           )}
 
-          {props.state.kind === 'archive' && (
-            <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm leading-relaxed text-gray-600">
-              The workflow will stay in the audit trail, but it will stop appearing as an active automation path for future runs.
-            </div>
-          )}
-
           <div className="mt-6 flex items-center justify-end gap-3">
             <button onClick={props.onClose} className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50">
               Cancel
             </button>
             <button onClick={props.onConfirm} className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90">
-              {props.state.kind === 'archive'
-                ? 'Archive'
-                : props.state.kind === 'import_url'
-                  ? 'Import'
-                  : props.state.kind === 'move'
-                    ? 'Move'
-                    : 'Save'}
+              {props.state.kind === 'import_url'
+                ? 'Import'
+                : props.state.kind === 'move'
+                  ? 'Move'
+                  : 'Save'}
             </button>
           </div>
         </motion.div>
