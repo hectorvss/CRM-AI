@@ -3019,12 +3019,6 @@ function WorkflowVariablesSection(props: {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-end">
-        <button onClick={props.onCreate} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90">
-          New variable
-        </button>
-      </div>
-
       {props.storedVariables.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-2">
           {props.storedVariables
@@ -3120,12 +3114,6 @@ function WorkflowDataTablesSection(props: {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-end">
-        <button onClick={props.onCreate} className="rounded-lg bg-[#ff5a46] px-4 py-2 text-sm font-bold text-white shadow-card transition hover:opacity-90">
-          Create data table
-        </button>
-      </div>
-
       {visibleStoredTables.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-2">
           {visibleStoredTables.map((table) => (
