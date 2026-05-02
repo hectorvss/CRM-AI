@@ -75,8 +75,9 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
 
   // While permissions are loading, show all items to avoid an empty gap.
   // Once resolved, filter by actual permission grants.
+  // workspace_admin / supervisor (isAdmin) see everything — they manage the workspace.
   const visibleNavItems = navItems.filter(item =>
-    permissionsLoading || !item.requiredPermission || isSuperAdmin || has(item.requiredPermission)
+    permissionsLoading || !item.requiredPermission || isSuperAdmin || isAdmin || has(item.requiredPermission)
   );
 
   return (

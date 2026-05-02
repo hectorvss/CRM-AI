@@ -23,6 +23,7 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
   owner: ['*'],
   workspace_admin: ['*'],
   supervisor: [
+    'inbox.read',
     'cases.read', 'cases.write', 'cases.assign',
     'customers.read', 'customers.write',
     'orders.read', 'orders.write',
@@ -32,11 +33,13 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
     'workflows.read', 'workflows.write', 'workflows.trigger',
     'knowledge.read', 'knowledge.write', 'knowledge.publish',
     'reports.read', 'reports.export',
+    'integrations.read',
     'settings.read', 'settings.write',
     'members.read', 'members.invite', 'members.remove',
     'audit.read',
   ],
   agent: [
+    'inbox.read',
     'cases.read', 'cases.write',
     'customers.read',
     'orders.read',
@@ -49,6 +52,7 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
     'settings.read',
   ],
   viewer: [
+    'inbox.read',
     'cases.read',
     'customers.read',
     'orders.read',
