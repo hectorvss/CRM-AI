@@ -76,6 +76,9 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState('');
+  const [merging, setMerging] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -537,6 +540,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   };
 
   return (
+    <>
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       {/* Inbox Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-white dark:bg-card-dark rounded-t-xl mx-2 mt-2 border-b border-gray-100 dark:border-gray-700 shadow-card z-10">
@@ -852,6 +856,13 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                         {label}
                       </button>
                     ))}
+                    <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                    <button
+                      onClick={() => { setShowMoreMenu(false); setMergeTargetId(''); setShowMergeModal(true); }}
+                      className="w-full text-left px-4 py-2 text-sm text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                    >
+                      Merge into another case…
+                    </button>
                   </div>
                 )}
               </div>
@@ -1426,5 +1437,54 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
         </div>
       </div>
     </div>
+
+    {/* ── Case merge modal ─────────────────────────────────────────────── */}
+    {showMergeModal && selectedConv && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Merge case</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            This case (<span className="font-medium">{(selectedConv as any).caseId ?? selectedConv.id}</span>) will be merged
+            <em> into</em> the target. Enter the target case ID.
+          </p>
+          <input
+            type="text"
+            placeholder="Target case ID (e.g. case-uuid)"
+            value={mergeTargetId}
+            onChange={e => setMergeTargetId(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4"
+          />
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setShowMergeModal(false)}
+              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={!mergeTargetId.trim() || merging}
+              onClick={async () => {
+                if (!mergeTargetId.trim()) return;
+                setMerging(true);
+                try {
+                  await casesApi.merge(mergeTargetId.trim(), selectedConv.id);
+                  setShowMergeModal(false);
+                  setRefreshKey(k => k + 1);
+                  showFeedback('Case merged successfully');
+                } catch {
+                  showFeedback('Merge failed — check the target case ID', true);
+                } finally {
+                  setMerging(false);
+                }
+              }}
+              className="px-4 py-2 text-sm font-semibold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+            >
+              {merging ? 'Merging…' : 'Merge'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

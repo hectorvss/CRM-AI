@@ -46,7 +46,11 @@ const AGENT_ICON_MAP: Record<string, string> = {
   connectors: 'cable',
 };
 
-function getPeriodLabel(period: string): string {
+function getPeriodLabel(period: string, dateFrom?: string, dateTo?: string): string {
+  if (period === 'custom') {
+    if (dateFrom && dateTo) return `${dateFrom} – ${dateTo}`;
+    return 'Custom range';
+  }
   if (period === '90d') return 'Last 90 days';
   if (period === '30d') return 'Last 30 days';
   return 'Last 7 days';
@@ -165,6 +169,8 @@ export default function Reports() {
   const [activeTab, setActiveTab] = useState<ReportsTab>('overview');
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [period, setPeriod] = useState('7d');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [channel, setChannel] = useState<ReportChannel>('all');
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -192,14 +198,71 @@ export default function Reports() {
     window.print();
   };
 
-  const { data: overviewData, loading: overviewLoading } = useApi(() => reportsApi.overview(period, channel), [period, channel]);
-  const { data: intentsData, loading: intentsLoading } = useApi(() => reportsApi.intents(period, channel), [period, channel]);
-  const { data: agentsData, loading: agentsLoading } = useApi(() => reportsApi.agents(period, channel), [period, channel]);
-  const { data: approvalsData, loading: approvalsLoading } = useApi(() => reportsApi.approvals(period, channel), [period, channel]);
-  const { data: costsData, loading: costsLoading } = useApi(() => reportsApi.costs(period, channel), [period, channel]);
-  const { data: slaData, loading: slaLoading } = useApi(() => reportsApi.sla(period, channel), [period, channel]);
+  const handleExportCSV = () => {
+    const currentPeriodLabel = getPeriodLabel(period, dateFrom, dateTo);
+    const escape = (v: string | number | undefined) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
-  const periodLabel = useMemo(() => getPeriodLabel(period), [period]);
+    const lines: string[] = [];
+
+    // Header block
+    lines.push('Period,Channel');
+    lines.push(`${escape(currentPeriodLabel)},${escape(formatChannelLabel(channel))}`);
+    lines.push('');
+
+    // KPI Metrics
+    lines.push('KPI Metrics');
+    lines.push('Label,Value,Change,Trend');
+    for (const metric of overviewKpis) {
+      lines.push(`${escape(metric.label)},${escape(metric.value)},${escape(metric.change ?? '')},${escape(metric.trend ?? '')}`);
+    }
+    lines.push('');
+
+    // Agent Performance
+    lines.push('Agent Performance');
+    lines.push('Name,Success Rate,Failed Runs,Total Runs');
+    for (const agent of agentCards) {
+      lines.push(`${escape(agent.label)},${escape(agent.value)},${escape(agent.change ?? '')},${escape(agent.totalRuns ?? '')}`);
+    }
+    lines.push('');
+
+    // SLA Distribution
+    const distribution = slaData?.distribution ?? [];
+    if (distribution.length) {
+      lines.push('SLA Distribution');
+      lines.push('Status,Count');
+      for (const item of distribution) {
+        lines.push(`${escape(String(item.status).replace(/_/g, ' '))},${escape(item.count)}`);
+      }
+      lines.push('');
+    }
+
+    // Cost Summary
+    const costSummary = costsData?.summary ?? {};
+    lines.push('Cost Summary');
+    lines.push('Metric,Value');
+    lines.push(`Credits Used,${escape(costSummary.creditsUsed ?? '—')}`);
+    lines.push(`Credits Added,${escape(costSummary.creditsAdded ?? '—')}`);
+    lines.push(`Total Tokens,${escape(costSummary.totalTokens != null ? Number(costSummary.totalTokens).toLocaleString() : '—')}`);
+    lines.push(`AI Auto-Resolved Cases,${escape(costSummary.autoResolvedCases ?? '—')}`);
+
+    const csv = lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `crm-report-${period}-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const { data: overviewData, loading: overviewLoading } = useApi(() => reportsApi.overview(period, channel, dateFrom, dateTo), [period, channel, dateFrom, dateTo]);
+  const { data: intentsData, loading: intentsLoading } = useApi(() => reportsApi.intents(period, channel, dateFrom, dateTo), [period, channel, dateFrom, dateTo]);
+  const { data: agentsData, loading: agentsLoading } = useApi(() => reportsApi.agents(period, channel, dateFrom, dateTo), [period, channel, dateFrom, dateTo]);
+  const { data: approvalsData, loading: approvalsLoading } = useApi(() => reportsApi.approvals(period, channel, dateFrom, dateTo), [period, channel, dateFrom, dateTo]);
+  const { data: costsData, loading: costsLoading } = useApi(() => reportsApi.costs(period, channel, dateFrom, dateTo), [period, channel, dateFrom, dateTo]);
+  const { data: slaData, loading: slaLoading } = useApi(() => reportsApi.sla(period, channel, dateFrom, dateTo), [period, channel, dateFrom, dateTo]);
+
+  const periodLabel = useMemo(() => getPeriodLabel(period, dateFrom, dateTo), [period, dateFrom, dateTo]);
   const overviewKpis: MetricCardData[] = useMemo(
     () => (overviewData?.kpis ?? []).map((metric: any, index: number) => ({ ...metric, sparkline: deriveSparkline(metric, index) })),
     [overviewData],
@@ -484,6 +547,7 @@ export default function Reports() {
                   <div className="flex gap-2">
                     <button onClick={handleShare} title="Copy link" className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"><span className="material-symbols-outlined">share</span></button>
                     <button onClick={handleExportPDF} title="Print / Export PDF" className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"><span className="material-symbols-outlined">print</span></button>
+                    <button onClick={handleExportCSV} title="Export CSV" className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"><span className="material-symbols-outlined">table_view</span></button>
                   </div>
                 </div>
 
@@ -1040,6 +1104,13 @@ export default function Reports() {
                   <span className="material-symbols-outlined text-sm mr-1.5">download</span>
                   Export PDF
                 </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-sm mr-1.5">table_view</span>
+                  Export CSV
+                </button>
                 {shareToast ? (
                   <span className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
                     <span className="material-symbols-outlined text-[14px]">check_circle</span>
@@ -1076,7 +1147,24 @@ export default function Reports() {
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
               <option value="90d">Last 90 Days</option>
+              <option value="custom">Custom range</option>
             </StyledSelect>
+            {period === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="px-3 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm text-gray-700 dark:text-gray-300"
+                />
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="px-3 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm text-gray-700 dark:text-gray-300"
+                />
+              </>
+            )}
             <div className="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
             <StyledSelect
               value={channel}

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
 import { createAuditRepository, createCustomerRepository } from '../data/index.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 
 const router = Router();
 const customerRepository = createCustomerRepository();
@@ -150,6 +151,62 @@ router.patch('/:id', requirePermission('customers.write'), async (req: MultiTena
   } catch (error) {
     console.error('Error updating customer:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/customers/:id/merge ─────────────────────────────────────────────
+//
+// Merges sourceId INTO :id (the target/survivor). All linked records are
+// re-pointed at the target; source customer is tagged as merged.
+//
+// Body: { sourceId: string }
+
+router.post('/:id/merge', requirePermission('customers.write'), async (req: MultiTenantRequest, res: Response) => {
+  const targetId = req.params.id;
+  const sourceId = req.body?.sourceId as string | undefined;
+
+  if (!sourceId) return res.status(400).json({ error: 'sourceId is required' });
+  if (sourceId === targetId) return res.status(400).json({ error: 'sourceId and targetId must be different' });
+
+  const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+  const supabase = getSupabaseAdmin();
+
+  // Verify both customers exist in this tenant
+  const [targetRes, sourceRes] = await Promise.all([
+    customerRepository.getDetail(scope, targetId),
+    customerRepository.getDetail(scope, sourceId),
+  ]);
+  if (!targetRes) return res.status(404).json({ error: 'Target customer not found' });
+  if (!sourceRes) return res.status(404).json({ error: 'Source customer not found' });
+
+  try {
+    // ── 1. Re-point all linked records ─────────────────────────────────────
+    await Promise.all([
+      supabase.from('cases').update({ customer_id: targetId }).eq('customer_id', sourceId).eq('tenant_id', scope.tenantId),
+      supabase.from('orders').update({ customer_id: targetId }).eq('customer_id', sourceId).eq('tenant_id', scope.tenantId),
+      supabase.from('payments').update({ customer_id: targetId }).eq('customer_id', sourceId).eq('tenant_id', scope.tenantId),
+    ]);
+
+    // ── 2. Tag source customer as merged (non-destructive) ──────────────────
+    await customerRepository.update(scope, sourceId, {
+      segment:        'Merged',
+      canonical_name: `${(sourceRes as any).canonical_name ?? (sourceRes as any).name ?? ''} [merged into ${targetId.slice(0, 8)}]`,
+      updated_at:     new Date().toISOString(),
+    } as any);
+
+    // ── 3. Audit ────────────────────────────────────────────────────────────
+    await auditRepository.log(scope, {
+      actorId:    req.userId || 'system',
+      action:     'CUSTOMER_MERGED',
+      entityType: 'customer',
+      entityId:   targetId,
+      newValue:   { sourceId, targetId },
+    });
+
+    res.json({ ok: true, targetId, sourceId });
+  } catch (err: any) {
+    console.error('Error merging customers:', err);
+    res.status(500).json({ error: err.message ?? 'Internal server error' });
   }
 });
 

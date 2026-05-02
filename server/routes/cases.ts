@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import crypto from 'crypto';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 import {
   createCaseRepository,
   createConversationRepository,
@@ -1086,6 +1087,82 @@ router.post('/:id/resolution/execute-all', async (req: MultiTenantRequest, res: 
   } catch (error) {
     console.error('Error executing all resolution steps:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/cases/:id/merge ──────────────────────────────────────────────────
+//
+// Merges sourceId INTO :id (target/survivor).
+// All conversations and messages from source are re-parented to target;
+// source case is marked merged.
+//
+// Body: { sourceId: string }
+
+router.post('/:id/merge', async (req: MultiTenantRequest, res: Response) => {
+  if (!hasPermission(req, 'cases.write')) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const targetId = req.params.id;
+  const sourceId = req.body?.sourceId as string | undefined;
+
+  if (!sourceId) return res.status(400).json({ error: 'sourceId is required' });
+  if (sourceId === targetId) return res.status(400).json({ error: 'sourceId and targetId must be different' });
+
+  const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+  const supabase = getSupabaseAdmin();
+
+  // Verify both cases exist
+  const [target, source] = await Promise.all([
+    caseRepository.getCase(scope, targetId).catch(() => null),
+    caseRepository.getCase(scope, sourceId).catch(() => null),
+  ]);
+  if (!target) return res.status(404).json({ error: 'Target case not found' });
+  if (!source) return res.status(404).json({ error: 'Source case not found' });
+
+  try {
+    // ── 1. Re-parent conversations from source to target ───────────────────
+    await supabase
+      .from('conversations')
+      .update({ case_id: targetId })
+      .eq('case_id', sourceId)
+      .eq('tenant_id', scope.tenantId);
+
+    // ── 2. Merge tags (union) ──────────────────────────────────────────────
+    const sourceTags: string[] = (source as any).tags ?? [];
+    const targetTags: string[] = (target as any).tags ?? [];
+    const mergedTags = Array.from(new Set([...targetTags, ...sourceTags, 'merged']));
+
+    await supabase
+      .from('cases')
+      .update({ tags: mergedTags, updated_at: new Date().toISOString() })
+      .eq('id', targetId)
+      .eq('tenant_id', scope.tenantId);
+
+    // ── 3. Mark source case as merged ──────────────────────────────────────
+    await supabase
+      .from('cases')
+      .update({
+        status:     'merged',
+        tags:       [...sourceTags, 'merged'],
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sourceId)
+      .eq('tenant_id', scope.tenantId);
+
+    // ── 4. Audit ────────────────────────────────────────────────────────────
+    await auditRepository.log(scope, {
+      actorId:    req.userId || 'system',
+      action:     'CASE_MERGED',
+      entityType: 'case',
+      entityId:   targetId,
+      newValue:   { sourceId, targetId },
+    });
+
+    res.json({ ok: true, targetId, sourceId });
+  } catch (err: any) {
+    console.error('Error merging cases:', err);
+    res.status(500).json({ error: err.message ?? 'Internal server error' });
   }
 });
 

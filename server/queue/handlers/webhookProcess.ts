@@ -25,6 +25,7 @@ import { logger } from '../../utils/logger.js';
 import { registerHandler } from './index.js';
 import { requireScope } from '../../lib/scope.js';
 import { fireWorkflowEvent } from '../../lib/workflowEventBus.js';
+import { broadcastSSE } from '../../routes/sse.js';
 import type { WebhookProcessPayload, JobContext } from '../types.js';
 
 // ── Topic → canonical entity type mapping ─────────────────────────────────────
@@ -346,6 +347,16 @@ async function autoCreateCaseAndFireEvent(
         payment_ids:    paymentId ? [paymentId] : null,
         tags:           [`webhook`, source, topic.replace('/', '_')],
       } as any);
+
+      // Notify connected SSE clients of the new case
+      broadcastSSE(scope.tenantId, 'case:created', {
+        caseId,
+        caseNumber: caseNumber,
+        caseType:   caseType,
+        priority,
+        source,
+        topic,
+      });
 
       log.info('webhookProcess: auto-created case from webhook', {
         caseId, source, topic, entityType: extraction.entityType,

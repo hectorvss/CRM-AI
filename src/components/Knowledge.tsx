@@ -322,8 +322,7 @@ export default function Knowledge() {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>('library');
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [selectedLibraryIds, setSelectedLibraryIds] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<string | null>(null);
+  const [filterDomain, setFilterDomain] = useState<string>('');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('create');
   const [draft, setDraft] = useState<KnowledgeDraftState>(emptyDraft);
@@ -348,7 +347,18 @@ export default function Knowledge() {
   const [activeGapDraft, setActiveGapDraft] = useState<GapRecord | null>(null);
   const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
 
-  const { data: apiArticles, loading: articlesLoading, refetch } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const { data: apiArticles, loading: articlesLoading, refetch } = useApi(
+    () => {
+      const params: Record<string, string> = {};
+      if (filterDomain) params.domain_id = filterDomain;
+      if (libraryTypeFilter !== 'All') params.type = libraryTypeFilter;
+      if (libraryStatusFilter !== 'All') params.status = libraryStatusFilter.toLowerCase();
+      if (librarySearch) params.q = librarySearch;
+      return knowledgeApi.listArticles(Object.keys(params).length ? params : undefined);
+    },
+    [filterDomain, libraryTypeFilter, libraryStatusFilter, librarySearch],
+    [],
+  );
   const { data: gapsData, loading: gapsLoading, refetch: refetchGaps } = useApi<KnowledgeGapsPayload>(() => knowledgeApi.gaps(), [], null);
   const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
   const { data: apiDomains } = useApi(() => knowledgeApi.listDomains(), [], []);
@@ -379,26 +389,18 @@ export default function Knowledge() {
     health: a.health === 'stale' ? 'Stale' : 'OK',
   });
 
-  const library = useMemo(() => {
-    const base = Array.isArray(apiArticles) ? apiArticles.map(mapApiArticle) : [];
-    return base.filter(item => {
-      const matchesSearch = !searchQuery || item.title.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType = !filterType || item.type === filterType.toUpperCase();
-      return matchesSearch && matchesType;
-    });
-  }, [apiArticles, searchQuery, filterType]);
+  const library = useMemo(
+    () => (Array.isArray(apiArticles) ? apiArticles.map(mapApiArticle) : []),
+    [apiArticles],
+  );
   const isInitialLibraryLoading = articlesLoading && library.length === 0;
 
   const filteredLibrary = useMemo(() => {
     return library.filter(item => {
-      const q = librarySearch.toLowerCase();
-      const matchSearch = !q || item.title.toLowerCase().includes(q) || item.category.toLowerCase().includes(q) || item.owner.toLowerCase().includes(q);
-      const matchType = libraryTypeFilter === 'All' || item.type === libraryTypeFilter;
-      const matchStatus = libraryStatusFilter === 'All' || item.status === libraryStatusFilter;
       const matchHealth = libraryHealthFilter === 'All' || item.health === libraryHealthFilter;
-      return matchSearch && matchType && matchStatus && matchHealth;
+      return matchHealth;
     });
-  }, [library, librarySearch, libraryTypeFilter, libraryStatusFilter, libraryHealthFilter]);
+  }, [library, libraryHealthFilter]);
 
   const selectedLibraryItems = useMemo(
     () => filteredLibrary.filter((item) => selectedLibraryIds.includes(item.id)),
@@ -696,10 +698,24 @@ export default function Knowledge() {
               </div>
             </div>
           ))}
-          {/* Legacy filter buttons replaced — keeping map so old 'Category','Visibility','Owner' appear as stubs */}
+          {/* Domain filter */}
+          {domains.length > 0 && (
+            <div className="relative group">
+              <button className={`flex items-center px-3 py-2 text-xs font-semibold rounded-xl border hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm ${filterDomain ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-700' : 'text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
+                Domain{filterDomain ? `: ${domains.find((d: any) => d.id === filterDomain)?.name ?? filterDomain}` : ''}
+                <span className="material-symbols-outlined text-gray-400 text-sm ml-1">arrow_drop_down</span>
+              </button>
+              <div className="absolute left-0 top-full mt-1 z-30 hidden group-hover:flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 min-w-[140px]">
+                <button onClick={() => setFilterDomain('')} className={`px-4 py-2 text-xs text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${!filterDomain ? 'font-bold text-indigo-600 dark:text-indigo-400' : 'text-gray-700 dark:text-gray-200'}`}>All domains</button>
+                {domains.map((d: any) => (
+                  <button key={d.id} onClick={() => setFilterDomain(d.id)} className={`px-4 py-2 text-xs text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${filterDomain === d.id ? 'font-bold text-indigo-600 dark:text-indigo-400' : 'text-gray-700 dark:text-gray-200'}`}>{d.name}</button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex-1"></div>
           <button
-            onClick={() => { setLibrarySearch(''); setLibraryTypeFilter('All'); setLibraryStatusFilter('All'); setLibraryHealthFilter('All'); }}
+            onClick={() => { setLibrarySearch(''); setLibraryTypeFilter('All'); setLibraryStatusFilter('All'); setLibraryHealthFilter('All'); setFilterDomain(''); }}
             title="Clear all filters"
             className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
           >

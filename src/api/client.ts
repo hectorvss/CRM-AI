@@ -126,6 +126,11 @@ export const casesApi = {
     request<any>(`/cases/${id}/resolution/execute-all${dryRun ? '?dryRun=true' : ''}`, {
       method: 'POST',
     }),
+  merge: (targetId: string, sourceId: string) =>
+    request<any>(`/cases/${targetId}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ sourceId }),
+    }),
 };
 
 // ── Conversations ─────────────────────────────────────────
@@ -165,6 +170,11 @@ export const customersApi = {
     request<any>(`/customers/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
+    }),
+  merge: (targetId: string, sourceId: string) =>
+    request<any>(`/customers/${targetId}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ sourceId }),
     }),
 };
 
@@ -540,13 +550,26 @@ export const billingApi = {
 };
 
 // ── Reports ──────────────────────────────────────────────
+function buildReportParams(period: string, channel: string, dateFrom?: string, dateTo?: string): string {
+  const params: Record<string, string> = { period, channel };
+  if (dateFrom) params.dateFrom = dateFrom;
+  if (dateTo) params.dateTo = dateTo;
+  return new URLSearchParams(params).toString();
+}
+
 export const reportsApi = {
-  overview: (period = '7d', channel = 'all') => request<any>(`/reports/overview?${new URLSearchParams({ period, channel }).toString()}`),
-  intents: (period = '7d', channel = 'all') => request<any>(`/reports/intents?${new URLSearchParams({ period, channel }).toString()}`),
-  agents: (period = '7d', channel = 'all') => request<any>(`/reports/agents?${new URLSearchParams({ period, channel }).toString()}`),
-  approvals: (period = '7d', channel = 'all') => request<any>(`/reports/approvals?${new URLSearchParams({ period, channel }).toString()}`),
-  costs: (period = '7d', channel = 'all') => request<any>(`/reports/costs?${new URLSearchParams({ period, channel }).toString()}`),
-  sla: (period = '7d', channel = 'all') => request<any>(`/reports/sla?${new URLSearchParams({ period, channel }).toString()}`),
+  overview: (period = '7d', channel = 'all', dateFrom?: string, dateTo?: string) =>
+    request<any>(`/reports/overview?${buildReportParams(period, channel, dateFrom, dateTo)}`),
+  intents: (period = '7d', channel = 'all', dateFrom?: string, dateTo?: string) =>
+    request<any>(`/reports/intents?${buildReportParams(period, channel, dateFrom, dateTo)}`),
+  agents: (period = '7d', channel = 'all', dateFrom?: string, dateTo?: string) =>
+    request<any>(`/reports/agents?${buildReportParams(period, channel, dateFrom, dateTo)}`),
+  approvals: (period = '7d', channel = 'all', dateFrom?: string, dateTo?: string) =>
+    request<any>(`/reports/approvals?${buildReportParams(period, channel, dateFrom, dateTo)}`),
+  costs: (period = '7d', channel = 'all', dateFrom?: string, dateTo?: string) =>
+    request<any>(`/reports/costs?${buildReportParams(period, channel, dateFrom, dateTo)}`),
+  sla: (period = '7d', channel = 'all', dateFrom?: string, dateTo?: string) =>
+    request<any>(`/reports/sla?${buildReportParams(period, channel, dateFrom, dateTo)}`),
   summary: (period = '7d', channel = 'all', audience = 'Executive / C-Suite') =>
     request<any>(`/reports/summary?${new URLSearchParams({ period, channel, audience }).toString()}`),
 };

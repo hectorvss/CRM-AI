@@ -157,6 +157,10 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
   const [isCreateCustomerOpen, setIsCreateCustomerOpen] = useState(false);
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [customerActionsOpen, setCustomerActionsOpen] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState('');
+  const [merging, setMerging] = useState(false);
+  const [mergeToast, setMergeToast] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     email: '',
@@ -928,6 +932,14 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                     {item.label}
                   </button>
                 ))}
+                <div className="border-t border-black/5 dark:border-white/5 my-1" />
+                <button
+                  onClick={() => { setMergeSourceId(''); setShowMergeModal(true); setCustomerActionsOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-orange-600 dark:text-orange-400 rounded-xl hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px] text-orange-400">merge</span>
+                  Merge duplicate…
+                </button>
               </div>
             )}
           </div>
@@ -1598,6 +1610,58 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Customer merge modal ──────────────────────────────────────────── */}
+      {showMergeModal && selectedCustomerId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Merge duplicate customer</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Enter the ID of the <strong>duplicate</strong> customer to absorb. All their cases, orders and
+              payments will be re-assigned to{' '}
+              <span className="font-medium text-gray-900 dark:text-white">{selectedCustomer?.name}</span>.
+            </p>
+            <input
+              type="text"
+              placeholder="Duplicate customer ID"
+              value={mergeSourceId}
+              onChange={e => setMergeSourceId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4"
+            />
+            {mergeToast && (
+              <p className="text-xs text-red-600 dark:text-red-400 mb-3">{mergeToast}</p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setShowMergeModal(false); setMergeToast(null); }}
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={!mergeSourceId.trim() || merging}
+                onClick={async () => {
+                  if (!mergeSourceId.trim() || !selectedCustomerId) return;
+                  setMerging(true);
+                  setMergeToast(null);
+                  try {
+                    await customersApi.merge(selectedCustomerId, mergeSourceId.trim());
+                    setShowMergeModal(false);
+                    setMergeSourceId('');
+                  } catch (err: any) {
+                    setMergeToast(err?.message ?? 'Merge failed — check the duplicate customer ID');
+                  } finally {
+                    setMerging(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-semibold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              >
+                {merging ? 'Merging…' : 'Merge'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
