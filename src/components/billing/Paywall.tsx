@@ -585,10 +585,27 @@ const PAYWALL_CSS = `
     border-radius: 18px;
     padding: 32px;
     display: grid;
-    gap: 18px;
+    gap: 22px;
   }
   .pw-form-card-head h2 { font-family: var(--serif); font-size: 26px; font-weight: 400; letter-spacing: -0.02em; margin-bottom: 6px; }
   .pw-form-card-head p { font-size: 13px; color: var(--fg-muted); }
+
+  .pw-form-section {
+    display: grid; gap: 14px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .pw-form-section:first-of-type { border-top: 0; padding-top: 0; }
+  .pw-form-section-title {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--fg-faint);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .pw-form-section-title::before {
+    content: ''; width: 14px; height: 1px;
+    background: var(--line-strong);
+  }
 
   .pw-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 600px) { .pw-form-row { grid-template-columns: 1fr; } }
@@ -599,7 +616,12 @@ const PAYWALL_CSS = `
     letter-spacing: 0.12em; text-transform: uppercase;
     color: var(--fg-muted);
   }
-  .pw-form-field input, .pw-form-field textarea {
+  .pw-form-field-hint {
+    font-size: 11px; color: var(--fg-faint);
+    margin-top: 2px; font-style: italic;
+  }
+  .pw-form-field input,
+  .pw-form-field textarea {
     font-family: var(--sans); font-size: 14px;
     padding: 11px 14px;
     background: var(--bg-elev);
@@ -614,12 +636,18 @@ const PAYWALL_CSS = `
     outline: none;
     border-color: var(--fg);
   }
-  .pw-form-field textarea { min-height: 96px; }
+  .pw-form-field input[readonly] {
+    background: var(--bg);
+    color: var(--fg-muted);
+    cursor: not-allowed;
+  }
+  .pw-form-field textarea { min-height: 84px; }
 
-  .pw-volume-row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .pw-volume-pill {
-    flex: 1 1 auto; min-width: 90px;
-    padding: 10px 14px;
+  /* Pill rows (volume, team-size, timeline, source) */
+  .pw-pill-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pw-pill {
+    flex: 0 1 auto;
+    padding: 9px 14px;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
     background: var(--bg-elev);
@@ -627,12 +655,45 @@ const PAYWALL_CSS = `
     color: var(--fg);
     cursor: none;
     transition: all .15s;
+    white-space: nowrap;
   }
-  .pw-volume-pill:hover { border-color: var(--fg); }
-  .pw-volume-pill.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .pw-pill:hover { border-color: var(--fg); }
+  .pw-pill.active {
+    background: var(--fg); color: var(--bg); border-color: var(--fg);
+  }
+  .pw-pill.active::before {
+    content: '✓ ';
+    margin-right: 2px;
+    font-weight: 700;
+  }
+
+  .pw-submit-cta {
+    display: grid; gap: 8px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    margin-top: 4px;
+  }
+  .pw-submit-cta .pw-btn-primary {
+    width: 100%;
+    justify-content: center;
+    padding: 16px 22px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 12px;
+    box-shadow: 0 4px 18px rgba(10,10,10,0.12);
+  }
+  .pw-submit-cta .pw-btn-primary:hover { box-shadow: 0 6px 22px rgba(10,10,10,0.18); }
+  .pw-submit-cta .pw-btn-primary:disabled { box-shadow: none; }
+  .pw-submit-tag {
+    text-align: center;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--fg-faint);
+  }
 
   .pw-form-consent {
     font-size: 11px; color: var(--fg-faint); line-height: 1.6;
+    text-align: center;
   }
   .pw-form-consent a { color: var(--fg-muted); text-decoration: underline; }
 
@@ -640,7 +701,8 @@ const PAYWALL_CSS = `
     background: none; border: none;
     font-size: 13px; color: var(--fg-faint);
     text-decoration: underline; cursor: none;
-    margin-top: 12px;
+    margin-top: 4px;
+    text-align: center;
   }
   .pw-form-back:hover { color: var(--fg); }
 
@@ -672,10 +734,54 @@ export default function Paywall({
 
   // Trial signup form state
   const [trialForm, setTrialForm] = useState({
-    name: '', email: '', company: '', role: '', volume: '1-5k / mo',
-    stack: '', note: '',
+    name: '',
+    email: '',
+    company: '',
+    role: '',
+    teamSize: '',           // pill: solo / 2-5 / 6-15 / 16-50 / 50+
+    volume: '',             // pill: <1k / 1-5k / 5-20k / 20k+
+    timeline: '',           // pill: just-exploring / evaluating / ready
+    source: '',             // pill: how did you hear (twitter / google / ph / friend / blog / other)
+    useCases: [] as string[], // multi-select pills
+    favouriteTools: '',
+    note: '',
   });
-  const setTF = (k: keyof typeof trialForm, v: string) => setTrialForm((f) => ({ ...f, [k]: v }));
+  const setTF = (k: keyof typeof trialForm, v: any) =>
+    setTrialForm((f) => ({ ...f, [k]: v }));
+  const toggleUseCase = (uc: string) =>
+    setTrialForm((f) => ({
+      ...f,
+      useCases: f.useCases.includes(uc)
+        ? f.useCases.filter((x) => x !== uc)
+        : [...f.useCases, uc],
+    }));
+
+  // Auto-populate name + email from the existing Supabase session.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (cancelled) return;
+        const user = data?.user;
+        if (!user) return;
+        const meta = (user.user_metadata ?? {}) as Record<string, any>;
+        const name =
+          meta.full_name || meta.name ||
+          [meta.first_name, meta.last_name].filter(Boolean).join(' ') ||
+          (user.email ? user.email.split('@')[0] : '');
+        setTrialForm((f) => ({
+          ...f,
+          name: f.name || String(name || ''),
+          email: f.email || String(user.email || ''),
+          company: f.company || String(meta.company || meta.organization || ''),
+        }));
+      } catch {
+        // silent — user can fill in manually
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const dotRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
@@ -743,6 +849,17 @@ export default function Paywall({
     }
     setTrialLoading(true);
     try {
+      // Pack the rich research metadata into the existing `note` field so the
+      // backend doesn't need a schema change. The trial-signup row in
+      // demo_leads is searchable on `source = 'in_app_trial_signup'`.
+      const noteParts: string[] = [];
+      if (trialForm.teamSize)              noteParts.push(`Team size: ${trialForm.teamSize}`);
+      if (trialForm.timeline)              noteParts.push(`Timeline: ${trialForm.timeline}`);
+      if (trialForm.source)                noteParts.push(`Source: ${trialForm.source}`);
+      if (trialForm.useCases.length)       noteParts.push(`Use cases: ${trialForm.useCases.join(', ')}`);
+      if (trialForm.favouriteTools.trim()) noteParts.push(`Loves about other tools: ${trialForm.favouriteTools.trim()}`);
+      if (trialForm.note.trim())           noteParts.push(`Notes: ${trialForm.note.trim()}`);
+
       const res = await authedFetch('/api/billing/activate-trial', {
         method: 'POST',
         body: JSON.stringify({
@@ -750,9 +867,9 @@ export default function Paywall({
           email: trialForm.email.trim(),
           company: trialForm.company.trim(),
           role: trialForm.role.trim(),
-          volume: trialForm.volume,
-          stack: trialForm.stack.trim(),
-          note: trialForm.note.trim(),
+          volume: trialForm.volume || '',
+          stack: '', // no longer collected, kept for backend compat
+          note: noteParts.join(' · '),
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -993,69 +1110,182 @@ export default function Paywall({
               <form className="pw-form-card" onSubmit={handleSubmitTrial}>
                 <div className="pw-form-card-head">
                   <h2>Start your trial</h2>
-                  <p>Provisions in seconds.</p>
-                </div>
-                <div className="pw-form-row">
-                  <div className="pw-form-field">
-                    <label htmlFor="pw-name">Full name</label>
-                    <input id="pw-name" required value={trialForm.name} onChange={(e) => setTF('name', e.target.value)} />
-                  </div>
-                  <div className="pw-form-field">
-                    <label htmlFor="pw-email">Work email</label>
-                    <input id="pw-email" required type="email" placeholder="you@company.com" value={trialForm.email} onChange={(e) => setTF('email', e.target.value)} />
-                  </div>
-                </div>
-                <div className="pw-form-row">
-                  <div className="pw-form-field">
-                    <label htmlFor="pw-company">Company</label>
-                    <input id="pw-company" value={trialForm.company} onChange={(e) => setTF('company', e.target.value)} />
-                  </div>
-                  <div className="pw-form-field">
-                    <label htmlFor="pw-role">Role</label>
-                    <input id="pw-role" value={trialForm.role} onChange={(e) => setTF('role', e.target.value)} />
-                  </div>
-                </div>
-                <div className="pw-form-field">
-                  <label>Monthly ticket volume</label>
-                  <div className="pw-volume-row">
-                    {['<1k / mo', '1-5k / mo', '5-20k / mo', '20k+ / mo'].map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        className={`pw-volume-pill ${trialForm.volume === v ? 'active' : ''}`}
-                        onClick={() => setTF('volume', v)}
-                      >
-                        {v}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="pw-form-field">
-                  <label htmlFor="pw-stack">Current helpdesk</label>
-                  <input id="pw-stack" placeholder="Zendesk, Front, email, Notion…" value={trialForm.stack} onChange={(e) => setTF('stack', e.target.value)} />
-                </div>
-                <div className="pw-form-field">
-                  <label htmlFor="pw-note">What would you like to test? (optional)</label>
-                  <textarea id="pw-note" placeholder="A real hard case — duplicated refunds, fraud, international returns. Be specific." value={trialForm.note} onChange={(e) => setTF('note', e.target.value)} />
+                  <p>Most fields are optional. The more you tell us, the more we can tailor onboarding.</p>
                 </div>
 
-                <p className="pw-form-consent">
-                  By submitting, you agree to our <a href="/#/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>.
-                  Your trial workspace is created immediately — no card required.
-                </p>
+                {/* ── Section 1: About you ─────────────────────────── */}
+                <div className="pw-form-section">
+                  <div className="pw-form-section-title">About you</div>
+                  <div className="pw-form-row">
+                    <div className="pw-form-field">
+                      <label htmlFor="pw-name">Full name</label>
+                      <input id="pw-name" required value={trialForm.name} onChange={(e) => setTF('name', e.target.value)} />
+                    </div>
+                    <div className="pw-form-field">
+                      <label htmlFor="pw-email">Work email</label>
+                      <input
+                        id="pw-email"
+                        type="email"
+                        value={trialForm.email}
+                        readOnly
+                        title="Linked to your Clain account"
+                      />
+                      <span className="pw-form-field-hint">From your account — locked.</span>
+                    </div>
+                  </div>
+                  <div className="pw-form-row">
+                    <div className="pw-form-field">
+                      <label htmlFor="pw-company">Company</label>
+                      <input id="pw-company" value={trialForm.company} onChange={(e) => setTF('company', e.target.value)} placeholder="Acme Inc." />
+                    </div>
+                    <div className="pw-form-field">
+                      <label htmlFor="pw-role">Your role <span style={{textTransform:'none', letterSpacing: 0, color:'var(--fg-faint)'}}>(optional)</span></label>
+                      <input id="pw-role" value={trialForm.role} onChange={(e) => setTF('role', e.target.value)} placeholder="CX Lead, Founder, Ops Manager…" />
+                    </div>
+                  </div>
+                </div>
 
-                <button
-                  type="submit"
-                  disabled={trialLoading}
-                  className="pw-btn pw-btn-primary"
-                  style={{ width: '100%', justifyContent: 'center', padding: '14px 18px', fontSize: 15 }}
-                >
-                  {trialLoading ? 'Provisioning your trial…' : <>Start my 10-day trial <span className="pw-arrow">→</span></>}
-                </button>
+                {/* ── Section 2: About your team ───────────────────── */}
+                <div className="pw-form-section">
+                  <div className="pw-form-section-title">About your team</div>
+                  <div className="pw-form-field">
+                    <label>Team size</label>
+                    <div className="pw-pill-row">
+                      {['Solo', '2-5', '6-15', '16-50', '50+'].map((v) => (
+                        <button
+                          key={v} type="button"
+                          className={`pw-pill ${trialForm.teamSize === v ? 'active' : ''}`}
+                          onClick={() => setTF('teamSize', trialForm.teamSize === v ? '' : v)}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pw-form-field">
+                    <label>Monthly ticket volume</label>
+                    <div className="pw-pill-row">
+                      {['<1k', '1-5k', '5-20k', '20k+'].map((v) => (
+                        <button
+                          key={v} type="button"
+                          className={`pw-pill ${trialForm.volume === v ? 'active' : ''}`}
+                          onClick={() => setTF('volume', trialForm.volume === v ? '' : v)}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-                <button type="button" className="pw-form-back" onClick={() => setView('grid')}>
-                  ← Back to plans
-                </button>
+                {/* ── Section 3: What you want to do ───────────────── */}
+                <div className="pw-form-section">
+                  <div className="pw-form-section-title">What you want to do</div>
+                  <div className="pw-form-field">
+                    <label>Top use cases <span style={{textTransform:'none', letterSpacing: 0, color:'var(--fg-faint)'}}>· pick any</span></label>
+                    <div className="pw-pill-row">
+                      {[
+                        'Customer support',
+                        'Refunds & ops',
+                        'Fraud & risk',
+                        'AI agents / Copilot',
+                        'Workflow automation',
+                        'Custom integrations',
+                      ].map((uc) => (
+                        <button
+                          key={uc} type="button"
+                          className={`pw-pill ${trialForm.useCases.includes(uc) ? 'active' : ''}`}
+                          onClick={() => toggleUseCase(uc)}
+                        >
+                          {uc}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pw-form-field">
+                    <label>Where are you in the process?</label>
+                    <div className="pw-pill-row">
+                      {[
+                        'Just exploring',
+                        'Evaluating in 30 days',
+                        'Ready to switch now',
+                      ].map((v) => (
+                        <button
+                          key={v} type="button"
+                          className={`pw-pill ${trialForm.timeline === v ? 'active' : ''}`}
+                          onClick={() => setTF('timeline', trialForm.timeline === v ? '' : v)}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Section 4: How you found us + product feedback ─ */}
+                <div className="pw-form-section">
+                  <div className="pw-form-section-title">A bit about you</div>
+                  <div className="pw-form-field">
+                    <label>How did you hear about Clain?</label>
+                    <div className="pw-pill-row">
+                      {[
+                        'Twitter / X',
+                        'Google',
+                        'ProductHunt',
+                        'Friend or colleague',
+                        'Blog or newsletter',
+                        'YouTube / podcast',
+                        'Other',
+                      ].map((v) => (
+                        <button
+                          key={v} type="button"
+                          className={`pw-pill ${trialForm.source === v ? 'active' : ''}`}
+                          onClick={() => setTF('source', trialForm.source === v ? '' : v)}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pw-form-field">
+                    <label htmlFor="pw-fav">What do you love about your current tools?</label>
+                    <textarea
+                      id="pw-fav"
+                      placeholder="One thing your current support / ops stack does well that we should not break."
+                      value={trialForm.favouriteTools}
+                      onChange={(e) => setTF('favouriteTools', e.target.value)}
+                    />
+                    <span className="pw-form-field-hint">Optional — helps us prioritise the trial experience.</span>
+                  </div>
+                  <div className="pw-form-field">
+                    <label htmlFor="pw-note">Anything specific you want to test?</label>
+                    <textarea
+                      id="pw-note"
+                      placeholder="A real hard case — duplicated refunds, fraud, international returns. The more concrete, the better."
+                      value={trialForm.note}
+                      onChange={(e) => setTF('note', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* ── Submit CTA — large + prominent ───────────────── */}
+                <div className="pw-submit-cta">
+                  <div className="pw-submit-tag">10 days · 1,000 AI credits · No card</div>
+                  <button
+                    type="submit"
+                    disabled={trialLoading}
+                    className="pw-btn pw-btn-primary"
+                  >
+                    {trialLoading ? 'Provisioning your trial…' : <>Start my 10-day trial <span className="pw-arrow">→</span></>}
+                  </button>
+                  <p className="pw-form-consent">
+                    By submitting, you agree to our <a href="/#/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>.
+                    Your trial workspace is created instantly.
+                  </p>
+                  <button type="button" className="pw-form-back" onClick={() => setView('grid')}>
+                    ← Back to plans
+                  </button>
+                </div>
               </form>
             </section>
           </div>
