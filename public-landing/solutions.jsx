@@ -227,6 +227,7 @@ function OmnichannelPage({ t, lang }) {
   const c = OMNI_COPY[lang] || OMNI_COPY.es;
   const renderTitleParts = window.renderTitleParts;
   const FinalCTA = window.FinalCTA;
+  const InboxExtras = window.InboxExtras;
   return (
     <main>
       {/* Hero */}
@@ -336,6 +337,9 @@ function OmnichannelPage({ t, lang }) {
           </div>
         </div>
       </section>
+
+      {/* Inbox extras — metric row, deep features, before/after, FAQ */}
+      {InboxExtras && <InboxExtras />}
 
       <FinalCTA t={t} />
     </main>

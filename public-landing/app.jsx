@@ -16,7 +16,7 @@ const COPY = {
       aboutTitle: "Sobre Clain",
       about: [
         { slug: "/product", icon: "platform", name: "Cómo funciona Clain", desc: "Una plataforma moderna nativa de IA." },
-        { slug: "/product#agent", icon: "agent", name: "Incluye Super Agent", desc: "El #1 en agentes para CX y operaciones." },
+        { slug: "/super-agent", icon: "agent", name: "Incluye Super Agent", desc: "El #1 en agentes para CX y operaciones." },
         { slug: "/omnichannel", icon: "channels", name: "Funciona en todos los canales", desc: "Email, WhatsApp, voz y chat." },
         { slug: "/product#integrations", icon: "apps", name: "Integra tus apps", desc: "+250 integraciones para retener clientes." },
       ],
@@ -99,7 +99,7 @@ const COPY = {
       aboutTitle: "About Clain",
       about: [
         { slug: "/product", icon: "platform", name: "How Clain works", desc: "A modern, AI-native platform." },
-        { slug: "/product#agent", icon: "agent", name: "Includes Super Agent", desc: "#1 AI agent for CX and operations." },
+        { slug: "/super-agent", icon: "agent", name: "Includes Super Agent", desc: "#1 AI agent for CX and operations." },
         { slug: "/omnichannel", icon: "channels", name: "Works on every channel", desc: "Email, WhatsApp, voice and chat." },
         { slug: "/product#integrations", icon: "apps", name: "Integrates with your apps", desc: "250+ integrations to retain customers." },
       ],
@@ -446,7 +446,7 @@ function Nav({ t, lang, onLangToggle, route, navigate }) {
     >{label}</a>
   );
 
-  const productActive = route.startsWith('/product') || route.startsWith('/omnichannel') || route.startsWith('/early-stage');
+  const productActive = route.startsWith('/product') || route.startsWith('/omnichannel') || route.startsWith('/early-stage') || route.startsWith('/super-agent');
 
   return (
     <nav className="nav">
@@ -1409,6 +1409,7 @@ function App() {
   const isCustomers = route.startsWith('/customers');
   const isOmni = route.startsWith('/omnichannel');
   const isEarly = route.startsWith('/early-stage');
+  const isSuperAgent = route.startsWith('/super-agent');
   const isSignin = route.startsWith('/signin');
   const isSignup = route.startsWith('/signup');
   const isReset  = route.startsWith('/reset-password');
@@ -1447,6 +1448,7 @@ function App() {
         if (isCustomers && CustomersPage) return <CustomersPage t={t} lang={tweaks.lang} />;
         if (isOmni && OmnichannelPage) return <OmnichannelPage t={t} lang={tweaks.lang} />;
         if (isEarly && EarlyStagePage) return <EarlyStagePage t={t} lang={tweaks.lang} />;
+        if (isSuperAgent && window.SuperAgentPage) return <window.SuperAgentPage t={t} lang={tweaks.lang} />;
         if (isSignin && SignInPage) return <SignInPage lang={tweaks.lang} navigate={navigate} />;
         if (isSignup && window.SignUpPage) return <window.SignUpPage lang={tweaks.lang} navigate={navigate} />;
         if (isReset && window.ResetPasswordPage) return <window.ResetPasswordPage lang={tweaks.lang} navigate={navigate} />;

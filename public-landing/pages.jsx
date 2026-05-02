@@ -242,6 +242,7 @@ function ProductPage({ t, lang }) {
   const FeaturePlaceholder = window.FeaturePlaceholder;
   const FinalCTA = window.FinalCTA;
   const Panorama = window.Panorama;
+  const HelpdeskExtras = window.HelpdeskExtras;
   return (
     <main>
       <section className="hero wrap reveal" style={{paddingBottom: 40}}>
@@ -260,6 +261,9 @@ function ProductPage({ t, lang }) {
           ))}
         </nav>
       </section>
+
+      {/* Hero metrics + 5-stage flow + before/after + persona tabs */}
+      {HelpdeskExtras && <HelpdeskExtras />}
 
       {Panorama && <Panorama lang={lang} />}
 
