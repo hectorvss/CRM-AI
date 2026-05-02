@@ -2705,7 +2705,7 @@ async function executeWorkflowVersion({
   return { id: runId, status: finalStatus, error: finalError, steps, retryOfRunId };
 }
 
-async function continueWorkflowRun({
+export async function continueWorkflowRun({
   tenantId,
   workspaceId,
   userId,

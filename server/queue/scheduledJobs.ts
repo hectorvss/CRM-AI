@@ -23,6 +23,7 @@ import { createAuditRepository } from '../data/index.js';
 import { createSuperAgentOpsRepository } from '../data/superAgentOps.js';
 import { fireWorkflowEvent, recoverPendingEvents, pruneEventLog } from '../lib/workflowEventBus.js';
 import { pruneExpiredSessions } from '../agents/planEngine/sessionRepository.js';
+import { continueWorkflowRun } from '../routes/workflows.js';
 
 let slaIntervalId:              ReturnType<typeof setInterval> | null = null;
 let reconcileIntervalId:        ReturnType<typeof setInterval> | null = null;
@@ -168,22 +169,40 @@ async function resumeExpiredWorkflowDelays(tenantId: string): Promise<void> {
   logger.info(`Workflow delay sweep: resuming ${expired.length} expired run(s)`);
 
   for (const run of expired) {
-    // Mark as resuming to avoid double-processing
-    await supabase.from('workflow_runs').update({ status: 'running' }).eq('id', run.id).eq('status', 'waiting');
-    // Resume via the workflows router's internal continue logic
-    // We import lazily to avoid circular deps at startup
+    // Claim the run atomically — only proceed if still in 'waiting' state
+    const { data: claimed } = await supabase
+      .from('workflow_runs')
+      .update({ status: 'running' })
+      .eq('id', run.id)
+      .eq('status', 'waiting')
+      .select('*, workflow_versions!inner(id, workflow_id, status, nodes, edges, trigger)')
+      .maybeSingle();
+
+    if (!claimed) {
+      logger.debug(`Workflow delay sweep: run ${run.id} already claimed or no longer waiting, skipping`);
+      continue;
+    }
+
     try {
-      const { default: workflowRouter } = await import('../routes/workflows.js' as any);
-      void workflowRouter; // router is self-contained; trigger via direct DB path below
-    } catch { /* ignore — resume via API call below */ }
-
-    // Simple resume: update status back to 'running', next poll of the run will process
-    // Full resume would call continueWorkflowRun — wired via /runs/:id/resume endpoint
-    await supabase.from('workflow_runs')
-      .update({ status: 'running', context: { ...(run.context as any), delayUntil: null, autoResumed: true } })
-      .eq('id', run.id);
-
-    logger.info(`Resumed workflow run ${run.id} after delay expiry`);
+      const result = await continueWorkflowRun({
+        tenantId: run.tenant_id,
+        workspaceId: (run as any).workspace_id ?? tenantId,
+        userId: 'system',
+        run: claimed,
+        version: (claimed as any).workflow_versions,
+        resumePayload: { autoResumed: true, reason: 'delay_expired' },
+      });
+      logger.info(`Workflow delay sweep: run ${run.id} resumed — final status: ${result.status}`);
+    } catch (resumeErr) {
+      logger.warn(`Workflow delay sweep: failed to resume run ${run.id}`, {
+        error: resumeErr instanceof Error ? resumeErr.message : String(resumeErr),
+      });
+      // Roll back so it can be retried next sweep
+      await supabase.from('workflow_runs')
+        .update({ status: 'waiting' })
+        .eq('id', run.id)
+        .eq('status', 'running');
+    }
   }
 }
 
