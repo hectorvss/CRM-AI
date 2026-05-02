@@ -51,6 +51,8 @@ import './pipeline/resolutionRollback.js';
 import './pipeline/draftReply.js';
 import './pipeline/messageSender.js';
 import './pipeline/slaMonitor.js';
+import './pipeline/agentExecute.js';
+import './pipeline/aiJobs.js';
 
 // ── Agent engine (registers AGENT_TRIGGER handler via queue/handlers/index.ts) ──
 // Importing orchestrator ensures the agentTriggerHandler is available

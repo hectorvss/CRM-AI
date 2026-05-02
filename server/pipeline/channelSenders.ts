@@ -28,7 +28,11 @@ export async function sendWhatsApp(
   const phoneNumberId = config.channels?.whatsappPhoneNumberId;
 
   if (!accessToken || !phoneNumberId) {
-    logger.debug('WhatsApp: no credentials configured, simulating send', { to });
+    logger.warn(
+      'WhatsApp: WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID not configured — ' +
+      'message NOT delivered. Set both env vars to enable real WhatsApp sends.',
+      { to },
+    );
     return { messageId: `sim_wa_${randomUUID()}`, simulated: true };
   }
 
@@ -70,7 +74,11 @@ export async function sendEmail(
   const fromEmail     = process.env.EMAIL_FROM ?? 'support@example.com';
 
   if (!postmarkToken) {
-    logger.debug('Email: no Postmark token configured, simulating send', { to });
+    logger.warn(
+      'Email: POSTMARK_SERVER_TOKEN not configured — message NOT delivered. ' +
+      'Set POSTMARK_SERVER_TOKEN to enable real email sends.',
+      { to },
+    );
     return { messageId: `sim_email_${randomUUID()}`, simulated: true };
   }
 
@@ -109,7 +117,11 @@ export async function sendSms(
   const twilioFrom  = process.env.TWILIO_FROM_NUMBER;
 
   if (!twilioSid || !twilioToken || !twilioFrom) {
-    logger.debug('SMS: no Twilio credentials configured, simulating send', { to });
+    logger.warn(
+      'SMS: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or TWILIO_FROM_NUMBER not configured — ' +
+      'message NOT delivered. Set all three Twilio env vars to enable real SMS sends.',
+      { to },
+    );
     return { messageId: `sim_sms_${randomUUID()}`, simulated: true };
   }
 
