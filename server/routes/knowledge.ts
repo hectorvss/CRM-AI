@@ -839,4 +839,288 @@ router.get('/policies', async (req: MultiTenantRequest, res) => {
   );
 });
 
+// ── Domain write endpoints ─────────────────────────────────────────────────────
+
+/**
+ * POST /api/knowledge/domains
+ * Create a new knowledge domain.
+ */
+router.post('/domains', async (req: MultiTenantRequest, res) => {
+  try {
+    const { name, description } = req.body ?? {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const now   = new Date().toISOString();
+    const id    = randomUUID();
+    const tenantId = req.tenantId!;
+
+    if (getDatabaseProvider() === 'supabase') {
+      const { getSupabaseAdmin } = await import('../db/supabase.js');
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('knowledge_domains')
+        .insert({ id, tenant_id: tenantId, name: String(name).trim(), description: description ?? null, created_at: now })
+        .select()
+        .single();
+      if (error) throw error;
+      return res.status(201).json(data);
+    }
+
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO knowledge_domains (id, tenant_id, name, description, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, tenantId, String(name).trim(), description ?? null, now);
+    const domain = db.prepare('SELECT * FROM knowledge_domains WHERE id = ?').get(id);
+    res.status(201).json(domain);
+  } catch (error) {
+    console.error('Error creating knowledge domain:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PATCH /api/knowledge/domains/:id
+ * Update an existing knowledge domain's name and/or description.
+ */
+router.patch('/domains/:id', async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId  = req.tenantId!;
+    const domainId  = req.params.id;
+    const { name, description } = req.body ?? {};
+
+    if (getDatabaseProvider() === 'supabase') {
+      const { getSupabaseAdmin } = await import('../db/supabase.js');
+      const supabase = getSupabaseAdmin();
+      const updates: Record<string, any> = {};
+      if (name !== undefined)        updates.name        = String(name).trim();
+      if (description !== undefined) updates.description = description;
+      const { data, error } = await supabase
+        .from('knowledge_domains')
+        .update(updates)
+        .eq('id', domainId)
+        .eq('tenant_id', tenantId)
+        .select()
+        .single();
+      if (error) { if ((error as any).code === 'PGRST116') return res.status(404).json({ error: 'Not found' }); throw error; }
+      if (!data) return res.status(404).json({ error: 'Not found' });
+      return res.json(data);
+    }
+
+    const db = getDb();
+    const existing = db.prepare('SELECT * FROM knowledge_domains WHERE id = ? AND tenant_id = ?').get(domainId, tenantId) as any;
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const parts: string[] = [];
+    const params: any[] = [];
+    if (name !== undefined)        { parts.push('name = ?');        params.push(String(name).trim()); }
+    if (description !== undefined) { parts.push('description = ?'); params.push(description); }
+    if (parts.length) {
+      db.prepare(`UPDATE knowledge_domains SET ${parts.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...params, domainId, tenantId);
+    }
+    res.json(db.prepare('SELECT * FROM knowledge_domains WHERE id = ?').get(domainId));
+  } catch (error) {
+    console.error('Error updating knowledge domain:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * DELETE /api/knowledge/domains/:id
+ * Delete a knowledge domain (only if it has no published articles).
+ */
+router.delete('/domains/:id', async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId  = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const domainId  = req.params.id;
+
+    if (getDatabaseProvider() === 'supabase') {
+      const { getSupabaseAdmin } = await import('../db/supabase.js');
+      const supabase = getSupabaseAdmin();
+      // Safety guard: block delete if published articles reference this domain
+      const { count } = await supabase
+        .from('knowledge_articles')
+        .select('id', { count: 'exact', head: true })
+        .eq('domain_id', domainId)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .eq('status', 'published');
+      if ((count ?? 0) > 0) {
+        return res.status(409).json({ error: 'Cannot delete a domain that still has published articles. Archive or reassign those articles first.' });
+      }
+      const { error } = await supabase
+        .from('knowledge_domains')
+        .delete()
+        .eq('id', domainId)
+        .eq('tenant_id', tenantId);
+      if (error) throw error;
+      return res.json({ success: true });
+    }
+
+    const db = getDb();
+    const articleCount = (db.prepare(`
+      SELECT COUNT(*) as c FROM knowledge_articles WHERE domain_id = ? AND tenant_id = ? AND workspace_id = ? AND status = 'published'
+    `).get(domainId, tenantId, workspaceId) as any)?.c ?? 0;
+    if (articleCount > 0) {
+      return res.status(409).json({ error: 'Cannot delete a domain that still has published articles. Archive or reassign those articles first.' });
+    }
+    db.prepare('DELETE FROM knowledge_domains WHERE id = ? AND tenant_id = ?').run(domainId, tenantId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting knowledge domain:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Policy write endpoints ─────────────────────────────────────────────────────
+
+/**
+ * POST /api/knowledge/policies
+ * Create a new policy rule.
+ */
+router.post('/policies', async (req: MultiTenantRequest, res) => {
+  try {
+    const { name, description, rule_type, conditions, actions, priority } = req.body ?? {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const now       = new Date().toISOString();
+    const id        = randomUUID();
+    const tenantId  = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+
+    if (getDatabaseProvider() === 'supabase') {
+      const { getSupabaseAdmin } = await import('../db/supabase.js');
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('policy_rules')
+        .insert({
+          id,
+          tenant_id:    tenantId,
+          workspace_id: workspaceId,
+          name:         String(name).trim(),
+          description:  description ?? null,
+          rule_type:    rule_type ?? 'general',
+          conditions:   conditions ?? null,
+          actions:      actions ?? null,
+          priority:     priority ?? 0,
+          is_active:    true,
+          created_at:   now,
+          updated_at:   now,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return res.status(201).json(data);
+    }
+
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO policy_rules (id, tenant_id, workspace_id, name, description, rule_type, conditions, actions, priority, is_active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(
+      id, tenantId, workspaceId,
+      String(name).trim(), description ?? null,
+      rule_type ?? 'general',
+      conditions ? JSON.stringify(conditions) : null,
+      actions    ? JSON.stringify(actions)    : null,
+      priority ?? 0,
+      now, now,
+    );
+    res.status(201).json(parseJsonPolicy(db.prepare('SELECT * FROM policy_rules WHERE id = ?').get(id)));
+  } catch (error) {
+    console.error('Error creating policy rule:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * PATCH /api/knowledge/policies/:id
+ * Update an existing policy rule.
+ */
+router.patch('/policies/:id', async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId   = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const policyId   = req.params.id;
+    const { name, description, rule_type, conditions, actions, priority, is_active } = req.body ?? {};
+
+    if (getDatabaseProvider() === 'supabase') {
+      const { getSupabaseAdmin } = await import('../db/supabase.js');
+      const supabase = getSupabaseAdmin();
+      const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (name        !== undefined) updates.name        = String(name).trim();
+      if (description !== undefined) updates.description = description;
+      if (rule_type   !== undefined) updates.rule_type   = rule_type;
+      if (conditions  !== undefined) updates.conditions  = conditions;
+      if (actions     !== undefined) updates.actions     = actions;
+      if (priority    !== undefined) updates.priority    = priority;
+      if (is_active   !== undefined) updates.is_active   = Boolean(is_active);
+      const { data, error } = await supabase
+        .from('policy_rules')
+        .update(updates)
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId)
+        .select()
+        .single();
+      if (error) { if ((error as any).code === 'PGRST116') return res.status(404).json({ error: 'Not found' }); throw error; }
+      if (!data) return res.status(404).json({ error: 'Not found' });
+      return res.json(data);
+    }
+
+    const db = getDb();
+    const existing = db.prepare('SELECT * FROM policy_rules WHERE id = ? AND tenant_id = ?').get(policyId, tenantId) as any;
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const now = new Date().toISOString();
+    const parts: string[] = ['updated_at = ?'];
+    const params: any[]   = [now];
+    if (name        !== undefined) { parts.push('name = ?');        params.push(String(name).trim()); }
+    if (description !== undefined) { parts.push('description = ?'); params.push(description); }
+    if (rule_type   !== undefined) { parts.push('rule_type = ?');   params.push(rule_type); }
+    if (conditions  !== undefined) { parts.push('conditions = ?');  params.push(JSON.stringify(conditions)); }
+    if (actions     !== undefined) { parts.push('actions = ?');     params.push(JSON.stringify(actions)); }
+    if (priority    !== undefined) { parts.push('priority = ?');    params.push(priority); }
+    if (is_active   !== undefined) { parts.push('is_active = ?');   params.push(is_active ? 1 : 0); }
+    db.prepare(`UPDATE policy_rules SET ${parts.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...params, policyId, tenantId);
+    res.json(parseJsonPolicy(db.prepare('SELECT * FROM policy_rules WHERE id = ?').get(policyId)));
+  } catch (error) {
+    console.error('Error updating policy rule:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * DELETE /api/knowledge/policies/:id
+ * Soft-deletes a policy rule by setting is_active = false.
+ */
+router.delete('/policies/:id', async (req: MultiTenantRequest, res) => {
+  try {
+    const tenantId  = req.tenantId!;
+    const policyId  = req.params.id;
+    const now       = new Date().toISOString();
+
+    if (getDatabaseProvider() === 'supabase') {
+      const { getSupabaseAdmin } = await import('../db/supabase.js');
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase
+        .from('policy_rules')
+        .update({ is_active: false, updated_at: now })
+        .eq('id', policyId)
+        .eq('tenant_id', tenantId);
+      if (error) throw error;
+      return res.json({ success: true });
+    }
+
+    const db = getDb();
+    db.prepare('UPDATE policy_rules SET is_active = 0, updated_at = ? WHERE id = ? AND tenant_id = ?').run(now, policyId, tenantId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deactivating policy rule:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
