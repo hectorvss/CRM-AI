@@ -7,7 +7,7 @@ const DEFAULTS = /*EDITMODE-BEGIN*/{
   "accent": "#0A0A0A",
   "theme": "light",
   "density": "comfortable",
-  "lang": "es"
+  "lang": "en"
 }/*EDITMODE-END*/;
 
 const COPY = {
@@ -924,6 +924,102 @@ function DemoMain({ tab }) {
   );
 }
 
+/* ============ Scroll-painted quote ============
+   Sticky frame: as the user scrolls, each word transitions from light gray
+   to full dark — Attio-style painterly reveal. Uses requestAnimationFrame
+   for buttery-smooth interpolation regardless of scroll velocity. */
+function ScrollPaintedQuote({ lang }) {
+  const wrapRef = useRef(null);
+  const [progress, setProgress] = useState(0);
+
+  const COPY = {
+    es: {
+      pre: '"',
+      words: [
+        'La', 'primera', 'vez', 'que', 'abrí', 'Clain,',
+        'supe', 'al', 'instante', 'que', 'esto', 'era',
+        'la', 'próxima', 'generación', 'de', 'operaciones',
+        'de', 'comercio.',
+      ],
+      post: '"',
+      author: 'Tomás Silvera',
+      role: 'VP Operations · Norte&Co',
+    },
+    en: {
+      pre: '"',
+      words: [
+        'When', 'I', 'first', 'opened', 'Clain,', 'I',
+        'instantly', 'got', 'the', 'feeling', 'this', 'was',
+        'the', 'next', 'generation', 'of', 'commerce',
+        'operations.',
+      ],
+      post: '"',
+      author: 'Tomás Silvera',
+      role: 'VP Operations · Norte&Co',
+    },
+  };
+  const c = COPY[lang] || COPY.en;
+
+  useEffect(() => {
+    let raf = null;
+    const update = () => {
+      raf = null;
+      if (!wrapRef.current) return;
+      const rect = wrapRef.current.getBoundingClientRect();
+      const total = wrapRef.current.offsetHeight - window.innerHeight;
+      if (total <= 0) { setProgress(0); return; }
+      const scrolled = -rect.top;
+      const p = Math.max(0, Math.min(1, scrolled / total));
+      setProgress(p);
+    };
+    const onScroll = () => { if (raf == null) raf = requestAnimationFrame(update); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    update();
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // Reserve a fraction of the scroll for hold-state (text fully painted before
+  // the section detaches). 0.78 means: words finish painting at 78% scroll,
+  // then the fully-bright frame holds for the remaining 22%.
+  const STAGGER = 0.78;
+  const total = c.words.length;
+
+  return (
+    <section ref={wrapRef} className="scroll-paint-section">
+      <div className="scroll-paint-sticky">
+        <div className="scroll-paint-inner">
+          <p className="scroll-paint-quote">
+            <span className="scroll-paint-mark">{c.pre}</span>
+            {c.words.map((w, i) => {
+              const startP = (i / total) * STAGGER;
+              const endP = ((i + 1) / total) * STAGGER;
+              const wp = Math.max(0, Math.min(1, (progress - startP) / (endP - startP)));
+              // ease-out for the per-word fade (feels more "painted")
+              const eased = 1 - Math.pow(1 - wp, 2);
+              const opacity = 0.14 + 0.86 * eased;
+              return (
+                <span key={i} className="scroll-paint-word" style={{ opacity }}>
+                  {w}{i < total - 1 ? ' ' : ''}
+                </span>
+              );
+            })}
+            <span className="scroll-paint-mark">{c.post}</span>
+          </p>
+          <div className="scroll-paint-author">
+            <div className="scroll-paint-author-name">{c.author}</div>
+            <div className="scroll-paint-author-role">{c.role}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ============ Stats ============ */
 function Stats() {
   return (
@@ -1287,6 +1383,7 @@ function App() {
           <main>
             <Hero t={t} navigate={navigate} />
             <Logos t={t} />
+            <ScrollPaintedQuote lang={tweaks.lang} />
             <Stats />
             <Press />
             <Features t={t} />

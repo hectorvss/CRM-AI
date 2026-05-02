@@ -2105,6 +2105,83 @@ img { display: block; max-width: 100%; }
 .cap-mock-copilot-input button { width: 26px; height: 26px; border-radius: 50%; background: var(--fg); color: var(--bg); border: 0; cursor: pointer; }
 
 /* ============================================================================
+   Scroll-painted quote — Attio-style sticky frame, words tinted on scroll
+   ============================================================================ */
+
+.scroll-paint-section {
+  position: relative;
+  /* Total scroll distance: tall outer container so the sticky inner frame
+     gets multiple viewport-heights to "paint" through. */
+  height: 240vh;
+}
+.scroll-paint-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Subtle dotted background à la Attio for texture */
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.07) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+[data-theme="dark"] .scroll-paint-sticky {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.06) 1px, transparent 0);
+}
+.scroll-paint-inner {
+  width: 100%;
+  max-width: 1180px;
+  padding: 0 32px;
+  text-align: center;
+}
+.scroll-paint-quote {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(34px, 5.4vw, 80px);
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  margin: 0;
+  /* Sub-pixel rendering tweak — keeps the type crisp at large sizes */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+.scroll-paint-word {
+  display: inline;
+  /* No CSS transition — opacity is driven by rAF for buttery scroll-linked motion */
+  will-change: opacity;
+}
+.scroll-paint-mark {
+  font-style: italic;
+  opacity: 0.32;
+  margin: 0 4px;
+}
+.scroll-paint-author {
+  margin-top: clamp(40px, 4.6vw, 72px);
+  display: grid;
+  gap: 6px;
+  font-family: var(--sans);
+}
+.scroll-paint-author-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  opacity: 0.62;
+  letter-spacing: 0.01em;
+}
+.scroll-paint-author-role {
+  font-size: 13px;
+  color: var(--fg-soft);
+  opacity: 0.48;
+}
+@media (max-width: 720px) {
+  .scroll-paint-section { height: 200vh; }
+  .scroll-paint-inner { padding: 0 24px; }
+}
+
+/* ============================================================================
    Capability page extras — gradient blocks, use cases, integrations, FAQ, related
    ============================================================================ */
 
@@ -2142,17 +2219,15 @@ img { display: block; max-width: 100%; }
 }
 
 .cap-deepdive { padding-top: 80px; padding-bottom: 80px; }
-.cap-deepdive-inner {
-  display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
-  gap: 64px;
-  align-items: center;
+.cap-deepdive-inner-single {
+  max-width: 980px;
 }
-@media (max-width: 900px) {
-  .cap-deepdive-inner { grid-template-columns: 1fr; gap: 36px; }
+.cap-deepdive-inner-single .h-section { margin: 12px 0 18px; }
+.cap-deepdive-bullets { list-style: none; padding: 0; margin: 36px 0 0; display: grid; gap: 18px; }
+.cap-deepdive-bullets--cols { grid-template-columns: 1fr 1fr; gap: 28px 32px; }
+@media (max-width: 720px) {
+  .cap-deepdive-bullets--cols { grid-template-columns: 1fr; gap: 18px; }
 }
-.cap-deepdive-text .h-section { margin: 12px 0 18px; }
-.cap-deepdive-bullets { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 18px; }
 .cap-deepdive-bullets li {
   display: grid;
   grid-template-columns: 36px 1fr;
@@ -2209,9 +2284,7 @@ img { display: block; max-width: 100%; }
   transform: translateY(-4px);
   box-shadow: 0 24px 48px -24px rgba(15, 23, 42, 0.18);
 }
-.cap-usecase-tone { padding: 16px; }
-.cap-usecase-tone .cap-gradient-block { aspect-ratio: 16 / 9; border-radius: 12px; }
-.cap-usecase-body { padding: 4px 24px 24px; display: grid; gap: 12px; }
+.cap-usecase-body { padding: 28px 24px; display: grid; gap: 12px; }
 .cap-usecase-tag {
   font-family: var(--mono);
   font-size: 10px;
@@ -2357,9 +2430,7 @@ img { display: block; max-width: 100%; }
   border-color: var(--line-strong);
   box-shadow: 0 24px 48px -24px rgba(15, 23, 42, 0.18);
 }
-.cap-related-vis { padding: 14px; }
-.cap-related-vis .cap-gradient-block { aspect-ratio: 16 / 7; border-radius: 12px; }
-.cap-related-body { padding: 4px 22px 22px; display: grid; gap: 10px; }
+.cap-related-body { padding: 26px 22px; display: grid; gap: 10px; }
 .cap-related-tag {
   font-family: var(--mono);
   font-size: 10px;

@@ -80,9 +80,6 @@ function CapUseCases({ eyebrow, title, items }) {
         <div className="cap-usecases-grid reveal-children">
           {items.map((it, i) => (
             <article key={i} className="cap-usecase-card">
-              <div className={`cap-usecase-tone tone-${it.tone || 'indigo'}`}>
-                <CapGradientBlock tone={it.tone || 'indigo'} />
-              </div>
               <div className="cap-usecase-body">
                 <span className="cap-usecase-tag">{it.tag}</span>
                 <h4>{it.title}</h4>
@@ -165,10 +162,7 @@ function CapRelated({ eyebrow, title, items }) {
         </div>
         <div className="cap-related-grid reveal-children">
           {items.map((r, i) => (
-            <a key={i} href={r.href} className={`cap-related-card tone-${r.tone || 'indigo'}`}>
-              <div className="cap-related-vis">
-                <CapGradientBlock tone={r.tone || 'indigo'} />
-              </div>
+            <a key={i} href={r.href} className="cap-related-card">
               <div className="cap-related-body">
                 <span className="cap-related-tag">{r.tag || 'Capability'}</span>
                 <h4>{r.title}</h4>
@@ -185,36 +179,31 @@ function CapRelated({ eyebrow, title, items }) {
 
 /* ------------------------------------------------------------ Deep dive (split row with gradient) */
 
-function CapDeepDive({ eyebrow, title, body, bullets, tone = 'indigo', metric }) {
+function CapDeepDive({ eyebrow, title, body, bullets, metric }) {
   const renderTitleParts = window.renderTitleParts;
   return (
     <section className="section cap-deepdive">
-      <div className="wrap cap-deepdive-inner">
-        <div className="cap-deepdive-text reveal">
-          <span className="eyebrow">{eyebrow}</span>
-          <h2 className="h-section">{Array.isArray(title) ? renderTitleParts(title) : title}</h2>
-          <p className="lede">{body}</p>
-          <ul className="cap-deepdive-bullets">
-            {bullets.map((b, i) => (
-              <li key={i}>
-                <span className="cap-deepdive-num">{String(i + 1).padStart(2, '0')}</span>
-                <div>
-                  <strong>{b.t}</strong>
-                  <span>{b.d}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {metric && (
-            <div className="cap-deepdive-metric">
-              <div className="cap-deepdive-metric-num">{metric.value}</div>
-              <div className="cap-deepdive-metric-lab">{metric.label}</div>
-            </div>
-          )}
-        </div>
-        <div className="cap-deepdive-vis reveal">
-          <CapGradientBlock tone={tone} label={metric?.value} sub={eyebrow} />
-        </div>
+      <div className="wrap cap-deepdive-inner-single reveal">
+        <span className="eyebrow">{eyebrow}</span>
+        <h2 className="h-section">{Array.isArray(title) ? renderTitleParts(title) : title}</h2>
+        <p className="lede">{body}</p>
+        <ul className="cap-deepdive-bullets cap-deepdive-bullets--cols">
+          {bullets.map((b, i) => (
+            <li key={i}>
+              <span className="cap-deepdive-num">{String(i + 1).padStart(2, '0')}</span>
+              <div>
+                <strong>{b.t}</strong>
+                <span>{b.d}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {metric && (
+          <div className="cap-deepdive-metric">
+            <div className="cap-deepdive-metric-num">{metric.value}</div>
+            <div className="cap-deepdive-metric-lab">{metric.label}</div>
+          </div>
+        )}
       </div>
     </section>
   );

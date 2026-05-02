@@ -622,10 +622,10 @@ function makeCapPage(key) {
         <section className="cap-hero-mock-wrap wrap reveal"><Mock /></section>
         <CapStats items={data.stats} />
 
-        {/* Original two feature rows — visual fillers replaced by gradient block when available */}
+        {/* Original two feature rows */}
         {data.rows.map((r, i) => (
           <CapFeatureRow key={i} eyebrow={r.eyebrow} title={r.title} body={r.body} bullets={r.bullets} reverse={r.reverse}>
-            {CapGradientBlock ? <CapGradientBlock tone={i % 2 === 0 ? 'indigo' : 'teal'} /> : <Mock />}
+            <Mock />
           </CapFeatureRow>
         ))}
 
