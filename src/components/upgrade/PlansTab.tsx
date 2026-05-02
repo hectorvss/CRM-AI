@@ -14,55 +14,55 @@ export default function PlansTab() {
   const plans = [
     {
       name: 'Starter',
-      originalPrice: 149,
-      monthlyPrice: 49,
-      annualPrice: 42, // ~15% discount
+      monthlyPrice: 149,   // real monthly price (no discount)
+      annualPrice: 42,     // launch price billed annually
       bestFor: 'For small teams getting started with AI-assisted support operations',
-        cta: 'Current Plan',
-        isCurrent: currentPlanKey === 'starter',
+      cta: 'Current Plan',
+      isCurrent: currentPlanKey === 'starter',
       capacityExplanation: '5,000 AI credits per month. Equivalent to resolving ~500 standard cases or drafting ~2,500 replies.',
       models: ['GPT-4o mini', 'Claude 3.5 Haiku', 'Gemini 1.5 Flash'],
       bullets: [
+        '5,000 AI credits per month',
         '3 seats included (€25/extra seat)',
         'Core support and ops workflows',
         'Standard email & chat integrations',
-        'Basic reporting & analytics'
-      ]
+        'Basic reporting & analytics',
+      ],
     },
     {
       name: 'Growth',
-      originalPrice: 399,
-      monthlyPrice: 129,
+      monthlyPrice: 399,
       annualPrice: 109,
       bestFor: 'For growing support and ops teams using AI every day',
       cta: 'Upgrade to Growth',
-        isRecommended: true,
-        isCurrent: currentPlanKey === 'growth',
+      isRecommended: true,
+      isCurrent: currentPlanKey === 'growth',
       capacityExplanation: '20,000 AI credits per month. Equivalent to resolving ~2,000 complex cases or automating full workflows.',
       models: ['GPT-4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro'],
       bullets: [
+        '20,000 AI credits per month',
         '8 seats included (€22/extra seat)',
         'Advanced multi-step workflows',
         'Custom API integrations',
-        'Priority email support'
-      ]
+        'Priority email support',
+      ],
     },
     {
       name: 'Scale',
-      originalPrice: 899,
-      monthlyPrice: 299,
+      monthlyPrice: 899,
       annualPrice: 254,
       bestFor: 'For advanced teams managing high-volume, multi-workflow operations',
-        cta: 'Upgrade to Scale',
-        isCurrent: currentPlanKey === 'scale',
+      cta: 'Upgrade to Scale',
+      isCurrent: currentPlanKey === 'scale',
       capacityExplanation: '60,000 AI credits per month. Equivalent to resolving ~6,000 complex cases across multiple languages and systems.',
       models: ['GPT-4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro', 'Custom Fine-tuned Models'],
       bullets: [
+        '60,000 AI credits per month',
         '20 seats included (€19/extra seat)',
         'Unlimited custom workflows',
         'Dedicated success manager',
-        'Custom reporting dashboards'
-      ]
+        'Custom reporting dashboards',
+      ],
     },
     {
       name: 'Business',
@@ -120,7 +120,7 @@ export default function PlansTab() {
               <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30">Active</span>
             </div>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Includes {subscription?.credits_included ?? 5000} AI credits and {subscription?.seats_included ?? 3} seats.
+                Includes {(subscription?.ai_credits_included ?? subscription?.credits_included ?? 5000).toLocaleString()} AI credits and {subscription?.seats_included ?? 3} seats per month.
               </p>
           </div>
           <div className="flex items-center gap-3">
@@ -145,7 +145,7 @@ export default function PlansTab() {
               onClick={() => setIsAnnual(true)}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${isAnnual ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
             >
-              Annual <span className="text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded">15% OFF</span>
+              Annual <span className="text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded">~70% OFF</span>
             </button>
           </div>
         </div>
@@ -172,20 +172,29 @@ export default function PlansTab() {
                 
                 {/* Pricing */}
                 <div className="mb-6">
-                  <div className="flex items-baseline gap-1">
+                  <div className="flex items-baseline gap-1 flex-wrap">
                     {plan.monthlyPrice === 'Custom' ? (
                       <span className="text-3xl font-bold text-gray-900 dark:text-white">Custom</span>
                     ) : (
                       <>
-                        <span className="text-sm font-medium text-gray-400 dark:text-gray-500 line-through mr-1">€{plan.originalPrice}</span>
-                        <span className="text-3xl font-bold text-gray-900 dark:text-white">€{isAnnual ? plan.annualPrice : plan.monthlyPrice}</span>
+                        {/* Strikethrough monthly price — only visible when annual is selected */}
+                        {isAnnual && (
+                          <span className="text-sm font-medium text-gray-400 dark:text-gray-500 line-through mr-1">
+                            €{plan.monthlyPrice}
+                          </span>
+                        )}
+                        <span className="text-3xl font-bold text-gray-900 dark:text-white">
+                          €{isAnnual ? plan.annualPrice : plan.monthlyPrice}
+                        </span>
                         <span className="text-sm text-gray-500 dark:text-gray-400">/ mo</span>
                       </>
                     )}
                   </div>
-                  {isAnnual && plan.monthlyPrice !== 'Custom' && typeof plan.annualPrice === 'number' && (
-                    <p className="text-xs text-gray-500 mt-1">Billed annually (€{plan.annualPrice * 12}/yr)</p>
-                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {isAnnual && typeof plan.annualPrice === 'number'
+                      ? `Billed annually (€${plan.annualPrice * 12}/yr)`
+                      : 'Billed monthly'}
+                  </p>
                 </div>
                 
                 {/* Features & Models */}
