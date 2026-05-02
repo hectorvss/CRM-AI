@@ -140,6 +140,20 @@ export async function bootstrapIntegrations(): Promise<void> {
     });
   }
 
+  // WhatsApp (Meta Business Cloud API) — register whenever any channel creds exist.
+  // The adapter stubs sends gracefully when accessToken/phoneNumberId are absent,
+  // so we register it unconditionally to surface it in healthCheck / capability APIs.
+  registrations.push(async () => {
+    const { WhatsAppAdapter } = await import('./whatsapp.js');
+    integrationRegistry.register(
+      new WhatsAppAdapter(
+        config.channels?.whatsappAccessToken   ?? '',
+        config.channels?.whatsappPhoneNumberId ?? '',
+        config.channels?.whatsappVerifyToken   ?? '',
+      )
+    );
+  });
+
   // Run all registrations in parallel; log but don't crash on individual failures
   const results = await Promise.allSettled(registrations.map(fn => fn()));
 

@@ -78,10 +78,10 @@ export interface PlanRequest {
 }
 
 export type LLMResponse =
-  | { kind: 'plan'; plan: Plan }
-  | { kind: 'clarification'; question: string }
-  | { kind: 'chat'; message: string }
-  | { kind: 'error'; error: string };
+  | { kind: 'plan'; plan: Plan; tokensUsed?: number }
+  | { kind: 'clarification'; question: string; tokensUsed?: number }
+  | { kind: 'chat'; message: string; tokensUsed?: number }
+  | { kind: 'error'; error: string; tokensUsed?: number };
 
 export interface NarrativeRequest {
   userMessage: string;
@@ -455,14 +455,17 @@ class GeminiProvider implements LLMProvider {
         const lastMessage = contextMessages[contextMessages.length - 1];
         const result = await chat.sendMessage(lastMessage.parts[0].text);
         const raw = result.response.text();
+        const tokensUsed = result.response.usageMetadata?.totalTokenCount ?? 0;
 
         logger.debug('PlanEngine LLM response', {
           planId: req.planId,
           sessionId: req.session.id,
           rawLength: raw.length,
+          tokensUsed,
         });
 
-        return parseResponse(raw, req.planId, req.session.id);
+        const parsed = parseResponse(raw, req.planId, req.session.id);
+        return { ...parsed, tokensUsed };
       },
       { label: 'planEngine.generatePlan' },
     );

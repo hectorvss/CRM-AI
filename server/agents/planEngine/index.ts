@@ -25,6 +25,7 @@ import {
   createAgentRepository,
   createKnowledgeRepository,
 } from '../../data/index.js';
+import { createBillingRepository } from '../../data/billing.js';
 import { logger } from '../../utils/logger.js';
 import * as sessionRepo from './sessionRepository.js';
 import * as traceRepo from './traceRepository.js';
@@ -311,6 +312,25 @@ export const planEngine = {
     };
 
     const response = await getPlanEngineLLMProvider().generatePlan(req);
+
+    // ── Token-based billing deduction (non-blocking) ───────────────────────
+    const tokensUsed = response.tokensUsed ?? 0;
+    if (tokensUsed > 0) {
+      // 1 credit per 1 000 tokens (rounded up) — adjust the divisor via env
+      const tokensPerCredit = Number(process.env.BILLING_TOKENS_PER_CREDIT ?? '1000');
+      const creditsUsed = Math.ceil(tokensUsed / Math.max(1, tokensPerCredit));
+      createBillingRepository()
+        .addLedgerEntry({ tenantId: input.tenantId }, {
+          org_id:       input.tenantId,
+          entry_type:   'debit',
+          amount:       creditsUsed,
+          reason:       'PlanEngine LLM call',
+          reference_id: planId,
+          balance_after: 0,
+          occurred_at:  new Date().toISOString(),
+        })
+        .catch((err) => logger.warn('Billing deduction failed (non-critical)', { error: String(err), planId }));
+    }
 
     // Append user turn
     session.turns.push({
