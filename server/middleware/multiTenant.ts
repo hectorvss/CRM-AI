@@ -177,13 +177,19 @@ export async function resolveTenantWorkspaceContext(
       }
     }
 
-    const ws = await workspaceRepo.getFirstWorkspace();
-    if (ws) {
-      return {
-        tenantId: tenantId || ws.org_id,
-        workspaceId: workspaceId || ws.id,
-        userId: userId || 'system',
-      };
+    // Only fall back to "first workspace" for ANONYMOUS requests (no userId).
+    // Falling back for an authenticated user with no membership would leak
+    // another tenant's settings (e.g. their IP allowlist policy would reject
+    // the new user) and silently associate the user with someone else's data.
+    if (!userId || userId === 'system') {
+      const ws = await workspaceRepo.getFirstWorkspace();
+      if (ws) {
+        return {
+          tenantId: tenantId || ws.org_id,
+          workspaceId: workspaceId || ws.id,
+          userId: userId || 'system',
+        };
+      }
     }
   } catch {
     // Fall through to demo defaults if the backing store is not yet ready.
@@ -200,11 +206,39 @@ export async function resolveTenantWorkspaceContext(
 }
 
 /**
+ * Paths that must skip tenant resolution because they are called BEFORE the
+ * user has been associated with a tenant (onboarding) or are intentionally
+ * public (config, lead capture, OAuth provider redirects).
+ *
+ * Without this skip the middleware falls back to `getFirstWorkspace()` which
+ * (a) leaks another tenant's settings (e.g. their IP allowlist policy will
+ * reject the new user with 403 IP_NOT_ALLOWED) and (b) is a security bug.
+ */
+const TENANT_BYPASS_PATHS: RegExp[] = [
+  /^\/api\/public(\/|$)/,
+  /^\/api\/onboarding\/setup$/,
+  /^\/api\/oauth-connectors(\/|$)/,
+];
+
+function shouldBypassTenant(req: Request): boolean {
+  // Use originalUrl since middleware is mounted on `/api` and req.path is relative.
+  const url = (req.originalUrl || req.url || '').split('?')[0];
+  return TENANT_BYPASS_PATHS.some((rx) => rx.test(url));
+}
+
+/**
  * Middleware: extractMultiTenant
  * - Extracts tenant context from headers.
  * - For development, falls back to the first organization/workspace in the DB if none provided.
+ * - Bypasses tenant resolution for onboarding + public endpoints (see TENANT_BYPASS_PATHS).
  */
 export const extractMultiTenant = async (req: MultiTenantRequest, res: Response, next: NextFunction) => {
+  // Skip tenant resolution for endpoints that run before the user has a tenant
+  // (onboarding) or are public by design (config, oauth callbacks).
+  if (shouldBypassTenant(req)) {
+    return next();
+  }
+
   const tenantHeader = req.headers['x-tenant-id'] as string;
   const workspaceHeader = req.headers['x-workspace-id'] as string;
   const userHeader = req.headers['x-user-id'] as string;
