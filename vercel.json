@@ -62,6 +62,10 @@
   "env": {
     "NODE_ENV":                "production",
     "SUPABASE_URL":            "https://erzfvnpzbmwnpchhemjt.supabase.co",
+    "SUPABASE_ANON_KEY":       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVyemZ2bnB6Ym13bnBjaGhlbWp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTA5MjQsImV4cCI6MjA5MTM2NjkyNH0.vtUHINHIUIJortTkqcK6ShFrnSNbjQRnj5dE8fcFTxY",
+    "VITE_SUPABASE_URL":       "https://erzfvnpzbmwnpchhemjt.supabase.co",
+    "VITE_SUPABASE_ANON_KEY":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVyemZ2bnB6Ym13bnBjaGhlbWp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTA5MjQsImV4cCI6MjA5MTM2NjkyNH0.vtUHINHIUIJortTkqcK6ShFrnSNbjQRnj5dE8fcFTxY",
+    "APP_URL":                 "https://crm-ai-rose.vercel.app",
     "GEMINI_MODEL":            "gemini-2.0-flash",
     "SUPER_AGENT_LLM_ROUTING": "true",
     "CORS_ORIGINS":            "https://crm-ai-rose.vercel.app,http://localhost:3005,http://localhost:5173"
