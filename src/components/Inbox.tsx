@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Conversation, Channel, CaseTab, Message } from '../types';
 import { aiApi, casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
@@ -78,15 +78,37 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterRiskLevel, setFilterRiskLevel] = useState('');
+  const [filterQ, setFilterQ] = useState('');
+  const filterPanelRef = useRef<HTMLDivElement>(null);
   const submitLockRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 
+  // Build active filter params from filter state — memoised so useApi deps are stable
+  const activeFilters = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (filterStatus)    params.status     = filterStatus;
+    if (filterPriority)  params.priority   = filterPriority;
+    if (filterRiskLevel) params.risk_level = filterRiskLevel;
+    if (filterQ)         params.q          = filterQ;
+    return params;
+  }, [filterStatus, filterPriority, filterRiskLevel, filterQ]);
+
+  const hasActiveFilters = Object.keys(activeFilters).length > 0;
+
   // Fetch canonical cases from the backend. Static fixtures are no longer used
   // as runtime data, so every visible case comes from the simulated API/DB flow.
-  const { data: apiCases, loading: casesLoading, error: casesError } = useApi(() => casesApi.list(), [refreshKey], []);
+  const { data: apiCases, loading: casesLoading, error: casesError } = useApi(
+    () => casesApi.list(Object.keys(activeFilters).length > 0 ? activeFilters : undefined),
+    [refreshKey, filterStatus, filterPriority, filterRiskLevel, filterQ],
+    [],
+  );
   const { data: selectedInboxView, loading: inboxViewLoading, error: inboxError } = useApi(
     () => selectedId ? casesApi.inboxView(selectedId) : Promise.resolve(null),
     [selectedId, refreshKey]
@@ -261,6 +283,18 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showEmojiPicker]);
+
+  // Close filter panel when clicking outside
+  useEffect(() => {
+    if (!showFilterPanel) return;
+    const handler = (e: MouseEvent) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node)) {
+        setShowFilterPanel(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showFilterPanel]);
 
   // Reset attachments when switching cases
   useEffect(() => { setAttachments([]); setShowEmojiPicker(false); }, [selectedId]);
@@ -529,12 +563,108 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
             <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
             Online
           </div>
-          <button 
-            onClick={() => alert('Filtering cases... (Mock)')}
-            className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-          >
-            <span className="material-symbols-outlined">filter_list</span>
-          </button>
+          {/* Filter button + panel */}
+          <div className="relative" ref={filterPanelRef}>
+            <button
+              onClick={() => setShowFilterPanel(p => !p)}
+              className={`p-2 rounded-lg transition-colors ${
+                hasActiveFilters
+                  ? 'text-secondary bg-secondary/10 hover:bg-secondary/20'
+                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              title="Filter cases"
+            >
+              <span className="material-symbols-outlined">filter_list</span>
+              {hasActiveFilters && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-secondary" />
+              )}
+            </button>
+
+            {showFilterPanel && (
+              <div className="absolute right-0 top-10 z-40 w-72 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-bold text-gray-900 dark:text-white">Filter cases</span>
+                  {hasActiveFilters && (
+                    <button
+                      onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterRiskLevel(''); setFilterQ(''); }}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+
+                {/* Search */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">Search</label>
+                  <input
+                    type="text"
+                    value={filterQ}
+                    onChange={e => setFilterQ(e.target.value)}
+                    placeholder="Customer, case #, order…"
+                    className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
+                  />
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">Status</label>
+                  <select
+                    value={filterStatus}
+                    onChange={e => setFilterStatus(e.target.value)}
+                    className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
+                  >
+                    <option value="">All statuses</option>
+                    <option value="new">New</option>
+                    <option value="open">Open</option>
+                    <option value="pending">Pending</option>
+                    <option value="snoozed">Snoozed</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">Priority</label>
+                  <select
+                    value={filterPriority}
+                    onChange={e => setFilterPriority(e.target.value)}
+                    className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
+                  >
+                    <option value="">All priorities</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+
+                {/* Risk level */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">Risk level</label>
+                  <select
+                    value={filterRiskLevel}
+                    onChange={e => setFilterRiskLevel(e.target.value)}
+                    className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
+                  >
+                    <option value="">All risk levels</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => setShowFilterPanel(false)}
+                  className="w-full mt-1 py-1.5 rounded-lg bg-secondary text-white text-sm font-semibold hover:bg-secondary/90 transition-colors"
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
