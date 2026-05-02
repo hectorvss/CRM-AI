@@ -408,6 +408,28 @@ export class ShopifyAdapter
     return mapOrder(res.order);
   }
 
+  /**
+   * Restore a previously-cancelled order via POST /orders/:id/restore.json
+   *
+   * Shopify allows un-cancelling an order as long as it has not been fulfilled.
+   * If the order was already fulfilled, Shopify returns 422 and this method
+   * throws — callers must fall back to manual intervention.
+   *
+   * Used by the Plan Engine rollback to undo `shopify/cancel_order` steps.
+   */
+  async restoreOrder(orderExternalId: string): Promise<CanonicalOrder> {
+    try {
+      const res = await this.post<{ order: ShopifyOrder }>(
+        `/orders/${orderExternalId}/restore.json`,
+        {},
+      );
+      return mapOrder(res.order);
+    } catch (err: any) {
+      if (err?.statusCode === 404) throw new NotFoundError('ShopifyOrder', orderExternalId);
+      throw err;
+    }
+  }
+
   // ── Writable: Returns ─────────────────────────────────────────────────────
 
   /**

@@ -23,6 +23,7 @@ import {
   createKnowledgeRepository,
 } from '../data/index.js';
 import { planEngine } from '../agents/planEngine/index.js';
+import { assertCanUseAI, chargeCredits } from '../services/aiUsageMeter.js';
 
 const router = Router();
 router.use(extractMultiTenant);
@@ -209,7 +210,20 @@ router.post('/diagnose/:caseId', requirePermission('cases.write'), async (req: M
     const { caseId } = req.params;
     const { profile = 'standard' } = req.body;
 
-    const caseData = await aiRepository.getCaseContextData({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, caseId);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const preflight = await assertCanUseAI(scope, 5);
+    if (!preflight.allowed) {
+      return res.status(402).json({
+        ok: false,
+        kind: 'credit_exhausted',
+        code: 'AI_CREDIT_EXHAUSTED',
+        message: preflight.reason || 'AI credits exhausted. Upgrade your plan or add a top-up pack.',
+        upgradeUrl: '/billing',
+        available: preflight.available,
+      });
+    }
+
+    const caseData = await aiRepository.getCaseContextData(scope, caseId);
     if (!caseData) {
       res.status(404).json({ error: 'Case not found' });
       return;
@@ -240,7 +254,20 @@ router.post('/draft/:caseId', requirePermission('cases.write'), async (req: Mult
     const { caseId } = req.params;
     const { profile = 'friendly', agentSlug } = req.body;
 
-    const caseData = await aiRepository.getCaseContextData({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, caseId);
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const preflight = await assertCanUseAI(scope, 3);
+    if (!preflight.allowed) {
+      return res.status(402).json({
+        ok: false,
+        kind: 'credit_exhausted',
+        code: 'AI_CREDIT_EXHAUSTED',
+        message: preflight.reason || 'AI credits exhausted. Upgrade your plan or add a top-up pack.',
+        upgradeUrl: '/billing',
+        available: preflight.available,
+      });
+    }
+
+    const caseData = await aiRepository.getCaseContextData(scope, caseId);
     if (!caseData) {
       res.status(404).json({ error: 'Case not found' });
       return;
@@ -310,6 +337,19 @@ router.post('/copilot/:caseId', requirePermission('cases.read'), async (req: Mul
       return;
     }
 
+    const copilotScope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const copilotPreflight = await assertCanUseAI(copilotScope, 3);
+    if (!copilotPreflight.allowed) {
+      return res.status(402).json({
+        ok: false,
+        kind: 'credit_exhausted',
+        code: 'AI_CREDIT_EXHAUSTED',
+        message: copilotPreflight.reason || 'AI credits exhausted. Upgrade your plan or add a top-up pack.',
+        upgradeUrl: '/billing',
+        available: copilotPreflight.available,
+      });
+    }
+
     const gemini = new GoogleGenerativeAI(config.ai.geminiApiKey);
     const model = gemini.getGenerativeModel({ model: config.ai.geminiModel });
 
@@ -344,6 +384,21 @@ Respond in plain text only. No markdown headers or bullet lists unless clarity r
     );
 
     const answer = result.response.text().trim();
+
+    // Charge credits based on actual token usage.
+    try {
+      const usage = (result.response as any).usageMetadata || {};
+      await chargeCredits({
+        scope: copilotScope,
+        eventType: 'ai_copilot',
+        model: config.ai.geminiModel,
+        promptTokens: usage.promptTokenCount || 0,
+        completionTokens: usage.candidatesTokenCount || 0,
+        metadata: { caseId },
+      });
+    } catch (err) {
+      console.warn('ai.copilot: chargeCredits failed', err);
+    }
 
     res.json({
       ok: true,

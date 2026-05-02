@@ -8,6 +8,8 @@ export interface ConversationScope {
 }
 
 export interface AppendMessageInput {
+  /** Optional pre-generated id (used when caller wants to correlate with a queued job). */
+  id?: string;
   conversationId: string;
   caseId: string | null;
   customerId?: string | null;
@@ -20,6 +22,9 @@ export interface AppendMessageInput {
   draftReplyId?: string | null;
   externalMessageId?: string | null;
   sentAt?: string;
+  /** 'pending' | 'sent' | 'failed'. Defaults to 'sent' for backward compatibility. */
+  deliveryStatus?: 'pending' | 'sent' | 'failed';
+  deliveryError?: string | null;
 }
 
 export interface InternalNoteInput {
@@ -133,7 +138,7 @@ async function ensureConversationForCaseSupabase(scope: ConversationScope, caseR
 async function appendMessageSupabase(scope: ConversationScope, input: AppendMessageInput) {
   const supabase = getSupabaseAdmin();
   const now = input.sentAt || new Date().toISOString();
-  const messageId = crypto.randomUUID();
+  const messageId = input.id || crypto.randomUUID();
   const payload = {
     id: messageId,
     conversation_id: input.conversationId,
@@ -151,6 +156,8 @@ async function appendMessageSupabase(scope: ConversationScope, input: AppendMess
     sent_at: now,
     created_at: now,
     tenant_id: scope.tenantId,
+    delivery_status: input.deliveryStatus ?? 'sent',
+    delivery_error: input.deliveryError ?? null,
   };
 
   const { error: insertError } = await supabase.from('messages').insert(payload);

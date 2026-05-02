@@ -7,20 +7,111 @@ import { supabase } from './supabase';
 
 const BASE = '/api';
 
+// localStorage key used to cache the tenant/workspace fetched from /api/iam/me
+// for users whose JWT app_metadata is not yet populated. Scoped per-user via
+// the cached user id so a sign-out/sign-in as a different user doesn't leak.
+const MEMBERSHIP_CACHE_KEY = 'crmai.membership.v1';
+
+interface MembershipCache {
+  userId:      string;
+  tenantId:    string;
+  workspaceId: string;
+}
+
+function readMembershipCache(userId: string): MembershipCache | null {
+  try {
+    const raw = localStorage.getItem(MEMBERSHIP_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MembershipCache;
+    if (parsed?.userId === userId && parsed.tenantId && parsed.workspaceId) {
+      return parsed;
+    }
+    // Stale (different user) — drop it.
+    localStorage.removeItem(MEMBERSHIP_CACHE_KEY);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeMembershipCache(entry: MembershipCache) {
+  try {
+    localStorage.setItem(MEMBERSHIP_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    /* ignore quota / disabled storage */
+  }
+}
+
+let inflightMembershipFetch: Promise<MembershipCache | null> | null = null;
+
+async function fetchMembershipFromApi(userId: string, token: string): Promise<MembershipCache | null> {
+  if (inflightMembershipFetch) return inflightMembershipFetch;
+
+  inflightMembershipFetch = (async () => {
+    try {
+      const res = await fetch(`${BASE}/iam/me`, {
+        headers: {
+          'Content-Type':  'application/json',
+          Authorization:   `Bearer ${token}`,
+          // Backend tolerates these as hints; without them resolution may fail
+          // until app_metadata is populated. We send placeholders that the
+          // server will overwrite from the JWT/membership lookup.
+          'x-user-id':     userId,
+        },
+      });
+      if (!res.ok) return null;
+      const body = await res.json().catch(() => null) as any;
+      const tenantId =
+        body?.context?.tenant_id ||
+        body?.memberships?.[0]?.tenant_id;
+      const workspaceId =
+        body?.context?.workspace_id ||
+        body?.memberships?.[0]?.workspace_id;
+
+      if (!tenantId || !workspaceId) return null;
+      const entry: MembershipCache = { userId, tenantId, workspaceId };
+      writeMembershipCache(entry);
+      return entry;
+    } catch {
+      return null;
+    } finally {
+      // Clear the in-flight gate after this microtask cycle so subsequent
+      // pages still benefit from the cache but a new login can re-fetch.
+      setTimeout(() => { inflightMembershipFetch = null; }, 0);
+    }
+  })();
+
+  return inflightMembershipFetch;
+}
+
 // Resolve tenant / workspace context from (in priority order):
 //   1. Supabase JWT claims (app_metadata > user_metadata)
-//   2. Vite build-time env vars (VITE_TENANT_ID / VITE_WORKSPACE_ID)
-//   3. Hard-coded demo defaults (org_default / ws_default)
-function resolveTenantHeaders(user?: { app_metadata?: any; user_metadata?: any }) {
-  const tenantId =
+//   2. Cached membership fetched from /api/iam/me (per-user localStorage)
+//   3. Vite build-time env vars (VITE_TENANT_ID / VITE_WORKSPACE_ID)
+//   4. Hard-coded demo defaults (org_default / ws_default)
+function resolveTenantHeaders(user?: { id?: string; app_metadata?: any; user_metadata?: any }) {
+  const claimTenant =
     user?.app_metadata?.tenant_id ||
-    user?.user_metadata?.tenant_id ||
+    user?.user_metadata?.tenant_id;
+  const claimWorkspace =
+    user?.app_metadata?.workspace_id ||
+    user?.user_metadata?.workspace_id;
+
+  if (claimTenant && claimWorkspace) {
+    return { tenantId: claimTenant, workspaceId: claimWorkspace };
+  }
+
+  const cached = user?.id ? readMembershipCache(user.id) : null;
+
+  const tenantId =
+    claimTenant ||
+    cached?.tenantId ||
     (import.meta as any).env?.VITE_TENANT_ID ||
     'org_default';
 
   const workspaceId =
-    user?.app_metadata?.workspace_id ||
-    user?.user_metadata?.workspace_id ||
+    claimWorkspace ||
+    cached?.workspaceId ||
     (import.meta as any).env?.VITE_WORKSPACE_ID ||
     'ws_default';
 
@@ -32,7 +123,25 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = data.session?.access_token;
 
   const userId = data.session?.user?.id || 'system';
-  const { tenantId, workspaceId } = resolveTenantHeaders(data.session?.user);
+  const sessionUser = data.session?.user;
+  const claimTenant = sessionUser?.app_metadata?.tenant_id || sessionUser?.user_metadata?.tenant_id;
+  const claimWorkspace = sessionUser?.app_metadata?.workspace_id || sessionUser?.user_metadata?.workspace_id;
+
+  // If JWT doesn't carry tenant claims but we have a session+token, fetch
+  // membership from /api/iam/me (cached per-user). We await only when nothing
+  // is cached yet — otherwise we kick it off in the background and use the
+  // cached value immediately.
+  if (sessionUser?.id && token && (!claimTenant || !claimWorkspace)) {
+    const cached = readMembershipCache(sessionUser.id);
+    if (!cached) {
+      await fetchMembershipFromApi(sessionUser.id, token);
+    } else {
+      // Refresh in background (fire-and-forget)
+      void fetchMembershipFromApi(sessionUser.id, token);
+    }
+  }
+
+  const { tenantId, workspaceId } = resolveTenantHeaders(sessionUser);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -546,6 +655,39 @@ export const billingApi = {
     request<any>(`/billing/${orgId}/top-ups`, {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+  checkoutSession: (orgId: string, payload?: { priceId?: string; email?: string; successUrl?: string; cancelUrl?: string }) =>
+    request<{ url: string; sessionId?: string }>(`/billing/${orgId}/checkout-session`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    }),
+  portalSession: (orgId: string, payload?: { returnUrl?: string; email?: string }) =>
+    request<{ url: string }>(`/billing/${orgId}/portal-session`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    }),
+  // ── AI credits (Cluster I) ─────────────────────────────────────────────
+  usage: () => request<{
+    plan: string;
+    periodStart: string;
+    periodEnd: string;
+    included: number;
+    usedThisPeriod: number;
+    topupBalance: number;
+    flexibleEnabled: boolean;
+    flexibleCap: number | null;
+    flexibleUsedThisPeriod: number;
+    percentUsed: number;
+    unlimited: boolean;
+  }>(`/billing/usage`),
+  usageEvents: (limit = 50, offset = 0) =>
+    request<{ events: any[]; total: number; limit: number; offset: number }>(
+      `/billing/usage/events?limit=${limit}&offset=${offset}`,
+    ),
+  toggleFlexibleUsage: (enabled: boolean, capCredits?: number) =>
+    request<any>(`/billing/flexible-usage/toggle`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled, capCredits }),
     }),
 };
 

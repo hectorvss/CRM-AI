@@ -3,14 +3,28 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/:path*",      "destination": "/api/index" },
+    { "source": "/webhooks/:path*", "destination": "/api/index" },
+
+    { "source": "/",                "destination": "/landing/index.html" },
+
+    { "source": "/styles.css",        "destination": "/landing/styles.css" },
+    { "source": "/app.jsx",           "destination": "/landing/app.jsx" },
+    { "source": "/auth.jsx",          "destination": "/landing/auth.jsx" },
+    { "source": "/pages.jsx",         "destination": "/landing/pages.jsx" },
+    { "source": "/customers.jsx",     "destination": "/landing/customers.jsx" },
+    { "source": "/solutions.jsx",     "destination": "/landing/solutions.jsx" },
+    { "source": "/capabilities.jsx",  "destination": "/landing/capabilities.jsx" },
+    { "source": "/tweaks-panel.jsx",  "destination": "/landing/tweaks-panel.jsx" },
+    { "source": "/uploads/:f*",       "destination": "/landing/uploads/:f*" },
+
+    { "source": "/app",             "destination": "/index.html" },
+    { "source": "/app/:path*",      "destination": "/index.html" },
+    { "source": "/reset-password",  "destination": "/landing/index.html" },
+    { "source": "/signin",          "destination": "/landing/index.html" },
+    { "source": "/signup",          "destination": "/landing/index.html" },
+    { "source": "/demo",            "destination": "/landing/index.html" },
+    { "source": "/pricing",         "destination": "/landing/index.html" }
   ],
   "headers": [
     {

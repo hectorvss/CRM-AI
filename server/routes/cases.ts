@@ -27,6 +27,12 @@ import {
 } from '../services/caseResolution.js';
 import { buildResolutionPlan, type ResolutionRoute } from '../utils/resolutionPlan.js';
 import { isValidStatus, invalidStatusMessage, CASE_STATUSES } from '../utils/statusEnums.js';
+import { z } from 'zod';
+import { validate } from '../middleware/validate.js';
+
+const MergeBodySchema = z.object({
+  sourceId: z.string().min(1, 'sourceId is required'),
+});
 
 const router = Router();
 const caseRepository = createCaseRepository();
@@ -1098,15 +1104,14 @@ router.post('/:id/resolution/execute-all', async (req: MultiTenantRequest, res: 
 //
 // Body: { sourceId: string }
 
-router.post('/:id/merge', async (req: MultiTenantRequest, res: Response) => {
+router.post('/:id/merge', validate({ body: MergeBodySchema }), async (req: MultiTenantRequest, res: Response) => {
   if (!hasPermission(req, 'cases.write')) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
   const targetId = req.params.id;
-  const sourceId = req.body?.sourceId as string | undefined;
+  const { sourceId } = req.body as z.infer<typeof MergeBodySchema>;
 
-  if (!sourceId) return res.status(400).json({ error: 'sourceId is required' });
   if (sourceId === targetId) return res.status(400).json({ error: 'sourceId and targetId must be different' });
 
   const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
@@ -1114,8 +1119,8 @@ router.post('/:id/merge', async (req: MultiTenantRequest, res: Response) => {
 
   // Verify both cases exist
   const [target, source] = await Promise.all([
-    caseRepository.getCase(scope, targetId).catch(() => null),
-    caseRepository.getCase(scope, sourceId).catch(() => null),
+    caseRepository.get(scope, targetId).catch(() => null),
+    caseRepository.get(scope, sourceId).catch(() => null),
   ]);
   if (!target) return res.status(404).json({ error: 'Target case not found' });
   if (!source) return res.status(404).json({ error: 'Source case not found' });

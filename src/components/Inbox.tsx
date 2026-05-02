@@ -185,6 +185,9 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
       sender: msg.sender_name || (msg.direction === 'outbound' ? 'Agent' : 'Customer'),
       content: msg.content,
       time: formatTime(msg.sent_at),
+      // Surface delivery lifecycle for outbound messages (pending/sent/failed)
+      deliveryStatus: msg.direction === 'outbound' ? (msg.delivery_status ?? 'sent') : undefined,
+      deliveryError: msg.delivery_error ?? null,
     })) || selectedBaseConv.messages || [];
     const localMessages = localMessagesByCase[selectedBaseConv.id] || [];
     const knownFingerprints = new Set(apiMessages.map((message: Message) => fingerprintMessage(message)));
@@ -993,7 +996,20 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                       )}
                       <span className="whitespace-pre-wrap break-words">{msg.content}</span>
                       <span className={`float-right flex items-center gap-1 text-[11px] ml-4 mt-2 ${isRight ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400'}`}>
-                        {msg.time} {isRight && <span className="material-symbols-outlined text-[14px] text-blue-500">done_all</span>}
+                        {msg.time}
+                        {isRight && msg.deliveryStatus === 'pending' && (
+                          <span title="Sending..." className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-[10px] font-medium">
+                            <span className="material-symbols-outlined text-[12px]">schedule</span>Pending
+                          </span>
+                        )}
+                        {isRight && msg.deliveryStatus === 'failed' && (
+                          <span title={msg.deliveryError || 'Delivery failed'} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-[10px] font-medium">
+                            <span className="material-symbols-outlined text-[12px]">error</span>Failed
+                          </span>
+                        )}
+                        {isRight && (msg.deliveryStatus === 'sent' || msg.deliveryStatus === undefined) && (
+                          <span className="material-symbols-outlined text-[14px] text-blue-500" title="Sent">done_all</span>
+                        )}
                       </span>
                     </div>
                   </div>

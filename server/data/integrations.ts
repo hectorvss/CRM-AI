@@ -13,6 +13,8 @@ export interface IntegrationRepository {
   getWebhookEventByDedupeKey(scope: IntegrationScope, dedupeKey: string): Promise<any | null>;
   createWebhookEvent(scope: IntegrationScope, data: any): Promise<any>;
   updateWebhookEventStatus(scope: IntegrationScope, id: string, status: string, updates?: any): Promise<void>;
+  getCanonicalEvent(id: string): Promise<any | null>;
+  createCanonicalEvent(scope: IntegrationScope, data: any): Promise<any>;
   updateCanonicalEvent(id: string, updates: any): Promise<void>;
   updateConnector(scope: IntegrationScope, id: string, updates: any): Promise<void>;
   deleteConnector(scope: IntegrationScope, id: string): Promise<void>;

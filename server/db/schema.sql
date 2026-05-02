@@ -246,11 +246,34 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   delivered_at TEXT,
   read_at TEXT,
+  delivery_status TEXT NOT NULL DEFAULT 'sent',  -- 'pending' | 'sent' | 'failed'
+  delivery_error TEXT,
   tenant_id TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, sent_at);
 CREATE INDEX IF NOT EXISTS idx_messages_case ON messages(case_id, sent_at);
+CREATE INDEX IF NOT EXISTS idx_messages_delivery_status ON messages(tenant_id, delivery_status, sent_at);
+
+CREATE TABLE IF NOT EXISTS manual_intervention_required (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  workspace_id TEXT,
+  plan_id TEXT,
+  step_id TEXT,
+  case_id TEXT,
+  original_tool TEXT NOT NULL,
+  compensate_tool TEXT,
+  error_message TEXT NOT NULL,
+  context TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'open',
+  resolved_by TEXT,
+  resolved_at TEXT,
+  resolution_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
+CREATE INDEX IF NOT EXISTS idx_manual_intervention_status ON manual_intervention_required(tenant_id, status, created_at);
 
 CREATE TABLE IF NOT EXISTS draft_replies (
   id TEXT PRIMARY KEY,

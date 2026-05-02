@@ -63,6 +63,7 @@ const ROLE_PERMISSION_PRESETS: Record<string, string[]> = {
     'knowledge.read',
     'reports.read',
     'settings.read',
+    'billing.read',
   ],
   billing_admin: ['billing.read', 'billing.manage'],
 };
@@ -90,13 +91,30 @@ async function resolvePermissions(
   roleId: string,
   explicitPermissions: unknown,
 ): Promise<string[]> {
-  // owner and workspace_admin are built-in roles with full access.
-  // Always return the preset directly — never let stale DB rows override this.
+  const iamRepo = createIAMRepository();
+
+  // For built-in privileged roles (owner / workspace_admin) we still consult the
+  // role_assignments table first, so a tenant that has explicitly customized the
+  // owner role's permissions is respected. Only when no assignment exists do we
+  // fall back to the wildcard preset.
   if (roleId === 'owner' || roleId === 'workspace_admin') {
+    try {
+      const mappedPermissions = await iamRepo.getPermissionKeys(roleId);
+      if (mappedPermissions.length > 0) {
+        return mappedPermissions;
+      }
+    } catch (error) {
+      // ignore — fall through to preset
+    }
+
+    const parsedPermissions = normalizePermissions(explicitPermissions);
+    if (parsedPermissions.length > 0) {
+      return parsedPermissions;
+    }
+
     return ROLE_PERMISSION_PRESETS[roleId]; // ['*']
   }
 
-  const iamRepo = createIAMRepository();
   try {
     const mappedPermissions = await iamRepo.getPermissionKeys(roleId);
 
@@ -257,10 +275,20 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
       }
     }
 
-    // Block unauthenticated anonymous fallback in production environments.
-    if (resolved.isAnonymousFallback && process.env.NODE_ENV === 'production') {
-      logger.warn('Rejected unauthenticated request in production (anonymous fallback)', { path: req.path });
-      return sendError(res, 401, 'UNAUTHORIZED', 'Authentication required. Provide a valid Bearer token.');
+    // Strict anonymous fallback: only allowed when running in dev mode AND the
+    // operator has explicitly opted in via ALLOW_ANON_DEV=true. Anywhere else
+    // (production, staging, test, or dev without the flag) we fail closed.
+    if (resolved.isAnonymousFallback) {
+      const isDev = process.env.NODE_ENV === 'development';
+      const allowAnon = process.env.ALLOW_ANON_DEV === 'true';
+      if (!isDev || !allowAnon) {
+        logger.warn('Rejected anonymous fallback request', {
+          path: req.path,
+          nodeEnv: process.env.NODE_ENV,
+          allowAnon,
+        });
+        return sendError(res, 401, 'UNAUTHORIZED', 'Authentication required. Provide a valid Bearer token.');
+      }
     }
 
     req.tenantId = resolved.tenantId;
@@ -307,14 +335,55 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
 
       next();
     } catch (memberError) {
-      // Member/permission lookup failed (e.g. DB timeout).
+      // Member/permission lookup failed.
       // Fail-secure: do NOT escalate privileges on error.
+      // Distinguish transient infrastructure errors (timeout / serialization /
+      // network) from validation/auth errors so that clients can retry the
+      // former and immediately re-authenticate on the latter.
+      const errAny = memberError as any;
+      const code = errAny?.code as string | undefined;
+      const message = errAny instanceof Error ? errAny.message : String(errAny ?? '');
+
+      // PostgreSQL transient codes: 57014 = query_canceled (statement timeout),
+      // 40001 = serialization_failure. Network errors typically surface with
+      // ECONNRESET / ETIMEDOUT / ENOTFOUND / EAI_AGAIN / fetch failures.
+      const transientPgCodes = new Set(['57014', '40001', '08000', '08003', '08006', '53300']);
+      const isTransientNet = /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed|network|socket hang up|aborted|timeout/i.test(message);
+      const isTransient = (code && transientPgCodes.has(code)) || isTransientNet;
+
+      // Validation-style errors: invalid input, malformed userId/tenantId, etc.
+      const isValidationError = code === '22P02' /* invalid_text_representation */
+        || code === '23503' /* foreign_key_violation */
+        || /invalid input syntax|invalid uuid|not authenticated/i.test(message);
+
+      if (isTransient) {
+        logger.warn('Member lookup transient failure — returning 503', {
+          path: req.path,
+          userId: req.userId,
+          code,
+          error: message,
+        });
+        res.setHeader('Retry-After', '5');
+        return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'Authentication service temporarily unavailable. Please retry.');
+      }
+
+      if (isValidationError) {
+        logger.warn('Member lookup validation failure — returning 401', {
+          path: req.path,
+          userId: req.userId,
+          code,
+          error: message,
+        });
+        return sendError(res, 401, 'UNAUTHORIZED', 'Authentication failed. Please re-authenticate.');
+      }
+
       logger.error('Member lookup failed in multi-tenant middleware — returning 500', {
         path: req.path,
         userId: req.userId,
-        error: memberError instanceof Error ? memberError.message : String(memberError),
+        code,
+        error: message,
       });
-      return sendError(res, 500, 'SERVICE_UNAVAILABLE', 'Authentication service temporarily unavailable. Please retry.');
+      return sendError(res, 500, 'INTERNAL_ERROR', 'Authentication service error.');
     }
   } catch (error) {
     // Outer catch: unexpected error in auth pipeline.

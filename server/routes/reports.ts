@@ -214,7 +214,17 @@ router.get('/summary', async (req: MultiTenantRequest, res: Response) => {
       reportRepository.getCosts(scope, period, channel),
       reportRepository.getSLA(scope, period, channel),
     ]);
-    res.json(buildGeneratedSummary({ period, channel, audience, overview, intents, agents, approvals, costs, sla }));
+    const summary = buildGeneratedSummary({ period, channel, audience, overview, intents, agents, approvals, costs, sla });
+    if (!process.env.GEMINI_API_KEY) {
+      // Heuristic-only mode — surface a notice the UI can render.
+      res.json({
+        ...summary,
+        aiAvailable: false,
+        notice: 'AI summary unavailable — configure GEMINI_API_KEY for narrative generation. Showing heuristic summary based on metrics.',
+      });
+      return;
+    }
+    res.json({ ...summary, aiAvailable: true });
   } catch (error) {
     console.error('Reports summary error:', error);
     res.status(500).json({ error: 'Internal server error' });

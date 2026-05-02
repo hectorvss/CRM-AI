@@ -93,6 +93,24 @@ export interface Config {
     whatsappPhoneNumberId?: string;
     /** Meta permanent access token for sending messages */
     whatsappAccessToken?: string;
+    /** Optional: Meta webhook verification secret for signature checks */
+    whatsappWebhookSecret?: string;
+    /** Postmark configuration (transactional email) */
+    postmark?: {
+      serverToken: string;
+      fromEmail: string;
+    };
+    /** Twilio configuration (SMS) */
+    twilio?: {
+      accountSid: string;
+      authToken: string;
+      fromNumber: string;
+    };
+  };
+
+  /** Application URL used for building outbound links (invite, OAuth callback) */
+  app: {
+    url: string;
   };
 }
 
@@ -150,6 +168,14 @@ function buildConfig(): Config {
   const whatsappVerifyToken   = process.env.WHATSAPP_VERIFY_TOKEN;
   const whatsappPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const whatsappAccessToken   = process.env.WHATSAPP_ACCESS_TOKEN;
+  const whatsappWebhookSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
+
+  const postmarkToken = process.env.POSTMARK_SERVER_TOKEN;
+  const emailFrom     = process.env.EMAIL_FROM;
+
+  const twilioSid    = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken  = process.env.TWILIO_AUTH_TOKEN;
+  const twilioFrom   = process.env.TWILIO_FROM_NUMBER ?? process.env.TWILIO_PHONE;
 
   const config: Config = {
     env,
@@ -193,6 +219,10 @@ function buildConfig(): Config {
     commerce: {
       refundAutoApprovalThreshold: optionalInt('REFUND_AUTO_APPROVAL_THRESHOLD', 250),
     },
+
+    app: {
+      url: optionalEnv('APP_URL', 'http://localhost:5173'),
+    },
   };
 
   // Attach optional integration blocks only when ALL keys for that integration exist
@@ -211,12 +241,32 @@ function buildConfig(): Config {
     };
   }
 
-  if (whatsappVerifyToken || whatsappPhoneNumberId || whatsappAccessToken) {
+  const hasWhatsapp = whatsappVerifyToken || whatsappPhoneNumberId || whatsappAccessToken || whatsappWebhookSecret;
+  const hasPostmark = !!postmarkToken;
+  const hasTwilio   = twilioSid && twilioToken && twilioFrom;
+
+  if (hasWhatsapp || hasPostmark || hasTwilio) {
     config.channels = {
-      whatsappVerifyToken:   whatsappVerifyToken,
-      whatsappPhoneNumberId: whatsappPhoneNumberId,
-      whatsappAccessToken:   whatsappAccessToken,
+      whatsappVerifyToken,
+      whatsappPhoneNumberId,
+      whatsappAccessToken,
+      whatsappWebhookSecret,
     };
+
+    if (hasPostmark) {
+      config.channels.postmark = {
+        serverToken: postmarkToken!,
+        fromEmail:   emailFrom ?? 'support@example.com',
+      };
+    }
+
+    if (hasTwilio) {
+      config.channels.twilio = {
+        accountSid: twilioSid!,
+        authToken:  twilioToken!,
+        fromNumber: twilioFrom!,
+      };
+    }
   }
 
   return config;

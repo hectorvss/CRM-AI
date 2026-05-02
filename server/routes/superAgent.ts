@@ -15,7 +15,17 @@ import {
   createWorkspaceRepository,
 } from '../data/index.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { validate } from '../middleware/validate.js';
+import { z } from 'zod';
 import { broadcastSSE } from './sse.js';
+
+const CommandBodySchema = z.object({
+  input: z.string().min(1, 'input is required').max(8000),
+  mode: z.enum(['investigate', 'operate']).optional(),
+  sessionId: z.string().max(200).optional(),
+  runId: z.string().max(200).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
+}).passthrough();
 import { isGeneralConversationInput, normalizeSearchQuery } from '../agents/superAgent/search.js';
 import type {
   CommandContext,
@@ -3499,7 +3509,7 @@ router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
   }
 });
 
-router.post('/command', async (req: MultiTenantRequest, res) => {
+router.post('/command', validate({ body: CommandBodySchema }), async (req: MultiTenantRequest, res) => {
   try {
     const scope = getScope(req);
     const input = String(req.body?.input || '').trim();
@@ -3570,6 +3580,25 @@ router.post('/command', async (req: MultiTenantRequest, res) => {
           },
           { dryRun: mode !== 'operate' },
         );
+
+        if (llmResponse.kind === 'credit_exhausted') {
+          emitSuperAgentEvent(scope, 'credit_exhausted', {
+            runId,
+            message: llmResponse.message,
+            upgradeUrl: llmResponse.upgradeUrl,
+            available: llmResponse.available,
+          });
+          return res.status(402).json({
+            ok: false,
+            kind: 'credit_exhausted',
+            code: 'AI_CREDIT_EXHAUSTED',
+            error: 'AI_CREDIT_EXHAUSTED',
+            message: llmResponse.message,
+            upgradeUrl: llmResponse.upgradeUrl,
+            available: llmResponse.available,
+            sessionId,
+          });
+        }
 
         if (llmResponse.kind === 'error') {
           emitSuperAgentEvent(scope, 'run_failed', {
@@ -4124,6 +4153,19 @@ router.post('/plan', async (req: MultiTenantRequest, res) => {
       },
       { dryRun: dryRun === true },
     );
+
+    if (response.kind === 'credit_exhausted') {
+      return res.status(402).json({
+        ok: false,
+        kind: 'credit_exhausted',
+        code: 'AI_CREDIT_EXHAUSTED',
+        error: 'AI_CREDIT_EXHAUSTED',
+        message: response.message,
+        upgradeUrl: response.upgradeUrl,
+        available: response.available,
+        sessionId: effectiveSessionId,
+      });
+    }
 
     if (response.kind === 'error') {
       return res.status(502).json({

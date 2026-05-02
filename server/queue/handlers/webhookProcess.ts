@@ -348,7 +348,7 @@ async function autoCreateCaseAndFireEvent(
         tags:           [`webhook`, source, topic.replace('/', '_')],
       } as any);
 
-      // Notify connected SSE clients of the new case
+      // Notify connected SSE clients of the new case (scoped to workspace)
       broadcastSSE(scope.tenantId, 'case:created', {
         caseId,
         caseNumber: caseNumber,
@@ -356,7 +356,9 @@ async function autoCreateCaseAndFireEvent(
         priority,
         source,
         topic,
-      });
+        tenantId:    scope.tenantId,
+        workspaceId: scope.workspaceId,
+      }, scope.workspaceId);
 
       log.info('webhookProcess: auto-created case from webhook', {
         caseId, source, topic, entityType: extraction.entityType,

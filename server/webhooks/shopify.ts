@@ -23,7 +23,11 @@ import { getSupabaseAdmin } from '../db/supabase.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
+import { handleWebhookProcess } from '../queue/handlers/webhookProcess.js';
+import { resolveTenantWorkspaceContext } from '../middleware/multiTenant.js';
 import { logger } from '../utils/logger.js';
+
+const isServerless = Boolean(process.env.VERCEL);
 
 export const shopifyWebhookRouter = Router();
 
@@ -129,21 +133,43 @@ shopifyWebhookRouter.post('/', async (req: Request, res: Response) => {
       dedupeKey
     });
 
-    // ── 5. Respond immediately ─────────────────────────────────────────────────
-    res.status(200).send('ok');
-
-    // ── 6. Enqueue for background processing ──────────────────────────────────
-    try {
-      enqueue(JobType.WEBHOOK_PROCESS, {
-        webhookEventId: eventId,
-        source:         'shopify',
-        rawBody,
-        headers,
-      });
-      logger.info('Shopify webhook enqueued', { eventId, topic, shopDomain });
-    } catch (err) {
-      logger.error('Shopify webhook: failed to enqueue job', err, { eventId, topic });
-      // Event is persisted — a recovery sweep can re-enqueue it later
+    // ── 5. Process inline (serverless) or enqueue (worker) ────────────────────
+    if (isServerless) {
+      // On Vercel there is no persistent worker — run the handler synchronously
+      // during the HTTP request BEFORE responding, since post-response async
+      // work is killed when the function returns.
+      try {
+        const resolved = await resolveTenantWorkspaceContext(tenantId, null, 'system');
+        await handleWebhookProcess(
+          { webhookEventId: eventId, source: 'shopify', rawBody, headers },
+          {
+            jobId:       `inline-${eventId}`,
+            traceId:     eventId,
+            tenantId:    resolved.tenantId,
+            workspaceId: resolved.workspaceId,
+            attempt:     1,
+          },
+        );
+        logger.info('Shopify webhook processed inline (Vercel)', { eventId, topic, shopDomain });
+      } catch (err) {
+        logger.error('Shopify webhook: inline processing failed', err, { eventId, topic });
+      }
+      res.status(200).send('ok');
+    } else {
+      // ── Respond immediately, then enqueue ───────────────────────────────────
+      res.status(200).send('ok');
+      try {
+        enqueue(JobType.WEBHOOK_PROCESS, {
+          webhookEventId: eventId,
+          source:         'shopify',
+          rawBody,
+          headers,
+        });
+        logger.info('Shopify webhook enqueued', { eventId, topic, shopDomain });
+      } catch (err) {
+        logger.error('Shopify webhook: failed to enqueue job', err, { eventId, topic });
+        // Event is persisted — a recovery sweep can re-enqueue it later
+      }
     }
   } catch (error) {
     logger.error('Shopify webhook: failed to process at root', error, { topic });

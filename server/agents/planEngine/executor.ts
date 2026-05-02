@@ -30,6 +30,9 @@ import { toolRegistry } from './registry.js';
 import { evaluatePlan, aggregateDecision, evaluateStep, loadActiveRules } from './policy.js';
 import { logger } from '../../utils/logger.js';
 import { classifyRiskFromArgs, classifyRiskFromPlanSignal, isToolBlocked } from './safety.js';
+import { getSupabaseAdmin } from '../../db/supabase.js';
+import { createApprovalRepository } from '../../data/approvals.js';
+import { broadcastSSE } from '../../routes/sse.js';
 
 export interface ExecutorDeps {
   /** Create an approval request when policy says `require_approval`. Returns approval id. */
@@ -507,7 +510,19 @@ export async function executePlan(
             );
             spans.push(makeSyntheticSpan(ordered.find(s => s.id === prevSpan.stepId) || { id: prevSpan.stepId, tool: comp.tool, args: comp.args, dependsOn: [] }, 'none', compResult));
           } catch (compErr) {
+            const errMessage = compErr instanceof Error ? compErr.message : String(compErr);
             logger.error('PlanEngine auto-rollback failed after retries', compErr instanceof Error ? compErr : new Error(String(compErr)));
+            await recordCompensateFailure({
+              plan,
+              context,
+              originalTool: prevSpan.tool,
+              compensateTool: comp.tool,
+              stepId: prevSpan.stepId,
+              compensateArgs: comp.args,
+              errorMessage: errMessage,
+            }).catch((persistErr) => {
+              logger.error('PlanEngine: failed to persist manual intervention record', persistErr instanceof Error ? persistErr : new Error(String(persistErr)));
+            });
           }
         }
       }
@@ -540,6 +555,100 @@ export async function executePlan(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Persist a compensation failure for human follow-up:
+ *   1. Insert a row in manual_intervention_required
+ *   2. Open an approval_requests row of action_type=manual_intervention
+ *   3. Broadcast `super-agent:rollback_failed` over SSE so the UI reacts
+ *
+ * Errors are logged but never thrown — the executor must complete its trace.
+ */
+async function recordCompensateFailure(input: {
+  plan: Plan;
+  context: ToolExecutionContext;
+  originalTool: string;
+  compensateTool: string;
+  stepId: string;
+  compensateArgs: unknown;
+  errorMessage: string;
+}): Promise<void> {
+  const { plan, context, originalTool, compensateTool, stepId, compensateArgs, errorMessage } = input;
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const caseId = (context as any).caseId
+    ?? (compensateArgs && typeof compensateArgs === 'object' && (compensateArgs as any).caseId)
+    ?? null;
+
+  // 1. Insert manual_intervention_required row
+  try {
+    const supabase = getSupabaseAdmin();
+    await supabase.from('manual_intervention_required').insert({
+      id,
+      tenant_id: context.tenantId,
+      workspace_id: context.workspaceId ?? null,
+      plan_id: plan.planId,
+      step_id: stepId,
+      case_id: caseId,
+      original_tool: originalTool,
+      compensate_tool: compensateTool,
+      error_message: errorMessage,
+      context: { args: compensateArgs, sessionId: plan.sessionId },
+      status: 'open',
+      created_at: now,
+      updated_at: now,
+    });
+  } catch (err) {
+    logger.error('manual_intervention_required insert failed', err instanceof Error ? err : new Error(String(err)));
+  }
+
+  // 2. Create an approval so the operator sees it in their queue
+  if (caseId) {
+    try {
+      const approvalRepo = createApprovalRepository();
+      await approvalRepo.create(
+        { tenantId: context.tenantId, workspaceId: context.workspaceId ?? '', userId: context.userId ?? undefined },
+        {
+          caseId,
+          actionType: 'manual_intervention',
+          riskLevel: 'critical',
+          requestedBy: 'plan_engine',
+          requestedByType: 'system',
+          actionPayload: {
+            planId: plan.planId,
+            stepId,
+            originalTool,
+            compensateTool,
+            compensateArgs,
+            interventionId: id,
+          },
+          evidencePackage: {
+            reason: 'Compensation failed after retries',
+            error: errorMessage,
+          },
+          priority: 'high',
+        },
+      );
+    } catch (err) {
+      logger.error('manual_intervention approval create failed', err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
+  // 3. Broadcast SSE
+  try {
+    broadcastSSE(context.tenantId, 'super-agent:rollback_failed', {
+      planId: plan.planId,
+      stepId,
+      originalTool,
+      compensateTool,
+      caseId,
+      interventionId: id,
+      error: errorMessage,
+    });
+  } catch (err) {
+    logger.warn('rollback_failed SSE broadcast failed', { error: err instanceof Error ? err.message : String(err) });
+  }
+}
 
 function makeSyntheticSpan(step: PlanStep, risk: string, result: ToolResult): ExecutionSpan {
   const now = new Date().toISOString();

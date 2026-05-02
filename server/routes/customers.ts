@@ -1,8 +1,14 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
+import { validate } from '../middleware/validate.js';
 import { createAuditRepository, createCustomerRepository } from '../data/index.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
+
+const MergeCustomerBodySchema = z.object({
+  sourceId: z.string().min(1, 'sourceId is required'),
+});
 
 const router = Router();
 const customerRepository = createCustomerRepository();
@@ -161,11 +167,10 @@ router.patch('/:id', requirePermission('customers.write'), async (req: MultiTena
 //
 // Body: { sourceId: string }
 
-router.post('/:id/merge', requirePermission('customers.write'), async (req: MultiTenantRequest, res: Response) => {
+router.post('/:id/merge', requirePermission('customers.write'), validate({ body: MergeCustomerBodySchema }), async (req: MultiTenantRequest, res: Response) => {
   const targetId = req.params.id;
-  const sourceId = req.body?.sourceId as string | undefined;
+  const { sourceId } = req.body as z.infer<typeof MergeCustomerBodySchema>;
 
-  if (!sourceId) return res.status(400).json({ error: 'sourceId is required' });
   if (sourceId === targetId) return res.status(400).json({ error: 'sourceId and targetId must be different' });
 
   const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };

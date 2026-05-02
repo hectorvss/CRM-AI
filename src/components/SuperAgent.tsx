@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { superAgentApi } from '../api/client';
+import { supabase } from '../api/supabase';
 import type { NavigateFn, NavigationTarget, Page } from '../types';
+import CreditBanner from './billing/CreditBanner';
+import { useAICredits } from '../hooks/useAICredits';
 
 type MessageSection = {
   title: string;
@@ -772,6 +775,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [contextPanel, setContextPanel] = useState<ContextPanel | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const { blocked: aiCreditsBlocked } = useAICredits();
   const [composerText, setComposerText] = useState('');
   const [mode, setMode] = useState<SuperAgentMode>('investigate');
   const [planMode, setPlanMode] = useState(false);
@@ -782,6 +786,12 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [isExecuting, setIsExecuting] = useState(false);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [streamActivity, setStreamActivity] = useState<StreamActivity | null>(null);
+  const [sseReconnectAttempt, setSseReconnectAttempt] = useState(0);
+  const [caseCreatedToast, setCaseCreatedToast] = useState<{
+    caseId: string;
+    caseNumber: string;
+    source?: string | null;
+  } | null>(null);
   const [isStreamConnected, setIsStreamConnected] = useState(false);
   const [liveAlerts, setLiveAlerts] = useState<ProactiveAlert[]>([]);
   const [planSessionId, setPlanSessionId] = useState<string | null>(null);
@@ -887,52 +897,125 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   }, [composerText, planSuggestionVisible, planMode, mode]);
 
   useEffect(() => {
-    const source = new EventSource('/api/sse/agent-runs');
+    let cancelled = false;
+    let source: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+
     const parseData = (e: MessageEvent) => { try { return JSON.parse(e.data || '{}'); } catch { return {}; } };
     const updateIfCurrent = (e: MessageEvent, fn: (d: any, c: StreamActivity) => StreamActivity) => {
       const data = parseData(e);
       setStreamActivity((cur) => (!cur || data.runId !== cur.runId) ? cur : fn(data, cur));
     };
-    source.addEventListener('connected', () => setIsStreamConnected(true) as any);
-    source.addEventListener('super-agent:run_started', ((e: MessageEvent) => {
-      const data = parseData(e);
-      setStreamActivity((cur) => (!cur || data.runId !== cur.runId) ? cur : { ...cur, statusLine: 'Connecting modules...' });
-    }) as EventListener);
-    source.addEventListener('super-agent:message_chunk', ((e: MessageEvent) => {
-      updateIfCurrent(e, (d, c) => ({ ...c, text: `${c.text}${d.chunk || ''}` }));
-    }) as EventListener);
-    source.addEventListener('super-agent:step_started', ((e: MessageEvent) => {
-      updateIfCurrent(e, (d, c) => ({ ...c, statusLine: d.step?.label || c.statusLine, steps: [...c.steps.filter((s) => s.id !== d.step?.id), d.step].filter(Boolean) }));
-    }) as EventListener);
-    source.addEventListener('super-agent:step_completed', ((e: MessageEvent) => {
-      updateIfCurrent(e, (d, c) => ({ ...c, statusLine: d.step?.label || 'Done', steps: [...c.steps.filter((s) => s.id !== d.step?.id), d.step].filter(Boolean) }));
-    }) as EventListener);
-    source.addEventListener('super-agent:agent_called', ((e: MessageEvent) => {
-      updateIfCurrent(e, (d, c) => ({ ...c, agents: [...c.agents.filter((a) => a.slug !== d.agent?.slug), { slug: d.agent?.slug || 'agent', name: d.agent?.name || 'Agent', runtime: d.agent?.runtime || null, mode: d.agent?.mode || null, status: d.agent?.status || 'consulted', summary: 'Consulting...' }] }));
-    }) as EventListener);
-    source.addEventListener('super-agent:agent_result', ((e: MessageEvent) => {
-      updateIfCurrent(e, (d, c) => ({ ...c, agents: [...c.agents.filter((a) => a.slug !== d.agent?.slug), { slug: d.agent?.slug || 'agent', name: d.agent?.name || 'Agent', runtime: null, mode: null, status: d.agent?.status || 'consulted', summary: d.agent?.summary || 'Completed.' }] }));
-    }) as EventListener);
-    source.addEventListener('super-agent:run_finished', ((e: MessageEvent) => {
-      updateIfCurrent(e, (d, c) => ({ ...c, statusLine: d.statusLine || 'Done' }));
-    }) as EventListener);
-    source.addEventListener('super-agent:run_failed', ((e: MessageEvent) => {
-      updateIfCurrent(e, (d, c) => ({ ...c, error: d.error || 'Run failed.', statusLine: 'Failed' }));
-    }) as EventListener);
-    source.addEventListener('super-agent:workspace_alert', ((e: MessageEvent) => {
-      const data = parseData(e);
-      if (data.alerts && Array.isArray(data.alerts)) {
-        setLiveAlerts((prev) => {
-          const merged = [...prev];
-          for (const a of data.alerts as ProactiveAlert[]) {
-            if (!merged.some((x) => x.label === a.label)) merged.push(a);
-          }
-          return merged;
-        });
+
+    async function connectSSE() {
+      if (cancelled) return;
+
+      // Pull the current Supabase access token (if any) and pass it as a
+      // query param — EventSource cannot set Authorization headers in the
+      // browser. The server strips this from logs (see sse.ts).
+      let token: string | null = null;
+      try {
+        const { data } = await supabase.auth.getSession();
+        token = data.session?.access_token ?? null;
+      } catch {
+        // Auth lookup failed — connect anonymously; backend will reject if required.
       }
-    }) as EventListener);
-    source.onerror = () => setIsStreamConnected(false);
-    return () => { source.close(); };
+      if (cancelled) return;
+
+      const url = token
+        ? `/api/sse/agent-runs?token=${encodeURIComponent(token)}`
+        : '/api/sse/agent-runs';
+
+      const es = new EventSource(url);
+      source = es;
+
+      es.addEventListener('connected', () => {
+        attempts = 0;
+        setSseReconnectAttempt(0);
+        setIsStreamConnected(true);
+      });
+      es.addEventListener('super-agent:run_started', ((e: MessageEvent) => {
+        const data = parseData(e);
+        setStreamActivity((cur) => (!cur || data.runId !== cur.runId) ? cur : { ...cur, statusLine: 'Connecting modules...' });
+      }) as EventListener);
+      es.addEventListener('super-agent:message_chunk', ((e: MessageEvent) => {
+        updateIfCurrent(e, (d, c) => ({ ...c, text: `${c.text}${d.chunk || ''}` }));
+      }) as EventListener);
+      es.addEventListener('super-agent:step_started', ((e: MessageEvent) => {
+        updateIfCurrent(e, (d, c) => ({ ...c, statusLine: d.step?.label || c.statusLine, steps: [...c.steps.filter((s) => s.id !== d.step?.id), d.step].filter(Boolean) }));
+      }) as EventListener);
+      es.addEventListener('super-agent:step_completed', ((e: MessageEvent) => {
+        updateIfCurrent(e, (d, c) => ({ ...c, statusLine: d.step?.label || 'Done', steps: [...c.steps.filter((s) => s.id !== d.step?.id), d.step].filter(Boolean) }));
+      }) as EventListener);
+      es.addEventListener('super-agent:agent_called', ((e: MessageEvent) => {
+        updateIfCurrent(e, (d, c) => ({ ...c, agents: [...c.agents.filter((a) => a.slug !== d.agent?.slug), { slug: d.agent?.slug || 'agent', name: d.agent?.name || 'Agent', runtime: d.agent?.runtime || null, mode: d.agent?.mode || null, status: d.agent?.status || 'consulted', summary: 'Consulting...' }] }));
+      }) as EventListener);
+      es.addEventListener('super-agent:agent_result', ((e: MessageEvent) => {
+        updateIfCurrent(e, (d, c) => ({ ...c, agents: [...c.agents.filter((a) => a.slug !== d.agent?.slug), { slug: d.agent?.slug || 'agent', name: d.agent?.name || 'Agent', runtime: null, mode: null, status: d.agent?.status || 'consulted', summary: d.agent?.summary || 'Completed.' }] }));
+      }) as EventListener);
+      es.addEventListener('super-agent:run_finished', ((e: MessageEvent) => {
+        updateIfCurrent(e, (d, c) => ({ ...c, statusLine: d.statusLine || 'Done' }));
+      }) as EventListener);
+      es.addEventListener('super-agent:run_failed', ((e: MessageEvent) => {
+        updateIfCurrent(e, (d, c) => ({ ...c, error: d.error || 'Run failed.', statusLine: 'Failed' }));
+      }) as EventListener);
+      es.addEventListener('super-agent:workspace_alert', ((e: MessageEvent) => {
+        const data = parseData(e);
+        if (data.alerts && Array.isArray(data.alerts)) {
+          setLiveAlerts((prev) => {
+            const merged = [...prev];
+            for (const a of data.alerts as ProactiveAlert[]) {
+              if (!merged.some((x) => x.label === a.label)) merged.push(a);
+            }
+            return merged;
+          });
+        }
+      }) as EventListener);
+
+      // New-case notification (emitted by webhookProcess when an inbound
+      // webhook auto-creates a case). Surface as a toast that links to the
+      // case_graph page on click.
+      es.addEventListener('case:created', ((e: MessageEvent) => {
+        const data = parseData(e);
+        if (!data?.caseId) return;
+        setCaseCreatedToast({
+          caseId: String(data.caseId),
+          caseNumber: String(data.caseNumber || data.caseId),
+          source: data.source ?? null,
+        });
+      }) as EventListener);
+
+      es.onerror = () => {
+        setIsStreamConnected(false);
+        try { es.close(); } catch { /* noop */ }
+        if (source === es) source = null;
+        if (cancelled) return;
+
+        attempts += 1;
+        setSseReconnectAttempt(attempts);
+        // Exponential backoff capped at 30s: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
+        const delay = Math.min(30_000, 1000 * Math.pow(2, attempts - 1));
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          void connectSSE();
+        }, delay);
+      };
+    }
+
+    void connectSSE();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (source) {
+        try { source.close(); } catch { /* noop */ }
+        source = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -1065,6 +1148,10 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   async function sendPrompt(promptOverride?: string) {
     const prompt = (promptOverride ?? composerText).trim();
     if (!prompt || isSending || isExecuting) return;
+    if (aiCreditsBlocked) {
+      setFlashMessage('AI credits exhausted. Please add a top-up pack or upgrade your plan.');
+      return;
+    }
     const finalPrompt = mode === 'operate' && !promptOverride ? `Operate: ${prompt}` : prompt;
     setComposerText('');
     setPendingAction(null);
@@ -1207,6 +1294,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
         {/* Scroll area */}
         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-56 pt-10 sm:px-6">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+            <CreditBanner />
 
             {/* Loading */}
             {isBootstrapping ? (
@@ -1523,6 +1611,43 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
 
             {flashMessage ? (
               <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">{flashMessage}</p>
+            ) : null}
+
+            {!isStreamConnected && sseReconnectAttempt > 0 ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="mb-2 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400"
+              >
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500" />
+                <span>Reconnecting to live stream… (attempt {sseReconnectAttempt})</span>
+              </div>
+            ) : null}
+
+            {caseCreatedToast ? (
+              <div className="mb-2 flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+                <button
+                  type="button"
+                  className="flex-1 text-left"
+                  onClick={() => {
+                    const target = fallbackNavigationTarget('case_graph', caseCreatedToast.caseId);
+                    if (target) onNavigate?.(target);
+                    setCaseCreatedToast(null);
+                  }}
+                >
+                  <span className="font-semibold">New case{caseCreatedToast.source ? ` from ${caseCreatedToast.source}` : ''}: </span>
+                  <span className="underline">{caseCreatedToast.caseNumber}</span>
+                  <span className="ml-1 opacity-70">— click to open</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  className="opacity-60 hover:opacity-100"
+                  onClick={() => setCaseCreatedToast(null)}
+                >
+                  ×
+                </button>
+              </div>
             ) : null}
 
             {pendingAction ? (

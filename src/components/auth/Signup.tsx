@@ -6,7 +6,7 @@ interface SignupProps {
   onShowLogin: () => void;
 }
 
-type Step = 'credentials' | 'org' | 'done';
+type Step = 'credentials' | 'org' | 'done' | 'confirm_email';
 
 const Signup: React.FC<SignupProps> = ({ onSignup, onShowLogin }) => {
   const [step, setStep] = useState<Step>('credentials');
@@ -33,8 +33,18 @@ const Signup: React.FC<SignupProps> = ({ onSignup, onShowLogin }) => {
     setError('');
 
     try {
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
+      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
       if (signUpError) throw signUpError;
+
+      // When Supabase has email confirmation enabled, signUp returns no
+      // session — the user must click the confirmation link before they can
+      // sign in. We do NOT call /api/onboarding/setup here; that runs on the
+      // first authenticated load post-confirmation (handled in App.tsx).
+      if (!data.session) {
+        setStep('confirm_email');
+        return;
+      }
+
       setStep('org');
     } catch (err: any) {
       setError(err.message || 'Sign up failed');
@@ -186,6 +196,28 @@ const Signup: React.FC<SignupProps> = ({ onSignup, onShowLogin }) => {
           </>
         )}
 
+        {step === 'confirm_email' && (
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
+              <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8m-18 0v8a2 2 0 002 2h14a2 2 0 002-2V8m-18 0a2 2 0 012-2h14a2 2 0 012 2" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900">Confirma tu email</h3>
+            <p className="text-sm text-gray-500">
+              Te hemos enviado un enlace de confirmación a <strong>{email}</strong>.
+              Confírmalo y vuelve a entrar para terminar la configuración de tu organización.
+            </p>
+            <button
+              type="button"
+              onClick={onShowLogin}
+              className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-500"
+            >
+              Volver a iniciar sesión
+            </button>
+          </div>
+        )}
+
         {step === 'done' && (
           <div className="flex flex-col items-center gap-4 py-8">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
@@ -198,7 +230,7 @@ const Signup: React.FC<SignupProps> = ({ onSignup, onShowLogin }) => {
           </div>
         )}
 
-        {step !== 'done' && (
+        {step !== 'done' && step !== 'confirm_email' && (
           <p className="text-center text-sm text-gray-600">
             Already have an account?{' '}
             <button

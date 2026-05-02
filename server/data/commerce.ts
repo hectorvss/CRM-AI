@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '../db/supabase.js';
+import { parseRow } from '../db/utils.js';
 import {
   getOrderCanonicalContext,
   getPaymentCanonicalContext,

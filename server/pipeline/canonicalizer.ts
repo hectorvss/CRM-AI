@@ -177,7 +177,7 @@ async function syncStripeSubscription(
   supabase: ReturnType<typeof import('../db/supabase.js').getSupabaseAdmin>,
   scope: { tenantId: string; workspaceId: string },
   event: Record<string, any>,
-  log: ReturnType<typeof import('../utils/logger.js').logger.child>,
+  log: ReturnType<typeof logger.child>,
 ): Promise<string | null> {
   const sub = await fetchStripeEventObject(supabase, event.normalized_payload);
   if (!sub?.id) {
@@ -252,7 +252,7 @@ async function syncStripeInvoice(
   supabase: ReturnType<typeof import('../db/supabase.js').getSupabaseAdmin>,
   scope: { tenantId: string; workspaceId: string },
   event: Record<string, any>,
-  log: ReturnType<typeof import('../utils/logger.js').logger.child>,
+  log: ReturnType<typeof logger.child>,
 ): Promise<string | null> {
   if (event.event_type !== 'invoice.payment_succeeded') {
     // payment_failed is handled by the intent router → case auto-creation

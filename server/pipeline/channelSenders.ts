@@ -70,8 +70,8 @@ export async function sendEmail(
   content: string,
   caseNumberOrRef: string = 'direct',
 ): Promise<ChannelSendResult> {
-  const postmarkToken = process.env.POSTMARK_SERVER_TOKEN;
-  const fromEmail     = process.env.EMAIL_FROM ?? 'support@example.com';
+  const postmarkToken = config.channels?.postmark?.serverToken;
+  const fromEmail     = config.channels?.postmark?.fromEmail ?? 'support@example.com';
 
   if (!postmarkToken) {
     logger.warn(
@@ -112,9 +112,9 @@ export async function sendSms(
   to: string,
   content: string,
 ): Promise<ChannelSendResult> {
-  const twilioSid   = process.env.TWILIO_ACCOUNT_SID;
-  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioFrom  = process.env.TWILIO_FROM_NUMBER;
+  const twilioSid   = config.channels?.twilio?.accountSid;
+  const twilioToken = config.channels?.twilio?.authToken;
+  const twilioFrom  = config.channels?.twilio?.fromNumber;
 
   if (!twilioSid || !twilioToken || !twilioFrom) {
     logger.warn(

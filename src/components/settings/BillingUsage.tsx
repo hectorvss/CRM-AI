@@ -4,6 +4,7 @@ import { billingApi, workspacesApi } from '../../api/client';
 import LoadingState from '../LoadingState';
 import { MinimalButton, MinimalCard, MinimalPill, MinimalProgressBar } from '../MinimalCategoryShell';
 import { NavigateInput } from '../../types';
+import AICreditsPanel from '../billing/AICreditsPanel';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = {
@@ -60,6 +61,41 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
   const [billingEmail, setBillingEmail] = useState('billing@acme.com');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [stripeBusy, setStripeBusy] = useState<'upgrade' | 'portal' | null>(null);
+
+  const handleUpgrade = useCallback(async () => {
+    if (!orgId) {
+      setStatusMessage('Workspace context is still loading.');
+      return;
+    }
+    setStripeBusy('upgrade');
+    setStatusMessage(null);
+    try {
+      const { url } = await billingApi.checkoutSession(orgId, { email: billingEmail });
+      if (url) window.location.href = url;
+    } catch (error: any) {
+      setStatusMessage(error?.message || 'Could not start checkout session.');
+    } finally {
+      setStripeBusy(null);
+    }
+  }, [orgId, billingEmail]);
+
+  const handleManageSubscription = useCallback(async () => {
+    if (!orgId) {
+      setStatusMessage('Workspace context is still loading.');
+      return;
+    }
+    setStripeBusy('portal');
+    setStatusMessage(null);
+    try {
+      const { url } = await billingApi.portalSession(orgId, { email: billingEmail });
+      if (url) window.location.href = url;
+    } catch (error: any) {
+      setStatusMessage(error?.message || 'Could not open billing portal.');
+    } finally {
+      setStripeBusy(null);
+    }
+  }, [orgId, billingEmail]);
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const ledgerRef = useRef<HTMLDivElement | null>(null);
   const billingEmailRef = useRef<HTMLInputElement | null>(null);
@@ -126,6 +162,14 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
         </div>
       )}
 
+      <MinimalCard
+        title="AI credits"
+        subtitle="Live usage, top-up balance, and recent AI activity."
+        icon="diamond"
+      >
+        <AICreditsPanel />
+      </MinimalCard>
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
         <MinimalCard
           title="Billing overview"
@@ -156,7 +200,13 @@ export default function BillingUsageTab({ onSaveReady, onNavigate }: Props) {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <MinimalButton onClick={() => onNavigate?.({ page: 'upgrade', entityType: 'workspace', section: 'plans', sourceContext: 'settings_billing' })}>
+              <MinimalButton onClick={handleUpgrade} disabled={stripeBusy !== null}>
+                {stripeBusy === 'upgrade' ? 'Redirecting…' : 'Upgrade'}
+              </MinimalButton>
+              <MinimalButton variant="outline" onClick={handleManageSubscription} disabled={stripeBusy !== null}>
+                {stripeBusy === 'portal' ? 'Opening…' : 'Manage subscription'}
+              </MinimalButton>
+              <MinimalButton variant="ghost" onClick={() => onNavigate?.({ page: 'upgrade', entityType: 'workspace', section: 'plans', sourceContext: 'settings_billing' })}>
                 Manage plan & seats
               </MinimalButton>
               <MinimalButton

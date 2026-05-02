@@ -24,6 +24,9 @@ import { createSuperAgentOpsRepository } from '../data/superAgentOps.js';
 import { fireWorkflowEvent, recoverPendingEvents, pruneEventLog } from '../lib/workflowEventBus.js';
 import { pruneExpiredSessions } from '../agents/planEngine/sessionRepository.js';
 import { continueWorkflowRun } from '../routes/workflows.js';
+import { startAuditExportSweeper, stopAuditExportSweeper } from '../jobs/auditExport.js';
+import { startFlexibleUsageReporter, stopFlexibleUsageReporter } from '../jobs/flexibleUsageReport.js';
+import { startAiCreditsReset, stopAiCreditsReset } from '../jobs/aiCreditsReset.js';
 
 let slaIntervalId:              ReturnType<typeof setInterval> | null = null;
 let reconcileIntervalId:        ReturnType<typeof setInterval> | null = null;
@@ -48,6 +51,49 @@ const EVENT_LOG_PRUNE_INTERVAL_MS    = 60 * 60 * 1_000;   // 1 hour — remove o
 const CHURN_RISK_SCAN_INTERVAL_MS    = 24 * 60 * 60 * 1_000; // 24 hours (daily)
 const SUPER_AGENT_SCHEDULE_INTERVAL_MS =  1 * 60 * 1_000;   // 1 minute â€” due reminders / delayed actions
 
+/**
+ * Iterates over all active workspaces and invokes the per-scope callback.
+ * If DEFAULT_TENANT_ID/DEFAULT_WORKSPACE_ID are set, those override the
+ * iteration (single-tenant deploys).
+ */
+async function forEachActiveScope(
+  fn: (scope: { tenantId: string; workspaceId: string }) => void | Promise<void>,
+): Promise<void> {
+  const override = bootstrapScope();
+  if (override) {
+    await fn(override);
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    // workspaces.org_id IS the tenantId in this codebase. There is no `status`
+    // column on workspaces in current schema — we treat any workspace whose
+    // parent organization is non-deleted as active. Filter org-level if available.
+    const { data, error } = await supabase
+      .from('workspaces')
+      .select('id, org_id');
+    if (error) throw error;
+    const rows = (data ?? []) as Array<{ id: string; org_id: string }>;
+    for (const row of rows) {
+      if (!row.org_id || !row.id) continue;
+      try {
+        await fn({ tenantId: row.org_id, workspaceId: row.id });
+      } catch (err) {
+        logger.warn('Scheduled job per-workspace iteration failed', {
+          tenantId: row.org_id,
+          workspaceId: row.id,
+          error: String((err as any)?.message ?? err),
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn('forEachActiveScope: failed to enumerate workspaces', {
+      error: String((err as any)?.message ?? err),
+    });
+  }
+}
+
 export function startScheduledJobs(): void {
   logger.info('Starting scheduled job intervals', {
     slaIntervalMin:            SLA_INTERVAL_MS / 60_000,
@@ -56,56 +102,77 @@ export function startScheduledJobs(): void {
     superAgentScheduleIntervalMin: SUPER_AGENT_SCHEDULE_INTERVAL_MS / 60_000,
   });
 
-  const scope = bootstrapScope();
-  if (!scope) {
-    logger.warn(
-      'Scheduled jobs DISABLED — DEFAULT_TENANT_ID and/or DEFAULT_WORKSPACE_ID are not set. ' +
-      'SLA checks, reconciliation, workflow delays, session pruning, and churn scans will not run. ' +
-      'Add these variables to .env.local to enable background maintenance.',
-    );
-    return;
+  const override = bootstrapScope();
+  if (override) {
+    logger.info('Scheduled jobs running in single-tenant override mode', {
+      tenantId: override.tenantId,
+      workspaceId: override.workspaceId,
+    });
+  } else {
+    logger.info('Scheduled jobs running in multi-tenant mode (iterating all active workspaces)');
   }
 
   // Fire once shortly after startup (give the worker a few seconds to be fully up)
-  enqueueDelayed(JobType.SLA_CHECK,           {}, 10_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
-  enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 30_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+  setTimeout(() => {
+    void forEachActiveScope((scope) => {
+      enqueueDelayed(JobType.SLA_CHECK,           {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+    });
+  }, 10_000);
+  setTimeout(() => {
+    void forEachActiveScope((scope) => {
+      enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+    });
+  }, 30_000);
 
   slaIntervalId = setInterval(() => {
-    enqueueDelayed(JobType.SLA_CHECK, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+    void forEachActiveScope((scope) => {
+      enqueueDelayed(JobType.SLA_CHECK, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+    });
   }, SLA_INTERVAL_MS);
 
   reconcileIntervalId = setInterval(() => {
-    enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+    void forEachActiveScope((scope) => {
+      enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 9 });
+    });
   }, RECONCILE_INTERVAL_MS);
 
   // Workflow delay watcher: resume runs whose delay has expired
   workflowDelayIntervalId = setInterval(() => {
-    void resumeExpiredWorkflowDelays(scope.tenantId).catch((err) =>
-      logger.warn('Workflow delay sweep failed', { error: String(err?.message ?? err) }),
-    );
+    void forEachActiveScope(async (scope) => {
+      await resumeExpiredWorkflowDelays(scope.tenantId).catch((err) =>
+        logger.warn('Workflow delay sweep failed', { tenantId: scope.tenantId, error: String(err?.message ?? err) }),
+      );
+    });
   }, WORKFLOW_DELAY_INTERVAL_MS);
 
   // trigger.schedule sweeper: fire scheduled workflows when their cron is due
   scheduleSweeperIntervalId = setInterval(() => {
-    void sweepScheduledWorkflows(scope.tenantId, scope.workspaceId).catch((err) =>
-      logger.warn('Workflow schedule sweep failed', { error: String(err?.message ?? err) }),
-    );
+    void forEachActiveScope(async (scope) => {
+      await sweepScheduledWorkflows(scope.tenantId, scope.workspaceId).catch((err) =>
+        logger.warn('Workflow schedule sweep failed', { tenantId: scope.tenantId, error: String(err?.message ?? err) }),
+      );
+    });
   }, SCHEDULE_SWEEPER_INTERVAL_MS);
 
   superAgentScheduleIntervalId = setInterval(() => {
-    void sweepSuperAgentScheduledActions(scope.tenantId, scope.workspaceId).catch((err) =>
-      logger.warn('Super Agent scheduled action sweep failed', { error: String(err?.message ?? err) }),
-    );
+    void forEachActiveScope(async (scope) => {
+      await sweepSuperAgentScheduledActions(scope.tenantId, scope.workspaceId).catch((err) =>
+        logger.warn('Super Agent scheduled action sweep failed', { tenantId: scope.tenantId, error: String(err?.message ?? err) }),
+      );
+    });
   }, SUPER_AGENT_SCHEDULE_INTERVAL_MS);
 
   // Orphaned run sweeper: mark workflow_runs stuck in 'running' > 30 min as failed
   orphanSweeperIntervalId = setInterval(() => {
-    void sweepOrphanedWorkflowRuns(scope.tenantId).catch((err) =>
-      logger.warn('Orphaned run sweep failed', { error: String(err?.message ?? err) }),
-    );
+    void forEachActiveScope(async (scope) => {
+      await sweepOrphanedWorkflowRuns(scope.tenantId).catch((err) =>
+        logger.warn('Orphaned run sweep failed', { tenantId: scope.tenantId, error: String(err?.message ?? err) }),
+      );
+    });
   }, ORPHAN_SWEEPER_INTERVAL_MS);
 
   // Session pruner: remove in-memory agent sessions whose TTL has expired
+  // (sessions are global in-memory — no per-tenant iteration needed)
   sessionPruneIntervalId = setInterval(() => {
     void (async () => {
       try {
@@ -119,23 +186,42 @@ export function startScheduledJobs(): void {
 
   // Event bus recovery: retry workflow events stuck in 'pending' (process crash recovery)
   eventBusRecoveryIntervalId = setInterval(() => {
-    void recoverPendingEvents(scope.tenantId, scope.workspaceId).catch((err) =>
-      logger.warn('Event bus recovery sweep failed', { error: String((err as any)?.message ?? err) }),
-    );
+    void forEachActiveScope(async (scope) => {
+      await recoverPendingEvents(scope.tenantId, scope.workspaceId).catch((err) =>
+        logger.warn('Event bus recovery sweep failed', { tenantId: scope.tenantId, error: String((err as any)?.message ?? err) }),
+      );
+    });
   }, EVENT_BUS_RECOVERY_INTERVAL_MS);
 
   // Event log pruner: delete executed rows older than 7 days to keep table lean
   eventLogPruneIntervalId = setInterval(() => {
-    void pruneEventLog(scope.tenantId).catch((err) =>
-      logger.warn('Event log prune failed', { error: String((err as any)?.message ?? err) }),
-    );
+    void forEachActiveScope(async (scope) => {
+      await pruneEventLog(scope.tenantId).catch((err) =>
+        logger.warn('Event log prune failed', { tenantId: scope.tenantId, error: String((err as any)?.message ?? err) }),
+      );
+    });
   }, EVENT_LOG_PRUNE_INTERVAL_MS);
 
   // Churn risk scanner: daily scan for customers at risk of churning
-  enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 60_000, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 6 });
+  setTimeout(() => {
+    void forEachActiveScope((scope) => {
+      enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 6 });
+    });
+  }, 60_000);
   churnRiskScanIntervalId = setInterval(() => {
-    enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 6 });
+    void forEachActiveScope((scope) => {
+      enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 0, { tenantId: scope.tenantId, workspaceId: scope.workspaceId, priority: 6 });
+    });
   }, CHURN_RISK_SCAN_INTERVAL_MS);
+
+  // Audit export request processor (hourly)
+  startAuditExportSweeper();
+
+  // Flexible (metered) Stripe usage reporter (daily)
+  startFlexibleUsageReporter();
+
+  // AI credits monthly period reset (hourly check; rolls only periods that have ended)
+  startAiCreditsReset();
 }
 
 /**
@@ -299,6 +385,9 @@ export function stopScheduledJobs(): void {
   if (eventBusRecoveryIntervalId)  clearInterval(eventBusRecoveryIntervalId);
   if (eventLogPruneIntervalId)     clearInterval(eventLogPruneIntervalId);
   if (churnRiskScanIntervalId)     clearInterval(churnRiskScanIntervalId);
+  stopAuditExportSweeper();
+  stopFlexibleUsageReporter();
+  stopAiCreditsReset();
   slaIntervalId              = null;
   reconcileIntervalId        = null;
   workflowDelayIntervalId    = null;

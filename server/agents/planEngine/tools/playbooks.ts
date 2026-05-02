@@ -90,7 +90,7 @@ export const playbookExecuteTool: ToolSpec<PlaybookExecuteArgs, unknown> = {
   args: s.object({
     playbookId: s.string({ description: 'ID of the playbook to run' }),
     parameters: s.any('Object mapping parameter name → value. Required + optional params per playbook.get.'),
-  }),
+  }) as unknown as import('../types.js').Schema<PlaybookExecuteArgs>,
   returns: s.any('{ playbookId, status, steps: [{ id, tool, ok, output?, error?, rationale }] }'),
   async run({ args, context }) {
     const pb = getPlaybook(args.playbookId);

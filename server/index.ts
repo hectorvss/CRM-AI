@@ -36,8 +36,10 @@ import policyRouter from './routes/policy.js';
 import reconciliationRouter from './routes/reconciliation.js';
 import superAgentRouter from './routes/superAgent.js';
 import onboardingRouter from './routes/onboarding.js';
+import publicConfigRouter from './routes/publicConfig.js';
 import { oauthConnectorsRouter } from './routes/oauthConnectors.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
+import { superAgentLimiter, aiLimiter, onboardingLimiter } from './middleware/rateLimit.js';
 import { webhookRouter } from './webhooks/router.js';
 
 // ── Register job handlers (must import to trigger side-effect registration) ──
@@ -127,7 +129,7 @@ app.use('/api/workflows', workflowsRouter);
 app.use('/api/agents', agentsRouter);
 app.use('/api/connectors', connectorsRouter);
 app.use('/api/audit', auditRouter);
-app.use('/api/ai', aiRouter);
+app.use('/api/ai', aiLimiter, aiRouter);
 app.use('/api/iam', iamRouter);
 app.use('/api/workspaces', workspacesRouter);
 app.use('/api/billing', billingRouter);
@@ -138,8 +140,10 @@ app.use('/api/sse', sseRouter);
 app.use('/api/demo', demoRouter);
 app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
-app.use('/api/super-agent', superAgentRouter);
-app.use('/api/onboarding', onboardingRouter);
+app.use('/api/super-agent', superAgentLimiter, superAgentRouter);
+app.use('/api/onboarding', onboardingLimiter, onboardingRouter);
+// Public, unauthenticated endpoints used by the landing page (config + lead capture).
+app.use('/api/public', publicConfigRouter);
 // OAuth callback must be public (no x-tenant-id header in the provider redirect)
 app.use('/api/oauth-connectors', oauthConnectorsRouter);
 
@@ -164,6 +168,31 @@ app.get('/api/health', async (_req, res) => {
       registered: integrationRegistry.registeredSystems(),
       health:     integrationHealth,
     },
+  });
+});
+
+// ── Static hosting ────────────────────────────────────────
+//   /            → static landing page (public-landing/)
+//   /app, /app/* → Vite-built SPA (dist/)
+//
+// Mounted AFTER /webhooks and /api so those continue to take precedence.
+// In Vercel, vercel.json rewrites handle equivalent routing; this block is
+// primarily for local `npm start` and self-hosted deployments.
+const LANDING_DIR = path.resolve(__dirname, '../public-landing');
+const SPA_DIR     = path.resolve(__dirname, '../dist');
+
+app.use('/app', express.static(SPA_DIR, { index: false, fallthrough: true }));
+app.get(/^\/app(\/.*)?$/, (_req, res, next) => {
+  res.sendFile(path.join(SPA_DIR, 'index.html'), (err) => {
+    if (err) next();
+  });
+});
+
+app.use('/', express.static(LANDING_DIR, { index: 'index.html', fallthrough: true }));
+// Hash-based SPA in the landing — every unmatched GET serves the landing shell.
+app.get(/^\/(?!api|webhooks|app).*/, (_req, res, next) => {
+  res.sendFile(path.join(LANDING_DIR, 'index.html'), (err) => {
+    if (err) next();
   });
 });
 

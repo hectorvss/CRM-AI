@@ -29,6 +29,9 @@ interface StyledSelectProps {
   className?: string;
   disabled?: boolean;
   placeholder?: string;
+  menuWidth?: number;
+  columns?: number;
+  wrapLabels?: boolean;
 }
 
 interface MenuPos {

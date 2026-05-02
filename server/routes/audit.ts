@@ -6,6 +6,8 @@ import { createApprovalRepository } from '../data/index.js';
 import { sendError } from '../http/errors.js';
 import { createWorkspaceRepository } from '../data/workspaces.js';
 import { parseSettings } from '../services/privacyRedaction.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 const auditRepository = createAuditRepository();
@@ -55,9 +57,43 @@ async function createPrivacyApproval(req: MultiTenantRequest, actionType: 'data_
   });
 }
 
+async function recordExportRequest(
+  scope: { tenantId: string; workspaceId: string },
+  kind: 'export' | 'deletion',
+  approvalId: string | null,
+  requestedBy: string | null,
+  reason: string | null,
+): Promise<void> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('workspace_export_requests').insert({
+      tenant_id:    scope.tenantId,
+      workspace_id: scope.workspaceId,
+      kind,
+      status:       'pending',
+      approval_id:  approvalId,
+      requested_by: requestedBy,
+      reason,
+    });
+    if (error) throw error;
+  } catch (err) {
+    logger.warn('recordExportRequest: failed to insert workspace_export_requests row', {
+      error: (err as Error).message,
+      kind,
+    });
+  }
+}
+
 router.post('/workspace/export-request', async (req: MultiTenantRequest, res) => {
   try {
     const approval = await createPrivacyApproval(req, 'data_export');
+    await recordExportRequest(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId! },
+      'export',
+      (approval as any)?.id ?? null,
+      req.userId ?? null,
+      req.body?.reason ?? null,
+    );
     res.status(202).json({ status: 'approval_required', approval });
   } catch (error) {
     console.error('Audit export approval error:', error);
@@ -68,6 +104,13 @@ router.post('/workspace/export-request', async (req: MultiTenantRequest, res) =>
 router.post('/workspace/deletion-request', async (req: MultiTenantRequest, res) => {
   try {
     const approval = await createPrivacyApproval(req, 'data_deletion');
+    await recordExportRequest(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId! },
+      'deletion',
+      (approval as any)?.id ?? null,
+      req.userId ?? null,
+      req.body?.reason ?? null,
+    );
     res.status(202).json({ status: 'approval_required', approval });
   } catch (error) {
     console.error('Audit deletion approval error:', error);

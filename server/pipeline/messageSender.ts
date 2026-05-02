@@ -137,10 +137,22 @@ async function handleSendMessage(
       }
     }
   } catch (err) {
-    log.error('Message send failed', {
-      channel,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log.error('Message send failed', { channel, error: errMsg });
+    // If the row was created in 'pending' state by the upstream tool, flip it
+    // to 'failed' so the inbox shows the user a clear failure indicator.
+    if (payload.queuedMessageId) {
+      try {
+        await caseRepo.updateMessage(scope, payload.queuedMessageId, {
+          delivery_status: 'failed',
+          delivery_error: errMsg,
+        });
+      } catch (updateErr) {
+        log.warn('Failed to mark queued message as failed', {
+          error: updateErr instanceof Error ? updateErr.message : String(updateErr),
+        });
+      }
+    }
     throw err; // Re-throw so the queue worker can retry
   }
 
@@ -152,7 +164,9 @@ async function handleSendMessage(
     await caseRepo.updateMessage(scope, payload.queuedMessageId, {
       external_message_id: externalMessageId,
       sent_at: now,
-      delivered_at: simulated ? null : now
+      delivered_at: simulated ? null : now,
+      delivery_status: 'sent',
+      delivery_error: null,
     });
   } else {
     await caseRepo.createMessage(scope, {

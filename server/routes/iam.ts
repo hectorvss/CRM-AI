@@ -5,6 +5,10 @@ import { requirePermission } from '../middleware/authorization.js';
 import { createHash, randomBytes } from 'crypto';
 import crypto from 'crypto';
 import { createIAMRepository, createWorkspaceRepository } from '../data/index.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
+import { sendEmail } from '../pipeline/channelSenders.js';
+import { config } from '../config.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 const iamRepository = createIAMRepository();
@@ -438,11 +442,78 @@ router.post('/members/invite', requirePermission('members.invite'), async (req: 
       tenantId: req.tenantId
     });
 
-    // Generate invite token (mock — real flow would store this in member_invitations table)
-    const token = crypto.randomBytes(24).toString('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')?.replace(/:\d+$/, ':5173') || 'localhost:5173'}`;
-    const acceptUrl = `${baseUrl}/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
+    // ── Generate + persist invite token ────────────────────────────────────
+    const token = crypto.randomUUID();
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const expiresAtDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = expiresAtDate.toISOString();
+
+    try {
+      const supabase = getSupabaseAdmin();
+      const { error: tokenInsertError } = await supabase.from('invite_tokens').insert({
+        token_hash:   tokenHash,
+        member_id:    memberId,
+        user_id:      userId,
+        email,
+        tenant_id:    req.tenantId,
+        workspace_id: req.workspaceId,
+        role_id,
+        expires_at:   expiresAt,
+        created_at:   new Date().toISOString(),
+      });
+      if (tokenInsertError) {
+        logger.warn('iam/invite: failed to persist invite token (continuing)', {
+          error: tokenInsertError.message,
+          memberId,
+        });
+      }
+    } catch (tokenErr: any) {
+      logger.warn('iam/invite: invite token persistence error (continuing)', {
+        error: tokenErr?.message,
+        memberId,
+      });
+    }
+
+    const baseUrl = config.app.url;
+    const acceptUrl = `${baseUrl}/accept-invite?token=${token}`;
+
+    // ── Resolve org name for email body ────────────────────────────────────
+    let orgName = 'your team';
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', req.tenantId)
+        .maybeSingle();
+      if (org?.name) orgName = org.name;
+    } catch { /* non-fatal */ }
+
+    // ── Deliver invite email (Postmark) ────────────────────────────────────
+    const emailSubject = `You've been invited to ${orgName}`;
+    const emailBody =
+      `Hello,\n\n` +
+      `You've been invited to ${orgName} on CRM-AI.\n\n` +
+      `Click the link below to accept your invitation (valid for 7 days):\n` +
+      `${acceptUrl}\n\n` +
+      `If you did not expect this invitation, you can safely ignore this email.\n`;
+
+    let emailDelivered = false;
+    let emailSimulated = false;
+    try {
+      const result = await sendEmail(email, emailSubject, emailBody, 'invite');
+      emailDelivered = !result.simulated;
+      emailSimulated = result.simulated;
+      if (result.simulated) {
+        logger.warn('iam/invite: Postmark not configured — invite email NOT sent', {
+          email, acceptUrl,
+        });
+      }
+    } catch (emailErr: any) {
+      logger.error('iam/invite: failed to send invite email', {
+        error: emailErr?.message, email,
+      });
+    }
 
     res.status(201).json({
       id: memberId,
@@ -453,6 +524,8 @@ router.post('/members/invite', requirePermission('members.invite'), async (req: 
         token,
         accept_url: acceptUrl,
         expires_at: expiresAt,
+        email_delivered: emailDelivered,
+        email_simulated: emailSimulated,
       },
     });
   } catch (error) {
@@ -622,6 +695,71 @@ router.post('/members/invite/resend', requirePermission('members.invite'), async
     res.json({ email, token, expires_at: expiresAt, accept_url: acceptUrl, role_id });
   } catch (error) {
     sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
+// ── POST /api/iam/accept-invite ──────────────────────────────────────────────
+// Public endpoint — validates an invitation token, marks the corresponding
+// member as 'active' and consumes the token. No tenant/workspace headers
+// required (the token itself carries the binding).
+router.post('/accept-invite', async (req, res) => {
+  const { token } = req.body as { token?: string };
+  if (!token || typeof token !== 'string') {
+    return sendError(res, 400, 'INVALID_INVITE_TOKEN', 'token is required');
+  }
+
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+
+  try {
+    const supabase = getSupabaseAdmin();
+
+    const { data: row, error } = await supabase
+      .from('invite_tokens')
+      .select('*')
+      .eq('token_hash', tokenHash)
+      .maybeSingle();
+
+    if (error) {
+      logger.error('iam/accept-invite: lookup failed', { error: error.message });
+      return sendError(res, 500, 'INTERNAL_ERROR', 'Failed to validate invite');
+    }
+    if (!row) {
+      return sendError(res, 404, 'INVITE_NOT_FOUND', 'Invitation not found or already used');
+    }
+    if (row.consumed_at) {
+      return sendError(res, 410, 'INVITE_ALREADY_USED', 'Invitation has already been used');
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      return sendError(res, 410, 'INVITE_EXPIRED', 'Invitation has expired');
+    }
+
+    // Activate member and consume token (best-effort sequence — RLS bypassed
+    // by service-role client).
+    await iamRepository.updateMember(row.member_id, { status: 'active' });
+
+    const { error: deleteError } = await supabase
+      .from('invite_tokens')
+      .delete()
+      .eq('token_hash', tokenHash);
+    if (deleteError) {
+      // If deletion fails, mark consumed instead so the token cannot be reused.
+      await supabase
+        .from('invite_tokens')
+        .update({ consumed_at: new Date().toISOString() })
+        .eq('token_hash', tokenHash);
+    }
+
+    res.json({
+      ok: true,
+      member_id:    row.member_id,
+      user_id:      row.user_id,
+      tenant_id:    row.tenant_id,
+      workspace_id: row.workspace_id,
+      email:        row.email,
+    });
+  } catch (err: any) {
+    logger.error('iam/accept-invite: unexpected error', { error: err?.message });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to accept invitation');
   }
 });
 

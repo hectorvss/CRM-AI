@@ -154,6 +154,11 @@ export default function App() {
   // Auth state — null = loading, false = unauthenticated, true = authenticated
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [showSignup, setShowSignup] = useState(false);
+  // Post-auth onboarding gate: null = unknown, true = has membership, false = needs org setup
+  const [hasMembership, setHasMembership] = useState<boolean | null>(null);
+  const [orgSetupName, setOrgSetupName] = useState('');
+  const [orgSetupLoading, setOrgSetupLoading] = useState(false);
+  const [orgSetupError, setOrgSetupError] = useState('');
 
   const currentPage = navigationTarget.page;
 
@@ -168,9 +173,96 @@ export default function App() {
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthenticated(!!session);
+      if (!session) setHasMembership(null);
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Membership check: once authenticated, verify the user has an active
+  // membership. If not (e.g. first login after email confirmation), gate the
+  // app on a minimal "name your organization" step that calls /onboarding/setup.
+  useEffect(() => {
+    if (!authenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        const user = data.session?.user;
+        if (!token || !user) return;
+
+        const claimTenant = (user.app_metadata as any)?.tenant_id || (user.user_metadata as any)?.tenant_id;
+        if (claimTenant) {
+          if (!cancelled) setHasMembership(true);
+          return;
+        }
+
+        const res = await fetch('/api/iam/me', {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization:  `Bearer ${token}`,
+            'x-user-id':    user.id,
+          },
+        });
+
+        if (cancelled) return;
+
+        // 404 = user record missing, 401/403 = no permission/membership →
+        // both indicate the onboarding scaffold has not run yet.
+        if (res.status === 404 || res.status === 401 || res.status === 403) {
+          setHasMembership(false);
+          return;
+        }
+
+        if (!res.ok) {
+          // Other errors: don't block — let downstream calls surface them.
+          setHasMembership(true);
+          return;
+        }
+
+        const body = await res.json().catch(() => null) as any;
+        const tenantId = body?.context?.tenant_id || body?.memberships?.[0]?.tenant_id;
+        setHasMembership(Boolean(tenantId));
+      } catch {
+        if (!cancelled) setHasMembership(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authenticated]);
+
+  const submitOrgSetup = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orgSetupName.trim()) {
+      setOrgSetupError('Organisation name is required');
+      return;
+    }
+    setOrgSetupLoading(true);
+    setOrgSetupError('');
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+      const res = await fetch('/api/onboarding/setup', {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          Authorization:   `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orgName: orgSetupName.trim() }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as any;
+        throw new Error(body?.message ?? `Setup failed (${res.status})`);
+      }
+      // Refresh the Supabase session so the new app_metadata claims are loaded.
+      try { await supabase.auth.refreshSession(); } catch { /* ignore */ }
+      setHasMembership(true);
+    } catch (err: any) {
+      setOrgSetupError(err.message || 'Organisation setup failed');
+    } finally {
+      setOrgSetupLoading(false);
+    }
+  }, [orgSetupName]);
 
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {
@@ -246,6 +338,52 @@ export default function App() {
         onLogin={() => setAuthenticated(true)}
         onShowSignup={() => setShowSignup(true)}
       />
+    );
+  }
+
+  // Authenticated but no membership yet → gate on org setup (covers first
+  // login after email confirmation, where signUp didn't run /onboarding/setup).
+  if (hasSupabaseAuth && authenticated && hasMembership === false) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-md space-y-6 bg-white p-8 rounded-lg shadow-md">
+          <h2 className="text-center text-2xl font-bold text-gray-900">
+            Configura tu organización
+          </h2>
+          <p className="text-center text-sm text-gray-500">
+            Estás a un paso. Pon nombre a tu organización para crear tu workspace.
+          </p>
+          <form className="space-y-4" onSubmit={submitOrgSetup}>
+            <input
+              type="text"
+              placeholder="Organisation name"
+              required
+              value={orgSetupName}
+              onChange={(e) => setOrgSetupName(e.target.value)}
+              className="block w-full rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6 px-3"
+            />
+            {orgSetupError && (
+              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{orgSetupError}</div>
+            )}
+            <button
+              type="submit"
+              disabled={orgSetupLoading}
+              className="w-full rounded-md bg-blue-600 py-2 px-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+            >
+              {orgSetupLoading ? 'Setting up...' : 'Create workspace'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // While we're checking membership, show the same loading spinner.
+  if (hasSupabaseAuth && authenticated && hasMembership === null) {
+    return (
+      <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
     );
   }
 

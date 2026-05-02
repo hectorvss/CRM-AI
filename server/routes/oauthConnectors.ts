@@ -97,15 +97,62 @@ const PROVIDERS: Record<string, ProviderConfig> = {
   },
 };
 
-// In-memory state store (per-process; fine for single-instance deployments)
-// key = state token, value = { tenantId, workspaceId, system, createdAt }
-const pendingStates = new Map<string, { tenantId: string; workspaceId: string; system: string; createdAt: number }>();
+// OAuth state lives in the `oauth_states` table so it survives restarts and
+// works across horizontally scaled instances. State tokens older than the
+// cutoff are pruned on every /start request before any new lookup.
+const OAUTH_STATE_TTL_MINUTES = 10;
 
-// Prune states older than 10 minutes
-function pruneStates() {
-  const cutoff = Date.now() - 10 * 60 * 1000;
-  for (const [k, v] of pendingStates) {
-    if (v.createdAt < cutoff) pendingStates.delete(k);
+async function pruneStates(): Promise<void> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const cutoff = new Date(Date.now() - OAUTH_STATE_TTL_MINUTES * 60 * 1000).toISOString();
+    await supabase.from('oauth_states').delete().lt('created_at', cutoff);
+  } catch (err: any) {
+    logger.warn('oauth: pruneStates failed (non-fatal)', { error: err?.message });
+  }
+}
+
+async function persistState(
+  state: string,
+  tenantId: string,
+  workspaceId: string,
+  system: string,
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from('oauth_states').insert({
+    state,
+    tenant_id:    tenantId,
+    workspace_id: workspaceId,
+    system,
+    created_at:   new Date().toISOString(),
+  });
+  if (error) {
+    throw new Error(`oauth_states insert failed: ${error.message}`);
+  }
+}
+
+async function consumeState(
+  state: string,
+): Promise<{ tenantId: string; workspaceId: string; system: string } | null> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const cutoff = new Date(Date.now() - OAUTH_STATE_TTL_MINUTES * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('oauth_states')
+      .select('*')
+      .eq('state', state)
+      .gte('created_at', cutoff)
+      .maybeSingle();
+    if (error || !data) return null;
+    await supabase.from('oauth_states').delete().eq('state', state);
+    return {
+      tenantId:    data.tenant_id,
+      workspaceId: data.workspace_id,
+      system:      data.system,
+    };
+  } catch (err: any) {
+    logger.error('oauth: consumeState failed', { error: err?.message });
+    return null;
   }
 }
 
@@ -117,8 +164,8 @@ function buildRedirectUri(req: Request, system: string): string {
 
 // ── GET /:system/start ─────────────────────────────────────────────────────────
 
-oauthConnectorsRouter.get('/:system/start', (req: Request, res: Response) => {
-  pruneStates();
+oauthConnectorsRouter.get('/:system/start', async (req: Request, res: Response) => {
+  await pruneStates();
 
   const system = req.params.system.toLowerCase();
   const provider = PROVIDERS[system];
@@ -139,7 +186,12 @@ oauthConnectorsRouter.get('/:system/start', (req: Request, res: Response) => {
   const workspaceId = (req.query.workspaceId as string) || 'ws_default';
 
   const state = randomBytes(20).toString('hex');
-  pendingStates.set(state, { tenantId, workspaceId, system, createdAt: Date.now() });
+  try {
+    await persistState(state, tenantId, workspaceId, system);
+  } catch (err: any) {
+    logger.error(`oauth/${system}: failed to persist state`, { error: err?.message });
+    return res.status(500).json({ error: 'Failed to initialize OAuth flow' });
+  }
 
   const redirectUri = buildRedirectUri(req, system);
   const params = new URLSearchParams({
@@ -167,18 +219,19 @@ oauthConnectorsRouter.get('/:system/callback', async (req: Request, res: Respons
 
   if (oauthError) {
     logger.warn(`oauth/${system}: provider returned error`, { error: oauthError });
-    return res.send(closePopupHtml('error', oauthError));
+    return sendClosePopup(res, 'error', oauthError);
   }
 
   if (!code || !state) {
-    return res.status(400).send(closePopupHtml('error', 'Missing code or state parameter'));
+    res.status(400);
+    return sendClosePopup(res, 'error', 'Missing code or state parameter');
   }
 
-  const pending = pendingStates.get(state);
+  const pending = await consumeState(state);
   if (!pending) {
-    return res.status(400).send(closePopupHtml('error', 'Invalid or expired state — please try again'));
+    res.status(400);
+    return sendClosePopup(res, 'error', 'Invalid or expired state — please try again');
   }
-  pendingStates.delete(state);
 
   const clientId     = provider.clientId()!;
   const clientSecret = provider.clientSecret()!;
@@ -234,28 +287,59 @@ oauthConnectorsRouter.get('/:system/callback', async (req: Request, res: Respons
     }
 
     logger.info(`oauth/${system}: connected`, { tenantId: pending.tenantId });
-    res.send(closePopupHtml('success', system));
+    sendClosePopup(res, 'success', system);
 
   } catch (err: any) {
     logger.error(`oauth/${system}: callback error`, { error: err.message });
-    res.send(closePopupHtml('error', err.message ?? 'OAuth failed'));
+    sendClosePopup(res, 'error', err.message ?? 'OAuth failed');
   }
 });
 
 // ── Popup close helper ────────────────────────────────────────────────────────
 
+/**
+ * Escape characters that have special meaning in HTML to prevent XSS when
+ * rendering arbitrary `detail` strings (which may include error messages
+ * sourced from upstream OAuth providers).
+ */
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function closePopupHtml(status: 'success' | 'error', detail: string): string {
+  const safeDetail = escapeHtml(detail);
+  // JSON.stringify gives us a JS-string-safe literal; escape `<` to prevent
+  // a `</script>` sequence inside the embedded value from breaking out.
+  const jsDetail = JSON.stringify(detail).replace(/</g, '\\u003c');
   return `<!DOCTYPE html>
 <html><head><title>OAuth ${status}</title></head>
 <body>
 <p style="font-family:sans-serif;padding:2rem;color:${status === 'success' ? '#16a34a' : '#dc2626'}">
-  ${status === 'success' ? `✓ ${detail} connected successfully. You can close this window.` : `✗ ${detail}`}
+  ${status === 'success' ? `✓ ${safeDetail} connected successfully. You can close this window.` : `✗ ${safeDetail}`}
 </p>
 <script>
   if (window.opener) {
-    window.opener.postMessage({ type: 'oauth_${status}', detail: ${JSON.stringify(detail)} }, '*');
+    window.opener.postMessage({ type: 'oauth_${status}', detail: ${jsDetail} }, '*');
     setTimeout(() => window.close(), 1500);
   }
 </script>
 </body></html>`;
+}
+
+function sendClosePopup(res: import('express').Response, status: 'success' | 'error', detail: string): void {
+  // Restrict what the popup is allowed to load. We only need our own inline
+  // script + style; everything else (network, images, frames, plugins) is
+  // disabled. Inline is required because the page is self-contained HTML.
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+  );
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.type('html').send(closePopupHtml(status, detail));
 }

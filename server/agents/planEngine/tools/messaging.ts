@@ -104,9 +104,11 @@ export const messageSendTool: ToolSpec<MessageSendArgs, unknown> = {
       conversationId = conversation?.id ?? null;
 
       if (conversationId) {
-        // Create a queued message row for instant inbox feedback
+        // Create a pending message row for instant inbox feedback. The
+        // SEND_MESSAGE handler flips delivery_status to 'sent' or 'failed'.
         const queuedMessageId = randomUUID();
         await conversationRepo.appendMessage(scope, {
+          id: queuedMessageId,
           conversationId,
           caseId: args.caseId,
           customerId: args.customerId,
@@ -116,6 +118,7 @@ export const messageSendTool: ToolSpec<MessageSendArgs, unknown> = {
           senderName: 'Super Agent',
           content: args.message,
           channel,
+          deliveryStatus: 'pending',
         });
 
         // Enqueue the actual channel delivery

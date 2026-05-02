@@ -309,12 +309,15 @@ export const planEngine = {
       mode: input.mode || 'investigate',
       planId,
       agentConfig,
+      scope: input.workspaceId
+        ? { tenantId: input.tenantId, workspaceId: input.workspaceId, userId: input.userId }
+        : undefined,
     };
 
     const response = await getPlanEngineLLMProvider().generatePlan(req);
 
     // ── Token-based billing deduction (non-blocking) ───────────────────────
-    const tokensUsed = response.tokensUsed ?? 0;
+    const tokensUsed = (response as { tokensUsed?: number }).tokensUsed ?? 0;
     if (tokensUsed > 0) {
       // 1 credit per 1 000 tokens (rounded up) — adjust the divisor via env
       const tokensPerCredit = Number(process.env.BILLING_TOKENS_PER_CREDIT ?? '1000');
@@ -387,7 +390,9 @@ export const planEngine = {
         const assistantContent =
           response.kind === 'clarification' ? response.question
           : response.kind === 'chat' ? response.message
-          : response.error;
+          : response.kind === 'credit_exhausted' ? response.message
+          : response.kind === 'error' ? response.error
+          : '';
         session.turns.push({
           role: 'assistant',
           content: assistantContent,

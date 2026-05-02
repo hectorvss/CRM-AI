@@ -17,6 +17,11 @@ import { logger } from '../../utils/logger.js';
 import { redactSensitiveText, redactStructuredValue } from './safety.js';
 import type { Plan, PlanStep, SessionState } from './types.js';
 import type { CatalogEntry } from './registry.js';
+import {
+  assertCanUseAI,
+  chargeCredits,
+  AICreditExhaustedError,
+} from '../../services/aiUsageMeter.js';
 
 // ── Contract ─────────────────────────────────────────────────────────────────
 
@@ -75,13 +80,20 @@ export interface PlanRequest {
    * Sourced from AI Studio's Reasoning / Safety / Knowledge tabs.
    */
   agentConfig?: AgentRuntimeConfig;
+  /**
+   * Billing scope for credit metering. When provided, the provider performs
+   * an `assertCanUseAI` pre-flight and a `chargeCredits` call after the LLM
+   * response. Omit only for tests or unmetered internal calls.
+   */
+  scope?: { tenantId: string; workspaceId: string; userId?: string };
 }
 
 export type LLMResponse =
   | { kind: 'plan'; plan: Plan; tokensUsed?: number }
   | { kind: 'clarification'; question: string; tokensUsed?: number }
   | { kind: 'chat'; message: string; tokensUsed?: number }
-  | { kind: 'error'; error: string; tokensUsed?: number };
+  | { kind: 'error'; error: string; tokensUsed?: number }
+  | { kind: 'credit_exhausted'; message: string; upgradeUrl: string; available: number };
 
 export interface NarrativeRequest {
   userMessage: string;
@@ -438,6 +450,24 @@ class GeminiProvider implements LLMProvider {
     const temperature = normalizeTemperature(agentConfig?.temperature, 0.2);
     const maxOutputTokens = normalizeMaxOutputTokens(agentConfig?.maxOutputTokens, 2048);
 
+    // ── Pre-flight: AI credits enforcement (Cluster I) ─────────────────────
+    if (req.scope) {
+      const preflight = await assertCanUseAI(req.scope, 2);
+      if (!preflight.allowed) {
+        logger.info('PlanEngine: AI credits exhausted, blocking call', {
+          tenantId: req.scope.tenantId,
+          workspaceId: req.scope.workspaceId,
+          available: preflight.available,
+        });
+        return {
+          kind: 'credit_exhausted',
+          message: preflight.reason || 'AI credits exhausted. Upgrade your plan or add a top-up pack.',
+          upgradeUrl: '/billing',
+          available: preflight.available,
+        };
+      }
+    }
+
     return withGeminiRetry(
       async () => {
         const model = this.genAI.getGenerativeModel({
@@ -455,6 +485,8 @@ class GeminiProvider implements LLMProvider {
         const result = await chat.sendMessage(lastMessage.parts[0].text);
         const raw = result.response.text();
         const tokensUsed = result.response.usageMetadata?.totalTokenCount ?? 0;
+        const promptTokens = result.response.usageMetadata?.promptTokenCount ?? 0;
+        const completionTokens = result.response.usageMetadata?.candidatesTokenCount ?? Math.max(0, tokensUsed - promptTokens);
 
         logger.debug('PlanEngine LLM response', {
           planId: req.planId,
@@ -462,6 +494,30 @@ class GeminiProvider implements LLMProvider {
           rawLength: raw.length,
           tokensUsed,
         });
+
+        // ── Post-call: charge credits ────────────────────────────────────
+        if (req.scope) {
+          try {
+            await chargeCredits({
+              scope: req.scope,
+              eventType: 'plan_engine',
+              model: modelName,
+              promptTokens,
+              completionTokens,
+              metadata: { sessionId: req.session.id, planId: req.planId, mode: req.mode },
+            });
+          } catch (err) {
+            if (err instanceof AICreditExhaustedError) {
+              return {
+                kind: 'credit_exhausted',
+                message: err.reason,
+                upgradeUrl: '/billing',
+                available: err.available,
+              } as LLMResponse;
+            }
+            logger.warn('PlanEngine: chargeCredits failed (non-fatal)', { error: (err as Error).message });
+          }
+        }
 
         const parsed = parseResponse(raw, req.planId, req.session.id);
         return { ...parsed, tokensUsed };
