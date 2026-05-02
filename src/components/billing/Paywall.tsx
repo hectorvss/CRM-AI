@@ -2,16 +2,16 @@
  * src/components/billing/Paywall.tsx
  *
  * Forced-choice screen rendered when the workspace has no active subscription.
- * Visually mirrors the landing-page pricing section — same card hierarchy,
- * same typography scale, same dark featured card.
+ * Visually identical to the landing pricing section — same Instrument Serif
+ * headline, Inter body, cream background, grain texture, and cursor follower.
  *
  * Three exits:
- *   1. Activate the one-time 10-day free trial (trial = demo: same access level)
- *   2. Choose a paid plan → Stripe Checkout
+ *   1. Start a 10-day free trial (no card required) — same access as a demo
+ *   2. Pick a paid plan → Stripe Checkout
  *   3. Talk to sales (Business / custom)
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../api/supabase';
 
 interface PaywallProps {
@@ -33,62 +33,57 @@ interface Plan {
   monthly: number;
   /** Bigger discount when billed annually. */
   annual: number;
-  credits: number;
-  seats: number;
-  blurb: string;
+  meta: string;
   bullets: string[];
+  cta: string;
   featured?: boolean;
+  badge?: string;
 }
 
 const PLANS: Plan[] = [
   {
     id: 'starter',
     name: 'Starter',
-    original: 149,
-    monthly: 49,
-    annual: 42,
-    credits: 5_000,
-    seats: 3,
-    blurb: 'For small teams starting with AI-assisted operations.',
+    original: 149, monthly: 49, annual: 42,
+    meta: 'For small teams getting started with AI-assisted operations.',
     bullets: [
       '5,000 AI credits / month',
-      '3 seats included',
-      'Email + chat channels',
-      'Core workflows + reporting',
+      '3 seats included (€25/extra seat)',
+      'Core support + ops workflows',
+      'Email + chat integrations',
+      'Basic reporting & analytics',
     ],
+    cta: 'Get Starter',
   },
   {
     id: 'growth',
     name: 'Growth',
-    original: 399,
-    monthly: 129,
-    annual: 109,
-    credits: 20_000,
-    seats: 8,
-    blurb: 'For teams using AI every day across support and ops.',
+    original: 399, monthly: 129, annual: 109,
+    meta: 'For teams using AI every day across support and ops.',
     bullets: [
       '20,000 AI credits / month',
-      '8 seats included',
-      'All channels + API integrations',
-      'Priority support',
+      '8 seats included (€22/extra seat)',
+      'Advanced multi-step workflows',
+      'Custom API integrations',
+      'Priority email support',
     ],
+    cta: 'Upgrade to Growth',
     featured: true,
+    badge: 'Recommended',
   },
   {
     id: 'scale',
     name: 'Scale',
-    original: 899,
-    monthly: 299,
-    annual: 254,
-    credits: 60_000,
-    seats: 20,
-    blurb: 'For high-volume teams with custom workflows.',
+    original: 899, monthly: 299, annual: 254,
+    meta: 'For high-volume teams with custom workflows.',
     bullets: [
       '60,000 AI credits / month',
-      '20 seats included',
-      'Custom workflows + SSO',
+      '20 seats included (€19/extra seat)',
+      'Unlimited custom workflows',
       'Dedicated customer success manager',
+      'Custom reporting dashboards',
     ],
+    cta: 'Upgrade to Scale',
   },
 ];
 
@@ -111,19 +106,379 @@ const REASON_COPY: Record<string, { headline: string; sub: string }> = {
   },
 };
 
+// ── Inline CSS that mirrors the landing-page tokens / typography / cursor ────
+const PAYWALL_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif&display=swap');
+
+  .pw-root {
+    --bg: #FAFAF7;
+    --bg-elev: #FFFFFF;
+    --fg: #0A0A0A;
+    --fg-muted: #6B6B6B;
+    --fg-faint: #A3A3A0;
+    --line: rgba(10,10,10,0.08);
+    --line-strong: rgba(10,10,10,0.16);
+    --accent: #0A0A0A;
+    --serif: 'Instrument Serif', 'Times New Roman', serif;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    --mono: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    cursor: none;
+    overflow-x: hidden;
+    position: relative;
+  }
+  @media (max-width: 768px) { .pw-root { cursor: auto; } }
+  .pw-root *, .pw-root button { cursor: inherit; }
+  .pw-root button { font: inherit; background: none; border: 0; color: inherit; }
+
+  /* Grain overlay — same SVG noise as landing */
+  .pw-grain {
+    position: fixed;
+    inset: -50%;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.06;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    animation: pw-grainShift 8s steps(8) infinite;
+    will-change: transform;
+  }
+  @keyframes pw-grainShift {
+    0% { transform: translate(0,0); }
+    20% { transform: translate(-5%,3%); }
+    40% { transform: translate(-2%,5%); }
+    60% { transform: translate(4%,1%); }
+    80% { transform: translate(2%,-3%); }
+    100% { transform: translate(0,0); }
+  }
+
+  /* Cursor follower */
+  .pw-cursor-dot, .pw-cursor-ring {
+    position: fixed;
+    pointer-events: none;
+    z-index: 10000;
+    top: 0; left: 0;
+    mix-blend-mode: difference;
+    transform: translate3d(-100px, -100px, 0);
+  }
+  .pw-cursor-dot { width: 6px; height: 6px; background: #FFF; border-radius: 50%; margin: -3px 0 0 -3px; }
+  .pw-cursor-ring {
+    width: 36px; height: 36px; border: 1px solid rgba(255,255,255,0.6);
+    border-radius: 50%; margin: -18px 0 0 -18px;
+    transition: width .25s ease, height .25s ease, margin .25s ease, border-color .25s ease, background .25s ease;
+  }
+  .pw-cursor-ring.is-hover {
+    width: 64px; height: 64px; margin: -32px 0 0 -32px;
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.9);
+  }
+  @media (max-width: 768px) { .pw-cursor-dot, .pw-cursor-ring { display: none; } }
+
+  /* Layout */
+  .pw-wrap { max-width: 1180px; margin: 0 auto; padding: 72px 24px 96px; position: relative; z-index: 2; }
+
+  /* Header */
+  .pw-eyebrow {
+    display: inline-block;
+    padding: 6px 14px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin-bottom: 20px;
+  }
+  .pw-headline {
+    font-family: var(--serif);
+    font-size: clamp(40px, 6vw, 64px);
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    margin-bottom: 16px;
+  }
+  .pw-headline .em { font-style: italic; color: var(--fg-muted); }
+  .pw-sub {
+    font-size: 17px;
+    color: var(--fg-muted);
+    line-height: 1.6;
+    max-width: 560px;
+    margin: 0 auto 18px;
+  }
+  .pw-signout {
+    background: none; border: none; cursor: none;
+    font-size: 13px; color: var(--fg-faint);
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color .15s;
+  }
+  .pw-signout:hover { text-decoration-color: var(--fg-faint); }
+
+  /* Trial banner */
+  .pw-trial-banner {
+    background: var(--bg-elev);
+    border: 1.5px solid var(--fg);
+    border-radius: 18px;
+    padding: 28px 36px;
+    margin: 48px 0 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    position: relative;
+    overflow: hidden;
+  }
+  .pw-trial-banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(600px 200px at 0% 0%, rgba(150, 100, 220, 0.06), transparent 60%);
+    pointer-events: none;
+  }
+  .pw-trial-mark {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--fg-muted); margin-bottom: 8px;
+  }
+  .pw-trial-title {
+    font-family: var(--serif); font-size: 28px; font-weight: 400;
+    letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 6px;
+  }
+  .pw-trial-meta { font-size: 14px; color: var(--fg-muted); }
+
+  /* Buttons */
+  .pw-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    transition: transform .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+    cursor: none;
+    white-space: nowrap;
+  }
+  .pw-btn:hover { transform: translateY(-1px); }
+  .pw-btn-primary { background: var(--fg); color: var(--bg); border: 1px solid var(--fg); }
+  .pw-btn-primary:hover { background: #2A2A2A; border-color: #2A2A2A; }
+  .pw-btn-ghost { background: transparent; color: var(--fg); border: 1px solid var(--line-strong); }
+  .pw-btn-ghost:hover { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .pw-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Toggle */
+  .pw-toggle-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px; margin: 32px 0 28px;
+  }
+  .pw-toggle-label { font-size: 14px; transition: opacity .15s; }
+  .pw-toggle-btn {
+    position: relative; width: 48px; height: 26px; border-radius: 999px;
+    background: #d1d5db; border: 0; cursor: none; transition: background .2s; flex-shrink: 0;
+  }
+  .pw-toggle-btn[data-on="true"] { background: var(--fg); }
+  .pw-toggle-btn span {
+    position: absolute; top: 3px; left: 3px;
+    width: 20px; height: 20px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: left .2s;
+  }
+  .pw-toggle-btn[data-on="true"] span { left: 25px; }
+  .pw-save-pill {
+    color: #16a34a; font-size: 10px; font-weight: 700;
+    background: #dcfce7; padding: 3px 7px; border-radius: 4px;
+    letter-spacing: 0.02em; margin-left: 4px;
+  }
+
+  /* Plan cards */
+  .pw-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 960px) { .pw-grid { grid-template-columns: 1fr; } }
+  .pw-card {
+    position: relative;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px;
+    display: flex; flex-direction: column;
+    transition: transform .2s ease, border-color .2s ease;
+  }
+  .pw-card:hover { transform: translateY(-4px); border-color: var(--line-strong); }
+  .pw-card.featured {
+    background: var(--fg);
+    color: var(--bg);
+    border-color: var(--fg);
+  }
+  .pw-card.featured .pw-card-meta,
+  .pw-card.featured .pw-card-billed { color: rgba(255,255,255,0.6); }
+  .pw-card.featured .pw-was { color: rgba(255,255,255,0.4); }
+  .pw-card.featured .pw-card-li { border-color: rgba(255,255,255,0.12); }
+  .pw-badge {
+    position: absolute; top: -12px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elev);
+    color: var(--fg);
+    border: 1px solid var(--fg);
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-family: var(--mono); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .pw-card.featured .pw-badge { background: var(--bg); color: var(--fg); border-color: var(--bg); }
+  .pw-card-name {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; margin-bottom: 16px;
+  }
+  .pw-card-amount {
+    font-family: var(--serif);
+    font-size: 48px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .pw-card-amount sup { font-size: 18px; opacity: 0.6; vertical-align: top; margin-right: 2px; }
+  .pw-card-amount .per {
+    font-family: var(--sans); font-size: 13px;
+    color: var(--fg-muted); letter-spacing: 0; margin-left: 4px;
+  }
+  .pw-card.featured .pw-card-amount .per { color: rgba(255,255,255,0.6); }
+  .pw-was {
+    font-family: var(--serif); font-size: 22px;
+    color: var(--fg-faint); text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+    margin-right: 4px;
+    font-weight: 400;
+  }
+  .pw-card-billed {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--fg-faint);
+    margin-bottom: 14px;
+  }
+  .pw-card-meta { font-size: 13.5px; color: var(--fg-muted); margin-bottom: 18px; line-height: 1.5; }
+  .pw-card-list { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 10px; }
+  .pw-card-li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 13px; padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  .pw-card-li:first-child { padding-top: 0; border-top: 0; }
+  .pw-card-li::before {
+    content: '✓';
+    color: var(--fg-muted);
+    flex-shrink: 0;
+  }
+  .pw-card.featured .pw-card-li::before { color: rgba(255,255,255,0.7); }
+  .pw-card .pw-btn { width: 100%; justify-content: center; margin-top: auto; }
+  .pw-card.featured .pw-btn-ghost { background: transparent; color: var(--bg); border-color: rgba(255,255,255,0.4); }
+  .pw-card.featured .pw-btn-ghost:hover { background: var(--bg); color: var(--fg); border-color: var(--bg); }
+
+  /* Business row */
+  .pw-business {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 24px 32px;
+    margin-top: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .pw-business-name {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--fg-faint); margin-bottom: 6px;
+  }
+  .pw-business-title { font-family: var(--serif); font-size: 22px; letter-spacing: -0.01em; line-height: 1.2; margin-bottom: 4px; }
+  .pw-business-sub { font-size: 13px; color: var(--fg-muted); }
+
+  /* Notices */
+  .pw-error {
+    margin-top: 24px; padding: 14px 20px;
+    background: #FEF2F2; border: 1px solid #FECACA;
+    border-radius: 12px; font-size: 13px; color: #B91C1C;
+  }
+  .pw-warn {
+    margin-bottom: 32px; padding: 12px 20px;
+    background: #FFFBEB; border: 1px solid #FDE68A;
+    border-radius: 10px; font-size: 13px; color: #92400E;
+  }
+  .pw-foot {
+    text-align: center; font-size: 12px;
+    color: var(--fg-faint); margin-top: 48px; line-height: 1.7;
+  }
+  .pw-foot a { color: var(--fg-muted); text-decoration: underline; }
+`;
+
 export default function Paywall({
-  reason,
-  status,
-  trialUsed,
-  canActivateTrial,
-  orgId,
-  onAccessGranted,
-  onSignOut,
+  reason, status, trialUsed, canActivateTrial, orgId, onAccessGranted, onSignOut,
 }: PaywallProps) {
   const [interval, setInterval] = useState<'month' | 'year'>('year');
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const dotRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
+
+  // Cursor follower (same approach as landing app.jsx)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia('(max-width: 768px)').matches) return;
+
+    let mx = -100, my = -100;
+    let rx = -100, ry = -100;
+    let rafId = 0;
+
+    const onMove = (e: MouseEvent) => {
+      mx = e.clientX; my = e.clientY;
+      if (dotRef.current) {
+        dotRef.current.style.transform = `translate3d(${mx}px, ${my}px, 0)`;
+      }
+      // Hover detection — anything tagged button / a / [data-hover]
+      const target = e.target as HTMLElement | null;
+      const interactive =
+        target?.closest('button, a, [data-hover]') != null;
+      ringRef.current?.classList.toggle('is-hover', !!interactive);
+    };
+
+    const tick = () => {
+      rx += (mx - rx) * 0.18;
+      ry += (my - ry) * 0.18;
+      if (ringRef.current) {
+        ringRef.current.style.transform = `translate3d(${rx}px, ${ry}px, 0)`;
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   const copy = REASON_COPY[reason ?? 'no_subscription'] ?? REASON_COPY.no_subscription;
 
@@ -145,14 +500,15 @@ export default function Paywall({
     setTrialLoading(true);
     try {
       const res = await authedFetch('/api/billing/activate-trial', { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || `Could not activate trial (HTTP ${res.status})`);
       }
+      // Successful trial activation — bubble up so App.tsx re-fetches /access
+      // and unmounts the paywall.
       onAccessGranted();
     } catch (e: any) {
       setError(e?.message || 'Could not start your trial. Try again or contact support.');
-    } finally {
       setTrialLoading(false);
     }
   };
@@ -184,115 +540,41 @@ export default function Paywall({
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#F8F8F6',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '64px 24px 80px',
-        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
-      }}
-    >
-      <div style={{ width: '100%', maxWidth: 1080 }}>
+    <div className="pw-root">
+      <style>{PAYWALL_CSS}</style>
 
-        {/* ── Header ──────────────────────────────────────────────────── */}
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '4px 12px', borderRadius: 999,
-            background: '#fff', border: '1px solid #E5E5E0',
-            fontSize: 11, fontWeight: 600, letterSpacing: '0.1em',
-            textTransform: 'uppercase', color: '#6B6B6B',
-            marginBottom: 20,
-          }}>
-            {status === 'trial_expired' ? '⏱ Trial ended' : '✦ Clain'}
-          </div>
-          <h1 style={{
-            fontSize: 'clamp(28px, 5vw, 42px)',
-            fontWeight: 600,
-            letterSpacing: '-0.025em',
-            color: '#0A0A0A',
-            lineHeight: 1.15,
-            margin: '0 0 14px',
-          }}>
-            {copy.headline}
+      <div className="pw-grain" aria-hidden />
+      <div ref={dotRef} className="pw-cursor-dot" aria-hidden />
+      <div ref={ringRef} className="pw-cursor-ring" aria-hidden />
+
+      <div className="pw-wrap">
+
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 8 }}>
+          <span className="pw-eyebrow">
+            {status === 'trial_expired' ? 'Trial ended' : 'Welcome to Clain'}
+          </span>
+          <h1 className="pw-headline">
+            {copy.headline.split(/\s+/).slice(0, -1).join(' ')}{' '}
+            <span className="em">{copy.headline.split(/\s+/).slice(-1)[0]}</span>
           </h1>
-          <p style={{
-            fontSize: 16,
-            color: '#6B6B6B',
-            lineHeight: 1.6,
-            maxWidth: 520,
-            margin: '0 auto 20px',
-          }}>
-            {copy.sub}
-          </p>
-          <button
-            onClick={onSignOut}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 13, color: '#A3A3A0', textDecoration: 'underline',
-              textDecorationColor: 'transparent',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.textDecorationColor = '#A3A3A0')}
-            onMouseLeave={e => (e.currentTarget.style.textDecorationColor = 'transparent')}
-          >
-            Sign out
-          </button>
+          <p className="pw-sub">{copy.sub}</p>
+          <button className="pw-signout" onClick={onSignOut}>Sign out</button>
         </div>
 
-        {/* ── Free trial banner (shown when trial is available) ────────── */}
+        {/* Trial banner */}
         {canActivateTrial && (
-          <div style={{
-            background: '#fff',
-            border: '1.5px solid #0A0A0A',
-            borderRadius: 16,
-            padding: '28px 36px',
-            marginBottom: 48,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 24,
-            flexWrap: 'wrap',
-          }}>
-            <div>
-              <div style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
-                textTransform: 'uppercase', color: '#6B6B6B', marginBottom: 8,
-                fontFamily: 'inherit',
-              }}>
-                Recommended · No card required
-              </div>
-              <div style={{
-                fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em',
-                color: '#0A0A0A', marginBottom: 4,
-              }}>
-                Start your 10-day free trial
-              </div>
-              <div style={{ fontSize: 14, color: '#6B6B6B' }}>
-                Full access to Cases, Inbox, Copilot and Reporting — 1,000 AI credits included.
-              </div>
+          <div className="pw-trial-banner">
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div className="pw-trial-mark">Recommended · No card required</div>
+              <div className="pw-trial-title">Start your <span style={{ fontStyle: 'italic' }}>10-day free trial</span></div>
+              <div className="pw-trial-meta">Full access to Cases, Inbox, Copilot and Reporting — 1,000 AI credits included.</div>
             </div>
             <button
               onClick={handleActivateTrial}
               disabled={trialLoading}
-              style={{
-                background: '#0A0A0A',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 10,
-                padding: '13px 28px',
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: trialLoading ? 'not-allowed' : 'pointer',
-                opacity: trialLoading ? 0.6 : 1,
-                transition: 'transform 0.15s',
-                whiteSpace: 'nowrap',
-                letterSpacing: '-0.01em',
-              }}
-              onMouseEnter={e => { if (!trialLoading) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
+              className="pw-btn pw-btn-primary"
+              style={{ position: 'relative', zIndex: 1 }}
             >
               {trialLoading ? 'Starting trial…' : 'Start trial →'}
             </button>
@@ -300,277 +582,82 @@ export default function Paywall({
         )}
 
         {trialUsed && reason === 'trial_expired' && (
-          <div style={{
-            background: '#FFFBEB', border: '1px solid #FDE68A',
-            borderRadius: 12, padding: '12px 20px',
-            fontSize: 13, color: '#92400E', marginBottom: 36,
-          }}>
+          <div className="pw-warn">
             Your 10-day trial has been used. Choose a plan below to continue — your data is preserved.
           </div>
         )}
 
-        {/* ── Billing interval toggle ──────────────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 32 }}>
-          <span style={{
-            fontSize: 13, fontWeight: interval === 'month' ? 600 : 400,
-            opacity: interval === 'month' ? 1 : 0.45, color: '#0A0A0A', transition: 'opacity .15s',
-          }}>
+        {/* Toggle */}
+        <div className="pw-toggle-row">
+          <span className="pw-toggle-label" style={{ fontWeight: interval === 'month' ? 600 : 400, opacity: interval === 'month' ? 1 : 0.5 }}>
             Monthly
           </span>
           <button
+            className="pw-toggle-btn"
+            data-on={interval === 'year'}
             onClick={() => setInterval(interval === 'month' ? 'year' : 'month')}
-            style={{
-              position: 'relative', width: 44, height: 24, borderRadius: 999,
-              background: interval === 'year' ? '#0A0A0A' : '#D1D5DB',
-              border: 'none', cursor: 'pointer', transition: 'background .2s', flexShrink: 0,
-            }}
+            aria-label="Toggle billing interval"
           >
-            <span style={{
-              position: 'absolute', top: 3, left: interval === 'year' ? 23 : 3,
-              width: 18, height: 18, borderRadius: '50%', background: '#fff',
-              boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'left .2s',
-              display: 'block',
-            }} />
+            <span />
           </button>
-          <span style={{
-            fontSize: 13, fontWeight: interval === 'year' ? 600 : 400,
-            opacity: interval === 'year' ? 1 : 0.45, color: '#0A0A0A', transition: 'opacity .15s',
-          }}>
-            Annual <span style={{ color: '#16a34a', fontSize: 10, fontWeight: 700, background: '#dcfce7', padding: '2px 6px', borderRadius: 4, letterSpacing: '0.02em', marginLeft: 4 }}>15% OFF</span>
+          <span className="pw-toggle-label" style={{ fontWeight: interval === 'year' ? 600 : 400, opacity: interval === 'year' ? 1 : 0.5 }}>
+            Annual <span className="pw-save-pill">15% OFF</span>
           </span>
         </div>
 
-        {/* ── Pricing cards ────────────────────────────────────────────── */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 16,
-        }}>
+        {/* Plan grid */}
+        <div className="pw-grid">
           {PLANS.map((plan) => {
-            const price = interval === 'year' ? plan.annual : plan.monthly;
-            const isFeatured = plan.featured;
+            const isAnnual = interval === 'year';
+            const price = isAnnual ? plan.annual : plan.monthly;
             const isLoading = loadingPlan === plan.id;
-
             return (
-              <div
-                key={plan.id}
-                style={{
-                  background: isFeatured ? '#0A0A0A' : '#fff',
-                  color: isFeatured ? '#F8F8F6' : '#0A0A0A',
-                  border: `1.5px solid ${isFeatured ? '#0A0A0A' : '#E5E5E0'}`,
-                  borderRadius: 16,
-                  padding: 28,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 0,
-                  position: 'relative',
-                  transition: 'transform 0.15s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
-              >
-                {/* Badge */}
-                {isFeatured && (
-                  <div style={{
-                    position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)',
-                    background: '#fff', color: '#0A0A0A',
-                    border: '1.5px solid #0A0A0A',
-                    borderRadius: 999,
-                    padding: '4px 14px',
-                    fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
-                    textTransform: 'uppercase', whiteSpace: 'nowrap',
-                  }}>
-                    Recommended
-                  </div>
-                )}
-
-                {/* Plan name */}
-                <div style={{
-                  fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: isFeatured ? 'rgba(255,255,255,0.55)' : '#6B6B6B',
-                  marginBottom: 18,
-                }}>
-                  {plan.name}
+              <div key={plan.id} className={`pw-card ${plan.featured ? 'featured' : ''}`}>
+                {plan.badge && <span className="pw-badge">{plan.badge}</span>}
+                <div className="pw-card-name">{plan.name}</div>
+                <div className="pw-card-amount">
+                  <span className="pw-was">€{plan.original}</span>
+                  <sup>€</sup>{price}
+                  <span className="per">/ mo</span>
                 </div>
-
-                {/* Price — strikethrough MSRP always shown */}
-                <div style={{
-                  fontSize: 48, fontWeight: 400, letterSpacing: '-0.025em',
-                  lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 6,
-                  marginBottom: 6, flexWrap: 'wrap',
-                }}>
-                  <span style={{
-                    fontSize: 18,
-                    color: isFeatured ? 'rgba(255,255,255,0.4)' : '#A3A3A0',
-                    textDecoration: 'line-through',
-                    fontWeight: 400,
-                    marginRight: 2,
-                  }}>€{plan.original}</span>
-                  <sup style={{ fontSize: 18, opacity: 0.6, verticalAlign: 'top', marginTop: 6 }}>€</sup>
-                  <span>{price}</span>
-                  <span style={{
-                    fontSize: 13, fontWeight: 400,
-                    color: isFeatured ? 'rgba(255,255,255,0.5)' : '#A3A3A0',
-                    letterSpacing: 0, marginLeft: 2,
-                  }}>/ mo</span>
+                <div className="pw-card-billed">
+                  {isAnnual ? `Billed annually · €${plan.annual * 12}/yr` : 'Billed monthly'}
                 </div>
-
-                {/* Billed note */}
-                <div style={{
-                  fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
-                  color: isFeatured ? 'rgba(255,255,255,0.35)' : '#A3A3A0',
-                  marginBottom: 14,
-                }}>
-                  {interval === 'year' ? `Billed annually · €${plan.annual * 12}/yr` : 'Billed monthly'}
-                </div>
-
-                {/* Blurb */}
-                <div style={{
-                  fontSize: 13,
-                  color: isFeatured ? 'rgba(255,255,255,0.6)' : '#6B6B6B',
-                  lineHeight: 1.5,
-                  marginBottom: 20,
-                }}>
-                  {plan.blurb}
-                </div>
-
-                {/* CTA */}
+                <div className="pw-card-meta">{plan.meta}</div>
+                <ul className="pw-card-list">
+                  {plan.bullets.map((b, i) => (
+                    <li key={i} className="pw-card-li">{b}</li>
+                  ))}
+                </ul>
                 <button
                   onClick={() => handlePickPlan(plan)}
                   disabled={loadingPlan !== null}
-                  style={{
-                    background: isFeatured ? '#F8F8F6' : '#0A0A0A',
-                    color: isFeatured ? '#0A0A0A' : '#F8F8F6',
-                    border: 'none',
-                    borderRadius: 10,
-                    padding: '11px 0',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: loadingPlan !== null ? 'not-allowed' : 'pointer',
-                    opacity: loadingPlan !== null ? 0.6 : 1,
-                    width: '100%',
-                    letterSpacing: '-0.01em',
-                    transition: 'transform 0.12s',
-                    marginBottom: 20,
-                  }}
-                  onMouseEnter={e => { if (!loadingPlan) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                  className={`pw-btn ${plan.featured ? 'pw-btn-primary' : 'pw-btn-ghost'}`}
                 >
-                  {isLoading ? 'Loading…' : `Get started →`}
+                  {isLoading ? 'Loading…' : <>{plan.cta} <span>→</span></>}
                 </button>
-
-                {/* Feature list */}
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 10 }}>
-                  {plan.bullets.map((b, i) => (
-                    <li key={i} style={{
-                      display: 'flex', alignItems: 'flex-start', gap: 10,
-                      fontSize: 13,
-                      color: isFeatured ? 'rgba(255,255,255,0.75)' : '#3A3A3A',
-                      paddingTop: i > 0 ? 10 : 0,
-                      borderTop: i > 0 ? `1px solid ${isFeatured ? 'rgba(255,255,255,0.1)' : '#F0F0EC'}` : 'none',
-                    }}>
-                      <span style={{
-                        color: isFeatured ? 'rgba(255,255,255,0.5)' : '#6B6B6B',
-                        fontSize: 13, flexShrink: 0, marginTop: 1,
-                      }}>✓</span>
-                      {b}
-                    </li>
-                  ))}
-                </ul>
               </div>
             );
           })}
         </div>
 
-        {/* ── Responsive grid fix (stacks on small screens) */}
-        <style>{`
-          @media (max-width: 900px) {
-            .paywall-grid { grid-template-columns: 1fr !important; }
-          }
-          @media (max-width: 680px) {
-            .paywall-grid { grid-template-columns: 1fr !important; }
-          }
-        `}</style>
-
-        {/* ── Business / custom row ────────────────────────────────────── */}
-        <div style={{
-          marginTop: 20,
-          background: '#fff',
-          border: '1.5px solid #E5E5E0',
-          borderRadius: 16,
-          padding: '24px 32px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 20,
-          flexWrap: 'wrap',
-        }}>
+        {/* Business row */}
+        <div className="pw-business">
           <div>
-            <div style={{
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-              textTransform: 'uppercase', color: '#A3A3A0', marginBottom: 6,
-            }}>Business</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#0A0A0A', marginBottom: 4 }}>
-              Need custom volume, SSO or enterprise compliance?
-            </div>
-            <div style={{ fontSize: 13, color: '#6B6B6B' }}>
-              Tailored credits, seat allocation, SLA guarantees and onboarding.
-            </div>
+            <div className="pw-business-name">Business</div>
+            <div className="pw-business-title">Need custom volume, SSO or enterprise compliance?</div>
+            <div className="pw-business-sub">Tailored credits, seat allocation, SLA guarantees and onboarding.</div>
           </div>
-          <button
-            onClick={handleTalkToSales}
-            style={{
-              background: 'transparent',
-              border: '1.5px solid #0A0A0A',
-              borderRadius: 10,
-              padding: '11px 24px',
-              fontSize: 14,
-              fontWeight: 600,
-              color: '#0A0A0A',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              whiteSpace: 'nowrap',
-              letterSpacing: '-0.01em',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#0A0A0A';
-              e.currentTarget.style.color = '#F8F8F6';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = '#0A0A0A';
-            }}
-          >
+          <button onClick={handleTalkToSales} className="pw-btn pw-btn-ghost">
             Talk to sales →
           </button>
         </div>
 
-        {/* ── Error message ────────────────────────────────────────────── */}
-        {error && (
-          <div style={{
-            marginTop: 24,
-            background: '#FEF2F2',
-            border: '1px solid #FECACA',
-            borderRadius: 12,
-            padding: '14px 20px',
-            fontSize: 13,
-            color: '#B91C1C',
-          }}>
-            {error}
-          </div>
-        )}
+        {error && <div className="pw-error">{error}</div>}
 
-        {/* ── Footer note ──────────────────────────────────────────────── */}
-        <p style={{
-          textAlign: 'center',
-          fontSize: 12,
-          color: '#A3A3A0',
-          marginTop: 40,
-          lineHeight: 1.7,
-        }}>
+        <p className="pw-foot">
           All plans include the core platform. AI credits reset monthly. Top-up packs available on all plans.<br />
-          Questions? <a href="mailto:support@clain.io" style={{ color: '#6B6B6B', textDecoration: 'underline' }}>support@clain.io</a>
+          Questions? <a href="mailto:support@clain.io">support@clain.io</a>
         </p>
 
       </div>
