@@ -35,6 +35,7 @@ import demoRouter from './routes/demo.js';
 import policyRouter from './routes/policy.js';
 import reconciliationRouter from './routes/reconciliation.js';
 import superAgentRouter from './routes/superAgent.js';
+import onboardingRouter from './routes/onboarding.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
@@ -137,6 +138,7 @@ app.use('/api/demo', demoRouter);
 app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
 app.use('/api/super-agent', superAgentRouter);
+app.use('/api/onboarding', onboardingRouter);
 
 // ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {

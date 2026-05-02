@@ -98,6 +98,17 @@ async function handleCanonicalize(
         const payment = await stripe.getPayment(event.source_entity_id);
         localEntityId = await commerceRepo.upsertPayment(scope, payment);
         log.info('Payment upserted', { localEntityId, externalId: payment.externalId });
+
+      } else if (
+        event.source_entity_type === 'customer' &&
+        (event.event_type.startsWith('customer.subscription.'))
+      ) {
+        // ── Sync subscription state to billing_subscriptions ──────────────────
+        localEntityId = await syncStripeSubscription(supabase, scope, event, log);
+
+      } else if (event.source_entity_type === 'invoice') {
+        // ── Log successful invoice payment to credit_ledger ───────────────────
+        localEntityId = await syncStripeInvoice(supabase, scope, event, log);
       }
     }
 
@@ -122,6 +133,181 @@ async function handleCanonicalize(
   );
 
   log.debug('INTENT_ROUTE enqueued');
+}
+
+// ── Billing sync helpers ──────────────────────────────────────────────────────
+
+/**
+ * Fetch the raw Stripe event body stored in webhook_events and return the
+ * `data.object` payload.  Returns null if not found or unparseable.
+ */
+async function fetchStripeEventObject(
+  supabase: ReturnType<typeof import('../db/supabase.js').getSupabaseAdmin>,
+  normalizedPayload: string | null,
+): Promise<Record<string, any> | null> {
+  try {
+    const meta = JSON.parse(normalizedPayload || '{}') as Record<string, any>;
+    const rawEventId = meta.rawEventId as string | undefined;
+    if (!rawEventId) return null;
+
+    const { data: row } = await supabase
+      .from('webhook_events')
+      .select('raw_payload')
+      .eq('id', rawEventId)
+      .maybeSingle();
+
+    if (!row) return null;
+
+    const parsed: Record<string, any> =
+      typeof row.raw_payload === 'string'
+        ? JSON.parse(row.raw_payload)
+        : (row.raw_payload as Record<string, any>);
+
+    return (parsed?.data?.object as Record<string, any>) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sync a Stripe subscription object into billing_subscriptions.
+ * Matches on external_subscription_id; falls back to org_id = tenantId.
+ */
+async function syncStripeSubscription(
+  supabase: ReturnType<typeof import('../db/supabase.js').getSupabaseAdmin>,
+  scope: { tenantId: string; workspaceId: string },
+  event: Record<string, any>,
+  log: ReturnType<typeof import('../utils/logger.js').logger.child>,
+): Promise<string | null> {
+  const sub = await fetchStripeEventObject(supabase, event.normalized_payload);
+  if (!sub?.id) {
+    log.warn('Stripe subscription sync: could not parse subscription object');
+    return null;
+  }
+
+  const isDeleted = event.event_type === 'customer.subscription.deleted';
+
+  const updates: Record<string, any> = {
+    status:               isDeleted ? 'canceled' : (sub.status ?? 'active'),
+    external_subscription_id: sub.id,
+    current_period_start: sub.current_period_start
+      ? new Date((sub.current_period_start as number) * 1000).toISOString()
+      : undefined,
+    current_period_end: sub.current_period_end
+      ? new Date((sub.current_period_end as number) * 1000).toISOString()
+      : undefined,
+  };
+
+  // Extract plan_id from subscription items if present
+  const priceId: string | undefined =
+    sub.items?.data?.[0]?.price?.id ??
+    sub.plan?.id ??
+    undefined;
+  if (priceId) updates.plan_id = priceId;
+
+  // Remove undefined values
+  Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k]);
+
+  // Try to update by external_subscription_id first, then by org_id
+  const { data: byExternal } = await supabase
+    .from('billing_subscriptions')
+    .update(updates)
+    .eq('external_subscription_id', sub.id)
+    .select('id')
+    .maybeSingle();
+
+  if (byExternal) {
+    log.info('Billing subscription updated (by external_subscription_id)', {
+      subscriptionId: sub.id, status: updates.status,
+    });
+    return byExternal.id as string;
+  }
+
+  // Fallback: update by org_id (single-tenant mapping)
+  const { data: byOrg } = await supabase
+    .from('billing_subscriptions')
+    .update(updates)
+    .eq('org_id', scope.tenantId)
+    .select('id')
+    .maybeSingle();
+
+  if (byOrg) {
+    log.info('Billing subscription updated (by org_id fallback)', {
+      subscriptionId: sub.id, status: updates.status,
+    });
+    return byOrg.id as string;
+  }
+
+  log.warn('Stripe subscription sync: no matching billing_subscriptions row found', {
+    subscriptionId: sub.id, tenantId: scope.tenantId,
+  });
+  return sub.id as string;
+}
+
+/**
+ * Log a successful Stripe invoice payment into credit_ledger.
+ * Only acts on invoice.payment_succeeded — failed payments are informational.
+ */
+async function syncStripeInvoice(
+  supabase: ReturnType<typeof import('../db/supabase.js').getSupabaseAdmin>,
+  scope: { tenantId: string; workspaceId: string },
+  event: Record<string, any>,
+  log: ReturnType<typeof import('../utils/logger.js').logger.child>,
+): Promise<string | null> {
+  if (event.event_type !== 'invoice.payment_succeeded') {
+    // payment_failed is handled by the intent router → case auto-creation
+    return null;
+  }
+
+  const invoice = await fetchStripeEventObject(supabase, event.normalized_payload);
+  if (!invoice?.id) {
+    log.warn('Stripe invoice sync: could not parse invoice object');
+    return null;
+  }
+
+  const dedupId = `stripe_invoice_${invoice.id as string}`;
+
+  // Idempotency check
+  const { data: existing } = await supabase
+    .from('credit_ledger')
+    .select('id')
+    .eq('id', dedupId)
+    .maybeSingle();
+
+  if (existing) {
+    log.debug('Invoice already in credit_ledger, skipping', { invoiceId: invoice.id });
+    return invoice.id as string;
+  }
+
+  const amountPaid = typeof invoice.amount_paid === 'number'
+    ? invoice.amount_paid / 100
+    : 0;
+
+  const occurredAt = invoice.status_transitions?.paid_at
+    ? new Date((invoice.status_transitions.paid_at as number) * 1000).toISOString()
+    : new Date().toISOString();
+
+  const { error } = await supabase.from('credit_ledger').insert({
+    id:           dedupId,
+    org_id:       scope.tenantId,
+    tenant_id:    scope.tenantId,
+    entry_type:   'charge',
+    amount:       amountPaid,
+    reason:       `Stripe invoice ${(invoice.number as string) ?? (invoice.id as string)} paid`,
+    reference_id: invoice.id as string,
+    balance_after: 0,   // balance tracking is handled separately
+    occurred_at:  occurredAt,
+  });
+
+  if (error) {
+    log.warn('Stripe invoice sync: credit_ledger insert failed', { error: error.message });
+    return null;
+  }
+
+  log.info('Invoice payment logged to credit_ledger', {
+    invoiceId: invoice.id, amount: amountPaid,
+  });
+  return invoice.id as string;
 }
 
 // ── Register ──────────────────────────────────────────────────────────────────

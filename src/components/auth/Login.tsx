@@ -3,11 +3,12 @@ import { supabase } from '../../api/supabase';
 
 interface LoginProps {
   onLogin: () => void;
+  onShowSignup?: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [email, setEmail] = useState('demo@example.com');
-  const [password, setPassword] = useState('demo123');
+const Login: React.FC<LoginProps> = ({ onLogin, onShowSignup }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -93,6 +94,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </button>
           </div>
         </form>
+
+        {onShowSignup && (
+          <p className="text-center text-sm text-gray-600">
+            Don&apos;t have an account?{' '}
+            <button
+              type="button"
+              onClick={onShowSignup}
+              className="font-medium text-blue-600 hover:text-blue-500"
+            >
+              Sign up
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );

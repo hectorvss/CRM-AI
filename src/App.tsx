@@ -21,6 +21,7 @@ import PageErrorBoundary from './components/PageErrorBoundary';
 import SuperAgent from './components/SuperAgent';
 import GlobalSearch from './components/GlobalSearch';
 import Login from './components/auth/Login';
+import Signup from './components/auth/Signup';
 import { supabase } from './api/supabase';
 import { NavigateInput, NavigationTarget, Page } from './types';
 
@@ -152,6 +153,7 @@ export default function App() {
   );
   // Auth state — null = loading, false = unauthenticated, true = authenticated
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [showSignup, setShowSignup] = useState(false);
 
   const currentPage = navigationTarget.page;
 
@@ -224,11 +226,27 @@ export default function App() {
     );
   }
 
-  // Unauthenticated — only show login if Supabase auth is actually configured
-  // (i.e. a real VITE_SUPABASE_ANON_KEY is set). In demo mode we skip the gate.
+  // Unauthenticated — only show login/signup if Supabase auth is configured.
+  // In demo mode (no VITE_SUPABASE_ANON_KEY) we skip the gate entirely.
   const hasSupabaseAuth = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
   if (hasSupabaseAuth && !authenticated) {
-    return <Login onLogin={() => setAuthenticated(true)} />;
+    if (showSignup) {
+      return (
+        <Signup
+          onSignup={() => {
+            setShowSignup(false);
+            setAuthenticated(true);
+          }}
+          onShowLogin={() => setShowSignup(false)}
+        />
+      );
+    }
+    return (
+      <Login
+        onLogin={() => setAuthenticated(true)}
+        onShowSignup={() => setShowSignup(true)}
+      />
+    );
   }
 
   return (
