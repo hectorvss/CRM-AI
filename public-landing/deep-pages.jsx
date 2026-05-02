@@ -171,6 +171,30 @@ function Quote({ q, who, role, brand }) {
   );
 }
 
+/** Cross-link block reusing the CapRelated component so the three deep pages
+ *  are discoverable from one another. Falls back silently if CapExtras isn't
+ *  loaded yet (script ordering safety). */
+function CrossLink({ exclude }) {
+  const CapRelated = window.CapExtras?.components?.CapRelated;
+  if (!CapRelated) return null;
+  const all = [
+    { tag: 'How Clain works',     href: '#/product',     title: 'The full platform tour',
+      summary: 'The five stages — capture, enrich, decide, execute, audit — and how every case flows through them.' },
+    { tag: 'Super Agent',         href: '#/super-agent', title: 'The autonomous resolution engine',
+      summary: 'How the agent investigates, plans, executes — and why it never ships a claim without a citation.' },
+    { tag: 'Unified inbox',       href: '#/omnichannel', title: 'Nine channels, one queue',
+      summary: 'Email, WhatsApp, voice, chat, forms — auto-merged on identity, prioritised by SLA and value.' },
+  ];
+  const items = all.filter((x) => x.href !== `#${exclude}`);
+  return (
+    <CapRelated
+      eyebrow="Keep exploring"
+      title={["Other parts of Clain you might want to see."]}
+      items={items}
+    />
+  );
+}
+
 /* =============================================================================
    1. SUPER AGENT PAGE  (autonomous AI resolution agent)
    ============================================================================= */
@@ -423,6 +447,9 @@ function SuperAgentPage({ t, lang }) {
       {/* FAQ */}
       <DeepFAQ title={c.faq.title} items={c.faq.items} />
 
+      {/* Cross-link to the other two deep pages */}
+      <CrossLink exclude="/super-agent" />
+
       {FinalCTA && <FinalCTA t={t} />}
     </main>
   );
@@ -541,6 +568,11 @@ function HelpdeskExtras() {
   );
 }
 
+function HelpdeskOutro() {
+  return <CrossLink exclude="/product" />;
+}
+window.HelpdeskOutro = HelpdeskOutro;
+
 window.HelpdeskExtras = HelpdeskExtras;
 
 /* =============================================================================
@@ -630,6 +662,7 @@ function InboxExtras() {
       <Feature3 title={INBOX_EXTRAS.feat.title} lede={INBOX_EXTRAS.feat.lede} items={INBOX_EXTRAS.feat.items} />
       <BeforeAfter title={INBOX_EXTRAS.ba.title} lede={INBOX_EXTRAS.ba.lede} before={INBOX_EXTRAS.ba.before} after={INBOX_EXTRAS.ba.after} />
       <DeepFAQ title={INBOX_EXTRAS.faq.title} items={INBOX_EXTRAS.faq.items} />
+      <CrossLink exclude="/omnichannel" />
     </>
   );
 }

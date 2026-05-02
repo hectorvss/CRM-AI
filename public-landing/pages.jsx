@@ -243,6 +243,7 @@ function ProductPage({ t, lang }) {
   const FinalCTA = window.FinalCTA;
   const Panorama = window.Panorama;
   const HelpdeskExtras = window.HelpdeskExtras;
+  const HelpdeskOutro = window.HelpdeskOutro;
   return (
     <main>
       <section className="hero wrap reveal" style={{paddingBottom: 40}}>
@@ -342,6 +343,9 @@ function ProductPage({ t, lang }) {
           </div>
         </div>
       </section>
+
+      {/* Cross-link to Super Agent + Inbox deep pages */}
+      {HelpdeskOutro && <HelpdeskOutro />}
 
       <FinalCTA t={t} />
     </main>
