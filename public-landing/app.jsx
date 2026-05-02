@@ -61,9 +61,9 @@ const COPY = {
     pricingTitle: ["Precio simple,", { em: " escalable con tu volumen." }],
     pricingNote: "Todos los planes incluyen la plataforma core. Lo que cambia es la capacidad de IA, los seats y la escala.",
     plans: [
-      { name: "Starter", price: 42, was: 149, per: "/ mes", billed: "Facturado anual (€504/año)", meta: "Para equipos pequeños empezando con operaciones asistidas por IA.", feats: ["5,000 créditos de IA / mes", "3 seats incluidos (€25/seat extra)", "Workflows de soporte y ops core", "Integraciones email y chat estándar", "Reporting y analytics básico"], cta: "Empieza con Starter", featured: false },
-      { name: "Growth", price: 109, was: 399, per: "/ mes", billed: "Facturado anual (€1,308/año)", meta: "Para equipos en crecimiento que usan IA todos los días.", feats: ["20,000 créditos de IA / mes", "8 seats incluidos (€22/seat extra)", "Workflows multi-step avanzados", "Integraciones API custom", "Soporte prioritario por email"], cta: "Empieza con Growth", featured: true, badge: "Recomendado" },
-      { name: "Scale", price: 254, was: 899, per: "/ mes", billed: "Facturado anual (€3,048/año)", meta: "Para equipos avanzados con alto volumen y multi-workflow.", feats: ["60,000 créditos de IA / mes", "20 seats incluidos (€19/seat extra)", "Workflows custom ilimitados", "Customer success manager dedicado", "Dashboards de reporting custom"], cta: "Empieza con Scale", featured: false },
+      { name: "Starter", price: 42, monthly: 49, was: 149, per: "/ mes", billed: "Facturado anual (€504/año)", meta: "Para equipos pequeños empezando con operaciones asistidas por IA.", feats: ["5,000 créditos de IA / mes", "3 seats incluidos (€25/seat extra)", "Workflows de soporte y ops core", "Integraciones email y chat estándar", "Reporting y analytics básico"], cta: "Empieza con Starter", featured: false },
+      { name: "Growth", price: 109, monthly: 129, was: 399, per: "/ mes", billed: "Facturado anual (€1,308/año)", meta: "Para equipos en crecimiento que usan IA todos los días.", feats: ["20,000 créditos de IA / mes", "8 seats incluidos (€22/seat extra)", "Workflows multi-step avanzados", "Integraciones API custom", "Soporte prioritario por email"], cta: "Empieza con Growth", featured: true, badge: "Recomendado" },
+      { name: "Scale", price: 254, monthly: 299, was: 899, per: "/ mes", billed: "Facturado anual (€3,048/año)", meta: "Para equipos avanzados con alto volumen y multi-workflow.", feats: ["60,000 créditos de IA / mes", "20 seats incluidos (€19/seat extra)", "Workflows custom ilimitados", "Customer success manager dedicado", "Dashboards de reporting custom"], cta: "Empieza con Scale", featured: false },
       { name: "Business", price: null, per: "Custom", meta: "Para organizaciones con capacidad, governance y necesidades enterprise.", feats: ["Asignación de créditos a medida", "Asignación de seats custom", "Seguridad y compliance enterprise", "SLA y uptime garantizados", "Onboarding y formación a medida"], cta: "Habla con ventas", featured: false },
     ],
     creditsTitle: ["Compra créditos", { em: " extra de IA." }],
@@ -144,9 +144,9 @@ const COPY = {
     pricingTitle: ["Simple pricing,", { em: " scales with you." }],
     pricingNote: "All plans include the core platform. What changes is AI capacity, seat capacity, and scale.",
     plans: [
-      { name: "Starter", price: 42, was: 149, per: "/ mo", billed: "Billed annually (€504/yr)", meta: "For small teams getting started with AI-assisted ops.", feats: ["5,000 AI credits / month", "3 seats included (€25/extra seat)", "Core support and ops workflows", "Standard email and chat integrations", "Basic reporting and analytics"], cta: "Get Starter", featured: false },
-      { name: "Growth", price: 109, was: 399, per: "/ mo", billed: "Billed annually (€1,308/yr)", meta: "For growing support and ops teams using AI every day.", feats: ["20,000 AI credits / month", "8 seats included (€22/extra seat)", "Advanced multi-step workflows", "Custom API integrations", "Priority email support"], cta: "Upgrade to Growth", featured: true, badge: "Recommended" },
-      { name: "Scale", price: 254, was: 899, per: "/ mo", billed: "Billed annually (€3,048/yr)", meta: "For advanced teams managing high-volume, multi-workflow ops.", feats: ["60,000 AI credits / month", "20 seats included (€19/extra seat)", "Unlimited custom workflows", "Dedicated customer success manager", "Custom reporting dashboards"], cta: "Upgrade to Scale", featured: false },
+      { name: "Starter", price: 42, monthly: 49, was: 149, per: "/ mo", billed: "Billed annually (€504/yr)", meta: "For small teams getting started with AI-assisted ops.", feats: ["5,000 AI credits / month", "3 seats included (€25/extra seat)", "Core support and ops workflows", "Standard email and chat integrations", "Basic reporting and analytics"], cta: "Get Starter", featured: false },
+      { name: "Growth", price: 109, monthly: 129, was: 399, per: "/ mo", billed: "Billed annually (€1,308/yr)", meta: "For growing support and ops teams using AI every day.", feats: ["20,000 AI credits / month", "8 seats included (€22/extra seat)", "Advanced multi-step workflows", "Custom API integrations", "Priority email support"], cta: "Upgrade to Growth", featured: true, badge: "Recommended" },
+      { name: "Scale", price: 254, monthly: 299, was: 899, per: "/ mo", billed: "Billed annually (€3,048/yr)", meta: "For advanced teams managing high-volume, multi-workflow ops.", feats: ["60,000 AI credits / month", "20 seats included (€19/extra seat)", "Unlimited custom workflows", "Dedicated customer success manager", "Custom reporting dashboards"], cta: "Upgrade to Scale", featured: false },
       { name: "Business", price: null, per: "Custom", meta: "For organizations with custom capacity, governance and enterprise needs.", feats: ["Tailored AI credit allocation", "Custom seat allocation", "Enterprise-grade security & compliance", "Custom SLA & uptime guarantees", "Tailored onboarding & training"], cta: "Talk to sales", featured: false },
     ],
     creditsTitle: ["Buy extra", { em: " AI credits." }],
@@ -1067,8 +1067,8 @@ function Pricing({ t, hideTitle, navigate }) {
   // Detect language from plan data (per text)
   const isEs = t.plans && t.plans[0] && t.plans[0].per === '/ mes';
   const toggleLabels = isEs
-    ? { monthly: 'Mensual', annual: 'Anual', save: '(ahorra ~70%)' }
-    : { monthly: 'Monthly', annual: 'Annual', save: '(save ~70%)' };
+    ? { monthly: 'Mensual', annual: 'Anual', save: '15% OFF' }
+    : { monthly: 'Monthly', annual: 'Annual', save: '15% OFF' };
 
   // Map plan name → checkout plan id; Business plan goes to /demo (talk to sales).
   const planActionFor = (planName) => {
@@ -1123,7 +1123,7 @@ function Pricing({ t, hideTitle, navigate }) {
             aria-label="Toggle billing interval"
             style={{
               position:'relative', width: 48, height: 26, borderRadius: 999,
-              background: billingInterval === 'year' ? '#4f46e5' : '#d1d5db',
+              background: billingInterval === 'year' ? '#0A0A0A' : '#d1d5db',
               border: 'none', cursor: 'pointer', transition:'background .2s', flexShrink: 0,
             }}
           >
@@ -1134,17 +1134,18 @@ function Pricing({ t, hideTitle, navigate }) {
             }} />
           </button>
           <span style={{fontSize: 14, fontWeight: billingInterval === 'year' ? 600 : 400, opacity: billingInterval === 'year' ? 1 : 0.5, transition:'opacity .15s'}}>
-            {toggleLabels.annual}&nbsp;<span style={{color:'#16a34a', fontSize: 12, fontWeight: 500}}>{toggleLabels.save}</span>
+            {toggleLabels.annual}&nbsp;<span style={{color:'#16a34a', fontSize: 10, fontWeight: 700, background:'#dcfce7', padding:'2px 6px', borderRadius: 4, letterSpacing:'.02em'}}>{toggleLabels.save}</span>
           </span>
         </div>
 
         <div className="price-grid price-grid-4 reveal-children">
           {t.plans.map((p, i) => {
-            // Annual: show discounted price + strikethrough original
-            // Monthly: show original price, no strikethrough
+            // Both monthly and annual are discounted from `was` (MSRP).
+            // Annual gets the bigger discount via `price`; monthly uses `monthly`.
+            // The strikethrough `was` is shown in BOTH modes (when present).
             const isAnnual = billingInterval === 'year';
-            const displayPrice = isAnnual ? p.price : p.was;
-            const strikePrice  = isAnnual && p.was ? p.was : null;
+            const displayPrice = isAnnual ? p.price : (p.monthly != null ? p.monthly : p.was);
+            const strikePrice  = (p.price !== null && p.was) ? p.was : null;
             const billedLine = p.price !== null
               ? (isAnnual ? p.billed : (isEs ? 'Facturado mensualmente' : 'Billed monthly'))
               : null;

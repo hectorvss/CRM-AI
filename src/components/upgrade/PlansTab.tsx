@@ -11,11 +11,16 @@ export default function PlansTab() {
   const [isSaving, setIsSaving] = useState(false);
   const currentPlanKey = String(subscription?.plan_id || workspace?.plan_id || 'starter').toLowerCase();
 
+  // Pricing structure (must match landing & Paywall exactly):
+  //   originalPrice = MSRP (always strikethrough)
+  //   monthlyPrice  = discounted price when billing monthly
+  //   annualPrice   = further discounted price when billing annually
   const plans = [
     {
       name: 'Starter',
-      monthlyPrice: 149,   // real monthly price (no discount)
-      annualPrice: 42,     // launch price billed annually
+      originalPrice: 149,
+      monthlyPrice: 49,
+      annualPrice: 42,
       bestFor: 'For small teams getting started with AI-assisted support operations',
       cta: 'Current Plan',
       isCurrent: currentPlanKey === 'starter',
@@ -31,7 +36,8 @@ export default function PlansTab() {
     },
     {
       name: 'Growth',
-      monthlyPrice: 399,
+      originalPrice: 399,
+      monthlyPrice: 129,
       annualPrice: 109,
       bestFor: 'For growing support and ops teams using AI every day',
       cta: 'Upgrade to Growth',
@@ -49,7 +55,8 @@ export default function PlansTab() {
     },
     {
       name: 'Scale',
-      monthlyPrice: 899,
+      originalPrice: 899,
+      monthlyPrice: 299,
       annualPrice: 254,
       bestFor: 'For advanced teams managing high-volume, multi-workflow operations',
       cta: 'Upgrade to Scale',
@@ -145,7 +152,7 @@ export default function PlansTab() {
               onClick={() => setIsAnnual(true)}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${isAnnual ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
             >
-              Annual <span className="text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded">~70% OFF</span>
+              Annual <span className="text-[9px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded">15% OFF</span>
             </button>
           </div>
         </div>
@@ -177,12 +184,10 @@ export default function PlansTab() {
                       <span className="text-3xl font-bold text-gray-900 dark:text-white">Custom</span>
                     ) : (
                       <>
-                        {/* Strikethrough monthly price — only visible when annual is selected */}
-                        {isAnnual && (
-                          <span className="text-sm font-medium text-gray-400 dark:text-gray-500 line-through mr-1">
-                            €{plan.monthlyPrice}
-                          </span>
-                        )}
+                        {/* Original price — strikethrough always (both monthly and annual are discounted) */}
+                        <span className="text-sm font-medium text-gray-400 dark:text-gray-500 line-through mr-1">
+                          €{plan.originalPrice}
+                        </span>
                         <span className="text-3xl font-bold text-gray-900 dark:text-white">
                           €{isAnnual ? plan.annualPrice : plan.monthlyPrice}
                         </span>
@@ -190,11 +195,13 @@ export default function PlansTab() {
                       </>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {isAnnual && typeof plan.annualPrice === 'number'
-                      ? `Billed annually (€${plan.annualPrice * 12}/yr)`
-                      : 'Billed monthly'}
-                  </p>
+                  {plan.monthlyPrice !== 'Custom' && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {isAnnual && typeof plan.annualPrice === 'number'
+                        ? `Billed annually (€${plan.annualPrice * 12}/yr)`
+                        : 'Billed monthly'}
+                    </p>
+                  )}
                 </div>
                 
                 {/* Features & Models */}

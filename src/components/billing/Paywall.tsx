@@ -27,7 +27,11 @@ interface PaywallProps {
 interface Plan {
   id: 'starter' | 'growth' | 'scale';
   name: string;
+  /** MSRP — always shown strikethrough. */
+  original: number;
+  /** Discounted monthly billing price. */
   monthly: number;
+  /** Bigger discount when billed annually. */
   annual: number;
   credits: number;
   seats: number;
@@ -40,7 +44,8 @@ const PLANS: Plan[] = [
   {
     id: 'starter',
     name: 'Starter',
-    monthly: 149,
+    original: 149,
+    monthly: 49,
     annual: 42,
     credits: 5_000,
     seats: 3,
@@ -55,7 +60,8 @@ const PLANS: Plan[] = [
   {
     id: 'growth',
     name: 'Growth',
-    monthly: 399,
+    original: 399,
+    monthly: 129,
     annual: 109,
     credits: 20_000,
     seats: 8,
@@ -71,7 +77,8 @@ const PLANS: Plan[] = [
   {
     id: 'scale',
     name: 'Scale',
-    monthly: 899,
+    original: 899,
+    monthly: 299,
     annual: 254,
     credits: 60_000,
     seats: 20,
@@ -329,7 +336,7 @@ export default function Paywall({
             fontSize: 13, fontWeight: interval === 'year' ? 600 : 400,
             opacity: interval === 'year' ? 1 : 0.45, color: '#0A0A0A', transition: 'opacity .15s',
           }}>
-            Annual <span style={{ color: '#16a34a', fontSize: 12, fontWeight: 500 }}>save ~70%</span>
+            Annual <span style={{ color: '#16a34a', fontSize: 10, fontWeight: 700, background: '#dcfce7', padding: '2px 6px', borderRadius: 4, letterSpacing: '0.02em', marginLeft: 4 }}>15% OFF</span>
           </span>
         </div>
 
@@ -387,12 +394,19 @@ export default function Paywall({
                   {plan.name}
                 </div>
 
-                {/* Price */}
+                {/* Price — strikethrough MSRP always shown */}
                 <div style={{
                   fontSize: 48, fontWeight: 400, letterSpacing: '-0.025em',
-                  lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 4,
-                  marginBottom: 6,
+                  lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 6,
+                  marginBottom: 6, flexWrap: 'wrap',
                 }}>
+                  <span style={{
+                    fontSize: 18,
+                    color: isFeatured ? 'rgba(255,255,255,0.4)' : '#A3A3A0',
+                    textDecoration: 'line-through',
+                    fontWeight: 400,
+                    marginRight: 2,
+                  }}>€{plan.original}</span>
                   <sup style={{ fontSize: 18, opacity: 0.6, verticalAlign: 'top', marginTop: 6 }}>€</sup>
                   <span>{price}</span>
                   <span style={{
