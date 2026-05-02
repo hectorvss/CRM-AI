@@ -163,44 +163,120 @@ export async function getAccessSnapshot(orgId: string): Promise<AccessSnapshot> 
   };
 }
 
-/** Activate the 10-day trial. Idempotent — fails if trial already used. */
+/**
+ * Activate the 10-day trial. Idempotent — fails if trial already used.
+ *
+ * Self-healing: if no subscription row exists (non-fatal onboarding skip),
+ * this function creates one before activating the trial.  It also degrades
+ * gracefully when optional columns (trial_*, ai_credits_period_*) are missing
+ * — it retries the update without the unsupported columns so the trial can
+ * always be activated with at least a status change.
+ */
 export async function activateTrial(orgId: string, userId: string | null): Promise<AccessSnapshot> {
   const supabase = getSupabaseAdmin();
 
   // Re-load to enforce one-time semantics.
-  const snapshot = await getAccessSnapshot(orgId);
+  let snapshot = await getAccessSnapshot(orgId);
   if (snapshot.trialUsed) {
     throw new Error('Trial has already been activated for this organization.');
-  }
-  if (!snapshot.subscriptionId) {
-    throw new Error('No subscription row found for organization.');
   }
 
   const now = new Date();
   const ends = new Date(now);
   ends.setDate(ends.getDate() + 10);
 
-  const { error } = await supabase
-    .from('billing_subscriptions')
-    .update({
-      status: 'trialing',
-      trial_used: true,
-      trial_started_at: now.toISOString(),
-      trial_ends_at: ends.toISOString(),
-      // Trial AI credit allowance — generous enough to test, capped enough
-      // to motivate upgrade. See pricing analysis doc for rationale.
-      ai_credits_included: 1000,
-      ai_credits_period_start: now.toISOString(),
-      ai_credits_period_end: ends.toISOString(),
-    })
-    .eq('id', snapshot.subscriptionId);
+  // ── Self-heal: create the subscription row if onboarding skipped it ──────
+  if (!snapshot.subscriptionId) {
+    logger.info('accessGate.activateTrial: no subscription row found, creating one', { orgId });
+    const seedPayload: Record<string, any> = {
+      id: `sub_trial_${Date.now()}`,
+      org_id: orgId,
+      tenant_id: orgId,
+      plan_id: null,
+      status: 'pending_subscription',
+      seats_included: 1,
+      seats_used: 1,
+      trial_used: false,
+      current_period_start: now.toISOString(),
+      current_period_end: ends.toISOString(),
+      created_at: now.toISOString(),
+    };
 
-  if (error) {
-    throw new Error(`Failed to activate trial: ${error.message}`);
+    // Try with ai_credits_* columns; fall back without them.
+    const seedWithCredits = {
+      ...seedPayload,
+      ai_credits_included: 0,
+      ai_credits_used_period: 0,
+      ai_credits_topup_balance: 0,
+    };
+    let { error: seedErr } = await supabase.from('billing_subscriptions').insert(seedWithCredits);
+    if (seedErr) {
+      // Might be missing ai_credits_* columns — retry minimal payload.
+      const { error: seedErr2 } = await supabase.from('billing_subscriptions').insert(seedPayload);
+      if (seedErr2) {
+        throw new Error(`Could not create subscription row: ${seedErr2.message}`);
+      }
+    }
+    // Re-fetch snapshot so subscriptionId is populated.
+    snapshot = await getAccessSnapshot(orgId);
+    if (!snapshot.subscriptionId) {
+      throw new Error('Subscription row could not be created — please contact support.');
+    }
   }
 
-  logger.info('accessGate.activateTrial: trial activated', { orgId, userId, ends: ends.toISOString() });
+  // ── Build full update payload ────────────────────────────────────────────
+  const fullPayload: Record<string, any> = {
+    status: 'trialing',
+    trial_used: true,
+    trial_started_at: now.toISOString(),
+    trial_ends_at: ends.toISOString(),
+    ai_credits_included: 1000,
+    ai_credits_period_start: now.toISOString(),
+    ai_credits_period_end: ends.toISOString(),
+  };
 
+  // Try with all columns; fall back progressively on unknown-column errors.
+  const attemptUpdate = async (payload: Record<string, any>): Promise<void> => {
+    const { error } = await supabase
+      .from('billing_subscriptions')
+      .update(payload)
+      .eq('id', snapshot.subscriptionId!);
+    if (!error) return;
+
+    const msg = error.message ?? '';
+    // 42703 = undefined_column; try stripping optional columns and retry once.
+    if (msg.includes('ai_credits_period') || msg.includes('ai_credits_included') ||
+        msg.includes('trial_started_at') || msg.includes('trial_ends_at')) {
+      const fallback: Record<string, any> = { status: 'trialing' };
+      if (!msg.includes('trial_used'))       fallback.trial_used       = true;
+      if (!msg.includes('trial_started_at')) fallback.trial_started_at = now.toISOString();
+      if (!msg.includes('trial_ends_at'))    fallback.trial_ends_at    = ends.toISOString();
+      if (!msg.includes('ai_credits_included')) fallback.ai_credits_included = 1000;
+      if (!msg.includes('ai_credits_period'))   {
+        fallback.ai_credits_period_start = now.toISOString();
+        fallback.ai_credits_period_end   = ends.toISOString();
+      }
+      // Last resort — at minimum flip to trialing.
+      const { error: e2 } = await supabase
+        .from('billing_subscriptions')
+        .update(fallback)
+        .eq('id', snapshot.subscriptionId!);
+      if (e2) {
+        // Absolute last resort: just the status flip.
+        const { error: e3 } = await supabase
+          .from('billing_subscriptions')
+          .update({ status: 'trialing' })
+          .eq('id', snapshot.subscriptionId!);
+        if (e3) throw new Error(`Failed to activate trial: ${e3.message}`);
+      }
+      return;
+    }
+    throw new Error(`Failed to activate trial: ${msg}`);
+  };
+
+  await attemptUpdate(fullPayload);
+
+  logger.info('accessGate.activateTrial: trial activated', { orgId, userId, ends: ends.toISOString() });
   return getAccessSnapshot(orgId);
 }
 

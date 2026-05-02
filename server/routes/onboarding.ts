@@ -226,7 +226,11 @@ router.post('/setup', validate({ body: SetupBodySchema }), async (req, res) => {
       // Seed in PENDING state — user must activate trial, choose paid plan,
       // or be granted demo access before the SPA lets them in. The paywall
       // (src/components/billing/Paywall.tsx) renders for status='pending_subscription'.
-      const { error: billingError } = await supabase.from('billing_subscriptions').insert({
+      //
+      // We try the full payload first; if optional columns from later migrations
+      // are missing (ai_credits_*, trial_used), we retry with just the core fields.
+      // activateTrial() is self-healing and will create the row if it's absent.
+      const fullBillingRow = {
         id:                      subscriptionId,
         org_id:                  orgId,
         plan_id:                 null,
@@ -242,13 +246,33 @@ router.post('/setup', validate({ body: SetupBodySchema }), async (req, res) => {
         current_period_start:    now.toISOString(),
         current_period_end:      nextMonth.toISOString(),
         created_at:              now.toISOString(),
-      });
+      };
+
+      let { error: billingError } = await supabase.from('billing_subscriptions').insert(fullBillingRow);
+
       if (billingError) {
-        // Billing seed is treated as non-fatal — the user can still operate
-        // and the row can be backfilled. Do not roll back.
-        logger.warn('onboarding/setup: billing subscription seed failed (non-fatal)', {
-          error: billingError.message,
-        });
+        // Columns from a later migration might be missing — retry with core fields only.
+        const minimalRow = {
+          id:                   subscriptionId,
+          org_id:               orgId,
+          plan_id:              null,
+          status:               'pending_subscription',
+          seats_included:       1,
+          seats_used:           1,
+          current_period_start: now.toISOString(),
+          current_period_end:   nextMonth.toISOString(),
+          created_at:           now.toISOString(),
+        };
+        const { error: billingError2 } = await supabase.from('billing_subscriptions').insert(minimalRow);
+        if (billingError2) {
+          // Still non-fatal — activateTrial() will backfill later.
+          logger.warn('onboarding/setup: billing subscription seed failed (non-fatal)', {
+            error: billingError2.message, originalError: billingError.message,
+          });
+        } else {
+          created.subscriptionId = subscriptionId;
+          billingError = null;
+        }
       } else {
         created.subscriptionId = subscriptionId;
       }
