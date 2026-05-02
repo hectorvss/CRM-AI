@@ -805,10 +805,6 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
         setBootstrap(data);
         setPermissionMatrix(data.permissionMatrix);
         setContextPanel(data.contextPanel || null);
-        // Seed proactive alert chips from bootstrap (shown in empty state)
-        if (Array.isArray(data.proactiveAlerts) && data.proactiveAlerts.length > 0) {
-          setLiveAlerts(data.proactiveAlerts);
-        }
       } catch (error) {
         if (cancelled) return;
         const fallback = assistantFromError('', error instanceof Error ? error.message : 'Unable to load Super Agent.');
@@ -1207,43 +1203,6 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="relative flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
 
-        {/* Live workspace-alert toast — shown in empty state and during conversation */}
-        {liveAlerts.length > 0 ? (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex flex-col gap-1.5 w-full max-w-md px-4 pointer-events-none">
-            {liveAlerts.map((alert, idx) => (
-              <div
-                key={idx}
-                className={[
-                  'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-md pointer-events-auto',
-                  'animate-in slide-in-from-top-2 duration-300',
-                  alert.severity === 'critical'
-                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/80 dark:text-red-300'
-                    : alert.severity === 'warning'
-                    ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/80 dark:text-amber-300'
-                    : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/80 dark:text-blue-300',
-                ].join(' ')}
-              >
-                <span className="text-base leading-none shrink-0">
-                  {alert.severity === 'critical' ? '🚨' : alert.severity === 'warning' ? '⚠️' : 'ℹ️'}
-                </span>
-                <span className="flex-1 truncate">{alert.label}</span>
-                <button
-                  className="ml-2 opacity-60 hover:opacity-100 text-xs shrink-0"
-                  onClick={() => void sendPrompt(alert.query)}
-                >
-                  Review →
-                </button>
-                <button
-                  className="ml-1 opacity-40 hover:opacity-80 text-base leading-none shrink-0"
-                  onClick={() => setLiveAlerts((prev) => prev.filter((_, i) => i !== idx))}
-                  aria-label="Dismiss"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : null}
 
         {/* Scroll area */}
         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-56 pt-10 sm:px-6">
