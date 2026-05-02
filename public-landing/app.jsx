@@ -12,7 +12,7 @@ const DEFAULTS = /*EDITMODE-BEGIN*/{
 
 const COPY = {
   es: {
-    nav: { home: "Home", product: "Producto", pricing: "Pricing", customers: "Clientes", omnichannel: "Bandeja unificada", earlyStage: "Para startups", changelog: "Changelog", login: "Iniciar sesión", cta: "Solicita demo", productMenu: {
+    nav: { home: "Home", product: "Producto", pricing: "Pricing", customers: "Clientes", omnichannel: "Bandeja unificada", earlyStage: "Para startups", changelog: "Changelog", login: "Iniciar sesión", cta: "Solicita trial", productMenu: {
       aboutTitle: "Sobre Clain",
       about: [
         { slug: "/product", icon: "platform", name: "Cómo funciona Clain", desc: "Una plataforma moderna nativa de IA." },
@@ -95,7 +95,7 @@ const COPY = {
     }
   },
   en: {
-    nav: { home: "Home", product: "Product", pricing: "Pricing", customers: "Customers", omnichannel: "Unified Inbox", earlyStage: "For startups", changelog: "Changelog", login: "Sign in", cta: "Request demo", productMenu: {
+    nav: { home: "Home", product: "Product", pricing: "Pricing", customers: "Customers", omnichannel: "Unified Inbox", earlyStage: "For startups", changelog: "Changelog", login: "Sign in", cta: "Request trial", productMenu: {
       aboutTitle: "About Clain",
       about: [
         { slug: "/product", icon: "platform", name: "How Clain works", desc: "A modern, AI-native platform." },
@@ -1174,6 +1174,31 @@ function Pricing({ t, hideTitle, navigate }) {
           })}
         </div>
 
+        {/* Need set up? — link to sales-led setup (the demo page) */}
+        <div style={{
+          marginTop: 32,
+          padding: '16px 24px',
+          background: 'var(--bg-elev)',
+          border: '1px dashed var(--line-strong)',
+          borderRadius: 12,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          flexWrap: 'wrap',
+          fontSize: 14,
+          color: 'var(--fg-muted)',
+        }}>
+          <span>{isEs ? 'Necesitas ayuda con onboarding, migración o setup técnico?' : 'Need help with onboarding, migration or technical setup?'}</span>
+          <a
+            href="#/demo"
+            onClick={(e)=>{e.preventDefault(); (navigate || ((p) => window.location.hash = '#' + p))('/demo');}}
+            style={{color:'var(--fg)', fontWeight: 500, textDecoration:'underline'}}
+          >
+            {isEs ? 'Need set up? Reserva una llamada →' : 'Need set up? Book a call →'}
+          </a>
+        </div>
+
         {t.credits && (
           <div style={{marginTop: 96}}>
             <div className="reveal" style={{display:'grid', gap: 18, maxWidth: 760}}>
@@ -1198,21 +1223,21 @@ function Pricing({ t, hideTitle, navigate }) {
                 </div>
               ))}
               {t.flexible && (
-                <div className="credit-row flex-row" style={{display:'grid', gridTemplateColumns:'1fr 1fr auto auto', gap: 32, alignItems:'center'}}>
-                  {/* Title + feats */}
-                  <div>
+                <div className="credit-row flex-row">
+                  {/* Col 1 — title (replaces the credit-amount block of upper rows) */}
+                  <div className="credit-amount">
                     <div className="credit-num" style={{fontSize: 26}}>{t.flexible.title}</div>
-                    <div className="credit-feats" style={{marginTop: 10}}>
-                      {t.flexible.feats.map((f, j) => <div key={j} style={{display:'flex', gap: 6, alignItems:'baseline'}}>· {f}</div>)}
-                    </div>
                   </div>
-                  {/* Spacer column kept for grid balance — no body copy */}
-                  <div />
-                  {/* Price */}
+                  {/* Col 2 — bullets, aligned with Models/Capacity of upper rows */}
+                  <div className="credit-feats">
+                    {t.flexible.feats.map((f, j) => <div key={j}>· {f}</div>)}
+                  </div>
+                  {/* Col 3 — price */}
                   <div className="credit-price" style={{fontSize: 22, whiteSpace:'nowrap'}}>
                     {t.flexible.price}
                     <div style={{fontFamily:'var(--mono)', fontSize: 10, color:'var(--fg-faint)', letterSpacing:'.08em', textTransform:'uppercase', marginTop: 4}}>{t.flexible.billed}</div>
                   </div>
+                  {/* Col 4 — CTA */}
                   <button className="btn btn-ghost" style={{whiteSpace:'nowrap'}}>{t.flexible.cta}</button>
                 </div>
               )}

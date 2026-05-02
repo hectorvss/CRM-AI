@@ -545,15 +545,137 @@ const PAYWALL_CSS = `
     color: var(--fg-faint); margin-top: 48px; line-height: 1.7;
   }
   .pw-foot a { color: var(--fg-muted); text-decoration: underline; }
+
+  /* ── Trial signup form ────────────────────────────────────────────── */
+  .pw-form-shell {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 56px;
+    margin-top: 32px;
+    align-items: start;
+  }
+  @media (max-width: 960px) { .pw-form-shell { grid-template-columns: 1fr; gap: 32px; } }
+
+  .pw-form-info { display: grid; gap: 32px; }
+  .pw-form-info-head { display: grid; gap: 14px; }
+  .pw-form-info-head h2 {
+    font-family: var(--serif);
+    font-size: clamp(34px, 4.5vw, 48px);
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+  }
+  .pw-form-info-head h2 .em { font-style: italic; color: var(--fg-muted); }
+  .pw-form-info-head p { font-size: 15.5px; color: var(--fg-muted); line-height: 1.6; }
+
+  .pw-form-bullets { display: grid; gap: 18px; }
+  .pw-form-bullet { display: flex; gap: 12px; align-items: flex-start; }
+  .pw-form-bullet-mark {
+    flex-shrink: 0; width: 22px; height: 22px;
+    border-radius: 50%; background: #16a34a; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-top: 2px;
+  }
+  .pw-form-bullet h5 { font-family: var(--sans); font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+  .pw-form-bullet p { font-size: 13.5px; color: var(--fg-muted); line-height: 1.55; }
+
+  .pw-form-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 32px;
+    display: grid;
+    gap: 18px;
+  }
+  .pw-form-card-head h2 { font-family: var(--serif); font-size: 26px; font-weight: 400; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .pw-form-card-head p { font-size: 13px; color: var(--fg-muted); }
+
+  .pw-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 600px) { .pw-form-row { grid-template-columns: 1fr; } }
+
+  .pw-form-field { display: grid; gap: 6px; }
+  .pw-form-field label {
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--fg-muted);
+  }
+  .pw-form-field input, .pw-form-field textarea {
+    font-family: var(--sans); font-size: 14px;
+    padding: 11px 14px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    color: var(--fg);
+    cursor: text;
+    transition: border-color .15s;
+    resize: vertical;
+  }
+  .pw-form-field input:focus, .pw-form-field textarea:focus {
+    outline: none;
+    border-color: var(--fg);
+  }
+  .pw-form-field textarea { min-height: 96px; }
+
+  .pw-volume-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pw-volume-pill {
+    flex: 1 1 auto; min-width: 90px;
+    padding: 10px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--bg-elev);
+    font-size: 13px;
+    color: var(--fg);
+    cursor: none;
+    transition: all .15s;
+  }
+  .pw-volume-pill:hover { border-color: var(--fg); }
+  .pw-volume-pill.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+  .pw-form-consent {
+    font-size: 11px; color: var(--fg-faint); line-height: 1.6;
+  }
+  .pw-form-consent a { color: var(--fg-muted); text-decoration: underline; }
+
+  .pw-form-back {
+    background: none; border: none;
+    font-size: 13px; color: var(--fg-faint);
+    text-decoration: underline; cursor: none;
+    margin-top: 12px;
+  }
+  .pw-form-back:hover { color: var(--fg); }
+
+  .pw-need-setup {
+    margin-top: 18px;
+    padding: 14px 18px;
+    background: var(--bg);
+    border: 1px dashed var(--line-strong);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--fg-muted);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .pw-need-setup a {
+    color: var(--fg); text-decoration: underline;
+    font-weight: 500;
+  }
 `;
 
 export default function Paywall({
   reason, status, trialUsed, canActivateTrial, orgId, onAccessGranted, onSignOut,
 }: PaywallProps) {
+  const [view, setView] = useState<'grid' | 'trial-form'>('grid');
   const [interval, setInterval] = useState<'month' | 'year'>('year');
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Trial signup form state
+  const [trialForm, setTrialForm] = useState({
+    name: '', email: '', company: '', role: '', volume: '1-5k / mo',
+    stack: '', note: '',
+  });
+  const setTF = (k: keyof typeof trialForm, v: string) => setTrialForm((f) => ({ ...f, [k]: v }));
 
   const dotRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
@@ -611,22 +733,43 @@ export default function Paywall({
     });
   };
 
-  const handleActivateTrial = async () => {
+  /** Submit the trial signup form → activate trial + log metadata. */
+  const handleSubmitTrial = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
+    if (!trialForm.name.trim() || !trialForm.email.trim()) {
+      setError('Name and work email are required.');
+      return;
+    }
     setTrialLoading(true);
     try {
-      const res = await authedFetch('/api/billing/activate-trial', { method: 'POST' });
+      const res = await authedFetch('/api/billing/activate-trial', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: trialForm.name.trim(),
+          email: trialForm.email.trim(),
+          company: trialForm.company.trim(),
+          role: trialForm.role.trim(),
+          volume: trialForm.volume,
+          stack: trialForm.stack.trim(),
+          note: trialForm.note.trim(),
+        }),
+      });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(body?.error || `Could not activate trial (HTTP ${res.status})`);
       }
-      // Successful trial activation — bubble up so App.tsx re-fetches /access
-      // and unmounts the paywall.
       onAccessGranted();
     } catch (e: any) {
       setError(e?.message || 'Could not start your trial. Try again or contact support.');
       setTrialLoading(false);
     }
+  };
+
+  /** Open the trial signup form. */
+  const handleOpenTrialForm = () => {
+    setError(null);
+    setView('trial-form');
   };
 
   const handlePickPlan = async (plan: Plan) => {
@@ -666,115 +809,266 @@ export default function Paywall({
 
       <div className="pw-wrap">
 
-        {/* Header */}
+        {/* Header — adapts based on view */}
         <div style={{ textAlign: 'center', marginBottom: 8 }}>
           <span className="pw-eyebrow">
-            {status === 'trial_expired' ? 'Trial ended' : 'Welcome to Clain'}
+            {view === 'trial-form' ? 'Request trial'
+              : status === 'trial_expired' ? 'Trial ended'
+              : 'Welcome to Clain'}
           </span>
-          <h1 className="pw-headline">
-            {copy.lead} <span className="em">{copy.em}</span>
-          </h1>
-          <p className="pw-sub">{copy.sub}</p>
+          {view === 'grid' ? (
+            <>
+              <h1 className="pw-headline">
+                {copy.lead} <span className="em">{copy.em}</span>
+              </h1>
+              <p className="pw-sub">{copy.sub}</p>
+            </>
+          ) : (
+            <>
+              <h1 className="pw-headline">
+                Tell us just <span className="em">enough.</span>
+              </h1>
+              <p className="pw-sub">7 fields. A human reads it. We'll provision your trial in seconds.</p>
+            </>
+          )}
           <button className="pw-signout" onClick={onSignOut}>Sign out</button>
         </div>
 
-        {/* Trial banner */}
-        {canActivateTrial && (
-          <div className="pw-trial-banner">
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div className="pw-trial-mark">Recommended · No card required</div>
-              <div className="pw-trial-title">Start your <span style={{ fontStyle: 'italic' }}>10-day free trial</span></div>
-              <div className="pw-trial-meta">Full access to Cases, Inbox, Copilot and Reporting — 1,000 AI credits included.</div>
-            </div>
-            <button
-              onClick={handleActivateTrial}
-              disabled={trialLoading}
-              className="pw-btn pw-btn-primary"
-              style={{ position: 'relative', zIndex: 1 }}
-            >
-              {trialLoading ? 'Starting trial…' : <>Start trial <span className="pw-arrow">→</span></>}
-            </button>
-          </div>
-        )}
-
-        {trialUsed && reason === 'trial_expired' && (
-          <div className="pw-warn">
-            Your 10-day trial has been used. Choose a plan below to continue — your data is preserved.
-          </div>
-        )}
-
-        {/* Toggle */}
-        <div className="pw-toggle-row">
-          <span className="pw-toggle-label" style={{ fontWeight: interval === 'month' ? 600 : 400, opacity: interval === 'month' ? 1 : 0.5 }}>
-            Monthly
-          </span>
-          <button
-            className="pw-toggle-btn"
-            data-on={interval === 'year'}
-            onClick={() => setInterval(interval === 'month' ? 'year' : 'month')}
-            aria-label="Toggle billing interval"
-          >
-            <span />
-          </button>
-          <span className="pw-toggle-label" style={{ fontWeight: interval === 'year' ? 600 : 400, opacity: interval === 'year' ? 1 : 0.5 }}>
-            Annual <span className="pw-save-pill">15% OFF</span>
-          </span>
-        </div>
-
-        {/* Plan grid */}
-        <div className="pw-grid">
-          {PLANS.map((plan) => {
-            const isAnnual = interval === 'year';
-            const price = isAnnual ? plan.annual : plan.monthly;
-            const isLoading = loadingPlan === plan.id;
-            return (
-              <div key={plan.id} className={`pw-card ${plan.featured ? 'featured' : ''}`}>
-                {plan.badge && <span className="pw-badge">{plan.badge}</span>}
-                <div className="pw-card-name">{plan.name}</div>
-                <div className="pw-card-amount">
-                  <span className="pw-was">€{plan.original}</span>
-                  <sup>€</sup>{price}
-                  <span className="per">/ mo</span>
+        {/* ── Plans grid view ────────────────────────────────────────── */}
+        {view === 'grid' && (
+          <>
+            {/* Trial banner */}
+            {canActivateTrial && (
+              <div className="pw-trial-banner">
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div className="pw-trial-mark">Recommended · No card required</div>
+                  <div className="pw-trial-title">Start your <span style={{ fontStyle: 'italic' }}>10-day free trial</span></div>
+                  <div className="pw-trial-meta">Full access to Cases, Inbox, Copilot and Reporting — 1,000 AI credits, real countdown.</div>
                 </div>
-                <div className="pw-card-billed">
-                  {isAnnual ? `Billed annually · €${plan.annual * 12}/yr` : 'Billed monthly'}
-                </div>
-                <div className="pw-card-meta">{plan.meta}</div>
-                <ul className="pw-card-list">
-                  {plan.bullets.map((b, i) => (
-                    <li key={i} className="pw-card-li">{b}</li>
-                  ))}
-                </ul>
                 <button
-                  onClick={() => handlePickPlan(plan)}
-                  disabled={loadingPlan !== null}
-                  className={`pw-btn ${plan.featured ? 'pw-btn-primary' : 'pw-btn-ghost'}`}
+                  onClick={handleOpenTrialForm}
+                  className="pw-btn pw-btn-primary"
+                  style={{ position: 'relative', zIndex: 1 }}
                 >
-                  {isLoading ? 'Loading…' : <>{plan.cta} <span className="pw-arrow">→</span></>}
+                  Start trial <span className="pw-arrow">→</span>
                 </button>
               </div>
-            );
-          })}
-        </div>
+            )}
 
-        {/* Business row */}
-        <div className="pw-business">
-          <div>
-            <div className="pw-business-name">Business</div>
-            <div className="pw-business-title">Need custom volume, SSO or enterprise compliance?</div>
-            <div className="pw-business-sub">Tailored credits, seat allocation, SLA guarantees and onboarding.</div>
+            {trialUsed && reason === 'trial_expired' && (
+              <div className="pw-warn">
+                Your 10-day trial has been used. Choose a plan below to continue — your data is preserved.
+              </div>
+            )}
+
+            {/* Toggle */}
+            <div className="pw-toggle-row">
+              <span className="pw-toggle-label" style={{ fontWeight: interval === 'month' ? 600 : 400, opacity: interval === 'month' ? 1 : 0.5 }}>
+                Monthly
+              </span>
+              <button
+                className="pw-toggle-btn"
+                data-on={interval === 'year'}
+                onClick={() => setInterval(interval === 'month' ? 'year' : 'month')}
+                aria-label="Toggle billing interval"
+              >
+                <span />
+              </button>
+              <span className="pw-toggle-label" style={{ fontWeight: interval === 'year' ? 600 : 400, opacity: interval === 'year' ? 1 : 0.5 }}>
+                Annual <span className="pw-save-pill">15% OFF</span>
+              </span>
+            </div>
+
+            {/* Plan grid */}
+            <div className="pw-grid">
+              {PLANS.map((plan) => {
+                const isAnnual = interval === 'year';
+                const price = isAnnual ? plan.annual : plan.monthly;
+                const isLoading = loadingPlan === plan.id;
+                return (
+                  <div key={plan.id} className={`pw-card ${plan.featured ? 'featured' : ''}`}>
+                    {plan.badge && <span className="pw-badge">{plan.badge}</span>}
+                    <div className="pw-card-name">{plan.name}</div>
+                    <div className="pw-card-amount">
+                      <span className="pw-was">€{plan.original}</span>
+                      <sup>€</sup>{price}
+                      <span className="per">/ mo</span>
+                    </div>
+                    <div className="pw-card-billed">
+                      {isAnnual ? `Billed annually · €${plan.annual * 12}/yr` : 'Billed monthly'}
+                    </div>
+                    <div className="pw-card-meta">{plan.meta}</div>
+                    <ul className="pw-card-list">
+                      {plan.bullets.map((b, i) => (
+                        <li key={i} className="pw-card-li">{b}</li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => handlePickPlan(plan)}
+                      disabled={loadingPlan !== null}
+                      className={`pw-btn ${plan.featured ? 'pw-btn-primary' : 'pw-btn-ghost'}`}
+                    >
+                      {isLoading ? 'Loading…' : <>{plan.cta} <span className="pw-arrow">→</span></>}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Business row */}
+            <div className="pw-business">
+              <div>
+                <div className="pw-business-name">Business</div>
+                <div className="pw-business-title">Need custom volume, SSO or enterprise compliance?</div>
+                <div className="pw-business-sub">Tailored credits, seat allocation, SLA guarantees and onboarding.</div>
+              </div>
+              <button onClick={handleTalkToSales} className="pw-btn pw-btn-ghost">
+                Talk to sales <span className="pw-arrow">→</span>
+              </button>
+            </div>
+
+            {/* Need set up? — links to demo (sales-led setup) */}
+            <div className="pw-need-setup">
+              <span>Need help with onboarding, migration or setup?</span>
+              <a href="/#/demo" target="_blank" rel="noopener noreferrer">
+                Book a setup call →
+              </a>
+            </div>
+          </>
+        )}
+
+        {/* ── Trial signup form view ──────────────────────────────────── */}
+        {view === 'trial-form' && (
+          <div className="pw-form-shell">
+            {/* Left: marketing info */}
+            <section className="pw-form-info">
+              <div className="pw-form-info-head">
+                <h2>
+                  10 days, full access. <span className="em">No card required.</span>
+                </h2>
+                <p>
+                  We'll provision your trial workspace right after you submit. Real countdown,
+                  real credit limits — exactly what your team will use day-to-day.
+                </p>
+              </div>
+              <div className="pw-form-bullets">
+                <div className="pw-form-bullet">
+                  <span className="pw-form-bullet-mark" aria-hidden>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                  </span>
+                  <div>
+                    <h5>Full product access</h5>
+                    <p>Cases, Inbox, Copilot, Reporting, integrations — the entire platform.</p>
+                  </div>
+                </div>
+                <div className="pw-form-bullet">
+                  <span className="pw-form-bullet-mark" aria-hidden>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                  </span>
+                  <div>
+                    <h5>1,000 AI credits, real limits</h5>
+                    <p>Enough to run the agent on real workloads. Same metering as paid plans.</p>
+                  </div>
+                </div>
+                <div className="pw-form-bullet">
+                  <span className="pw-form-bullet-mark" aria-hidden>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                  </span>
+                  <div>
+                    <h5>10-day countdown</h5>
+                    <p>No surprise charges. At day 10, pick a plan or extend with a top-up.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="pw-need-setup">
+                <span>Want a guided setup with our team instead?</span>
+                <a href="/#/demo" target="_blank" rel="noopener noreferrer">
+                  Need set up? →
+                </a>
+              </div>
+            </section>
+
+            {/* Right: form */}
+            <section>
+              <form className="pw-form-card" onSubmit={handleSubmitTrial}>
+                <div className="pw-form-card-head">
+                  <h2>Start your trial</h2>
+                  <p>Provisions in seconds.</p>
+                </div>
+                <div className="pw-form-row">
+                  <div className="pw-form-field">
+                    <label htmlFor="pw-name">Full name</label>
+                    <input id="pw-name" required value={trialForm.name} onChange={(e) => setTF('name', e.target.value)} />
+                  </div>
+                  <div className="pw-form-field">
+                    <label htmlFor="pw-email">Work email</label>
+                    <input id="pw-email" required type="email" placeholder="you@company.com" value={trialForm.email} onChange={(e) => setTF('email', e.target.value)} />
+                  </div>
+                </div>
+                <div className="pw-form-row">
+                  <div className="pw-form-field">
+                    <label htmlFor="pw-company">Company</label>
+                    <input id="pw-company" value={trialForm.company} onChange={(e) => setTF('company', e.target.value)} />
+                  </div>
+                  <div className="pw-form-field">
+                    <label htmlFor="pw-role">Role</label>
+                    <input id="pw-role" value={trialForm.role} onChange={(e) => setTF('role', e.target.value)} />
+                  </div>
+                </div>
+                <div className="pw-form-field">
+                  <label>Monthly ticket volume</label>
+                  <div className="pw-volume-row">
+                    {['<1k / mo', '1-5k / mo', '5-20k / mo', '20k+ / mo'].map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        className={`pw-volume-pill ${trialForm.volume === v ? 'active' : ''}`}
+                        onClick={() => setTF('volume', v)}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="pw-form-field">
+                  <label htmlFor="pw-stack">Current helpdesk</label>
+                  <input id="pw-stack" placeholder="Zendesk, Front, email, Notion…" value={trialForm.stack} onChange={(e) => setTF('stack', e.target.value)} />
+                </div>
+                <div className="pw-form-field">
+                  <label htmlFor="pw-note">What would you like to test? (optional)</label>
+                  <textarea id="pw-note" placeholder="A real hard case — duplicated refunds, fraud, international returns. Be specific." value={trialForm.note} onChange={(e) => setTF('note', e.target.value)} />
+                </div>
+
+                <p className="pw-form-consent">
+                  By submitting, you agree to our <a href="/#/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>.
+                  Your trial workspace is created immediately — no card required.
+                </p>
+
+                <button
+                  type="submit"
+                  disabled={trialLoading}
+                  className="pw-btn pw-btn-primary"
+                  style={{ width: '100%', justifyContent: 'center', padding: '14px 18px', fontSize: 15 }}
+                >
+                  {trialLoading ? 'Provisioning your trial…' : <>Start my 10-day trial <span className="pw-arrow">→</span></>}
+                </button>
+
+                <button type="button" className="pw-form-back" onClick={() => setView('grid')}>
+                  ← Back to plans
+                </button>
+              </form>
+            </section>
           </div>
-          <button onClick={handleTalkToSales} className="pw-btn pw-btn-ghost">
-            Talk to sales <span className="pw-arrow">→</span>
-          </button>
-        </div>
+        )}
 
         {error && <div className="pw-error">{error}</div>}
 
-        <p className="pw-foot">
-          All plans include the core platform. AI credits reset monthly. Top-up packs available on all plans.<br />
-          Questions? <a href="mailto:support@clain.io">support@clain.io</a>
-        </p>
+        {view === 'grid' && (
+          <p className="pw-foot">
+            All plans include the core platform. AI credits reset monthly. Top-up packs available on all plans.<br />
+            Questions? <a href="mailto:support@clain.io">support@clain.io</a>
+          </p>
+        )}
 
       </div>
     </div>

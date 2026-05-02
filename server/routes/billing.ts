@@ -43,12 +43,44 @@ router.get('/access', async (req: MultiTenantRequest, res) => {
 });
 
 // ── POST /api/billing/activate-trial ────────────────────────────────────────
+// Accepts optional metadata (name, company, role, volume, stack, note) which
+// is logged to demo_leads with source='in_app_trial_signup' for sales follow-up.
 router.post('/activate-trial', async (req: MultiTenantRequest, res) => {
   try {
     if (!req.tenantId) {
       return sendError(res, 401, 'NO_TENANT', 'Tenant context required');
     }
+
+    // Activate the trial first — credits + status flip happen here.
     const snapshot = await activateTrial(req.tenantId, req.userId ?? null);
+
+    // Log signup metadata to demo_leads (best-effort, non-fatal).
+    const meta = (req.body ?? {}) as Record<string, unknown>;
+    const hasMeta = meta && (meta.name || meta.email || meta.company || meta.note);
+    if (hasMeta) {
+      try {
+        const supabase = getSupabaseAdmin();
+        await supabase.from('demo_leads').insert({
+          id: crypto.randomUUID(),
+          name:    String(meta.name    ?? '').slice(0, 160),
+          email:   String(meta.email   ?? '').toLowerCase().slice(0, 200),
+          company: String(meta.company ?? '').slice(0, 160) || null,
+          volume:  String(meta.volume  ?? '').slice(0, 80)  || null,
+          note: [
+            meta.role  ? `Role: ${String(meta.role).slice(0, 80)}`     : null,
+            meta.stack ? `Stack: ${String(meta.stack).slice(0, 200)}` : null,
+            meta.note  ? String(meta.note).slice(0, 4000)              : null,
+          ].filter(Boolean).join(' · ') || null,
+          source: 'in_app_trial_signup',
+          created_at: new Date().toISOString(),
+        });
+      } catch (metaErr: any) {
+        logger.warn('billing.activate-trial: metadata log failed (non-fatal)', {
+          error: metaErr?.message,
+        });
+      }
+    }
+
     await auditRepository.write({
       action:     'TRIAL_ACTIVATED',
       entityType: 'subscription',
@@ -56,15 +88,16 @@ router.post('/activate-trial', async (req: MultiTenantRequest, res) => {
       tenantId:   req.tenantId,
       workspaceId: req.workspaceId ?? null,
       userId:     req.userId ?? 'system',
-      newValue:   { trialEndsAt: snapshot.trialEndsAt },
+      newValue:   { trialEndsAt: snapshot.trialEndsAt, hasMeta },
     } as any);
+
     return res.json(snapshot);
   } catch (err: any) {
     if (err?.message?.includes('already been activated')) {
       return sendError(res, 409, 'TRIAL_ALREADY_USED', err.message);
     }
     logger.error('billing.activate-trial failed', { error: err?.message });
-    return sendError(res, 500, 'TRIAL_ACTIVATION_FAILED', 'Could not activate trial');
+    return sendError(res, 500, 'TRIAL_ACTIVATION_FAILED', err?.message || 'Could not activate trial');
   }
 });
 
