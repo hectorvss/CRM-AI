@@ -61,7 +61,7 @@ const COPY = {
     pricingTitle: ["Precio simple,", { em: " escalable con tu volumen." }],
     pricingNote: "Todos los planes incluyen la plataforma core. Lo que cambia es la capacidad de IA, los seats y la escala.",
     plans: [
-      { name: "Starter", price: 42, was: 149, per: "/ mes", billed: "Facturado anual (€504/año)", meta: "Para equipos pequeños empezando con operaciones asistidas por IA.", feats: ["5,000 créditos de IA / mes", "3 seats incluidos (€25/seat extra)", "Workflows de soporte y ops core", "Integraciones email y chat estándar", "Reporting y analytics básico"], cta: "Empieza constarter", featured: false },
+      { name: "Starter", price: 42, was: 149, per: "/ mes", billed: "Facturado anual (€504/año)", meta: "Para equipos pequeños empezando con operaciones asistidas por IA.", feats: ["5,000 créditos de IA / mes", "3 seats incluidos (€25/seat extra)", "Workflows de soporte y ops core", "Integraciones email y chat estándar", "Reporting y analytics básico"], cta: "Empieza con Starter", featured: false },
       { name: "Growth", price: 109, was: 399, per: "/ mes", billed: "Facturado anual (€1,308/año)", meta: "Para equipos en crecimiento que usan IA todos los días.", feats: ["20,000 créditos de IA / mes", "8 seats incluidos (€22/seat extra)", "Workflows multi-step avanzados", "Integraciones API custom", "Soporte prioritario por email"], cta: "Empieza con Growth", featured: true, badge: "Recomendado" },
       { name: "Scale", price: 254, was: 899, per: "/ mes", billed: "Facturado anual (€3,048/año)", meta: "Para equipos avanzados con alto volumen y multi-workflow.", feats: ["60,000 créditos de IA / mes", "20 seats incluidos (€19/seat extra)", "Workflows custom ilimitados", "Customer success manager dedicado", "Dashboards de reporting custom"], cta: "Empieza con Scale", featured: false },
       { name: "Business", price: null, per: "Custom", meta: "Para organizaciones con capacidad, governance y necesidades enterprise.", feats: ["Asignación de créditos a medida", "Asignación de seats custom", "Seguridad y compliance enterprise", "SLA y uptime garantizados", "Onboarding y formación a medida"], cta: "Habla con ventas", featured: false },
@@ -144,7 +144,7 @@ const COPY = {
     pricingTitle: ["Simple pricing,", { em: " scales with you." }],
     pricingNote: "All plans include the core platform. What changes is AI capacity, seat capacity, and scale.",
     plans: [
-      { name: "Starter", price: 42, was: 149, per: "/ mo", billed: "Billed annually (€504/yr)", meta: "For small teams getting started with AI-assisted ops.", feats: ["5,000 AI credits / month", "3 seats included (€25/extra seat)", "Core support and ops workflows", "Standard email and chat integrations", "Basic reporting and analytics"], cta: "Start free", featured: false },
+      { name: "Starter", price: 42, was: 149, per: "/ mo", billed: "Billed annually (€504/yr)", meta: "For small teams getting started with AI-assisted ops.", feats: ["5,000 AI credits / month", "3 seats included (€25/extra seat)", "Core support and ops workflows", "Standard email and chat integrations", "Basic reporting and analytics"], cta: "Get Starter", featured: false },
       { name: "Growth", price: 109, was: 399, per: "/ mo", billed: "Billed annually (€1,308/yr)", meta: "For growing support and ops teams using AI every day.", feats: ["20,000 AI credits / month", "8 seats included (€22/extra seat)", "Advanced multi-step workflows", "Custom API integrations", "Priority email support"], cta: "Upgrade to Growth", featured: true, badge: "Recommended" },
       { name: "Scale", price: 254, was: 899, per: "/ mo", billed: "Billed annually (€3,048/yr)", meta: "For advanced teams managing high-volume, multi-workflow ops.", feats: ["60,000 AI credits / month", "20 seats included (€19/extra seat)", "Unlimited custom workflows", "Dedicated customer success manager", "Custom reporting dashboards"], cta: "Upgrade to Scale", featured: false },
       { name: "Business", price: null, per: "Custom", meta: "For organizations with custom capacity, governance and enterprise needs.", feats: ["Tailored AI credit allocation", "Custom seat allocation", "Enterprise-grade security & compliance", "Custom SLA & uptime guarantees", "Tailored onboarding & training"], cta: "Talk to sales", featured: false },
@@ -1140,9 +1140,13 @@ function Pricing({ t, hideTitle, navigate }) {
 
         <div className="price-grid price-grid-4 reveal-children">
           {t.plans.map((p, i) => {
-            const displayPrice = billingInterval === 'year' ? p.price : p.was;
+            // Annual: show discounted price + strikethrough original
+            // Monthly: show original price, no strikethrough
+            const isAnnual = billingInterval === 'year';
+            const displayPrice = isAnnual ? p.price : p.was;
+            const strikePrice  = isAnnual && p.was ? p.was : null;
             const billedLine = p.price !== null
-              ? (billingInterval === 'year' ? p.billed : (isEs ? 'Facturado mensualmente' : 'Billed monthly'))
+              ? (isAnnual ? p.billed : (isEs ? 'Facturado mensualmente' : 'Billed monthly'))
               : null;
             return (
               <div key={i} className={`price-card ${p.featured ? 'featured' : ''}`}>
@@ -1153,6 +1157,7 @@ function Pricing({ t, hideTitle, navigate }) {
                     <span style={{fontSize: 40}}>{p.per}</span>
                   ) : (
                     <>
+                      {strikePrice && <span className="price-was">€{strikePrice}</span>}
                       <sup>€</sup>{displayPrice}<span className="per">{p.per}</span>
                     </>
                   )}
