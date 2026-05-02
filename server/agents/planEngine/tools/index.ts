@@ -80,6 +80,24 @@ import { agentRunTool } from './agentRun.js';
 import { reconListIssuesTool, reconResolveIssueTool } from './reconciliation.js';
 // ── Cross-entity search
 import { searchGlobalTool } from './search.js';
+// ── Bulk operations
+import {
+  caseBulkUpdateStatusTool,
+  caseBulkUpdatePriorityTool,
+  caseBulkAssignTool,
+  caseBulkAddNoteTool,
+  orderBulkCancelTool,
+} from './bulk.js';
+// ── Playbooks
+import { playbookListTool, playbookGetTool, playbookExecuteTool } from './playbooks.js';
+// ── Scheduled actions
+import {
+  scheduledActionCreateTool,
+  scheduledActionListTool,
+  scheduledActionCancelTool,
+} from './scheduledActions.js';
+// ── Feedback / decision capture
+import { feedbackRecordDecisionTool, feedbackListTool } from './feedback.js';
 
 export function registerAllTools(): void {
   // Orders
@@ -177,4 +195,25 @@ export function registerAllTools(): void {
   toolRegistry.register(searchGlobalTool);
   toolRegistry.register(rootCauseAnalyzeTool);
   toolRegistry.register(interoperabilityCheckTool);
+
+  // Bulk operations
+  toolRegistry.register(caseBulkUpdateStatusTool);
+  toolRegistry.register(caseBulkUpdatePriorityTool);
+  toolRegistry.register(caseBulkAssignTool);
+  toolRegistry.register(caseBulkAddNoteTool);
+  toolRegistry.register(orderBulkCancelTool);
+
+  // Playbooks
+  toolRegistry.register(playbookListTool);
+  toolRegistry.register(playbookGetTool);
+  toolRegistry.register(playbookExecuteTool);
+
+  // Scheduled actions
+  toolRegistry.register(scheduledActionCreateTool);
+  toolRegistry.register(scheduledActionListTool);
+  toolRegistry.register(scheduledActionCancelTool);
+
+  // Feedback / decision capture
+  toolRegistry.register(feedbackRecordDecisionTool);
+  toolRegistry.register(feedbackListTool);
 }

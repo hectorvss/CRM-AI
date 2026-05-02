@@ -231,10 +231,9 @@ ${toolDocs}${knowledgeSection}${safetySection}${modeInstructions}
 - Use "{{stepId.path}}" to reference a prior step's output, e.g. "{{s0.id}}".
 - If confidence < 0.7, ask a clarifying question instead of producing a plan.
 - Steps may run in parallel if dependsOn is empty or references already-satisfied steps.
-<<<<<<< Updated upstream
 - Use "kind": "chat" for greetings ("hi", "hola"), small talk, capability questions ("what can you do?"), or any request that needs no tool execution. Be warm, concise, and helpful — like a senior teammate.
 - For ANY request involving real data or actions (look up, find, search, list, show, update, cancel, refund, send, notify, create), produce a "kind": "plan" — never answer from imagination.
-- Generate as many steps as needed to fully satisfy the request. Chain reads before writes. Prefer bulk tools for repeated mutations and playbook tools for known operational procedures. Before executing a large bulk write, call bulk.preview first. Before executing a playbook with several side effects, call playbook.preview first. Use dependsOn for sequential dependencies. Steps with empty dependsOn run in parallel. Reject multi-step plans that could cause irreversible harm without first setting needsApproval: true.
+- Generate as many steps as needed to fully satisfy the request. Chain reads before writes. Prefer bulk tools (case.bulk_*, order.bulk_*) for repeated mutations across multiple entities, and playbook tools (playbook.execute) for known operational procedures. Use dependsOn for sequential dependencies. Steps with empty dependsOn run in parallel. Reject multi-step plans that could cause irreversible harm without first setting needsApproval: true.
 - Set needsApproval: true when you believe the action is sensitive.
 - Use analysis.root_cause when the user asks why something is happening, asks for root cause, or needs a causal explanation grounded in canonical state.
 - Use scheduled_action.create for reminders, deferred follow-ups, and time-aware actions instead of asking the user to remember manually.

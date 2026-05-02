@@ -805,6 +805,10 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
         setBootstrap(data);
         setPermissionMatrix(data.permissionMatrix);
         setContextPanel(data.contextPanel || null);
+        // Seed proactive alert chips from bootstrap (shown in empty state)
+        if (Array.isArray(data.proactiveAlerts) && data.proactiveAlerts.length > 0) {
+          setLiveAlerts(data.proactiveAlerts);
+        }
       } catch (error) {
         if (cancelled) return;
         const fallback = assistantFromError('', error instanceof Error ? error.message : 'Unable to load Super Agent.');
@@ -1203,8 +1207,8 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="relative flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
 
-        {/* Live workspace-alert toast — shown when conversation is active */}
-        {messages.length > 0 && liveAlerts.length > 0 ? (
+        {/* Live workspace-alert toast — shown in empty state and during conversation */}
+        {liveAlerts.length > 0 ? (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex flex-col gap-1.5 w-full max-w-md px-4 pointer-events-none">
             {liveAlerts.map((alert, idx) => (
               <div
@@ -1272,6 +1276,20 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                     ))}
                   </h1>
                 </div>
+                {emptyHints.length > 0 ? (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {emptyHints.map((hint) => (
+                      <button
+                        key={hint}
+                        type="button"
+                        onClick={() => void sendPrompt(hint)}
+                        className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[13px] text-gray-600 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-800 dark:hover:text-white"
+                      >
+                        {hint}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
