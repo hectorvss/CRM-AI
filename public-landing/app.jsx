@@ -1197,16 +1197,24 @@ function Pricing({ t, hideTitle, navigate }) {
                 </div>
               ))}
               {t.flexible && (
-                <div className="credit-row flex-row">
-                  <div className="credit-amount">
-                    <div className="credit-num" style={{fontSize: 28}}>{t.flexible.title}</div>
-                    <div className="credit-sub">{t.flexible.body}</div>
+                <div className="credit-row flex-row" style={{display:'grid', gridTemplateColumns:'1fr 1fr auto auto', gap: 32, alignItems:'center'}}>
+                  {/* Title only — no body text here */}
+                  <div>
+                    <div className="credit-num" style={{fontSize: 26}}>{t.flexible.title}</div>
+                    <div className="credit-feats" style={{marginTop: 10}}>
+                      {t.flexible.feats.map((f, j) => <div key={j} style={{display:'flex', gap: 6, alignItems:'baseline'}}>· {f}</div>)}
+                    </div>
                   </div>
-                  <div className="credit-feats">
-                    {t.flexible.feats.map((f, j) => <div key={j}>· {f}</div>)}
+                  {/* Body text — normal paragraph style, not uppercase */}
+                  <div style={{fontFamily:'var(--sans)', fontSize: 13, color:'var(--fg-muted)', lineHeight: 1.6}}>
+                    {t.flexible.body}
                   </div>
-                  <div className="credit-price" style={{fontSize: 22}}>{t.flexible.price}<div style={{fontFamily:'var(--mono)', fontSize: 10, color:'var(--fg-faint)', letterSpacing:'.08em', textTransform:'uppercase', marginTop: 4}}>{t.flexible.billed}</div></div>
-                  <button className="btn btn-ghost">{t.flexible.cta}</button>
+                  {/* Price */}
+                  <div className="credit-price" style={{fontSize: 22, whiteSpace:'nowrap'}}>
+                    {t.flexible.price}
+                    <div style={{fontFamily:'var(--mono)', fontSize: 10, color:'var(--fg-faint)', letterSpacing:'.08em', textTransform:'uppercase', marginTop: 4}}>{t.flexible.billed}</div>
+                  </div>
+                  <button className="btn btn-ghost" style={{whiteSpace:'nowrap'}}>{t.flexible.cta}</button>
                 </div>
               )}
             </div>
