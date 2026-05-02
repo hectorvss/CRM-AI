@@ -7,16 +7,37 @@ import { supabase } from './supabase';
 
 const BASE = '/api';
 
+// Resolve tenant / workspace context from (in priority order):
+//   1. Supabase JWT claims (app_metadata > user_metadata)
+//   2. Vite build-time env vars (VITE_TENANT_ID / VITE_WORKSPACE_ID)
+//   3. Hard-coded demo defaults (org_default / ws_default)
+function resolveTenantHeaders(user?: { app_metadata?: any; user_metadata?: any }) {
+  const tenantId =
+    user?.app_metadata?.tenant_id ||
+    user?.user_metadata?.tenant_id ||
+    (import.meta as any).env?.VITE_TENANT_ID ||
+    'org_default';
+
+  const workspaceId =
+    user?.app_metadata?.workspace_id ||
+    user?.user_metadata?.workspace_id ||
+    (import.meta as any).env?.VITE_WORKSPACE_ID ||
+    'ws_default';
+
+  return { tenantId, workspaceId };
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 
   const userId = data.session?.user?.id || 'system';
+  const { tenantId, workspaceId } = resolveTenantHeaders(data.session?.user);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'x-tenant-id': 'org_default',
-    'x-workspace-id': 'ws_default',
+    'x-tenant-id': tenantId,
+    'x-workspace-id': workspaceId,
     'x-user-id': userId,
     ...(options?.headers as Record<string, string> || {}),
   };
