@@ -129,9 +129,12 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
           const contact           = contacts.find((c: any) => c.wa_id === from);
           const senderName        = contact?.profile?.name as string | undefined;
 
-          // Deduplicate by externalMessageId
+          // Deduplicate by externalMessageId using the real repo method
           const dedupeKey = `whatsapp:message:${externalMessageId}`;
-          const existing = await (integrationRepo as any).getCanonicalEventByDedupeKey?.(dedupeKey);
+          const existing = await integrationRepo.getWebhookEventByDedupeKey(
+            { tenantId: context.tenantId },
+            dedupeKey,
+          ).catch(() => null);
 
           if (existing) {
             logger.debug('WhatsApp: duplicate message, skipping', { externalMessageId });

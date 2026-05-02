@@ -5,12 +5,14 @@ import {
   createCaseRepository,
   createConversationRepository,
   createAuditRepository,
+  createApprovalRepository,
   buildCaseState,
   buildGraphView,
   buildInboxView,
   buildResolveView,
   buildTimeline,
 } from '../data/index.js';
+import * as traceRepo from '../agents/planEngine/traceRepository.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
@@ -916,14 +918,27 @@ router.post('/:id/resolution/execute-step', async (req: MultiTenantRequest, res:
       singleStepPlan,
       context,
       {
-        createApproval: async ({ step, decision }) => {
-          // Create approval in DB
-          const approvalId = `APR-${Date.now()}`;
-          // TODO: Persist approval in approvals table
-          return approvalId;
+        createApproval: async ({ plan, step, decision, context: ctx }) => {
+          const approvalRepo = createApprovalRepository();
+          const approval = await approvalRepo.create(
+            { tenantId: req.tenantId!, workspaceId: req.workspaceId ?? '', userId: req.userId ?? undefined },
+            {
+              caseId: caseId,
+              actionType: step.tool,
+              actionPayload: { args: step.args, planId: plan.planId },
+              riskLevel: decision.riskLevel,
+              priority: decision.riskLevel === 'critical' ? 'critical' : 'high',
+              requestedBy: req.userId ?? 'system',
+              requestedByType: 'human',
+              evidencePackage: {
+                summary: `Resolution step ${step.id}: ${step.tool} — ${decision.reason}`,
+              },
+            },
+          );
+          return (approval as any).id;
         },
         persistTrace: async (trace) => {
-          // TODO: Persist execution trace for audit
+          await traceRepo.persistTrace(trace);
         },
       }
     );

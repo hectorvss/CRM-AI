@@ -57,7 +57,11 @@ export function startScheduledJobs(): void {
 
   const scope = bootstrapScope();
   if (!scope) {
-    logger.info('Skipping scheduled job bootstrap because DEFAULT_TENANT_ID/DEFAULT_WORKSPACE_ID are not set');
+    logger.warn(
+      'Scheduled jobs DISABLED — DEFAULT_TENANT_ID and/or DEFAULT_WORKSPACE_ID are not set. ' +
+      'SLA checks, reconciliation, workflow delays, session pruning, and churn scans will not run. ' +
+      'Add these variables to .env.local to enable background maintenance.',
+    );
     return;
   }
 
