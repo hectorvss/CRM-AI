@@ -1,7 +1,4 @@
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { parseRow } from '../db/utils.js';
 import { workerStatus } from '../queue/worker.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { redactForWorkspacePolicy } from '../services/privacyRedaction.js';
@@ -72,35 +69,6 @@ async function getOverviewSupabase(scope: OperationsScope) {
   };
 }
 
-function getOverviewSqlite(scope: OperationsScope) {
-  const db = getDb();
-  const webhookStatus = db.prepare('SELECT status, COUNT(*) as count FROM webhook_events WHERE tenant_id = ? GROUP BY status').all(scope.tenantId) as any[];
-  const canonicalStatus = db.prepare('SELECT status, COUNT(*) as count FROM canonical_events WHERE tenant_id = ? AND workspace_id = ? GROUP BY status').all(scope.tenantId, scope.workspaceId) as any[];
-  const recentAgentRuns = db.prepare(`SELECT COUNT(*) as count FROM agent_runs WHERE tenant_id = ? AND started_at >= datetime('now', '-24 hours')`).get(scope.tenantId) as any;
-  const failedAgentRuns = db.prepare(`SELECT COUNT(*) as count FROM agent_runs WHERE tenant_id = ? AND outcome_status = 'failed' AND started_at >= datetime('now', '-24 hours')`).get(scope.tenantId) as any;
-  const queueStatus = db.prepare(`SELECT status, COUNT(*) as count FROM jobs WHERE tenant_id = ? AND (workspace_id = ? OR workspace_id IS NULL) GROUP BY status`).all(scope.tenantId, scope.workspaceId) as any[];
-  const staleWebhooks = db.prepare(`SELECT COUNT(*) as count FROM webhook_events WHERE tenant_id = ? AND status != 'processed' AND received_at < datetime('now', '-15 minutes')`).get(scope.tenantId) as any;
-
-  const alerts: string[] = [];
-  if (queueStatus.find(r => r.status === 'dead')?.count > 0) alerts.push('dead_jobs_detected');
-  if (staleWebhooks?.count > 0) alerts.push('stale_webhooks_detected');
-  if (failedAgentRuns?.count > 0) alerts.push('agent_failures_detected');
-
-  return {
-    worker: workerStatus(),
-    queue: queueStatus.reduce((a, r) => ({ ...a, [r.status]: r.count }), {}),
-    webhooks: webhookStatus.reduce((a, r) => ({ ...a, [r.status]: r.count }), {}),
-    canonical_events: canonicalStatus.reduce((a, r) => ({ ...a, [r.status]: r.count }), {}),
-    agent_runs_last_24h: recentAgentRuns?.count ?? 0,
-    agent_failures_last_24h: failedAgentRuns?.count ?? 0,
-    stale_webhooks: staleWebhooks?.count ?? 0,
-    alerts,
-    integrations: {
-      registered: integrationRegistry.registeredSystems(),
-      health: [] // integrationRegistry.healthCheck is async, route handles it
-    }
-  };
-}
 
 async function listJobsSupabase(scope: OperationsScope, limit = 100) {
   const supabase = getSupabaseAdmin();
@@ -115,10 +83,6 @@ async function listJobsSupabase(scope: OperationsScope, limit = 100) {
   return data || [];
 }
 
-function listJobsSqlite(scope: OperationsScope, limit = 100) {
-  const db = getDb();
-  return db.prepare(`SELECT * FROM jobs WHERE tenant_id = ? AND (workspace_id = ? OR workspace_id IS NULL) ORDER BY created_at DESC LIMIT ?`).all(scope.tenantId, scope.workspaceId, limit).map(parseRow);
-}
 
 async function listDeadLetterJobsSupabase(scope: OperationsScope, limit = 100) {
   const supabase = getSupabaseAdmin();
@@ -134,10 +98,6 @@ async function listDeadLetterJobsSupabase(scope: OperationsScope, limit = 100) {
   return data || [];
 }
 
-function listDeadLetterJobsSqlite(scope: OperationsScope, limit = 100) {
-  const db = getDb();
-  return db.prepare(`SELECT * FROM jobs WHERE tenant_id = ? AND (workspace_id = ? OR workspace_id IS NULL) AND status = 'dead' ORDER BY finished_at DESC, created_at DESC LIMIT ?`).all(scope.tenantId, scope.workspaceId, limit).map(parseRow);
-}
 
 async function getJobSupabase(scope: OperationsScope, id: string) {
   const supabase = getSupabaseAdmin();
@@ -146,10 +106,6 @@ async function getJobSupabase(scope: OperationsScope, id: string) {
   return data;
 }
 
-function getJobSqlite(scope: OperationsScope, id: string) {
-  const db = getDb();
-  return parseRow(db.prepare('SELECT * FROM jobs WHERE id = ?').get(id));
-}
 
 async function listWebhooksSupabase(scope: OperationsScope, limit = 100) {
   const supabase = getSupabaseAdmin();
@@ -163,10 +119,6 @@ async function listWebhooksSupabase(scope: OperationsScope, limit = 100) {
   return data || [];
 }
 
-function listWebhooksSqlite(scope: OperationsScope, limit = 100) {
-  const db = getDb();
-  return db.prepare('SELECT * FROM webhook_events WHERE tenant_id = ? ORDER BY received_at DESC LIMIT ?').all(scope.tenantId, limit).map(parseRow);
-}
 
 async function getWebhookSupabase(scope: OperationsScope, id: string) {
   const supabase = getSupabaseAdmin();
@@ -175,10 +127,6 @@ async function getWebhookSupabase(scope: OperationsScope, id: string) {
   return data;
 }
 
-function getWebhookSqlite(scope: OperationsScope, id: string) {
-  const db = getDb();
-  return parseRow(db.prepare('SELECT * FROM webhook_events WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId));
-}
 
 async function updateWebhookStatusSupabase(scope: OperationsScope, id: string, status: string) {
   const supabase = getSupabaseAdmin();
@@ -188,14 +136,6 @@ async function updateWebhookStatusSupabase(scope: OperationsScope, id: string, s
   if (error) throw error;
 }
 
-function updateWebhookStatusSqlite(scope: OperationsScope, id: string, status: string) {
-  const db = getDb();
-  if (status === 'received') {
-    db.prepare(`UPDATE webhook_events SET status = 'received', processed_at = NULL WHERE id = ?`).run(id);
-  } else {
-    db.prepare(`UPDATE webhook_events SET status = ? WHERE id = ?`).run(status, id);
-  }
-}
 
 async function listCanonicalEventsSupabase(scope: OperationsScope, limit = 100) {
   const supabase = getSupabaseAdmin();
@@ -210,10 +150,6 @@ async function listCanonicalEventsSupabase(scope: OperationsScope, limit = 100) 
   return data || [];
 }
 
-function listCanonicalEventsSqlite(scope: OperationsScope, limit = 100) {
-  const db = getDb();
-  return db.prepare('SELECT * FROM canonical_events WHERE tenant_id = ? AND workspace_id = ? ORDER BY occurred_at DESC, ingested_at DESC LIMIT ?').all(scope.tenantId, scope.workspaceId, limit).map(parseRow);
-}
 
 async function listAgentRunsSupabase(scope: OperationsScope, limit = 100) {
   const supabase = getSupabaseAdmin();
@@ -232,17 +168,6 @@ async function listAgentRunsSupabase(scope: OperationsScope, limit = 100) {
   }));
 }
 
-function listAgentRunsSqlite(scope: OperationsScope, limit = 100) {
-  const db = getDb();
-  return db.prepare(`
-    SELECT ar.*, a.name as agent_name, a.slug as agent_slug
-    FROM agent_runs ar
-    JOIN agents a ON a.id = ar.agent_id
-    WHERE ar.tenant_id = ?
-    ORDER BY ar.started_at DESC
-    LIMIT ?
-  `).all(scope.tenantId, limit).map(parseRow);
-}
 
 async function logAuditSupabase(scope: OperationsScope, entry: any) {
   const supabase = getSupabaseAdmin();
@@ -264,56 +189,18 @@ async function logAuditSupabase(scope: OperationsScope, entry: any) {
   if (error) throw error;
 }
 
-async function logAuditSqlite(scope: OperationsScope, entry: any) {
-  const db = getDb();
-  const redactedEntry = await redactForWorkspacePolicy(scope, entry);
-  db.prepare(`
-    INSERT INTO audit_events (
-      id, tenant_id, workspace_id, actor_type, actor_id, action,
-      entity_type, entity_id, old_value, new_value, metadata, occurred_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    redactedEntry.id ?? crypto.randomUUID(),
-    scope.tenantId,
-    scope.workspaceId,
-    redactedEntry.actorType ?? redactedEntry.actor_type ?? 'system',
-    redactedEntry.actorId ?? redactedEntry.actor_id ?? 'system',
-    redactedEntry.action,
-    redactedEntry.entityType ?? redactedEntry.entity_type ?? null,
-    redactedEntry.entityId ?? redactedEntry.entity_id ?? null,
-    JSON.stringify(redactedEntry.oldValue ?? redactedEntry.old_value ?? null),
-    JSON.stringify(redactedEntry.newValue ?? redactedEntry.new_value ?? null),
-    JSON.stringify(redactedEntry.metadata ?? null),
-    redactedEntry.occurred_at ?? new Date().toISOString(),
-  );
-}
 
 export function createOperationsRepository(): OperationsRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      getOverview: getOverviewSupabase,
-      listJobs: listJobsSupabase,
-      listDeadLetterJobs: listDeadLetterJobsSupabase,
-      getJob: getJobSupabase,
-      listWebhooks: listWebhooksSupabase,
-      getWebhook: getWebhookSupabase,
-      updateWebhookStatus: updateWebhookStatusSupabase,
-      listCanonicalEvents: listCanonicalEventsSupabase,
-      listAgentRuns: listAgentRunsSupabase,
-      logAudit: logAuditSupabase,
-    };
-  }
-
   return {
-    getOverview: async (scope) => getOverviewSqlite(scope),
-    listJobs: async (scope, limit) => listJobsSqlite(scope, limit),
-    listDeadLetterJobs: async (scope, limit) => listDeadLetterJobsSqlite(scope, limit),
-    getJob: async (scope, id) => getJobSqlite(scope, id),
-    listWebhooks: async (scope, limit) => listWebhooksSqlite(scope, limit),
-    getWebhook: async (scope, id) => getWebhookSqlite(scope, id),
-    updateWebhookStatus: async (scope, id, status) => updateWebhookStatusSqlite(scope, id, status),
-    listCanonicalEvents: async (scope, limit) => listCanonicalEventsSqlite(scope, limit),
-    listAgentRuns: async (scope, limit) => listAgentRunsSqlite(scope, limit),
-    logAudit: async (scope, entry) => logAuditSqlite(scope, entry),
+    getOverview: getOverviewSupabase,
+    listJobs: listJobsSupabase,
+    listDeadLetterJobs: listDeadLetterJobsSupabase,
+    getJob: getJobSupabase,
+    listWebhooks: listWebhooksSupabase,
+    getWebhook: getWebhookSupabase,
+    updateWebhookStatus: updateWebhookStatusSupabase,
+    listCanonicalEvents: listCanonicalEventsSupabase,
+    listAgentRuns: listAgentRunsSupabase,
+    logAudit: logAuditSupabase,
   };
 }

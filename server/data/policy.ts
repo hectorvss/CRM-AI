@@ -1,8 +1,6 @@
 import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { parseRow, logAudit } from '../db/utils.js';
+import { parseRow } from '../db/utils.js';
 
 export interface PolicyScope {
   tenantId: string;
@@ -115,15 +113,6 @@ async function listRulesSupabase(scope: PolicyScope, entityType?: string, isActi
   return data || [];
 }
 
-function listRulesSqlite(scope: PolicyScope, entityType?: string, isActive?: boolean) {
-  const db = getDb();
-  let query = 'SELECT * FROM policy_rules WHERE tenant_id = ?';
-  const params: any[] = [scope.tenantId];
-  if (entityType) { query += ' AND entity_type = ?'; params.push(entityType); }
-  if (isActive !== undefined) { query += ' AND is_active = ?'; params.push(isActive ? 1 : 0); }
-  query += ' ORDER BY created_at DESC';
-  return db.prepare(query).all(...params).map(parseRow);
-}
 
 async function createRuleSupabase(scope: PolicyScope, data: any) {
   const supabase = getSupabaseAdmin();
@@ -161,32 +150,6 @@ async function createRuleSupabase(scope: PolicyScope, data: any) {
   return rule;
 }
 
-function createRuleSqlite(scope: PolicyScope, data: any) {
-  const db = getDb();
-  const id = randomUUID();
-  db.prepare(`
-    INSERT INTO policy_rules (
-      id, tenant_id, knowledge_article_id, name, description, entity_type,
-      conditions, action_mapping, approval_mapping, escalation_mapping, is_active, version, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP)
-  `).run(
-    id, scope.tenantId, data.knowledge_article_id || null, data.name, data.description || null, data.entity_type,
-    JSON.stringify(data.conditions || []), JSON.stringify(data.action_mapping || {}),
-    JSON.stringify(data.approval_mapping || {}), JSON.stringify(data.escalation_mapping || {})
-  );
-
-  logAudit(db, {
-    tenantId: scope.tenantId,
-    workspaceId: scope.workspaceId,
-    actorId: scope.userId || 'system',
-    action: 'POLICY_RULE_CREATED',
-    entityType: 'policy_rule',
-    entityId: id,
-    metadata: { name: data.name, entity_type: data.entity_type }
-  });
-
-  return parseRow(db.prepare('SELECT * FROM policy_rules WHERE id = ?').get(id));
-}
 
 async function updateRuleSupabase(scope: PolicyScope, id: string, data: any) {
   const supabase = getSupabaseAdmin();
@@ -224,48 +187,6 @@ async function updateRuleSupabase(scope: PolicyScope, id: string, data: any) {
   return { ...existing, ...updates };
 }
 
-function updateRuleSqlite(scope: PolicyScope, id: string, data: any) {
-  const db = getDb();
-  const existing = db.prepare('SELECT * FROM policy_rules WHERE id = ? AND tenant_id = ?').get(id, scope.tenantId) as any;
-  if (!existing) return null;
-
-  const updates = {
-    name: data.name ?? existing.name,
-    description: data.description ?? existing.description,
-    entity_type: data.entity_type ?? existing.entity_type,
-    conditions: data.conditions ?? asArray(existing.conditions),
-    action_mapping: data.action_mapping ?? asObject(existing.action_mapping),
-    approval_mapping: data.approval_mapping ?? asObject(existing.approval_mapping),
-    escalation_mapping: data.escalation_mapping ?? asObject(existing.escalation_mapping),
-    is_active: data.is_active !== undefined ? (data.is_active ? 1 : 0) : existing.is_active,
-    version: (existing.version || 1) + 1
-  };
-
-  db.prepare(`
-    UPDATE policy_rules
-    SET name = ?, description = ?, entity_type = ?, conditions = ?,
-        action_mapping = ?, approval_mapping = ?, escalation_mapping = ?,
-        is_active = ?, version = ?
-    WHERE id = ? AND tenant_id = ?
-  `).run(
-    updates.name, updates.description, updates.entity_type, JSON.stringify(updates.conditions),
-    JSON.stringify(updates.action_mapping), JSON.stringify(updates.approval_mapping),
-    JSON.stringify(updates.escalation_mapping), updates.is_active, updates.version,
-    id, scope.tenantId
-  );
-
-  logAudit(db, {
-    tenantId: scope.tenantId,
-    workspaceId: scope.workspaceId,
-    actorId: scope.userId || 'system',
-    action: 'POLICY_RULE_UPDATED',
-    entityType: 'policy_rule',
-    entityId: id,
-    newValue: updates
-  });
-
-  return parseRow(db.prepare('SELECT * FROM policy_rules WHERE id = ?').get(id));
-}
 
 async function evaluatePolicy(scope: PolicyScope, entityType: string, actionType: string | null, context: Record<string, any>, caseId: string | null) {
   const rules = await createPolicyRepository().listRules(scope, entityType, true);
@@ -325,16 +246,6 @@ async function listEvaluationsSupabase(scope: PolicyScope, filters: any) {
   return data || [];
 }
 
-function listEvaluationsSqlite(scope: PolicyScope, filters: any) {
-  const db = getDb();
-  let query = 'SELECT * FROM policy_evaluations WHERE tenant_id = ? AND workspace_id = ?';
-  const params: any[] = [scope.tenantId, scope.workspaceId];
-  if (filters.decision) { query += ' AND decision = ?'; params.push(filters.decision); }
-  if (filters.entityType) { query += ' AND entity_type = ?'; params.push(filters.entityType); }
-  if (filters.caseId) { query += ' AND case_id = ?'; params.push(filters.caseId); }
-  query += ' ORDER BY created_at DESC LIMIT 200';
-  return db.prepare(query).all(...params).map(parseRow);
-}
 
 async function getMetricsSupabase(scope: PolicyScope) {
   const supabase = getSupabaseAdmin();
@@ -376,44 +287,6 @@ async function getMetricsSupabase(scope: PolicyScope) {
   };
 }
 
-function getMetricsSqlite(scope: PolicyScope) {
-  const db = getDb();
-  const totals = db.prepare(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN decision = 'allow' THEN 1 ELSE 0 END) as allow_count,
-      SUM(CASE WHEN decision = 'conditional' THEN 1 ELSE 0 END) as conditional_count,
-      SUM(CASE WHEN decision = 'approval_required' THEN 1 ELSE 0 END) as approval_required_count,
-      SUM(CASE WHEN decision = 'block' THEN 1 ELSE 0 END) as block_count,
-      SUM(CASE WHEN conflict_detected = 1 THEN 1 ELSE 0 END) as conflict_count
-    FROM policy_evaluations
-    WHERE tenant_id = ? AND workspace_id = ?
-  `).get(scope.tenantId, scope.workspaceId) as any;
-
-  const recent24h = db.prepare(`
-    SELECT COUNT(*) as total
-    FROM policy_evaluations
-    WHERE tenant_id = ? AND workspace_id = ? AND created_at >= datetime('now', '-24 hours')
-  `).get(scope.tenantId, scope.workspaceId) as any;
-
-  const topRules = db.prepare(`
-    SELECT matched_rule_id as rule_id, COUNT(*) as matches
-    FROM policy_evaluations
-    WHERE tenant_id = ? AND workspace_id = ? AND matched_rule_id IS NOT NULL
-    GROUP BY matched_rule_id
-    ORDER BY matches DESC
-    LIMIT 5
-  `).all(scope.tenantId, scope.workspaceId);
-
-  return {
-    total_evaluations: totals?.total || 0,
-    decision_breakdown: { allow: totals?.allow_count || 0, conditional: totals?.conditional_count || 0, approval_required: totals?.approval_required_count || 0, block: totals?.block_count || 0 },
-    conflict_count: totals?.conflict_count || 0,
-    conflict_rate: (totals?.total || 0) > 0 ? (totals?.conflict_count || 0) / (totals?.total || 1) : 0,
-    evaluations_last_24h: recent24h?.total || 0,
-    top_matched_rules: topRules
-  };
-}
 
 async function resolveAssigneeSupabase(scope: PolicyScope, role: string | null) {
   if (!role) return null;
@@ -431,20 +304,6 @@ async function resolveAssigneeSupabase(scope: PolicyScope, role: string | null) 
   return data?.[0]?.user_id || null;
 }
 
-function resolveAssigneeSqlite(scope: PolicyScope, role: string | null) {
-  if (!role) return null;
-  const db = getDb();
-  const row = db.prepare(`
-    SELECT m.user_id
-    FROM members m
-    JOIN roles r ON r.id = m.role_id
-    WHERE m.tenant_id = ? AND m.workspace_id = ?
-      AND m.status = 'active' AND lower(r.name) = lower(?)
-    ORDER BY m.joined_at ASC
-    LIMIT 1
-  `).get(scope.tenantId, scope.workspaceId, role) as { user_id?: string } | undefined;
-  return row?.user_id || null;
-}
 
 async function persistEvaluationSupabase(scope: PolicyScope, evaluation: any) {
   const supabase = getSupabaseAdmin();
@@ -468,58 +327,16 @@ async function persistEvaluationSupabase(scope: PolicyScope, evaluation: any) {
   if (error) throw error;
 }
 
-function persistEvaluationSqlite(scope: PolicyScope, evaluation: any) {
-  const db = getDb();
-  try {
-    db.prepare(`
-      INSERT INTO policy_evaluations (
-        id, tenant_id, workspace_id, entity_type, action_type, case_id,
-        input_context, evaluated_rules, matched_rule_id, decision, requires_approval,
-        conflict_detected, conflicting_rule_ids, reason
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      evaluation.id, scope.tenantId, scope.workspaceId, evaluation.entityType, evaluation.actionType, evaluation.caseId,
-      JSON.stringify(evaluation.context), JSON.stringify(evaluation.matchedRules), evaluation.matchedRuleId,
-      evaluation.decision, evaluation.requiresApproval ? 1 : 0, evaluation.conflictDetected ? 1 : 0,
-      JSON.stringify(evaluation.conflictingRuleIds), evaluation.reason
-    );
-  } catch {
-    // Fallback for older schemas without conflict columns
-    db.prepare(`
-      INSERT INTO policy_evaluations (
-        id, tenant_id, workspace_id, entity_type, action_type, case_id,
-        input_context, evaluated_rules, matched_rule_id, decision, requires_approval, reason
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      evaluation.id, scope.tenantId, scope.workspaceId, evaluation.entityType, evaluation.actionType, evaluation.caseId,
-      JSON.stringify(evaluation.context), JSON.stringify(evaluation.matchedRules), evaluation.matchedRuleId,
-      evaluation.decision, evaluation.requiresApproval ? 1 : 0, evaluation.reason
-    );
-  }
-}
 
 export function createPolicyRepository(): PolicyRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      listRules: listRulesSupabase,
-      createRule: createRuleSupabase,
-      updateRule: updateRuleSupabase,
-      evaluate: evaluatePolicy,
-      listEvaluations: listEvaluationsSupabase,
-      getMetrics: getMetricsSupabase,
-      resolveAssigneeByRole: resolveAssigneeSupabase,
-      persistEvaluation: persistEvaluationSupabase,
-    };
-  }
-
   return {
-    listRules: async (scope, entityType, isActive) => listRulesSqlite(scope, entityType, isActive),
-    createRule: async (scope, data) => createRuleSqlite(scope, data),
-    updateRule: async (scope, id, data) => updateRuleSqlite(scope, id, data),
+    listRules: listRulesSupabase,
+    createRule: createRuleSupabase,
+    updateRule: updateRuleSupabase,
     evaluate: evaluatePolicy,
-    listEvaluations: async (scope, filters) => listEvaluationsSqlite(scope, filters),
-    getMetrics: async (scope) => getMetricsSqlite(scope),
-    resolveAssigneeByRole: async (scope, role) => resolveAssigneeSqlite(scope, role),
-    persistEvaluation: async (scope, evaluation) => persistEvaluationSqlite(scope, evaluation),
+    listEvaluations: listEvaluationsSupabase,
+    getMetrics: getMetricsSupabase,
+    resolveAssigneeByRole: resolveAssigneeSupabase,
+    persistEvaluation: persistEvaluationSupabase,
   };
 }

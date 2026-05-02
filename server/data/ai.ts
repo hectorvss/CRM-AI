@@ -1,8 +1,5 @@
 import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { parseRow } from '../db/utils.js';
 
 export interface AIScope {
   tenantId: string;
@@ -40,20 +37,6 @@ async function getStatsSupabase(scope: AIScope) {
   };
 }
 
-function getStatsSqlite(scope: AIScope) {
-  const db = getDb();
-  const totalRuns = db.prepare('SELECT COUNT(*) as c FROM agent_runs WHERE tenant_id = ?').get(scope.tenantId) as any;
-  const resolvedByAI = db.prepare(`SELECT COUNT(*) as c FROM cases WHERE tenant_id = ? AND resolved_by LIKE 'agent%'`).get(scope.tenantId) as any;
-  const totalCases = db.prepare('SELECT COUNT(*) as c FROM cases WHERE tenant_id = ?').get(scope.tenantId) as any;
-  const pendingApprovals = db.prepare(`SELECT COUNT(*) as c FROM approval_requests WHERE tenant_id = ? AND status='pending'`).get(scope.tenantId) as any;
-
-  return {
-    total_agent_runs: totalRuns.c,
-    ai_resolution_rate: totalCases.c > 0 ? Math.round((resolvedByAI.c / totalCases.c) * 100) : 0,
-    pending_approvals: pendingApprovals.c,
-    total_cases: totalCases.c,
-  };
-}
 
 async function updateCaseAIFieldsSupabase(scope: AIScope, caseId: string, data: any) {
   const supabase = getSupabaseAdmin();
@@ -72,23 +55,6 @@ async function updateCaseAIFieldsSupabase(scope: AIScope, caseId: string, data: 
   if (error) throw error;
 }
 
-function updateCaseAIFieldsSqlite(scope: AIScope, caseId: string, data: any) {
-  const db = getDb();
-  db.prepare(`
-    UPDATE cases SET
-      ai_diagnosis = ?, ai_root_cause = ?, ai_confidence = ?, ai_recommended_action = ?,
-      ai_evidence_refs = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ?
-  `).run(
-    data.summary,
-    data.root_cause,
-    data.confidence,
-    data.recommended_action,
-    JSON.stringify(data.citations || []),
-    caseId,
-    scope.tenantId
-  );
-}
 
 async function createDraftReplySupabase(scope: AIScope, data: any) {
   const supabase = getSupabaseAdmin();
@@ -111,21 +77,6 @@ async function createDraftReplySupabase(scope: AIScope, data: any) {
   return id;
 }
 
-function createDraftReplySqlite(scope: AIScope, data: any) {
-  const db = getDb();
-  const id = randomUUID();
-  db.prepare(`
-    INSERT INTO draft_replies (
-      id, case_id, conversation_id, content, generated_by, generated_at,
-      status, tenant_id, has_policies, citations
-    )
-    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending_review', ?, ?, ?)
-  `).run(
-    id, data.caseId, data.conversationId, data.content, data.model,
-    scope.tenantId, data.hasPolicies ? 1 : 0, JSON.stringify(data.citations || [])
-  );
-  return id;
-}
 
 async function getAgentKnowledgeProfileSupabase(scope: AIScope, agentSlug: string) {
   const supabase = getSupabaseAdmin();
@@ -146,18 +97,6 @@ async function getAgentKnowledgeProfileSupabase(scope: AIScope, agentSlug: strin
   return version?.knowledge_profile || {};
 }
 
-function getAgentKnowledgeProfileSqlite(scope: AIScope, agentSlug: string) {
-  const db = getDb();
-  const row = db.prepare(`
-    SELECT av.knowledge_profile
-    FROM agents a
-    LEFT JOIN agent_versions av ON a.current_version_id = av.id
-    WHERE a.slug = ? AND a.tenant_id = ? AND a.is_active = 1
-    LIMIT 1
-  `).get(agentSlug, scope.tenantId) as any;
-
-  return row?.knowledge_profile ? JSON.parse(row.knowledge_profile) : {};
-}
 
 async function getCaseContextDataSupabase(scope: AIScope, caseId: string) {
   const supabase = getSupabaseAdmin();
@@ -198,77 +137,13 @@ async function getCaseContextDataSupabase(scope: AIScope, caseId: string) {
   };
 }
 
-function getCaseContextDataSqlite(scope: AIScope, caseId: string) {
-  const db = getDb();
-  const caseRow = db.prepare(`
-    SELECT c.*, cu.canonical_name, cu.canonical_email, cu.segment, cu.lifetime_value,
-           cu.dispute_rate, cu.refund_rate
-    FROM cases c
-    LEFT JOIN customers cu ON c.customer_id = cu.id
-    WHERE c.id = ? AND c.tenant_id = ?
-  `).get(caseId, scope.tenantId) as any;
-
-  if (!caseRow) return null;
-
-  const conversation = db.prepare(`
-    SELECT * FROM conversations
-    WHERE (case_id = ? OR id = ?) AND tenant_id = ?
-    ORDER BY updated_at DESC
-    LIMIT 1
-  `).get(caseId, caseRow.conversation_id, scope.tenantId) as any;
-
-  const messages = conversation
-    ? db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY sent_at ASC').all(conversation.id)
-    : [];
-
-  const parseJsonArray = (val: any) => {
-    if (Array.isArray(val)) return val;
-    try { return JSON.parse(val) || []; } catch { return []; }
-  };
-
-  const orderIds = parseJsonArray(caseRow.order_ids);
-  const paymentIds = parseJsonArray(caseRow.payment_ids);
-  const returnIds = parseJsonArray(caseRow.return_ids);
-
-  const orders = orderIds.map((id: string) => db.prepare('SELECT * FROM orders WHERE id = ?').get(id)).filter(Boolean);
-  const payments = paymentIds.map((id: string) => db.prepare('SELECT * FROM payments WHERE id = ?').get(id)).filter(Boolean);
-  const returns = returnIds.map((id: string) => db.prepare('SELECT * FROM returns WHERE id = ?').get(id)).filter(Boolean);
-
-  const conflicts = db.prepare(`
-    SELECT conflict_domain
-    FROM reconciliation_issues
-    WHERE case_id = ? AND tenant_id = ?
-    ORDER BY id DESC
-    LIMIT 10
-  `).all(caseId, scope.tenantId);
-
-  return {
-    caseRow: parseRow(caseRow),
-    customer: parseRow(caseRow), // customer fields are joined
-    messages: messages.map(parseRow),
-    orders: orders.map(parseRow),
-    payments: payments.map(parseRow),
-    returns: returns.map(parseRow),
-    conflicts: conflicts.map(parseRow)
-  };
-}
 
 export function createAIRepository(): AIRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      getStats: getStatsSupabase,
-      updateCaseAIFields: updateCaseAIFieldsSupabase,
-      createDraftReply: createDraftReplySupabase,
-      getAgentKnowledgeProfile: getAgentKnowledgeProfileSupabase,
-      getCaseContextData: getCaseContextDataSupabase,
-    };
-  }
-
   return {
-    getStats: async (scope) => getStatsSqlite(scope),
-    updateCaseAIFields: async (scope, caseId, data) => updateCaseAIFieldsSqlite(scope, caseId, data),
-    createDraftReply: async (scope, data) => createDraftReplySqlite(scope, data),
-    getAgentKnowledgeProfile: async (scope, agentSlug) => getAgentKnowledgeProfileSqlite(scope, agentSlug),
-    getCaseContextData: async (scope, caseId) => getCaseContextDataSqlite(scope, caseId),
+    getStats: getStatsSupabase,
+    updateCaseAIFields: updateCaseAIFieldsSupabase,
+    createDraftReply: createDraftReplySupabase,
+    getAgentKnowledgeProfile: getAgentKnowledgeProfileSupabase,
+    getCaseContextData: getCaseContextDataSupabase,
   };
 }

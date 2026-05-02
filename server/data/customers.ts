@@ -1,6 +1,3 @@
-import { getDb } from '../db/client.js';
-import { parseRow } from '../db/utils.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { canonicalHealth, compactStrings } from './shared.js';
 
@@ -277,117 +274,6 @@ async function getCustomerActivitySupabase(scope: CustomerScope, customerId: str
   return data ?? [];
 }
 
-// ── SQLite implementation ─────────────────────────────────────────────────────
-
-function getCustomerDetailSqlite(scope: CustomerScope, customerId: string) {
-  const db = getDb();
-  const customer = db.prepare(
-    'SELECT * FROM customers WHERE id = ? AND tenant_id = ? AND workspace_id = ?'
-  ).get(customerId, scope.tenantId, scope.workspaceId) as any;
-  if (!customer) return null;
-
-  const cases = db.prepare(`
-    SELECT id, case_number, type, status, priority, created_at, updated_at, risk_level,
-           has_reconciliation_conflicts, conflict_severity, ai_root_cause, ai_recommended_action, intent
-    FROM cases WHERE customer_id = ? AND tenant_id = ?
-    ORDER BY created_at DESC
-  `).all(customerId, scope.tenantId).map(parseRow);
-
-  const identities = db.prepare(
-    'SELECT * FROM linked_identities WHERE customer_id = ?'
-  ).all(customerId).map(parseRow);
-
-  const orders = db.prepare(`
-    SELECT o.id, o.external_order_id, o.status, o.total_amount, o.currency, o.order_date,
-           o.has_conflict, o.updated_at, o.created_at, o.tracking_number, o.tracking_url,
-           o.fulfillment_status, o.shipping_address
-    FROM orders o WHERE o.customer_id = ? AND o.tenant_id = ?
-    ORDER BY o.order_date DESC
-  `).all(customerId, scope.tenantId).map((row: any) => {
-    const parsed = parseRow(row);
-    // Attach line items
-    const lineItems = db.prepare(
-      'SELECT id, sku, name, price, quantity, currency, icon, image_url FROM order_line_items WHERE order_id = ?'
-    ).all(parsed.id).map(parseRow);
-    return { ...parsed, line_items: lineItems };
-  });
-
-  const payments = db.prepare(`
-    SELECT id, external_payment_id, status, amount, currency, created_at, has_conflict, payment_method, psp
-    FROM payments WHERE customer_id = ? AND tenant_id = ?
-    ORDER BY created_at DESC
-  `).all(customerId, scope.tenantId).map(parseRow);
-
-  const returns_ = db.prepare(`
-    SELECT id, external_return_id, status, return_value, currency, created_at, has_conflict, return_reason, method
-    FROM returns WHERE customer_id = ? AND tenant_id = ?
-    ORDER BY created_at DESC
-  `).all(customerId, scope.tenantId).map(parseRow);
-
-  const activity = db.prepare(`
-    SELECT id, type, system, level, title, content, metadata, source, occurred_at
-    FROM customer_activity WHERE customer_id = ? AND tenant_id = ?
-    ORDER BY occurred_at DESC LIMIT 50
-  `).all(customerId, scope.tenantId).map(parseRow);
-
-  const detail = {
-    customer: parseRow(customer),
-    cases,
-    linked_identities: identities,
-    orders,
-    payments,
-    returns: returns_,
-    activity,
-  };
-
-  return {
-    ...detail.customer,
-    cases,
-    linked_identities: identities,
-    orders,
-    payments,
-    returns: returns_,
-    activity,
-    state_snapshot: buildCustomerState(detail),
-  };
-}
-
-function listCustomersSqlite(scope: CustomerScope, filters: CustomerFilters) {
-  const db = getDb();
-  let query = 'SELECT * FROM customers WHERE tenant_id = ? AND workspace_id = ?';
-  const params: any[] = [scope.tenantId, scope.workspaceId];
-
-  if (filters.segment)    { query += ' AND segment = ?';    params.push(filters.segment); }
-  if (filters.risk_level) { query += ' AND risk_level = ?'; params.push(filters.risk_level); }
-  if (filters.q) {
-    query += ' AND (canonical_name LIKE ? OR canonical_email LIKE ?)';
-    const term = `%${filters.q}%`;
-    params.push(term, term);
-  }
-  query += ' ORDER BY lifetime_value DESC';
-
-  const rows = db.prepare(query).all(...params).map((row: any) => parseRow(row));
-  const detailEntries: Array<[string, any]> = rows.map((row: any) => [
-    row.id,
-    getCustomerDetailSqlite(scope, row.id),
-  ]);
-  return enrichCustomerRows(rows, new Map<string, any>(detailEntries));
-}
-
-function getCustomerStateSqlite(scope: CustomerScope, customerId: string) {
-  const detail = getCustomerDetailSqlite(scope, customerId);
-  return detail?.state_snapshot ?? null;
-}
-
-function getCustomerActivitySqlite(scope: CustomerScope, customerId: string) {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT * FROM customer_activity WHERE customer_id = ? AND tenant_id = ?
-    ORDER BY occurred_at DESC LIMIT 100
-  `).all(customerId, scope.tenantId).map(parseRow);
-  return rows;
-}
-
 // ── Repository interface + factory ───────────────────────────────────────────
 
 export interface CustomerRepository {
@@ -403,177 +289,107 @@ export interface CustomerRepository {
 }
 
 export function createCustomerRepository(): CustomerRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      list:         listCustomersSupabase,
-      get:          getCustomerDetailSupabase,
-      getDetail:    getCustomerDetailSupabase,
-      getState:     getCustomerStateSupabase,
-      getActivity:  getCustomerActivitySupabase,
-      getIdentity: async (scope, system, externalId) => {
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase
-          .from('linked_identities')
-          .select('*')
-          .eq('system', system)
-          .eq('external_id', externalId)
-          .maybeSingle();
-        if (error) throw error;
-        return data;
-      },
-      createStub: async (scope, input) => {
-        const supabase = getSupabaseAdmin();
-        const id = input.id ?? crypto.randomUUID();
-        const now = new Date().toISOString();
-        const { error: customerError } = await supabase.from('customers').insert({
-          id,
-          tenant_id: scope.tenantId,
-          workspace_id: scope.workspaceId,
-          canonical_name: input.canonicalName ?? input.canonical_name ?? 'Unknown Customer',
-          canonical_email: input.canonicalEmail ?? input.canonical_email ?? null,
-          email: input.email ?? null,
-          phone: input.phone ?? null,
-          segment: 'regular',
-          risk_level: 'low',
-          created_at: now,
-          updated_at: now,
-        });
-        if (customerError) throw customerError;
-        const { error: identityError } = await supabase.from('linked_identities').insert({
-          id: crypto.randomUUID(),
-          customer_id: id,
-          tenant_id: scope.tenantId,
-          workspace_id: scope.workspaceId,
-          system: input.identitySystem,
-          external_id: input.identityExternalId,
-          confidence: 1,
-          verified: true,
-          verified_at: now,
-          created_at: now,
-        });
-        if (identityError) throw identityError;
-        return id;
-      },
-
-      update: async (scope, customerId, updates) => {
-        const supabase = getSupabaseAdmin();
-        const { error } = await supabase
-          .from('customers')
-          .update({ ...updates, updated_at: new Date().toISOString() })
-          .eq('id', customerId)
-          .eq('tenant_id', scope.tenantId);
-        if (error) throw error;
-      },
-
-      upsertCustomer: async (scope, customer) => {
-        const supabase = getSupabaseAdmin();
-        const { data: linked } = await supabase
-          .from('linked_identities')
-          .select('customer_id')
-          .eq('system', customer.source)
-          .eq('external_id', customer.externalId)
-          .maybeSingle();
-
-        if (linked) {
-          await supabase.from('customers').update({
-            canonical_name:  customer.displayName,
-            canonical_email: customer.email,
-            updated_at:      new Date().toISOString(),
-          }).eq('id', (linked as any).customer_id);
-          return (linked as any).customer_id;
-        }
-
-        const id = crypto.randomUUID();
-        await supabase.from('customers').insert({
-          id,
-          tenant_id:       scope.tenantId,
-          workspace_id:    scope.workspaceId,
-          canonical_email: customer.email,
-          canonical_name:  customer.displayName,
-          segment:         'regular',
-          risk_level:      'low',
-          fraud_risk:      'low',
-          created_at:      new Date().toISOString(),
-          updated_at:      new Date().toISOString(),
-        });
-
-        await supabase.from('linked_identities').insert({
-          id:          crypto.randomUUID(),
-          customer_id: id,
-          system:      customer.source,
-          external_id: customer.externalId,
-          confidence:  1.0,
-          verified:    true,
-        });
-
-        return id;
-      },
-    };
-  }
-
   return {
-    list:        async (scope, filters)    => listCustomersSqlite(scope, filters),
-    get:         async (scope, customerId) => getCustomerDetailSqlite(scope, customerId),
-    getDetail:   async (scope, customerId) => getCustomerDetailSqlite(scope, customerId),
-    getState:    async (scope, customerId) => getCustomerStateSqlite(scope, customerId),
-    getActivity: async (scope, customerId) => getCustomerActivitySqlite(scope, customerId),
+    list:         listCustomersSupabase,
+    get:          getCustomerDetailSupabase,
+    getDetail:    getCustomerDetailSupabase,
+    getState:     getCustomerStateSupabase,
+    getActivity:  getCustomerActivitySupabase,
     getIdentity: async (scope, system, externalId) => {
-      const db = getDb();
-      return parseRow(db.prepare('SELECT * FROM linked_identities WHERE system = ? AND external_id = ?').get(system, externalId));
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('linked_identities')
+        .select('*')
+        .eq('system', system)
+        .eq('external_id', externalId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
     },
     createStub: async (scope, input) => {
-      const db = getDb();
+      const supabase = getSupabaseAdmin();
       const id = input.id ?? crypto.randomUUID();
-      db.prepare(`
-        INSERT INTO customers (id, tenant_id, workspace_id, canonical_name, canonical_email, email, phone, segment, risk_level, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'regular', 'low', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `).run(id, scope.tenantId, scope.workspaceId, input.canonicalName ?? 'Unknown Customer', input.canonicalEmail ?? null, input.email ?? null, input.phone ?? null);
-      db.prepare(`
-        INSERT INTO linked_identities (id, customer_id, tenant_id, workspace_id, system, external_id, confidence, verified, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP)
-      `).run(crypto.randomUUID(), id, scope.tenantId, scope.workspaceId, input.identitySystem, input.identityExternalId);
+      const now = new Date().toISOString();
+      const { error: customerError } = await supabase.from('customers').insert({
+        id,
+        tenant_id: scope.tenantId,
+        workspace_id: scope.workspaceId,
+        canonical_name: input.canonicalName ?? input.canonical_name ?? 'Unknown Customer',
+        canonical_email: input.canonicalEmail ?? input.canonical_email ?? null,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        segment: 'regular',
+        risk_level: 'low',
+        created_at: now,
+        updated_at: now,
+      });
+      if (customerError) throw customerError;
+      const { error: identityError } = await supabase.from('linked_identities').insert({
+        id: crypto.randomUUID(),
+        customer_id: id,
+        tenant_id: scope.tenantId,
+        workspace_id: scope.workspaceId,
+        system: input.identitySystem,
+        external_id: input.identityExternalId,
+        confidence: 1,
+        verified: true,
+        verified_at: now,
+        created_at: now,
+      });
+      if (identityError) throw identityError;
       return id;
     },
 
     update: async (scope, customerId, updates) => {
-      const db = getDb();
-      const allowed = ['segment', 'risk_level', 'preferred_channel', 'fraud_flag', 'fraud_risk', 'updated_at'];
-      const fields = Object.entries(updates).filter(([k]) => allowed.includes(k));
-      if (fields.length === 0) return;
-      const setClause = fields.map(([k]) => `${k} = ?`).join(', ');
-      const values = fields.map(([, v]) => v);
-      db.prepare(
-        `UPDATE customers SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`
-      ).run(...values, customerId, scope.tenantId);
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase
+        .from('customers')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', customerId)
+        .eq('tenant_id', scope.tenantId);
+      if (error) throw error;
     },
 
     upsertCustomer: async (scope, customer) => {
-      const db = getDb();
-      const linked = db.prepare(
-        'SELECT customer_id FROM linked_identities WHERE system = ? AND external_id = ?'
-      ).get(customer.source, customer.externalId) as any;
+      const supabase = getSupabaseAdmin();
+      const { data: linked } = await supabase
+        .from('linked_identities')
+        .select('customer_id')
+        .eq('system', customer.source)
+        .eq('external_id', customer.externalId)
+        .maybeSingle();
 
       if (linked) {
-        db.prepare(`
-          UPDATE customers SET
-            canonical_name  = COALESCE(?, canonical_name),
-            canonical_email = COALESCE(?, canonical_email),
-            updated_at      = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(customer.displayName, customer.email, linked.customer_id);
-        return linked.customer_id;
+        await supabase.from('customers').update({
+          canonical_name:  customer.displayName,
+          canonical_email: customer.email,
+          updated_at:      new Date().toISOString(),
+        }).eq('id', (linked as any).customer_id);
+        return (linked as any).customer_id;
       }
 
       const id = crypto.randomUUID();
-      db.prepare(`
-        INSERT INTO customers (id, tenant_id, workspace_id, canonical_email, canonical_name, segment, risk_level, fraud_risk, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'regular', 'low', 'low', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `).run(id, scope.tenantId, scope.workspaceId, customer.email, customer.displayName);
+      await supabase.from('customers').insert({
+        id,
+        tenant_id:       scope.tenantId,
+        workspace_id:    scope.workspaceId,
+        canonical_email: customer.email,
+        canonical_name:  customer.displayName,
+        segment:         'regular',
+        risk_level:      'low',
+        fraud_risk:      'low',
+        created_at:      new Date().toISOString(),
+        updated_at:      new Date().toISOString(),
+      });
 
-      db.prepare(`
-        INSERT OR IGNORE INTO linked_identities (id, customer_id, system, external_id, confidence, verified)
-        VALUES (?, ?, ?, ?, 1.0, 1)
-      `).run(crypto.randomUUID(), id, customer.source, customer.externalId);
+      await supabase.from('linked_identities').insert({
+        id:          crypto.randomUUID(),
+        customer_id: id,
+        system:      customer.source,
+        external_id: customer.externalId,
+        confidence:  1.0,
+        verified:    true,
+      });
 
       return id;
     },

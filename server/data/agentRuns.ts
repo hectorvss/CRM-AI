@@ -1,7 +1,4 @@
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { parseRow } from '../db/utils.js';
 
 export interface AgentRunScope {
   tenantId: string;
@@ -58,51 +55,6 @@ async function updateRunSupabase(scope: AgentRunScope, runId: string, updates: a
   if (error) throw error;
 }
 
-function listRunsSqlite(scope: AgentRunScope, agentId: string, limit: number) {
-  const db = getDb();
-  return db.prepare(`
-    SELECT ar.*, c.case_number
-    FROM agent_runs ar
-    LEFT JOIN cases c ON ar.case_id = c.id
-    WHERE ar.agent_id = ? AND ar.tenant_id = ?
-    ORDER BY ar.started_at DESC
-    LIMIT ?
-  `).all(agentId, scope.tenantId, limit).map(parseRow);
-}
-
-function createRunSqlite(scope: AgentRunScope, data: any) {
-  const db = getDb();
-  const payload = {
-    ...data,
-    tenant_id: scope.tenantId,
-    workspace_id: scope.workspaceId,
-    trigger_type: data.trigger_type ?? 'agent_event',
-    outcome_status: data.outcome_status ?? data.status ?? 'running',
-  };
-  const fields = Object.keys(payload);
-  const values = Object.values(payload).map((value) => value && typeof value === 'object' ? JSON.stringify(value) : value);
-  db.prepare(`INSERT INTO agent_runs (${fields.join(', ')}) VALUES (${fields.map(() => '?').join(', ')})`).run(...values);
-  return data.id;
-}
-
-function updateRunSqlite(scope: AgentRunScope, runId: string, updates: any) {
-  const db = getDb();
-  const payload = {
-    ...updates,
-    outcome_status: updates.outcome_status ?? updates.status,
-    ended_at: updates.ended_at ?? updates.finished_at ?? (updates.status ? new Date().toISOString() : undefined),
-  };
-  Object.keys(payload).forEach((key) => payload[key] === undefined && delete payload[key]);
-  const fields = Object.keys(payload);
-  if (!fields.length) return;
-  const values = fields.map((field) => {
-    const value = payload[field];
-    return value && typeof value === 'object' ? JSON.stringify(value) : value;
-  });
-  db.prepare(`UPDATE agent_runs SET ${fields.map((field) => `${field} = ?`).join(', ')} WHERE id = ? AND tenant_id = ?`)
-    .run(...values, runId, scope.tenantId);
-}
-
 export interface AgentRunRepository {
   list(scope: AgentRunScope, agentId: string, limit: number): Promise<any[]>;
   create(scope: AgentRunScope, data: any): Promise<string>;
@@ -110,16 +62,9 @@ export interface AgentRunRepository {
 }
 
 export function createAgentRunRepository(): AgentRunRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      list: listRunsSupabase,
-      create: createRunSupabase,
-      update: updateRunSupabase,
-    };
-  }
   return {
-    list: async (scope, agentId, limit) => listRunsSqlite(scope, agentId, limit),
-    create: async (scope, data) => createRunSqlite(scope, data),
-    update: async (scope, runId, updates) => updateRunSqlite(scope, runId, updates),
+    list: listRunsSupabase,
+    create: createRunSupabase,
+    update: updateRunSupabase,
   };
 }

@@ -1,7 +1,4 @@
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { parseRow } from '../db/utils.js';
 
 export interface ReportScope {
   tenantId: string;
@@ -39,15 +36,6 @@ async function getChannelCaseIdsSupabase(scope: ReportScope, channel?: string): 
     .eq('source_channel', normalized);
   if (error) throw error;
   return (data || []).map((row: any) => row.id).filter(Boolean);
-}
-
-function getChannelCaseIdsSqlite(scope: ReportScope, channel?: string): string[] | null {
-  const normalized = normalizeChannel(channel);
-  if (!normalized) return null;
-  const db = getDb();
-  return (db.prepare('SELECT id FROM cases WHERE tenant_id = ? AND source_channel = ?').all(scope.tenantId, normalized) as any[])
-    .map((row) => row.id)
-    .filter(Boolean);
 }
 
 function pct(numerator: number, denominator: number): string {
@@ -192,79 +180,6 @@ async function getOverviewSupabase(scope: ReportScope, period: string, channel?:
   };
 }
 
-function getOverviewSqlite(scope: ReportScope, period: string, channel?: string) {
-  const db = getDb();
-  const since = periodToISO(period);
-  const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
-  const priorEnd = since;
-  const priorStart = new Date(new Date(since).getTime() - days * 86_400_000).toISOString();
-  const normalizedChannel = normalizeChannel(channel);
-  const channelSql = normalizedChannel ? ' AND source_channel = ?' : '';
-  const channelArgs = normalizedChannel ? [normalizedChannel] : [];
-
-  const totalCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql}`).get(scope.tenantId, since, ...channelArgs) as any).n;
-  const priorCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ?${channelSql}`).get(scope.tenantId, priorStart, priorEnd, ...channelArgs) as any).n;
-  const resolvedCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} AND status IN ('resolved', 'closed')`).get(scope.tenantId, since, ...channelArgs) as any).n;
-  const priorResolved = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ?${channelSql} AND status IN ('resolved', 'closed')`).get(scope.tenantId, priorStart, priorEnd, ...channelArgs) as any).n;
-  const slaBreached = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} AND sla_status = 'breached'`).get(scope.tenantId, since, ...channelArgs) as any).n;
-  const slaTotal = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} AND sla_status IS NOT NULL`).get(scope.tenantId, since, ...channelArgs) as any).n;
-  const slaCompliant = slaTotal - slaBreached;
-  const priorSlaBreached = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ?${channelSql} AND sla_status = 'breached'`).get(scope.tenantId, priorStart, priorEnd, ...channelArgs) as any).n;
-  const priorSlaTotal = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ?${channelSql} AND sla_status IS NOT NULL`).get(scope.tenantId, priorStart, priorEnd, ...channelArgs) as any).n;
-  const priorSlaCompliant = priorSlaTotal - priorSlaBreached;
-  const openCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ?${channelSql} AND status NOT IN ('resolved','closed','cancelled')`).get(scope.tenantId, ...channelArgs) as any).n;
-  const highRiskCases = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} AND risk_level IN ('high', 'critical')`).get(scope.tenantId, since, ...channelArgs) as any).n;
-  const autoResolved = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} AND resolution_state = 'resolved' AND execution_state = 'completed'`).get(scope.tenantId, since, ...channelArgs) as any).n;
-  const priorAutoResolved = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ? AND created_at < ?${channelSql} AND resolution_state = 'resolved' AND execution_state = 'completed'`).get(scope.tenantId, priorStart, priorEnd, ...channelArgs) as any).n;
-
-  return {
-    period,
-    generatedAt: new Date().toISOString(),
-    kpis: [
-      {
-        key: 'total_cases',
-        label: 'Total Cases',
-        value: String(totalCases),
-        change: changeStr(totalCases, priorCases),
-        trend: trend(totalCases, priorCases),
-        sub: `${openCases} open`,
-      },
-      {
-        key: 'resolution_rate',
-        label: 'Resolution Rate',
-        value: pct(resolvedCases, totalCases || 1),
-        change: changeStr(resolvedCases / (totalCases || 1), priorResolved / (priorCases || 1)),
-        trend: trend(resolvedCases / (totalCases || 1), priorResolved / (priorCases || 1)),
-        sub: `${resolvedCases} resolved`,
-      },
-      {
-        key: 'sla_compliance',
-        label: 'SLA Compliance',
-        value: pct(slaCompliant, slaTotal || 1),
-        change: changeStr(slaCompliant / (slaTotal || 1), priorSlaCompliant / (priorSlaTotal || 1)),
-        trend: trend(slaCompliant, priorSlaCompliant),
-        sub: `${slaBreached} breached`,
-      },
-      {
-        key: 'auto_resolution',
-        label: 'AI Auto-Resolution',
-        value: pct(autoResolved, resolvedCases || 1),
-        change: changeStr(autoResolved, priorAutoResolved),
-        trend: trend(autoResolved, priorAutoResolved),
-        sub: `${autoResolved} automated`,
-      },
-      {
-        key: 'high_risk',
-        label: 'High Risk Cases',
-        value: String(highRiskCases),
-        change: '—',
-        trend: 'neutral',
-        sub: `of ${totalCases} total`,
-      },
-    ],
-  };
-}
-
 async function getIntentsSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
@@ -292,40 +207,6 @@ async function getIntentsSupabase(scope: ReportScope, period: string, channel?: 
     volume: val.volume,
     handled: val.handled
   })).sort((a, b) => b.volume - a.volume).slice(0, 15);
-
-  const total = rows.reduce((s, r) => s + r.volume, 0);
-  const palette = ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#818cf8', '#4f46e5', '#7c3aed', '#9333ea'];
-
-  return {
-    period,
-    total,
-    intents: rows.map((r, i) => ({
-      name: r.name,
-      volume: String(r.volume),
-      handled: pct(r.handled, r.volume),
-      shareOfTotal: pct(r.volume, total),
-      color: palette[i % palette.length],
-    })),
-  };
-}
-
-function getIntentsSqlite(scope: ReportScope, period: string, channel?: string) {
-  const db = getDb();
-  const since = periodToISO(period);
-  const normalizedChannel = normalizeChannel(channel);
-  const channelSql = normalizedChannel ? ' AND source_channel = ?' : '';
-  const channelArgs = normalizedChannel ? [normalizedChannel] : [];
-  const rows = db.prepare(`
-    SELECT
-      COALESCE(type, 'general_support') as name,
-      COUNT(*) as volume,
-      SUM(CASE WHEN status IN ('resolved','closed') THEN 1 ELSE 0 END) as handled
-    FROM cases
-    WHERE tenant_id = ? AND created_at >= ?${channelSql}
-    GROUP BY type
-    ORDER BY volume DESC
-    LIMIT 15
-  `).all(scope.tenantId, since, ...channelArgs) as any[];
 
   const total = rows.reduce((s, r) => s + r.volume, 0);
   const palette = ['#6366f1', '#8b5cf6', '#a78bfa', '#c4b5fd', '#818cf8', '#4f46e5', '#7c3aed', '#9333ea'];
@@ -414,47 +295,6 @@ async function getAgentsSupabase(scope: ReportScope, period: string, channel?: s
   return { period, agents: rows };
 }
 
-function getAgentsSqlite(scope: ReportScope, period: string, channel?: string) {
-  const db = getDb();
-  const since = periodToISO(period);
-  const channelCaseIds = getChannelCaseIdsSqlite(scope, channel);
-  const runJoin = channelCaseIds
-    ? channelCaseIds.length
-      ? `LEFT JOIN agent_runs ar ON ar.agent_id = a.id AND ar.started_at >= ? AND ar.case_id IN (${channelCaseIds.map(() => '?').join(',')})`
-      : `LEFT JOIN agent_runs ar ON 1 = 0`
-    : `LEFT JOIN agent_runs ar ON ar.agent_id = a.id AND ar.started_at >= ?`;
-  const rows = db.prepare(`
-    SELECT
-      a.name, a.slug, a.category,
-      COUNT(ar.id) as total_runs,
-      SUM(CASE WHEN ar.outcome_status = 'completed' THEN 1 ELSE 0 END) as completed,
-      SUM(CASE WHEN ar.outcome_status = 'failed' THEN 1 ELSE 0 END) as failed,
-      SUM(ar.tokens_used) as tokens_total,
-      SUM(ar.cost_credits) as cost_total,
-      AVG(CASE WHEN ar.ended_at IS NOT NULL THEN (julianday(ar.ended_at) - julianday(ar.started_at)) * 86400 END) as avg_duration_sec
-    FROM agents a
-    ${runJoin}
-    WHERE a.tenant_id = ?
-    GROUP BY a.id
-    ORDER BY total_runs DESC
-  `).all(...(channelCaseIds ? (channelCaseIds.length ? [since, ...channelCaseIds, scope.tenantId] : [scope.tenantId]) : [since, scope.tenantId])) as any[];
-
-  return {
-    period,
-    agents: rows.map(r => ({
-      name: r.name,
-      slug: r.slug,
-      category: r.category,
-      totalRuns: r.total_runs ?? 0,
-      successRate: pct(r.completed ?? 0, (r.total_runs || 1)),
-      failedRuns: r.failed ?? 0,
-      tokensUsed: r.tokens_total ?? 0,
-      costCredits: Number((r.cost_total ?? 0).toFixed(4)),
-      avgDurationSec: r.avg_duration_sec ? Math.round(r.avg_duration_sec) : null,
-    })),
-  };
-}
-
 async function getApprovalsSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
@@ -537,36 +377,6 @@ async function getApprovalsSupabase(scope: ReportScope, period: string, channel?
   };
 }
 
-function getApprovalsSqlite(scope: ReportScope, period: string, channel?: string) {
-  const db = getDb();
-  const since = periodToISO(period);
-  const channelCaseIds = getChannelCaseIdsSqlite(scope, channel);
-  const caseSql = channelCaseIds ? (channelCaseIds.length ? ` AND case_id IN (${channelCaseIds.map(() => '?').join(',')})` : ' AND 1 = 0') : '';
-  const caseArgs = channelCaseIds && channelCaseIds.length ? channelCaseIds : [];
-  const total = (db.prepare(`SELECT COUNT(*) as n FROM approval_requests WHERE tenant_id = ? AND created_at >= ?${caseSql}`).get(scope.tenantId, since, ...caseArgs) as any).n;
-  const approved = (db.prepare(`SELECT COUNT(*) as n FROM approval_requests WHERE tenant_id = ? AND created_at >= ?${caseSql} AND status = 'approved'`).get(scope.tenantId, since, ...caseArgs) as any).n;
-  const rejected = (db.prepare(`SELECT COUNT(*) as n FROM approval_requests WHERE tenant_id = ? AND created_at >= ?${caseSql} AND status = 'rejected'`).get(scope.tenantId, since, ...caseArgs) as any).n;
-  const pending = (db.prepare(`SELECT COUNT(*) as n FROM approval_requests WHERE tenant_id = ?${caseSql} AND status = 'pending'`).get(scope.tenantId, ...caseArgs) as any).n;
-  const byRisk = db.prepare(`SELECT risk_level, COUNT(*) as n FROM approval_requests WHERE tenant_id = ? AND created_at >= ?${caseSql} GROUP BY risk_level`).all(scope.tenantId, since, ...caseArgs) as any[];
-  const avgDecisionHours = (db.prepare(`SELECT AVG((julianday(decision_at) - julianday(created_at)) * 24) as avg_h FROM approval_requests WHERE tenant_id = ? AND created_at >= ?${caseSql} AND decision_at IS NOT NULL`).get(scope.tenantId, since, ...caseArgs) as any)?.avg_h;
-
-  return {
-    period,
-    funnel: [
-      { label: 'Triggered', val: String(total) },
-      { label: 'Approved', val: String(approved) },
-      { label: 'Rejected', val: String(rejected) },
-      { label: 'Pending', val: String(pending) },
-    ],
-    rates: {
-      approvalRate: pct(approved, total || 1),
-      rejectionRate: pct(rejected, total || 1),
-      avgDecisionHours: avgDecisionHours ? Math.round(avgDecisionHours * 10) / 10 : null,
-    },
-    byRisk: byRisk.map(r => ({ riskLevel: r.risk_level, count: r.n })),
-  };
-}
-
 async function getCostsSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
@@ -637,36 +447,6 @@ async function getCostsSupabase(scope: ReportScope, period: string, channel?: st
   };
 }
 
-function getCostsSqlite(scope: ReportScope, period: string, channel?: string) {
-  const db = getDb();
-  const since = periodToISO(period);
-  const channelCaseIds = getChannelCaseIdsSqlite(scope, channel);
-  const caseSql = channelCaseIds ? (channelCaseIds.length ? ` AND ar.case_id IN (${channelCaseIds.map(() => '?').join(',')})` : ' AND 1 = 0') : '';
-  const caseArgs = channelCaseIds && channelCaseIds.length ? channelCaseIds : [];
-  const normalizedChannel = normalizeChannel(channel);
-  const channelSql = normalizedChannel ? ' AND source_channel = ?' : '';
-  const channelArgs = normalizedChannel ? [normalizedChannel] : [];
-  const credits = db.prepare(`SELECT SUM(CASE WHEN entry_type = 'debit' THEN amount ELSE 0 END) as debited, SUM(CASE WHEN entry_type = 'credit' THEN amount ELSE 0 END) as credited FROM credit_ledger WHERE tenant_id = ? AND occurred_at >= ?`).get(scope.tenantId, since) as any;
-  const agentCosts = db.prepare(`SELECT a.name, SUM(ar.tokens_used) as tokens, SUM(ar.cost_credits) as cost FROM agent_runs ar JOIN agents a ON a.id = ar.agent_id WHERE ar.started_at >= ? AND a.tenant_id = ?${caseSql} GROUP BY a.id ORDER BY cost DESC LIMIT 10`).all(since, scope.tenantId, ...caseArgs) as any[];
-  const totalTokens = (db.prepare(`SELECT SUM(tokens_used) as n FROM agent_runs WHERE started_at >= ?${channelCaseIds ? (channelCaseIds.length ? ` AND case_id IN (${channelCaseIds.map(() => '?').join(',')})` : ' AND 1 = 0') : ''} AND agent_id IN (SELECT id FROM agents WHERE tenant_id = ?)` ).get(...(channelCaseIds ? (channelCaseIds.length ? [since, ...channelCaseIds, scope.tenantId] : [since, scope.tenantId]) : [since, scope.tenantId])) as any)?.n ?? 0;
-  const autoResolvedCount = (db.prepare(`SELECT COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} AND execution_state = 'completed'`).get(scope.tenantId, since, ...channelArgs) as any).n;
-
-  return {
-    period,
-    summary: {
-      creditsUsed: Number((credits?.debited ?? 0).toFixed(2)),
-      creditsAdded: Number((credits?.credited ?? 0).toFixed(2)),
-      totalTokens,
-      autoResolvedCases: autoResolvedCount,
-    },
-    byAgent: agentCosts.map(r => ({
-      name: r.name,
-      tokens: r.tokens ?? 0,
-      cost: Number((r.cost ?? 0).toFixed(4)),
-    })),
-  };
-}
-
 async function getSLASupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
   const since = periodToISO(period);
@@ -708,42 +488,13 @@ async function getSLASupabase(scope: ReportScope, period: string, channel?: stri
   };
 }
 
-function getSLASqlite(scope: ReportScope, period: string, channel?: string) {
-  const db = getDb();
-  const since = periodToISO(period);
-  const normalizedChannel = normalizeChannel(channel);
-  const channelSql = normalizedChannel ? ' AND source_channel = ?' : '';
-  const channelArgs = normalizedChannel ? [normalizedChannel] : [];
-  const distribution = db.prepare(`SELECT sla_status, COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} GROUP BY sla_status`).all(scope.tenantId, since, ...channelArgs) as any[];
-  const byPriority = db.prepare(`SELECT priority, sla_status, COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} GROUP BY priority, sla_status ORDER BY priority, sla_status`).all(scope.tenantId, since, ...channelArgs) as any[];
-  const breachedByType = db.prepare(`SELECT type, COUNT(*) as n FROM cases WHERE tenant_id = ? AND created_at >= ?${channelSql} AND sla_status = 'breached' GROUP BY type ORDER BY n DESC LIMIT 10`).all(scope.tenantId, since, ...channelArgs) as any[];
-
-  return {
-    period,
-    distribution: distribution.map(r => ({ status: r.sla_status ?? 'unknown', count: r.n })),
-    byPriority: byPriority.map(r => ({ priority: r.priority, slaStatus: r.sla_status, count: r.n })),
-    breachedByType: breachedByType.map(r => ({ type: r.type, count: r.n })),
-  };
-}
-
 export function createReportRepository(): ReportRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      getOverview: getOverviewSupabase,
-      getIntents: getIntentsSupabase,
-      getAgents: getAgentsSupabase,
-      getApprovals: getApprovalsSupabase,
-      getCosts: getCostsSupabase,
-      getSLA: getSLASupabase,
-    };
-  }
-
   return {
-    getOverview: async (scope, period) => getOverviewSqlite(scope, period),
-    getIntents: async (scope, period) => getIntentsSqlite(scope, period),
-    getAgents: async (scope, period) => getAgentsSqlite(scope, period),
-    getApprovals: async (scope, period) => getApprovalsSqlite(scope, period),
-    getCosts: async (scope, period) => getCostsSqlite(scope, period),
-    getSLA: async (scope, period) => getSLASqlite(scope, period),
+    getOverview: getOverviewSupabase,
+    getIntents: getIntentsSupabase,
+    getAgents: getAgentsSupabase,
+    getApprovals: getApprovalsSupabase,
+    getCosts: getCostsSupabase,
+    getSLA: getSLASupabase,
   };
 }

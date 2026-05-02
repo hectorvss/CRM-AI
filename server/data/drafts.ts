@@ -1,8 +1,4 @@
-import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { parseRow } from '../db/utils.js';
 
 export interface DraftScope {
   tenantId: string;
@@ -31,68 +27,33 @@ export interface DraftRepository {
 }
 
 export function createDraftRepository(): DraftRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      getPendingDraft: async (scope, caseId) => {
-        const supabase = getSupabaseAdmin();
-        const { data, error } = await supabase
-          .from('draft_replies')
-          .select('*')
-          .eq('case_id', caseId)
-          .eq('status', 'pending_review')
-          .eq('tenant_id', scope.tenantId)
-          .eq('workspace_id', scope.workspaceId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (error) throw error;
-        return data;
-      },
-      upsert: async (scope, draft) => {
-        const supabase = getSupabaseAdmin();
-        const { error } = await supabase
-          .from('draft_replies')
-          .upsert({
-            ...draft,
-            tenant_id: scope.tenantId,
-            workspace_id: scope.workspaceId,
-            updated_at: new Date().toISOString(),
-          });
-        if (error) throw error;
-      }
-    };
-  }
-
   return {
     getPendingDraft: async (scope, caseId) => {
-      const db = getDb();
-      const row = db.prepare(`
-        SELECT * FROM draft_replies
-        WHERE case_id = ? AND status = 'pending_review' AND workspace_id = ?
-        ORDER BY created_at DESC
-        LIMIT 1
-      `).get(caseId, scope.workspaceId);
-      return row ? parseRow(row) : null;
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('draft_replies')
+        .select('*')
+        .eq('case_id', caseId)
+        .eq('status', 'pending_review')
+        .eq('tenant_id', scope.tenantId)
+        .eq('workspace_id', scope.workspaceId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
     },
     upsert: async (scope, draft) => {
-      const db = getDb();
-      const existing = db.prepare('SELECT id FROM draft_replies WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(draft.id, scope.tenantId, scope.workspaceId);
-      
-      const fields = Object.keys(draft);
-      const values = fields.map(f => {
-        const val = (draft as any)[f];
-        return (val && typeof val === 'object') ? JSON.stringify(val) : val;
-      });
-
-      if (existing) {
-        const setClause = fields.map(f => `${f} = ?`).join(', ');
-        db.prepare(`UPDATE draft_replies SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
-          .run(...values, draft.id, scope.tenantId, scope.workspaceId);
-      } else {
-        const placeholders = fields.map(() => '?').join(', ');
-        db.prepare(`INSERT INTO draft_replies (${fields.join(', ')}, tenant_id, workspace_id) VALUES (${placeholders}, ?, ?)`)
-          .run(...values, scope.tenantId, scope.workspaceId);
-      }
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase
+        .from('draft_replies')
+        .upsert({
+          ...draft,
+          tenant_id: scope.tenantId,
+          workspace_id: scope.workspaceId,
+          updated_at: new Date().toISOString(),
+        });
+      if (error) throw error;
     }
   };
 }

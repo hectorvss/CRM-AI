@@ -1,7 +1,4 @@
 import crypto from 'crypto';
-import { getDb } from '../db/client.js';
-import { parseRow } from '../db/utils.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 
 export interface ConversationScope {
@@ -200,135 +197,6 @@ async function createInternalNoteSupabase(scope: ConversationScope, input: Inter
   return { id: noteId, ...payload };
 }
 
-function getConversationByCaseSqlite(scope: ConversationScope, caseId: string) {
-  const db = getDb();
-  const conv = db.prepare('SELECT * FROM conversations WHERE case_id = ? AND tenant_id = ? AND workspace_id = ?').get(caseId, scope.tenantId, scope.workspaceId) as any;
-  if (!conv) return null;
-  const messages = db.prepare('SELECT * FROM messages WHERE conversation_id = ? AND tenant_id = ? ORDER BY sent_at ASC').all(conv.id, scope.tenantId);
-  return { ...parseRow(conv), messages: messages.map(parseRow) };
-}
-
-function getConversationSqlite(scope: ConversationScope, conversationId: string) {
-  const db = getDb();
-  const conv = db.prepare('SELECT * FROM conversations WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(conversationId, scope.tenantId, scope.workspaceId);
-  return conv ? parseRow(conv) : null;
-}
-
-function listMessagesSqlite(scope: ConversationScope, conversationId: string) {
-  const db = getDb();
-  return db.prepare('SELECT * FROM messages WHERE conversation_id = ? AND tenant_id = ? ORDER BY sent_at ASC').all(conversationId, scope.tenantId).map(parseRow);
-}
-
-function ensureConversationForCaseSqlite(scope: ConversationScope, caseRow: any) {
-  const db = getDb();
-  const existing = db.prepare(`
-    SELECT *
-    FROM conversations
-    WHERE case_id = ? AND tenant_id = ? AND workspace_id = ?
-    ORDER BY last_message_at DESC, created_at DESC
-    LIMIT 1
-  `).get(caseRow.id, scope.tenantId, scope.workspaceId) as any;
-  if (existing) return parseRow(existing);
-
-  const now = new Date().toISOString();
-  const conversationId = crypto.randomUUID();
-  db.prepare(`
-    INSERT INTO conversations (
-      id, case_id, customer_id, channel, status, subject, external_thread_id,
-      first_message_at, last_message_at, created_at, updated_at, tenant_id, workspace_id
-    )
-    VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    conversationId,
-    caseRow.id,
-    caseRow.customer_id || null,
-    caseRow.source_channel || 'web_chat',
-    null,
-    caseRow.source_entity_id || null,
-    now,
-    now,
-    now,
-    now,
-    scope.tenantId,
-    scope.workspaceId,
-  );
-
-  db.prepare(`
-    UPDATE cases
-    SET conversation_id = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(conversationId, caseRow.id, scope.tenantId, scope.workspaceId);
-
-  return getConversationSqlite(scope, conversationId);
-}
-
-function appendMessageSqlite(scope: ConversationScope, input: AppendMessageInput) {
-  const db = getDb();
-  const now = input.sentAt || new Date().toISOString();
-  const messageId = crypto.randomUUID();
-  db.prepare(`
-    INSERT INTO messages (
-      id, conversation_id, case_id, customer_id, type, direction, sender_id, sender_name,
-      content, content_type, channel, external_message_id, draft_reply_id,
-      sent_at, created_at, tenant_id
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'text', ?, ?, ?, ?, ?, ?)
-  `).run(
-    messageId,
-    input.conversationId,
-    input.caseId,
-    input.customerId || null,
-    input.type,
-    input.direction || 'outbound',
-    input.senderId || null,
-    input.senderName || null,
-    input.content,
-    input.channel,
-    input.externalMessageId || null,
-    input.draftReplyId || null,
-    now,
-    now,
-    scope.tenantId,
-  );
-
-  db.prepare(`UPDATE conversations SET last_message_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
-    .run(now, input.conversationId, scope.tenantId, scope.workspaceId);
-  if (input.caseId) {
-    db.prepare(`UPDATE cases SET last_activity_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ? AND workspace_id = ?`)
-      .run(now, input.caseId, scope.tenantId, scope.workspaceId);
-  }
-
-  return {
-    id: messageId,
-    conversation_id: input.conversationId,
-    case_id: input.caseId,
-    customer_id: input.customerId || null,
-    type: input.type,
-    direction: input.direction || 'outbound',
-    sender_id: input.senderId || null,
-    sender_name: input.senderName || null,
-    content: input.content,
-    channel: input.channel,
-    sent_at: now,
-  };
-}
-
-function createInternalNoteSqlite(scope: ConversationScope, input: InternalNoteInput) {
-  const db = getDb();
-  const noteId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  db.prepare(`
-    INSERT INTO internal_notes (id, case_id, content, created_by, created_by_type, created_at, tenant_id)
-    VALUES (?, ?, ?, ?, 'human', ?, ?)
-  `).run(noteId, input.caseId, input.content, input.createdBy || scope.userId || 'user_local', now, scope.tenantId);
-  return {
-    id: noteId,
-    case_id: input.caseId,
-    content: input.content,
-    created_by: input.createdBy || scope.userId || 'user_local',
-    created_at: now,
-  };
-}
 
 export interface ConversationRepository {
   getByCase(scope: ConversationScope, caseId: string): Promise<any | null>;
@@ -340,23 +208,12 @@ export interface ConversationRepository {
 }
 
 export function createConversationRepository(): ConversationRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      getByCase: getConversationByCaseSupabase,
-      get: getConversationSupabase,
-      listMessages: listMessagesSupabase,
-      ensureForCase: ensureConversationForCaseSupabase,
-      appendMessage: appendMessageSupabase,
-      createInternalNote: createInternalNoteSupabase,
-    };
-  }
-
   return {
-    getByCase: async (scope, caseId) => getConversationByCaseSqlite(scope, caseId),
-    get: async (scope, conversationId) => getConversationSqlite(scope, conversationId),
-    listMessages: async (scope, conversationId) => listMessagesSqlite(scope, conversationId),
-    ensureForCase: async (scope, caseRow) => ensureConversationForCaseSqlite(scope, caseRow),
-    appendMessage: async (scope, input) => appendMessageSqlite(scope, input),
-    createInternalNote: async (scope, input) => createInternalNoteSqlite(scope, input),
+    getByCase: getConversationByCaseSupabase,
+    get: getConversationSupabase,
+    listMessages: listMessagesSupabase,
+    ensureForCase: ensureConversationForCaseSupabase,
+    appendMessage: appendMessageSupabase,
+    createInternalNote: createInternalNoteSupabase,
   };
 }

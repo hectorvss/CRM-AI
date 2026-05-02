@@ -1,7 +1,4 @@
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { parseRow } from '../db/utils.js';
 
 export interface JobRepository {
   enqueue(data: {
@@ -34,99 +31,6 @@ export interface JobRepository {
   quarantineOrphanJobs(): Promise<number>;
 }
 
-class SQLiteJobRepository implements JobRepository {
-  async enqueue(data: any) {
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO jobs
-        (id, type, payload, status, priority, attempts, max_attempts,
-         run_at, started_at, finished_at, error, created_at,
-         tenant_id, workspace_id, trace_id)
-      VALUES
-        (?, ?, ?, 'pending', ?, 0, ?, ?, NULL, NULL, NULL,
-         CURRENT_TIMESTAMP, ?, ?, ?)
-    `).run(
-      data.id, data.type, JSON.stringify(data.payload), data.priority, data.maxAttempts,
-      data.runAt, data.tenantId, data.workspaceId, data.traceId
-    );
-    return data.id;
-  }
-
-  async getJob(id: string) {
-    const db = getDb();
-    return db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
-  }
-
-  async claimJob() {
-    const db = getDb();
-    // Atomic claim in SQLite using subquery
-    return db.prepare(`
-      UPDATE jobs
-      SET status = 'running', started_at = CURRENT_TIMESTAMP
-      WHERE id = (
-        SELECT id FROM jobs
-        WHERE status = 'pending' AND run_at <= CURRENT_TIMESTAMP
-        ORDER BY priority ASC, run_at ASC, created_at ASC
-        LIMIT 1
-      )
-      RETURNING *
-    `).get();
-  }
-
-  async finishJob(id: string, updates: any) {
-    const db = getDb();
-    const fields = ['status = ?', 'finished_at = ?'];
-    const params = [updates.status, updates.finishedAt];
-
-    if (updates.attempts !== undefined) {
-      fields.push('attempts = ?');
-      params.push(updates.attempts);
-    }
-    if (updates.error !== undefined) {
-      fields.push('error = ?');
-      params.push(updates.error);
-    }
-
-    params.push(id);
-    db.prepare(`UPDATE jobs SET ${fields.join(', ')} WHERE id = ?`).run(...params);
-  }
-
-  async rescheduleJob(id: string, updates: { runAt: string; error?: string | null }) {
-    const db = getDb();
-    db.prepare(`
-      UPDATE jobs
-      SET status = 'pending',
-          run_at = ?,
-          started_at = NULL,
-          finished_at = NULL,
-          error = ?
-      WHERE id = ?
-    `).run(updates.runAt, updates.error ?? null, id);
-  }
-
-  async countJobs() {
-    const db = getDb();
-    const rows = db.prepare(`
-      SELECT status, COUNT(*) as count FROM jobs GROUP BY status
-    `).all() as any[];
-    return rows.reduce((acc, r) => ({ ...acc, [r.status]: r.count }), {});
-  }
-
-  async retryDeadJob(id: string) {
-    const db = getDb();
-    const result = db.prepare(`
-      UPDATE jobs
-      SET status = 'pending', attempts = 0, error = NULL,
-          run_at = CURRENT_TIMESTAMP, finished_at = NULL
-      WHERE id = ? AND status = 'dead'
-    `).run(id);
-    return result.changes > 0;
-  }
-
-  async quarantineOrphanJobs() {
-    return 0;
-  }
-}
 
 class SupabaseJobRepository implements JobRepository {
   async enqueue(data: any) {
@@ -270,7 +174,6 @@ var instance: JobRepository | null = null;
 
 export function createJobRepository(): JobRepository {
   if (instance) return instance;
-  const provider = getDatabaseProvider();
-  instance = provider === 'supabase' ? new SupabaseJobRepository() : new SQLiteJobRepository();
+  instance = new SupabaseJobRepository();
   return instance;
 }

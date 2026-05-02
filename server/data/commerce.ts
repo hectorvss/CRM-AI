@@ -1,6 +1,3 @@
-import { getDb } from '../db/client.js';
-import { parseRow } from '../db/utils.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import {
   getOrderCanonicalContext,
@@ -288,236 +285,6 @@ async function enrichReturn(row: any, tenantId: string, workspaceId: string): Pr
         : [],
     canonical_context: context,
   };
-}
-
-// ── SQLite implementations ───────────────────────────────────
-
-async function listOrdersSqlite(scope: CommerceScope, filters: OrderFilters): Promise<any[]> {
-  const db = getDb();
-  let query = `
-    SELECT o.*, cu.canonical_name as customer_name, cu.segment as customer_segment
-    FROM orders o
-    LEFT JOIN customers cu ON o.customer_id = cu.id
-    WHERE o.tenant_id = ? AND o.workspace_id = ?
-  `;
-  const params: any[] = [scope.tenantId, scope.workspaceId];
-
-  if (filters.status) { query += ' AND o.status = ?'; params.push(filters.status); }
-  if (filters.risk_level) { query += ' AND o.risk_level = ?'; params.push(filters.risk_level); }
-  if (filters.q) {
-    query += ' AND (o.external_order_id LIKE ? OR cu.canonical_name LIKE ?)';
-    const t = `%${filters.q}%`;
-    params.push(t, t);
-  }
-
-  query += ' ORDER BY o.updated_at DESC';
-
-  const rows = db.prepare(query).all(...params);
-  return Promise.all(rows.map(async (row: any) => {
-    try {
-      return await enrichOrder(row, scope.tenantId, scope.workspaceId);
-    } catch (error) {
-      console.warn('[commerce] order enrichment fallback', { orderId: row?.id, error });
-      return parseRow(row);
-    }
-  }));
-}
-
-async function getOrderSqlite(scope: CommerceScope, orderId: string): Promise<any | null> {
-  const db = getDb();
-  const order = db
-    .prepare(
-      `SELECT o.*, cu.canonical_name as customer_name, cu.canonical_email as customer_email
-       FROM orders o LEFT JOIN customers cu ON o.customer_id = cu.id
-       WHERE o.id = ? AND o.tenant_id = ? AND o.workspace_id = ?`,
-    )
-    .get(orderId, scope.tenantId, scope.workspaceId) as any;
-
-  if (!order) return null;
-
-  const context = await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId);
-  const events = db
-    .prepare('SELECT * FROM order_events WHERE order_id = ? ORDER BY time ASC')
-    .all(orderId);
-  const lineItems = db
-    .prepare('SELECT * FROM order_line_items WHERE order_id = ? AND tenant_id = ? AND workspace_id = ? ORDER BY created_at ASC')
-    .all(orderId, scope.tenantId, scope.workspaceId);
-
-  const relatedCases = db
-    .prepare(
-      `SELECT id, case_number, status, type
-       FROM cases
-       WHERE order_ids LIKE ? AND tenant_id = ? AND workspace_id = ?`,
-    )
-    .all(`%${orderId}%`, scope.tenantId, scope.workspaceId);
-
-  const enriched = await enrichOrder(order, scope.tenantId, scope.workspaceId);
-  return {
-    ...enriched,
-    events: context?.case_state
-      ? context.case_state.timeline.filter((entry: any) =>
-          ['orders', 'fulfillment', 'returns', 'payments'].includes(entry.domain),
-        )
-      : events.map(parseRow),
-    line_items: lineItems.map(parseRow),
-    related_cases: context?.case_state?.related.linked_cases?.length
-      ? context.case_state.related.linked_cases
-      : relatedCases.map(parseRow),
-    canonical_context: context,
-  };
-}
-
-function updateOrderSqlite(scope: CommerceScope, orderId: string, updates: any): void {
-  const db = getDb();
-  const fields = Object.keys(updates);
-  if (fields.length === 0) return;
-
-  const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates), orderId, scope.tenantId, scope.workspaceId];
-  
-  db.prepare(`
-    UPDATE orders 
-    SET ${setClause}, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(...params);
-}
-
-async function getOrderContextSqlite(scope: CommerceScope, orderId: string): Promise<any | null> {
-  return await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId) ?? null;
-}
-
-async function listPaymentsSqlite(scope: CommerceScope, filters: PaymentFilters): Promise<any[]> {
-  const db = getDb();
-  let query = `
-    SELECT p.*, cu.canonical_name as customer_name
-    FROM payments p
-    LEFT JOIN customers cu ON p.customer_id = cu.id
-    WHERE p.tenant_id = ? AND p.workspace_id = ?
-  `;
-  const params: any[] = [scope.tenantId, scope.workspaceId];
-
-  if (filters.status) { query += ' AND p.status = ?'; params.push(filters.status); }
-  if (filters.risk_level) { query += ' AND p.risk_level = ?'; params.push(filters.risk_level); }
-  if (filters.q) {
-    query += ' AND (p.external_payment_id LIKE ? OR cu.canonical_name LIKE ?)';
-    const t = `%${filters.q}%`;
-    params.push(t, t);
-  }
-
-  query += ' ORDER BY p.updated_at DESC';
-
-  const rows = db.prepare(query).all(...params);
-  return Promise.all(rows.map((row: any) => enrichPayment(row, scope.tenantId, scope.workspaceId)));
-}
-
-async function getPaymentSqlite(scope: CommerceScope, paymentId: string): Promise<any | null> {
-  const db = getDb();
-  const payment = db
-    .prepare(
-      `SELECT p.*, cu.canonical_name as customer_name, cu.canonical_email as customer_email
-       FROM payments p LEFT JOIN customers cu ON p.customer_id = cu.id
-       WHERE p.id = ? AND p.tenant_id = ? AND p.workspace_id = ?`,
-    )
-    .get(paymentId, scope.tenantId, scope.workspaceId) as any;
-
-  if (!payment) return null;
-
-  const context = await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId);
-  return {
-    ...(await enrichPayment(payment, scope.tenantId, scope.workspaceId)),
-    canonical_context: context,
-  };
-}
-
-function updatePaymentSqlite(scope: CommerceScope, paymentId: string, updates: any): void {
-  const db = getDb();
-  const fields = Object.keys(updates);
-  if (fields.length === 0) return;
-
-  const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates), paymentId, scope.tenantId, scope.workspaceId];
-  
-  db.prepare(`
-    UPDATE payments 
-    SET ${setClause}, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(...params);
-}
-
-async function getPaymentContextSqlite(scope: CommerceScope, paymentId: string): Promise<any | null> {
-  return await getPaymentCanonicalContext(paymentId, scope.tenantId, scope.workspaceId) ?? null;
-}
-
-async function listReturnsSqlite(scope: CommerceScope, filters: ReturnFilters): Promise<any[]> {
-  const db = getDb();
-  let query = `
-    SELECT r.*, cu.canonical_name as customer_name
-    FROM returns r
-    LEFT JOIN customers cu ON r.customer_id = cu.id
-    WHERE r.tenant_id = ? AND r.workspace_id = ?
-  `;
-  const params: any[] = [scope.tenantId, scope.workspaceId];
-
-  if (filters.status) { query += ' AND r.status = ?'; params.push(filters.status); }
-  if (filters.risk_level) { query += ' AND r.risk_level = ?'; params.push(filters.risk_level); }
-  if (filters.q) {
-    query += ' AND (r.external_return_id LIKE ? OR cu.canonical_name LIKE ?)';
-    const t = `%${filters.q}%`;
-    params.push(t, t);
-  }
-
-  query += ' ORDER BY r.updated_at DESC';
-
-  const rows = db.prepare(query).all(...params);
-  return Promise.all(rows.map((row: any) => enrichReturn(row, scope.tenantId, scope.workspaceId)));
-}
-
-async function getReturnSqlite(scope: CommerceScope, returnId: string): Promise<any | null> {
-  const db = getDb();
-  const ret = db
-    .prepare(
-      `SELECT r.*, cu.canonical_name as customer_name
-       FROM returns r LEFT JOIN customers cu ON r.customer_id = cu.id
-       WHERE r.id = ? AND r.tenant_id = ? AND r.workspace_id = ?`,
-    )
-    .get(returnId, scope.tenantId, scope.workspaceId) as any;
-
-  if (!ret) return null;
-
-  const context = await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId);
-  const events = db
-    .prepare('SELECT * FROM return_events WHERE return_id = ? ORDER BY time ASC')
-    .all(returnId);
-
-  const enriched = await enrichReturn(ret, scope.tenantId, scope.workspaceId);
-  return {
-    ...enriched,
-    events: context?.case_state
-      ? context.case_state.timeline.filter((entry: any) =>
-          ['returns', 'payments', 'orders', 'fulfillment', 'approvals'].includes(entry.domain),
-        )
-      : events.map(parseRow),
-    canonical_context: context,
-  };
-}
-
-function updateReturnSqlite(scope: CommerceScope, returnId: string, updates: any): void {
-  const db = getDb();
-  const fields = Object.keys(updates);
-  if (fields.length === 0) return;
-
-  const setClause = fields.map((f) => `${f} = ?`).join(', ');
-  const params = [...Object.values(updates), returnId, scope.tenantId, scope.workspaceId];
-  
-  db.prepare(`
-    UPDATE returns 
-    SET ${setClause}, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-  `).run(...params);
-}
-
-async function getReturnContextSqlite(scope: CommerceScope, returnId: string): Promise<any | null> {
-  return await getReturnCanonicalContext(returnId, scope.tenantId, scope.workspaceId) ?? null;
 }
 
 // ── Supabase implementations ─────────────────────────────────
@@ -889,25 +656,24 @@ export interface CommerceRepository {
 }
 
 export function createCommerceRepository(): CommerceRepository {
-  if (getDatabaseProvider() === 'supabase') {
-    return {
-      listOrders: listOrdersSupabase,
-      getOrder: getOrderSupabase,
-      getOrderContext: getOrderContextSupabase,
+  return {
+    listOrders: listOrdersSupabase,
+    getOrder: getOrderSupabase,
+    getOrderContext: getOrderContextSupabase,
 
-      listPayments: listPaymentsSupabase,
-      getPayment: getPaymentSupabase,
-      getPaymentContext: getPaymentContextSupabase,
+    listPayments: listPaymentsSupabase,
+    getPayment: getPaymentSupabase,
+    getPaymentContext: getPaymentContextSupabase,
 
-      listReturns: listReturnsSupabase,
-      getReturn: getReturnSupabase,
-      getReturnContext: getReturnContextSupabase,
+    listReturns: listReturnsSupabase,
+    getReturn: getReturnSupabase,
+    getReturnContext: getReturnContextSupabase,
 
-      updateOrder: updateOrderSupabase,
-      updatePayment: updatePaymentSupabase,
-      updateReturn: updateReturnSupabase,
+    updateOrder: updateOrderSupabase,
+    updatePayment: updatePaymentSupabase,
+    updateReturn: updateReturnSupabase,
 
-      upsertOrder: async (scope, order) => {
+    upsertOrder: async (scope, order) => {
         const supabase = getSupabaseAdmin();
         const systemStates = { canonical: order.status, [order.source]: order.status };
         const { data: existing } = await supabase
@@ -1032,87 +798,4 @@ export function createCommerceRepository(): CommerceRepository {
         }).eq('id', entityId).eq('tenant_id', scope.tenantId);
       }
     };
-  }
-
-  return {
-    listOrders: async (scope, filters) => listOrdersSqlite(scope, filters),
-    getOrder: async (scope, orderId) => getOrderSqlite(scope, orderId),
-    getOrderContext: async (scope, orderId) => getOrderContextSqlite(scope, orderId),
-
-    listPayments: async (scope, filters) => listPaymentsSqlite(scope, filters),
-    getPayment: async (scope, paymentId) => getPaymentSqlite(scope, paymentId),
-    getPaymentContext: async (scope, paymentId) => getPaymentContextSqlite(scope, paymentId),
-
-    listReturns: async (scope, filters) => listReturnsSqlite(scope, filters),
-    getReturn: async (scope, returnId) => getReturnSqlite(scope, returnId),
-    getReturnContext: async (scope, returnId) => getReturnContextSqlite(scope, returnId),
-
-    updateOrder: async (scope, orderId, updates) => updateOrderSqlite(scope, orderId, updates),
-    updatePayment: async (scope, paymentId, updates) => updatePaymentSqlite(scope, paymentId, updates),
-    updateReturn: async (scope, returnId, updates) => updateReturnSqlite(scope, returnId, updates),
-
-    upsertOrder: async (scope, order) => {
-      const db = getDb();
-      const existing = db.prepare('SELECT id FROM orders WHERE external_order_id = ? AND tenant_id = ?').get(order.externalId, scope.tenantId) as any;
-      const systemStates = JSON.stringify({ canonical: order.status, [order.source]: order.status });
-      const badges = JSON.stringify(order.tags);
-
-      if (existing) {
-        db.prepare(`
-          UPDATE orders SET
-            status = ?, fulfillment_status = ?, shipping_address = ?,
-            system_states = ?, total_amount = ?, currency = ?,
-            last_sync_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(order.status, order.fulfillmentStatus, order.shippingAddress ? JSON.stringify(order.shippingAddress) : null, systemStates, order.totalAmount, order.currency, existing.id);
-        return existing.id;
-      }
-
-      const id = crypto.randomUUID();
-      db.prepare(`
-        INSERT INTO orders (id, external_order_id, tenant_id, workspace_id, status, fulfillment_status, shipping_address, system_states, total_amount, currency, order_date, badges, last_sync_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `).run(id, order.externalId, scope.tenantId, scope.workspaceId, order.status, order.fulfillmentStatus, order.shippingAddress ? JSON.stringify(order.shippingAddress) : null, systemStates, order.totalAmount, order.currency, order.createdAt, badges);
-      return id;
-    },
-    upsertPayment: async (scope, payment) => {
-      const db = getDb();
-      const existing = db.prepare('SELECT id FROM payments WHERE external_payment_id = ? AND tenant_id = ?').get(payment.externalId, scope.tenantId) as any;
-      const systemStates = JSON.stringify({ canonical: payment.status, [payment.source]: payment.status });
-
-      if (existing) {
-        db.prepare('UPDATE payments SET status = ?, system_states = ?, refund_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(payment.status, systemStates, payment.amountRefunded, existing.id);
-        return existing.id;
-      }
-
-      const id = crypto.randomUUID();
-      db.prepare(`
-        INSERT INTO payments (id, external_payment_id, tenant_id, workspace_id, amount, currency, payment_method, psp, status, system_states, refund_amount, dispute_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `).run(id, payment.externalId, scope.tenantId, scope.workspaceId, payment.amount, payment.currency, payment.paymentMethod || 'card', payment.source, payment.status, systemStates, payment.amountRefunded, payment.disputeId);
-      return id;
-    },
-    upsertReturn: async (scope, returnData) => {
-      const db = getDb();
-      const existing = db.prepare('SELECT id FROM returns WHERE external_return_id = ? AND tenant_id = ?').get(returnData.externalId, scope.tenantId) as any;
-      const systemStates = JSON.stringify({ canonical: returnData.status, [returnData.source]: returnData.status });
-
-      if (existing) {
-        db.prepare('UPDATE returns SET status = ?, system_states = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(returnData.status, systemStates, existing.id);
-        return existing.id;
-      }
-
-      const id = crypto.randomUUID();
-      db.prepare(`
-        INSERT INTO returns (id, external_return_id, tenant_id, workspace_id, status, system_states, return_value, currency, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `).run(id, returnData.externalId, scope.tenantId, scope.workspaceId, returnData.status, systemStates, returnData.totalAmount, returnData.currency);
-      return id;
-    },
-    flagEntityConflict: async (scope, entityType, entityId, message) => {
-      const db = getDb();
-      const table = entityType === 'order' ? 'orders' : entityType === 'payment' ? 'payments' : 'returns';
-      db.prepare(`UPDATE ${table} SET has_conflict = 1, conflict_detected = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?`).run(message, entityId, scope.tenantId);
-    }
-  };
 }
