@@ -24,9 +24,13 @@ export default function CreditsTab() {
   const [spendCap, setSpendCap] = useState('100');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const includedCredits = subscription?.credits_included ?? 5000;
-  const usedCredits = subscription?.credits_used ?? 3240;
-  const remainingCredits = Math.max(includedCredits - usedCredits, 0);
+  // Use the ai_credits_* columns (Option A / Cluster I schema).
+  // Fall back gracefully when the subscription row is still loading.
+  const includedCredits = subscription?.ai_credits_included ?? subscription?.credits_included ?? 0;
+  const usedCredits = subscription?.ai_credits_used_period ?? subscription?.credits_used ?? 0;
+  const topupBalance = subscription?.ai_credits_topup_balance ?? 0;
+  const remainingCredits = Math.max(includedCredits - usedCredits, 0) + topupBalance;
+  const percentUsed = includedCredits > 0 ? Math.min(100, Math.round((usedCredits / includedCredits) * 100)) : 0;
   const workspaceSettings = useMemo(() => parseSettings(workspace?.settings), [workspace?.settings]);
 
   useEffect(() => {
@@ -89,8 +93,12 @@ export default function CreditsTab() {
           <div className="grid grid-cols-3 gap-6 mb-6">
             <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Included Monthly Credits</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{includedCredits.toLocaleString()}</p>
-              <p className="text-[10px] text-gray-400 mt-1">Resets on Nov 12, 2024</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{includedCredits > 0 ? includedCredits.toLocaleString() : '—'}</p>
+              <p className="text-[10px] text-gray-400 mt-1">
+                {subscription?.ai_credits_period_end
+                  ? `Resets ${new Date(subscription.ai_credits_period_end).toLocaleDateString()}`
+                  : 'Per billing period'}
+              </p>
             </div>
             <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700">
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Used Credits</p>
@@ -98,11 +106,34 @@ export default function CreditsTab() {
               <p className="text-[10px] text-gray-400 mt-1">This billing cycle</p>
             </div>
             <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30">
-              <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1 font-medium">Remaining Credits</p>
+              <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1 font-medium">Available Now</p>
               <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{remainingCredits.toLocaleString()}</p>
-              <p className="text-[10px] text-indigo-500/70 mt-1">Available to use</p>
+              <p className="text-[10px] text-indigo-500/70 mt-1">
+                {topupBalance > 0 ? `Incl. ${topupBalance.toLocaleString()} top-up` : 'Included + top-up'}
+              </p>
             </div>
           </div>
+
+          {/* Usage progress bar */}
+          {includedCredits > 0 && (
+            <div className="mb-6">
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                <span>{usedCredits.toLocaleString()} of {includedCredits.toLocaleString()} included credits used</span>
+                <span className={percentUsed >= 100 ? 'text-red-600 font-semibold' : percentUsed >= 80 ? 'text-yellow-600 font-semibold' : ''}>{percentUsed}%</span>
+              </div>
+              <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    percentUsed >= 100 ? 'bg-red-500' : percentUsed >= 80 ? 'bg-yellow-500' : 'bg-indigo-500'
+                  }`}
+                  style={{ width: `${Math.min(100, percentUsed)}%` }}
+                />
+              </div>
+              {topupBalance > 0 && (
+                <p className="text-[10px] text-gray-400 mt-1.5">+ {topupBalance.toLocaleString()} top-up credits queued after included credits run out</p>
+              )}
+            </div>
+          )}
 
           {isFlexibleUsageEnabled && (
             <div className="grid grid-cols-3 gap-6 mb-6 pt-6 border-t border-gray-100 dark:border-gray-800">

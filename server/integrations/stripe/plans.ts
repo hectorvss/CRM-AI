@@ -18,11 +18,17 @@ export type PlanCode = 'starter' | 'growth' | 'scale' | 'business' | 'free';
 export type PlanInterval = 'month' | 'year';
 export type TopupPack = '5k' | '20k' | '50k';
 
-/** Credits granted per subscription period for each plan. */
+/**
+ * Credits granted per subscription period for each plan.
+ * These values reflect Option A (Conservative) — see docs/PRICING_ANALYSIS.md.
+ *   Starter →  5,000  (€42/mo annual)
+ *   Growth  → 20,000  (€109/mo annual)
+ *   Scale   → 60,000  (€254/mo annual)
+ */
 export const PLAN_CREDITS: Record<Exclude<PlanCode, 'business' | 'free'>, number> = {
   starter: 5_000,
   growth: 20_000,
-  scale: 75_000,
+  scale: 60_000,
 };
 
 /** Top-up packs: pack code → credits. */

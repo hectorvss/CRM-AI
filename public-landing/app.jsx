@@ -1062,6 +1062,14 @@ function Testimonials({ t }) {
 
 /* ============ Pricing ============ */
 function Pricing({ t, hideTitle, navigate }) {
+  const [billingInterval, setBillingInterval] = React.useState('year');
+
+  // Detect language from plan data (per text)
+  const isEs = t.plans && t.plans[0] && t.plans[0].per === '/ mes';
+  const toggleLabels = isEs
+    ? { monthly: 'Mensual', annual: 'Anual', save: '(ahorra ~70%)' }
+    : { monthly: 'Monthly', annual: 'Annual', save: '(save ~70%)' };
+
   // Map plan name → checkout plan id; Business plan goes to /demo (talk to sales).
   const planActionFor = (planName) => {
     const key = (planName || '').toLowerCase();
@@ -1078,10 +1086,10 @@ function Pricing({ t, hideTitle, navigate }) {
       return;
     }
     if (action.kind === 'plan' && window.ClainAuth) {
-      await window.ClainAuth.checkoutPlan(action.id);
+      await window.ClainAuth.checkoutPlan(action.id, billingInterval);
       return;
     }
-    (navigate || ((path) => window.location.hash = '#' + path))('/signup');
+    (navigate || ((path) => window.location.hash = '#' + path))(`/signup?interval=${billingInterval}`);
   };
   // Credit packs are ordered: 5,000 / 20,000 / 50,000.
   const onCreditCta = async (c) => {
@@ -1104,29 +1112,60 @@ function Pricing({ t, hideTitle, navigate }) {
             {t.pricingNote && <p className="lede">{t.pricingNote}</p>}
           </div>
         )}
+
+        {/* ── Billing-interval toggle ── */}
+        <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap: 10, margin:'40px 0 32px'}}>
+          <span style={{fontSize: 14, fontWeight: billingInterval === 'month' ? 600 : 400, opacity: billingInterval === 'month' ? 1 : 0.5, transition:'opacity .15s'}}>
+            {toggleLabels.monthly}
+          </span>
+          <button
+            onClick={() => setBillingInterval(billingInterval === 'month' ? 'year' : 'month')}
+            aria-label="Toggle billing interval"
+            style={{
+              position:'relative', width: 48, height: 26, borderRadius: 999,
+              background: billingInterval === 'year' ? '#4f46e5' : '#d1d5db',
+              border: 'none', cursor: 'pointer', transition:'background .2s', flexShrink: 0,
+            }}
+          >
+            <span style={{
+              position:'absolute', top: 3, left: billingInterval === 'year' ? 25 : 3,
+              width: 20, height: 20, borderRadius: '50%', background: '#fff',
+              boxShadow:'0 1px 3px rgba(0,0,0,.25)', transition:'left .2s',
+            }} />
+          </button>
+          <span style={{fontSize: 14, fontWeight: billingInterval === 'year' ? 600 : 400, opacity: billingInterval === 'year' ? 1 : 0.5, transition:'opacity .15s'}}>
+            {toggleLabels.annual}&nbsp;<span style={{color:'#16a34a', fontSize: 12, fontWeight: 500}}>{toggleLabels.save}</span>
+          </span>
+        </div>
+
         <div className="price-grid price-grid-4 reveal-children">
-          {t.plans.map((p, i) => (
-            <div key={i} className={`price-card ${p.featured ? 'featured' : ''}`}>
-              {p.badge && <span className="price-badge">{p.badge}</span>}
-              <div className="price-name">{p.name}</div>
-              <div className="price-amount">
-                {p.price === null ? (
-                  <span style={{fontSize: 40}}>{p.per}</span>
-                ) : (
-                  <>
-                    {p.was && <span className="price-was">€{p.was}</span>}
-                    <sup>€</sup>{p.price}<span className="per">{p.per}</span>
-                  </>
-                )}
+          {t.plans.map((p, i) => {
+            const displayPrice = billingInterval === 'year' ? p.price : p.was;
+            const billedLine = p.price !== null
+              ? (billingInterval === 'year' ? p.billed : (isEs ? 'Facturado mensualmente' : 'Billed monthly'))
+              : null;
+            return (
+              <div key={i} className={`price-card ${p.featured ? 'featured' : ''}`}>
+                {p.badge && <span className="price-badge">{p.badge}</span>}
+                <div className="price-name">{p.name}</div>
+                <div className="price-amount">
+                  {displayPrice === null || displayPrice === undefined ? (
+                    <span style={{fontSize: 40}}>{p.per}</span>
+                  ) : (
+                    <>
+                      <sup>€</sup>{displayPrice}<span className="per">{p.per}</span>
+                    </>
+                  )}
+                </div>
+                {billedLine && <div className="price-billed">{billedLine}</div>}
+                <div className="price-meta">{p.meta}</div>
+                <ul className="price-list">
+                  {p.feats.map((f, j) => <li className="price-li" key={j}>{f}</li>)}
+                </ul>
+                <button onClick={() => onPlanCta(p)} className={`btn ${p.featured ? 'btn-primary' : 'btn-ghost'}`}>{p.cta} <span className="arrow">→</span></button>
               </div>
-              {p.billed && <div className="price-billed">{p.billed}</div>}
-              <div className="price-meta">{p.meta}</div>
-              <ul className="price-list">
-                {p.feats.map((f, j) => <li className="price-li" key={j}>{f}</li>)}
-              </ul>
-              <button onClick={() => onPlanCta(p)} className={`btn ${p.featured ? 'btn-primary' : 'btn-ghost'}`}>{p.cta} <span className="arrow">→</span></button>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {t.credits && (

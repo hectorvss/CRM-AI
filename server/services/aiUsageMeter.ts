@@ -84,14 +84,53 @@ export class AICreditExhaustedError extends Error {
 
 // ── Token → credit conversion ────────────────────────────────────────────────
 
-/** Heuristic credit cost per 1,000 tokens by model family. */
+/**
+ * Option A (Conservative) — model-tier credit multipliers.
+ *
+ * Tier mapping (credits consumed per 1,000 tokens):
+ *   Fast     × 1  — Gemini Flash, Claude Haiku, GPT-4o-mini, *-instruct
+ *   Balanced × 5  — Claude Sonnet, GPT-4o, Gemini Pro/1.5
+ *   Heavy    × 10 — Claude Opus, GPT-4-Turbo, GPT-4-32k
+ *
+ * This lifts the worst-case margin floor from 75 % to 92 %+ while keeping
+ * fast-model costs identical for users.  See docs/PRICING_ANALYSIS.md §4-A.
+ */
 function modelCostPerKTokens(model?: string): number {
-  if (!model) return 1;
+  if (!model) return 1; // unknown model → Fast tier (fail-safe)
   const m = model.toLowerCase();
-  if (m.includes('pro') || m.includes('opus') || m.includes('gpt-4')) return 1.5;
-  if (m.includes('flash') || m.includes('haiku') || m.includes('mini')) return 1;
-  // Default conservative estimate.
-  return 1;
+
+  // Heavy tier  ×10
+  if (
+    m.includes('opus') ||
+    m.includes('gpt-4-turbo') ||
+    m.includes('gpt-4-32k') ||
+    m.includes('gpt4-turbo')
+  ) return 10;
+
+  // Balanced tier  ×5
+  if (
+    m.includes('sonnet') ||
+    m.includes('gpt-4o') ||      // gpt-4o and gpt-4o-* (but NOT gpt-4o-mini — see Fast)
+    m.includes('gemini-pro') ||
+    m.includes('gemini-1.5') ||
+    m.includes('gemini-2.5')
+  ) {
+    // gpt-4o-mini falls through to Fast tier below; catch it here first:
+    if (m.includes('gpt-4o-mini') || m.includes('gpt4o-mini')) return 1;
+    return 5;
+  }
+
+  // Fast tier  ×1
+  if (
+    m.includes('flash') ||
+    m.includes('haiku') ||
+    m.includes('mini') ||
+    m.includes('instruct') ||
+    m.includes('gemini-2.0')
+  ) return 1;
+
+  // Unknown model — default to Balanced to err on the safe side for margin.
+  return 5;
 }
 
 export function tokensToCredits(model: string | undefined, promptTokens: number, completionTokens: number): number {
