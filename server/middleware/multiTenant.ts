@@ -107,6 +107,8 @@ export interface ResolvedTenantContext {
   tenantId: string;
   workspaceId: string;
   userId?: string;
+  /** True when resolved via anonymous fallback (no explicit auth or headers). */
+  isAnonymousFallback?: boolean;
 }
 
 export async function resolveTenantWorkspaceContext(
@@ -159,10 +161,13 @@ export async function resolveTenantWorkspaceContext(
     // Fall through to demo defaults if the backing store is not yet ready.
   }
 
+  // Anonymous fallback — only safe for local development with demo data.
+  // In production this is blocked at the middleware level.
   return {
     tenantId: tenantId || 'org_default',
     workspaceId: workspaceId || 'ws_default',
     userId: userId || 'system',
+    isAnonymousFallback: true,
   };
 }
 
@@ -242,6 +247,12 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
       }
     }
 
+    // Block unauthenticated anonymous fallback in production environments.
+    if (resolved.isAnonymousFallback && process.env.NODE_ENV === 'production') {
+      logger.warn('Rejected unauthenticated request in production (anonymous fallback)', { path: req.path });
+      return sendError(res, 401, 'UNAUTHORIZED', 'Authentication required. Provide a valid Bearer token.');
+    }
+
     req.tenantId = resolved.tenantId;
     req.workspaceId = resolved.workspaceId;
     req.userId = resolved.userId;
@@ -265,11 +276,9 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
       path: req.path
     });
 
-    if (req.userId === 'system') {
-      req.roleId = 'workspace_admin';
-      req.permissions = ['*'];
-      return next();
-    }
+    // NOTE: The 'system' userId coming from an HTTP header is NOT trusted.
+    // Internal jobs access repositories directly and do not go through this middleware.
+    // Any request arriving here with userId='system' is treated as an unauthenticated viewer.
 
     try {
       const member = await iamRepo.getMember(req.userId || '', req.tenantId || '', req.workspaceId || '');
@@ -288,25 +297,22 @@ export const extractMultiTenant = async (req: MultiTenantRequest, res: Response,
 
       next();
     } catch (memberError) {
-      logger.warn('Falling back to demo tenant context', {
+      // Member/permission lookup failed (e.g. DB timeout).
+      // Fail-secure: do NOT escalate privileges on error.
+      logger.error('Member lookup failed in multi-tenant middleware — returning 500', {
         path: req.path,
+        userId: req.userId,
         error: memberError instanceof Error ? memberError.message : String(memberError),
       });
-      req.userId = req.userId || 'system';
-      req.roleId = 'workspace_admin';
-      req.permissions = ['*'];
-      next();
+      return sendError(res, 500, 'SERVICE_UNAVAILABLE', 'Authentication service temporarily unavailable. Please retry.');
     }
   } catch (error) {
-    logger.warn('Multi-tenant middleware fallback triggered', {
+    // Outer catch: unexpected error in auth pipeline.
+    // Fail-secure: do NOT grant any permissions on unexpected errors.
+    logger.error('Multi-tenant middleware critical error — returning 500', {
       path: req.path,
       error: error instanceof Error ? error.message : String(error),
     });
-    req.tenantId = req.tenantId || 'org_default';
-    req.workspaceId = req.workspaceId || 'ws_default';
-    req.userId = req.userId || 'system';
-    req.roleId = 'workspace_admin';
-    req.permissions = ['*'];
-    next();
+    return sendError(res, 500, 'SERVICE_UNAVAILABLE', 'Authentication service temporarily unavailable. Please retry.');
   }
 };

@@ -8,6 +8,8 @@ import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { logger } from '../utils/logger.js';
 import type { WritableRefunds } from '../integrations/types.js';
+import { config } from '../config.js';
+import { isValidStatus, invalidStatusMessage, RETURN_STATUSES, RETURN_INSPECTION_STATUSES, RETURN_REFUND_STATUSES } from '../utils/statusEnums.js';
 
 const router = Router();
 const commerceRepo = createCommerceRepository();
@@ -76,7 +78,7 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
 
     const amount = Number(req.body?.amount ?? payment.amount ?? 0);
     const reason = String(req.body?.reason ?? '').trim() || 'Refund requested from CRM-AI';
-    const sensitive = amount > 250 || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase());
+    const sensitive = amount > config.commerce.refundAutoApprovalThreshold || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase());
     const blocked = ['disputed', 'blocked', 'chargeback'].includes(String(payment.status ?? '').toLowerCase());
 
     if (blocked) {
@@ -281,11 +283,23 @@ returnsRouter.patch('/:id/status', requirePermission('returns.write'), async (re
     if (!ret) return res.status(404).json({ error: 'Return not found' });
     const status = String(req.body?.status ?? '').trim();
     if (!status) return res.status(400).json({ error: 'Status is required' });
+    if (!isValidStatus(status, RETURN_STATUSES)) {
+      return res.status(400).json({ error: invalidStatusMessage('status', RETURN_STATUSES) });
+    }
+
+    const inspectionStatus = req.body?.inspection_status ?? ret.inspection_status;
+    if (inspectionStatus && !isValidStatus(String(inspectionStatus), RETURN_INSPECTION_STATUSES)) {
+      return res.status(400).json({ error: invalidStatusMessage('inspection_status', RETURN_INSPECTION_STATUSES) });
+    }
+    const refundStatus = req.body?.refund_status ?? ret.refund_status;
+    if (refundStatus && !isValidStatus(String(refundStatus), RETURN_REFUND_STATUSES)) {
+      return res.status(400).json({ error: invalidStatusMessage('refund_status', RETURN_REFUND_STATUSES) });
+    }
 
     await commerceRepo.updateReturn(scope, req.params.id, {
       status,
-      inspection_status: req.body?.inspection_status ?? ret.inspection_status,
-      refund_status: req.body?.refund_status ?? ret.refund_status,
+      inspection_status: inspectionStatus,
+      refund_status: refundStatus,
       approval_status: req.body?.approval_status ?? ret.approval_status,
       last_update: req.body?.reason ?? `Return status changed to ${status}`,
       system_states: { ...(ret.system_states ?? {}), canonical: status, crm_ai: status },

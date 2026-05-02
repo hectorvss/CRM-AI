@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
+import { requirePermission } from '../middleware/authorization.js';
 import { createApprovalRepository } from '../data/index.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
@@ -62,14 +63,20 @@ router.get('/:id/context', async (req: MultiTenantRequest, res) => {
   }
 });
 
-router.post('/:id/decide', async (req: MultiTenantRequest, res) => {
+// requirePermission ensures only users with 'approvals.decide' can approve/reject.
+// decided_by is always taken from the authenticated req.userId — never from the request body —
+// to prevent audit trail forgery.
+router.post('/:id/decide', requirePermission('approvals.decide'), async (req: MultiTenantRequest, res) => {
   try {
     const scope = {
       tenantId: req.tenantId!,
       workspaceId: req.workspaceId!,
       userId: req.userId,
     };
-    const { decision, note, decided_by } = req.body;
+    const { decision, note } = req.body;
+    // decided_by is ALWAYS the authenticated user — body.decided_by is intentionally ignored.
+    const decidedBy = req.userId || 'system';
+
     if (!['approved', 'rejected'].includes(decision)) {
       return res.status(400).json({ error: 'Decision must be approved or rejected' });
     }
@@ -77,7 +84,7 @@ router.post('/:id/decide', async (req: MultiTenantRequest, res) => {
     const result = await approvalRepository.decide(scope, req.params.id, {
       decision,
       note,
-      decided_by: decided_by || req.userId || 'system',
+      decided_by: decidedBy,
     });
 
     if (!result) return res.status(404).json({ error: 'Not found' });
@@ -86,11 +93,11 @@ router.post('/:id/decide', async (req: MultiTenantRequest, res) => {
       await enqueue(
         JobType.RESOLUTION_EXECUTE,
         { executionPlanId: result.executionPlanId, mode: 'ai' },
-        { 
-          tenantId: scope.tenantId, 
-          workspaceId: scope.workspaceId, 
-          traceId: req.params.id, 
-          priority: 5 
+        {
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId,
+          traceId: req.params.id,
+          priority: 5,
         },
       );
     }
@@ -98,7 +105,7 @@ router.post('/:id/decide', async (req: MultiTenantRequest, res) => {
     fireWorkflowEvent(
       { tenantId: scope.tenantId, workspaceId: scope.workspaceId, userId: scope.userId },
       'approval.decided',
-      { approvalId: req.params.id, decision, caseId: result.caseId, decidedBy: decided_by || req.userId || 'system' },
+      { approvalId: req.params.id, decision, caseId: result.caseId, decidedBy },
     );
     res.json({ success: true, decision, caseId: result.caseId, postApproval: result.postApproval ?? null });
   } catch (error) {

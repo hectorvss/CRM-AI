@@ -77,6 +77,14 @@ export interface Config {
     webhookSecret: string;
   };
 
+  commerce: {
+    /**
+     * Refund amount above which manual approval is required.
+     * Configurable via REFUND_AUTO_APPROVAL_THRESHOLD (default: 250).
+     */
+    refundAutoApprovalThreshold: number;
+  };
+
   /** Optional: Direct messaging channel credentials */
   channels?: {
     /** Token used to verify Meta's webhook subscription handshake */
@@ -180,6 +188,10 @@ function buildConfig(): Config {
       defaultTimeoutMs:          optionalInt('INTEGRATION_TIMEOUT_MS', 15000),
       defaultMaxRetries:         optionalInt('INTEGRATION_MAX_RETRIES', 3),
       defaultRateLimitPerMinute: optionalInt('INTEGRATION_RATE_LIMIT', 60),
+    },
+
+    commerce: {
+      refundAutoApprovalThreshold: optionalInt('REFUND_AUTO_APPROVAL_THRESHOLD', 250),
     },
   };
 

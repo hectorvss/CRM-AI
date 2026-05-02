@@ -7,6 +7,7 @@ import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { logger } from '../utils/logger.js';
 import type { WritableOrders } from '../integrations/types.js';
+import { isValidStatus, invalidStatusMessage, ORDER_STATUSES } from '../utils/statusEnums.js';
 
 const router = Router();
 
@@ -90,6 +91,9 @@ router.patch('/:id/status', requirePermission('orders.write'), async (req: Multi
 
     const newStatus = String(req.body?.status ?? '').trim();
     if (!newStatus) return res.status(400).json({ error: 'status is required' });
+    if (!isValidStatus(newStatus, ORDER_STATUSES)) {
+      return res.status(400).json({ error: invalidStatusMessage('status', ORDER_STATUSES) });
+    }
 
     const note = String(req.body?.note ?? '').trim() || `Status updated to ${newStatus}`;
 

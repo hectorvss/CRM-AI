@@ -23,7 +23,8 @@
     "test:interop-http": "tsx tests/interop-http/run-end-to-end.ts",
     "test:e2e:interop": "tsx tests/interop-http/run-end-to-end.ts",
     "worker": "tsx server/worker-standalone.ts",
-    "seed:supabase-demo": "tsx seed_sample_data.ts"
+    "seed:supabase-demo": "tsx seed_sample_data.ts",
+    "seed:demo": "psql $DATABASE_URL -f scripts/seed-demo.sql"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

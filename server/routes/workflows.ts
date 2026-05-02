@@ -1263,7 +1263,7 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     const payment = await commerceRepository.getPayment(scope, paymentId);
     if (!payment) return { status: 'failed', error: 'Payment not found' };
     const amount = Number(config.amount || payment.amount || 0);
-    if (amount > 250 || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase())) {
+    if (amount > appConfig.commerce.refundAutoApprovalThreshold || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase())) {
       return { status: 'waiting_approval', output: { reason: 'Refund requires approval', paymentId, amount } };
     }
     await commerceRepository.updatePayment(scope, paymentId, {

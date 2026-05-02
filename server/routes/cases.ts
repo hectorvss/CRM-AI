@@ -23,6 +23,7 @@ import {
   buildPlanFromResolutionSteps,
 } from '../services/caseResolution.js';
 import { buildResolutionPlan, type ResolutionRoute } from '../utils/resolutionPlan.js';
+import { isValidStatus, invalidStatusMessage, CASE_STATUSES } from '../utils/statusEnums.js';
 
 const router = Router();
 const caseRepository = createCaseRepository();
@@ -449,6 +450,11 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
     const { status, reason, changed_by } = req.body;
+
+    if (!status) return res.status(400).json({ error: 'status is required' });
+    if (!isValidStatus(String(status), CASE_STATUSES)) {
+      return res.status(400).json({ error: invalidStatusMessage('status', CASE_STATUSES) });
+    }
 
     const bundle = await caseRepository.getBundle(scope, req.params.id);
     if (!bundle) return res.status(404).json({ error: 'Case not found' });
