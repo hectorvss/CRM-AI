@@ -90,6 +90,12 @@ async function resolvePermissions(
   roleId: string,
   explicitPermissions: unknown,
 ): Promise<string[]> {
+  // owner and workspace_admin are built-in roles with full access.
+  // Always return the preset directly — never let stale DB rows override this.
+  if (roleId === 'owner' || roleId === 'workspace_admin') {
+    return ROLE_PERMISSION_PRESETS[roleId]; // ['*']
+  }
+
   const iamRepo = createIAMRepository();
   try {
     const mappedPermissions = await iamRepo.getPermissionKeys(roleId);

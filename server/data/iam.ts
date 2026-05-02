@@ -248,6 +248,10 @@ class SQLiteIAMRepository implements IAMRepository {
   }
 
   async getPermissionKeys(roleId: string) {
+    // Built-in admin roles always return empty here so resolvePermissions
+    // uses the preset ['*'] — never let DB rows silently truncate them.
+    if (roleId === 'owner' || roleId === 'workspace_admin') return [];
+
     const db = getDb();
     const rows = db.prepare('SELECT permission_key FROM role_permissions WHERE role_id = ? ORDER BY permission_key').all(roleId) as any[];
     if (rows.length > 0) return rows.map((row) => row.permission_key).filter(Boolean);
@@ -532,6 +536,10 @@ class SupabaseIAMRepository implements IAMRepository {
   }
 
   async getPermissionKeys(roleId: string) {
+    // Built-in admin roles always return empty here so resolvePermissions
+    // uses the preset ['*'] — never let DB rows silently truncate them.
+    if (roleId === 'owner' || roleId === 'workspace_admin') return [];
+
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('role_permissions')
