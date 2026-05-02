@@ -36,6 +36,7 @@ import policyRouter from './routes/policy.js';
 import reconciliationRouter from './routes/reconciliation.js';
 import superAgentRouter from './routes/superAgent.js';
 import onboardingRouter from './routes/onboarding.js';
+import { oauthConnectorsRouter } from './routes/oauthConnectors.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { webhookRouter } from './webhooks/router.js';
 
@@ -139,6 +140,8 @@ app.use('/api/policy', policyRouter);
 app.use('/api/reconciliation', reconciliationRouter);
 app.use('/api/super-agent', superAgentRouter);
 app.use('/api/onboarding', onboardingRouter);
+// OAuth callback must be public (no x-tenant-id header in the provider redirect)
+app.use('/api/oauth-connectors', oauthConnectorsRouter);
 
 // ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {

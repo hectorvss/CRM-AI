@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { connectorsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
+import { supabase } from '../api/supabase';
 
 // ── Credential field schemas per connector system ────────────────────────────
 // These define which auth_config fields are shown in the "Connect" modal.
@@ -152,6 +153,23 @@ const topCriticalIds = [
   'slack', 'gmail', 'notion', 'hubspot', 'zapier', 'customapp'
 ];
 
+// Systems that support the OAuth popup flow
+const OAUTH_SYSTEMS = new Set(['google', 'gmail', 'slack', 'outlook']);
+
+const OAUTH_BUTTON_LABEL: Record<string, string> = {
+  google:  'Connect with Google',
+  gmail:   'Connect with Google',
+  slack:   'Connect with Slack',
+  outlook: 'Connect with Microsoft',
+};
+
+const OAUTH_ICON: Record<string, string> = {
+  google:  'G',
+  gmail:   'G',
+  slack:   '#',
+  outlook: '⊞',
+};
+
 export default function ToolsIntegrations() {
   const [activeCategory, setActiveCategory] = useState<IntegrationCategory>('All Apps');
   const [searchQuery, setSearchQuery] = useState('');
@@ -163,10 +181,57 @@ export default function ToolsIntegrations() {
     values: Record<string, string>;
   } | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [oauthStatus, setOauthStatus] = useState<Record<string, 'connecting' | 'done' | 'error'>>({});
+  const popupRef = useRef<Window | null>(null);
+
+  async function handleOAuthConnect(system: string) {
+    setOauthStatus(prev => ({ ...prev, [system]: 'connecting' }));
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const tenantId    = (session?.session?.user?.app_metadata?.tenant_id as string) ?? 'org_default';
+      const workspaceId = (session?.session?.user?.app_metadata?.workspace_id as string) ?? 'ws_default';
+      const apiBase     = (import.meta as any).env?.VITE_API_URL ?? '';
+      const url = `${apiBase}/api/oauth-connectors/${system}/start?tenantId=${encodeURIComponent(tenantId)}&workspaceId=${encodeURIComponent(workspaceId)}`;
+
+      const popup = window.open(url, `oauth_${system}`, 'width=520,height=640,menubar=no,toolbar=no,status=no');
+      if (!popup) {
+        throw new Error('Popup blocked — allow popups for this site and try again.');
+      }
+      popupRef.current = popup;
+
+      // Poll for popup close as fallback
+      const poll = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(poll);
+          setOauthStatus(prev => {
+            if (prev[system] === 'connecting') return { ...prev, [system]: 'error' };
+            return prev;
+          });
+        }
+      }, 800);
+    } catch (err: any) {
+      setOauthStatus(prev => ({ ...prev, [system]: 'error' }));
+      console.error('OAuth connect error:', err.message);
+    }
+  }
 
   const { data: apiConnectors, refetch } = useApi(connectorsApi.list);
   const testConnector = useMutation((id: string) => connectorsApi.test(id));
   const updateConnector = useMutation((payload: { id: string; body: Record<string, any> }) => connectorsApi.update(payload.id, payload.body));
+
+  // Listen for postMessage from OAuth popup — placed after refetch is declared
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'oauth_success') {
+        setOauthStatus(prev => ({ ...prev, [event.data.detail as string]: 'done' }));
+        refetch();
+      } else if (event.data?.type === 'oauth_error') {
+        setOauthStatus(prev => ({ ...prev, _last: 'error' }));
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [refetch]);
 
   function openConfigModal(integration: Integration) {
     const apiConnector = (apiConnectors as any[])?.find((c: any) => c.system.toLowerCase() === integration.id);
@@ -269,17 +334,33 @@ export default function ToolsIntegrations() {
           </div>
         )}
         
-        <button
-          onClick={() => openConfigModal(integration)}
-          className={`text-sm font-semibold px-5 py-2 rounded-xl transition-colors shadow-card min-w-[100px] border ${
-          integration.status === 'Connected' || integration.status === 'Syncing' ? 'text-gray-700 dark:text-white border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700' :
-          integration.status === 'Error' || integration.status === 'Reconnect Required' ? 'text-red-600 bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900 hover:bg-red-100 dark:hover:bg-red-900/40' :
-          'text-white bg-gray-900 dark:bg-white dark:text-black hover:bg-black dark:hover:bg-gray-200'
-        }`}>
-          {integration.status === 'Connected' ? 'Manage' :
-           integration.status === 'Syncing' ? 'Configure' :
-           integration.status === 'Error' || integration.status === 'Reconnect Required' ? 'Reconnect' : 'Connect'}
-        </button>
+        {/* OAuth connect button for supported systems */}
+        {OAUTH_SYSTEMS.has(integration.id) &&
+         integration.status !== 'Connected' &&
+         integration.status !== 'Syncing' ? (
+          <button
+            onClick={() => void handleOAuthConnect(integration.id)}
+            disabled={oauthStatus[integration.id] === 'connecting'}
+            className="flex items-center gap-2 text-sm font-semibold px-5 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-card min-w-[160px] disabled:opacity-60"
+          >
+            <span className="text-base font-bold w-4 text-center">{OAUTH_ICON[integration.id]}</span>
+            {oauthStatus[integration.id] === 'connecting'
+              ? 'Opening…'
+              : OAUTH_BUTTON_LABEL[integration.id] ?? 'Connect'}
+          </button>
+        ) : (
+          <button
+            onClick={() => openConfigModal(integration)}
+            className={`text-sm font-semibold px-5 py-2 rounded-xl transition-colors shadow-card min-w-[100px] border ${
+            integration.status === 'Connected' || integration.status === 'Syncing' ? 'text-gray-700 dark:text-white border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700' :
+            integration.status === 'Error' || integration.status === 'Reconnect Required' ? 'text-red-600 bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900 hover:bg-red-100 dark:hover:bg-red-900/40' :
+            'text-white bg-gray-900 dark:bg-white dark:text-black hover:bg-black dark:hover:bg-gray-200'
+          }`}>
+            {integration.status === 'Connected' ? 'Manage' :
+             integration.status === 'Syncing' ? 'Configure' :
+             integration.status === 'Error' || integration.status === 'Reconnect Required' ? 'Reconnect' : 'Connect'}
+          </button>
+        )}
       </div>
     </div>
   );
