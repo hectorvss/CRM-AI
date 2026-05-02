@@ -20,6 +20,7 @@
     { "source": "/customers.jsx",     "destination": "/landing/customers.jsx" },
     { "source": "/solutions.jsx",     "destination": "/landing/solutions.jsx" },
     { "source": "/capabilities.jsx",  "destination": "/landing/capabilities.jsx" },
+    { "source": "/capabilities-extra.jsx", "destination": "/landing/capabilities-extra.jsx" },
     { "source": "/tweaks-panel.jsx",  "destination": "/landing/tweaks-panel.jsx" },
     { "source": "/uploads/:f*",       "destination": "/landing/uploads/:f*" },
 

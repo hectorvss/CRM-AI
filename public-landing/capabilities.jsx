@@ -607,17 +607,56 @@ function makeCapPage(key) {
     const data = (CAP_COPY[key] && (CAP_COPY[key][lang] || CAP_COPY[key].es)) || null;
     if (!data) return <main><section className="hero wrap"><h1 className="h-display">Coming soon.</h1></section></main>;
     const Mock = MOCKS[data.mock] || (() => null);
+
+    // Pull extra sections (deepDive, useCases, integrations, faq, related)
+    // from capabilities-extra.jsx if available — otherwise the page renders the
+    // legacy short layout. This keeps backward compatibility while letting
+    // each capability ship a much richer page.
+    const extras = window.CapExtras?.data?.[key]?.[lang] || window.CapExtras?.data?.[key]?.es || null;
+    const cmp = window.CapExtras?.components || {};
+    const { CapDeepDive, CapUseCases, CapIntegrations, CapFAQ, CapRelated, CapGradientBlock } = cmp;
+
     return (
-      <main>
+      <main className="cap-page">
         <CapHero eyebrow={data.eyebrow} title={data.title} lede={data.lede} primary={data.primary} secondary={data.secondary} lang={lang} />
         <section className="cap-hero-mock-wrap wrap reveal"><Mock /></section>
         <CapStats items={data.stats} />
+
+        {/* Original two feature rows — visual fillers replaced by gradient block when available */}
         {data.rows.map((r, i) => (
           <CapFeatureRow key={i} eyebrow={r.eyebrow} title={r.title} body={r.body} bullets={r.bullets} reverse={r.reverse}>
-            <Mock />
+            {CapGradientBlock ? <CapGradientBlock tone={i % 2 === 0 ? 'indigo' : 'teal'} /> : <Mock />}
           </CapFeatureRow>
         ))}
+
+        {/* Deep dive: split row with gradient + numbered bullets */}
+        {extras?.deepDive && CapDeepDive && (
+          <CapDeepDive {...extras.deepDive} />
+        )}
+
+        {/* Original 6-card grid */}
         <CapGrid3 eyebrow={data.grid.eyebrow} title={data.grid.title} items={data.grid.items} />
+
+        {/* Real-world use cases */}
+        {extras?.useCases && CapUseCases && (
+          <CapUseCases {...extras.useCases} />
+        )}
+
+        {/* Integrations strip */}
+        {extras?.integrations && CapIntegrations && (
+          <CapIntegrations {...extras.integrations} />
+        )}
+
+        {/* FAQ */}
+        {extras?.faq && CapFAQ && (
+          <CapFAQ {...extras.faq} />
+        )}
+
+        {/* Related capabilities */}
+        {extras?.related && CapRelated && (
+          <CapRelated {...extras.related} />
+        )}
+
         {FinalCTA && <FinalCTA t={t} />}
       </main>
     );
