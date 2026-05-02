@@ -183,8 +183,11 @@ const SPA_DIR     = path.resolve(__dirname, '../dist');
 
 app.use('/app', express.static(SPA_DIR, { index: false, fallthrough: true }));
 app.get(/^\/app(\/.*)?$/, (_req, res, next) => {
-  res.sendFile(path.join(SPA_DIR, 'index.html'), (err) => {
-    if (err) next();
+  // Try _spa.html first (post-build rename), fall back to index.html (dev)
+  const spaFile = path.join(SPA_DIR, '_spa.html');
+  const indexFile = path.join(SPA_DIR, 'index.html');
+  res.sendFile(spaFile, (err) => {
+    if (err) res.sendFile(indexFile, (err2) => { if (err2) next(); });
   });
 });
 

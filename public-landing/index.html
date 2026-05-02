@@ -33,7 +33,7 @@
           try {
             var lib = window.supabase;
             window.__supabase = lib.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-              auth: { persistSession: true, autoRefreshToken: true, storageKey: 'clain.landing.auth' }
+              auth: { persistSession: true, autoRefreshToken: true }
             });
           } catch (e) {
             console.error('[Clain] Failed to init Supabase client', e);

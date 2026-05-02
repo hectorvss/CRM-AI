@@ -22,7 +22,7 @@ import SuperAgent from './components/SuperAgent';
 import GlobalSearch from './components/GlobalSearch';
 import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
-import { supabase } from './api/supabase';
+import { supabase, supabaseAuthEnabled, ensureSupabaseClient } from './api/supabase';
 import { NavigateInput, NavigationTarget, Page } from './types';
 
 const DEFAULT_TARGET: NavigationTarget = {
@@ -166,16 +166,31 @@ export default function App() {
     setNavigationTarget(normalizeNavigationTarget(target, entityId));
   }, []);
 
-  // Auth: check current session on mount + subscribe to auth state changes
+  // Auth: ensure Supabase client is ready (may need runtime config fetch),
+  // then check session + subscribe to auth state changes.
+  const [authReady, setAuthReady] = useState(false);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    let sub: { unsubscribe: () => void } | null = null;
+
+    (async () => {
+      // If VITE_SUPABASE_ANON_KEY was missing at build time, try fetching it
+      // from /api/public/config so the SPA still works on Vercel.
+      await ensureSupabaseClient();
+
+      // Now supabase singleton is guaranteed to be the real (or demo) client.
+      const { data } = await supabase.auth.getSession();
       setAuthenticated(!!data.session);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthenticated(!!session);
-      if (!session) setHasMembership(null);
-    });
-    return () => subscription.unsubscribe();
+      setAuthReady(true);
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setAuthenticated(!!session);
+        if (!session) setHasMembership(null);
+      });
+      sub = subscription;
+    })();
+
+    return () => { sub?.unsubscribe(); };
   }, []);
 
   // Membership check: once authenticated, verify the user has an active
@@ -309,8 +324,8 @@ export default function App() {
     [navigationTarget],
   );
 
-  // Loading auth state
-  if (authenticated === null) {
+  // Loading auth state (includes runtime config fetch on first load)
+  if (!authReady || authenticated === null) {
     return (
       <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
@@ -318,28 +333,21 @@ export default function App() {
     );
   }
 
-  // Unauthenticated — only show login/signup if Supabase auth is configured.
-  // In demo mode (no VITE_SUPABASE_ANON_KEY) we skip the gate entirely.
-  const hasSupabaseAuth = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+  // Unauthenticated — redirect back to the landing if auth is enabled.
+  // supabaseAuthEnabled is updated at runtime after ensureSupabaseClient().
+  const hasSupabaseAuth = supabaseAuthEnabled;
   if (hasSupabaseAuth && !authenticated) {
-    if (showSignup) {
-      return (
-        <Signup
-          onSignup={() => {
-            setShowSignup(false);
-            setAuthenticated(true);
-          }}
-          onShowLogin={() => setShowSignup(false)}
-        />
-      );
-    }
+    // If we're at /app and not logged in, send them to the landing signin
+    window.location.href = '/#/signin';
     return (
-      <Login
-        onLogin={() => setAuthenticated(true)}
-        onShowSignup={() => setShowSignup(true)}
-      />
+      <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
     );
   }
+
+  // (Login/Signup inline forms removed — auth now lives on the landing page.
+  //  The SPA redirects unauthenticated users to /#/signin above.)
 
   // Authenticated but no membership yet → gate on org setup (covers first
   // login after email confirmation, where signUp didn't run /onboarding/setup).

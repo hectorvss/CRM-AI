@@ -2,9 +2,14 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "cleanUrls": false,
+  "trailingSlash": false,
   "rewrites": [
     { "source": "/api/:path*",      "destination": "/api/index" },
     { "source": "/webhooks/:path*", "destination": "/api/index" },
+
+    { "source": "/app",             "destination": "/_spa.html" },
+    { "source": "/app/:path*",      "destination": "/_spa.html" },
 
     { "source": "/",                "destination": "/landing/index.html" },
 
@@ -18,13 +23,24 @@
     { "source": "/tweaks-panel.jsx",  "destination": "/landing/tweaks-panel.jsx" },
     { "source": "/uploads/:f*",       "destination": "/landing/uploads/:f*" },
 
-    { "source": "/app",             "destination": "/index.html" },
-    { "source": "/app/:path*",      "destination": "/index.html" },
     { "source": "/reset-password",  "destination": "/landing/index.html" },
     { "source": "/signin",          "destination": "/landing/index.html" },
     { "source": "/signup",          "destination": "/landing/index.html" },
     { "source": "/demo",            "destination": "/landing/index.html" },
-    { "source": "/pricing",         "destination": "/landing/index.html" }
+    { "source": "/pricing",         "destination": "/landing/index.html" },
+    { "source": "/product",         "destination": "/landing/index.html" },
+    { "source": "/product/:path*",  "destination": "/landing/index.html" },
+    { "source": "/customers",       "destination": "/landing/index.html" },
+    { "source": "/omnichannel",     "destination": "/landing/index.html" },
+    { "source": "/early-stage",     "destination": "/landing/index.html" },
+    { "source": "/unified-inbox",   "destination": "/landing/index.html" },
+    { "source": "/cases",           "destination": "/landing/index.html" },
+    { "source": "/help-center",     "destination": "/landing/index.html" },
+    { "source": "/reporting",       "destination": "/landing/index.html" },
+    { "source": "/policy-engine",   "destination": "/landing/index.html" },
+    { "source": "/audit-log",       "destination": "/landing/index.html" },
+    { "source": "/copilot",         "destination": "/landing/index.html" },
+    { "source": "/changelog",       "destination": "/landing/index.html" }
   ],
   "headers": [
     {
@@ -34,6 +50,12 @@
         { "key": "Access-Control-Allow-Credentials", "value": "true" },
         { "key": "Access-Control-Allow-Methods",     "value": "GET,POST,PUT,PATCH,DELETE,OPTIONS" },
         { "key": "Access-Control-Allow-Headers",     "value": "Content-Type,Authorization,x-tenant-id,x-workspace-id,x-user-id" }
+      ]
+    },
+    {
+      "source": "/landing/(.*)\\.jsx",
+      "headers": [
+        { "key": "Content-Type", "value": "text/javascript; charset=utf-8" }
       ]
     }
   ],
