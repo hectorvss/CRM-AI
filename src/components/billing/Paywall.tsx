@@ -14,6 +14,107 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../api/supabase';
 
+// ── GravityGrid: canvas of dots that get pulled toward the cursor ────────────
+// Direct port of public-landing/app.jsx GravityGrid → React TS.
+function GravityGrid({ intensity = 70 }: { intensity?: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let w = 0, h = 0;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let dots: { ox: number; oy: number; x: number; y: number; vx: number; vy: number }[] = [];
+    const SPACING = 28;
+    const RADIUS = 220;
+
+    const resize = () => {
+      w = window.innerWidth;
+      h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      dots = [];
+      const cols = Math.ceil(w / SPACING) + 2;
+      const rows = Math.ceil(h / SPACING) + 2;
+      for (let i = 0; i < cols; i++) {
+        for (let j = 0; j < rows; j++) {
+          const ox = (i - 1) * SPACING + (j % 2) * (SPACING / 2);
+          const oy = (j - 1) * SPACING;
+          dots.push({ ox, oy, x: ox, y: oy, vx: 0, vy: 0 });
+        }
+      }
+    };
+
+    const mouse = { x: -9999, y: -9999, active: false };
+    const onMove = (e: MouseEvent) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      mouse.active = true;
+    };
+    const onLeave = () => { mouse.x = -9999; mouse.y = -9999; mouse.active = false; };
+
+    let raf = 0;
+    const loop = () => {
+      ctx.clearRect(0, 0, w, h);
+      const f = intensity / 100;
+      const PULL = 0.22 * f;
+      const RETURN = 0.06;
+      const DAMP = 0.78;
+
+      for (let k = 0; k < dots.length; k++) {
+        const d = dots[k];
+        const dx = mouse.x - d.x;
+        const dy = mouse.y - d.y;
+        const dist2 = dx * dx + dy * dy;
+        if (mouse.active && dist2 < RADIUS * RADIUS) {
+          const dist = Math.sqrt(dist2) || 1;
+          const force = (1 - dist / RADIUS);
+          d.vx += (dx / dist) * force * PULL * 6;
+          d.vy += (dy / dist) * force * PULL * 6;
+        }
+        d.vx += (d.ox - d.x) * RETURN;
+        d.vy += (d.oy - d.y) * RETURN;
+        d.vx *= DAMP;
+        d.vy *= DAMP;
+        d.x += d.vx;
+        d.y += d.vy;
+
+        const ddx = d.x - d.ox;
+        const ddy = d.y - d.oy;
+        const disp = Math.sqrt(ddx * ddx + ddy * ddy);
+        const t = Math.min(disp / 30, 1);
+        const a = 0.08 + t * 0.35;
+        const r = 0.9 + t * 1.6;
+
+        ctx.fillStyle = `rgba(10,10,10,${a.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      raf = window.requestAnimationFrame(loop);
+    };
+
+    resize();
+    window.addEventListener('resize', resize);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseleave', onLeave);
+    raf = window.requestAnimationFrame(loop);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseleave', onLeave);
+    };
+  }, [intensity]);
+
+  return <canvas ref={canvasRef} className="pw-gravity-grid" aria-hidden />;
+}
+
 interface PaywallProps {
   reason: 'no_subscription' | 'trial_expired' | 'past_due_grace_ended' | 'canceled' | null;
   status: string;
@@ -87,21 +188,25 @@ const PLANS: Plan[] = [
   },
 ];
 
-const REASON_COPY: Record<string, { headline: string; sub: string }> = {
+const REASON_COPY: Record<string, { lead: string; em: string; sub: string }> = {
   no_subscription: {
-    headline: 'Choose how to get started',
+    lead: 'Choose how to',
+    em: 'get started.',
     sub: 'Try Clain free for 10 days — no card required. Or pick a plan and go.',
   },
   trial_expired: {
-    headline: 'Your 10-day trial has ended',
+    lead: 'Your trial has',
+    em: 'ended.',
     sub: 'Your data is preserved. Pick a plan to keep using Clain.',
   },
   past_due_grace_ended: {
-    headline: 'Payment failed',
+    lead: 'Payment',
+    em: 'failed.',
     sub: 'We could not process your last payment. Update your card to restore access.',
   },
   canceled: {
-    headline: 'Subscription canceled',
+    lead: 'Subscription',
+    em: 'canceled.',
     sub: 'Pick a plan to reactivate your workspace. Your data is safe.',
   },
 };
@@ -137,6 +242,16 @@ const PAYWALL_CSS = `
   @media (max-width: 768px) { .pw-root { cursor: auto; } }
   .pw-root *, .pw-root button { cursor: inherit; }
   .pw-root button { font: inherit; background: none; border: 0; color: inherit; }
+
+  /* Gravity grid — canvas of dots that respond to the mouse */
+  .pw-gravity-grid {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 0;
+  }
 
   /* Grain overlay — same SVG noise as landing */
   .pw-grain {
@@ -255,25 +370,26 @@ const PAYWALL_CSS = `
   }
   .pw-trial-meta { font-size: 14px; color: var(--fg-muted); }
 
-  /* Buttons */
+  /* Buttons — match landing .btn exactly */
   .pw-btn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 22px;
-    border-radius: 999px;
+    padding: 12px 18px;
     font-size: 14px;
     font-weight: 500;
-    letter-spacing: -0.01em;
-    transition: transform .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
-    cursor: none;
+    border-radius: 999px;
+    border: 1px solid transparent;
     white-space: nowrap;
+    transition: transform .2s ease, background .2s ease, color .2s ease, border-color .2s ease;
+    cursor: none;
   }
-  .pw-btn:hover { transform: translateY(-1px); }
-  .pw-btn-primary { background: var(--fg); color: var(--bg); border: 1px solid var(--fg); }
-  .pw-btn-primary:hover { background: #2A2A2A; border-color: #2A2A2A; }
-  .pw-btn-ghost { background: transparent; color: var(--fg); border: 1px solid var(--line-strong); }
+  .pw-btn-primary { background: var(--fg); color: var(--bg); }
+  .pw-btn-primary:hover { transform: translateY(-1px); }
+  .pw-btn-ghost { border-color: var(--line-strong); color: var(--fg); background: transparent; }
   .pw-btn-ghost:hover { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .pw-btn .pw-arrow { transition: transform .25s ease; display: inline-block; }
+  .pw-btn:hover .pw-arrow { transform: translateX(3px); }
   .pw-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
   /* Toggle */
@@ -543,6 +659,7 @@ export default function Paywall({
     <div className="pw-root">
       <style>{PAYWALL_CSS}</style>
 
+      <GravityGrid intensity={70} />
       <div className="pw-grain" aria-hidden />
       <div ref={dotRef} className="pw-cursor-dot" aria-hidden />
       <div ref={ringRef} className="pw-cursor-ring" aria-hidden />
@@ -555,8 +672,7 @@ export default function Paywall({
             {status === 'trial_expired' ? 'Trial ended' : 'Welcome to Clain'}
           </span>
           <h1 className="pw-headline">
-            {copy.headline.split(/\s+/).slice(0, -1).join(' ')}{' '}
-            <span className="em">{copy.headline.split(/\s+/).slice(-1)[0]}</span>
+            {copy.lead} <span className="em">{copy.em}</span>
           </h1>
           <p className="pw-sub">{copy.sub}</p>
           <button className="pw-signout" onClick={onSignOut}>Sign out</button>
@@ -576,7 +692,7 @@ export default function Paywall({
               className="pw-btn pw-btn-primary"
               style={{ position: 'relative', zIndex: 1 }}
             >
-              {trialLoading ? 'Starting trial…' : 'Start trial →'}
+              {trialLoading ? 'Starting trial…' : <>Start trial <span className="pw-arrow">→</span></>}
             </button>
           </div>
         )}
@@ -634,7 +750,7 @@ export default function Paywall({
                   disabled={loadingPlan !== null}
                   className={`pw-btn ${plan.featured ? 'pw-btn-primary' : 'pw-btn-ghost'}`}
                 >
-                  {isLoading ? 'Loading…' : <>{plan.cta} <span>→</span></>}
+                  {isLoading ? 'Loading…' : <>{plan.cta} <span className="pw-arrow">→</span></>}
                 </button>
               </div>
             );
@@ -649,7 +765,7 @@ export default function Paywall({
             <div className="pw-business-sub">Tailored credits, seat allocation, SLA guarantees and onboarding.</div>
           </div>
           <button onClick={handleTalkToSales} className="pw-btn pw-btn-ghost">
-            Talk to sales →
+            Talk to sales <span className="pw-arrow">→</span>
           </button>
         </div>
 

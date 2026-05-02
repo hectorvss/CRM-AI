@@ -1199,17 +1199,15 @@ function Pricing({ t, hideTitle, navigate }) {
               ))}
               {t.flexible && (
                 <div className="credit-row flex-row" style={{display:'grid', gridTemplateColumns:'1fr 1fr auto auto', gap: 32, alignItems:'center'}}>
-                  {/* Title only — no body text here */}
+                  {/* Title + feats */}
                   <div>
                     <div className="credit-num" style={{fontSize: 26}}>{t.flexible.title}</div>
                     <div className="credit-feats" style={{marginTop: 10}}>
                       {t.flexible.feats.map((f, j) => <div key={j} style={{display:'flex', gap: 6, alignItems:'baseline'}}>· {f}</div>)}
                     </div>
                   </div>
-                  {/* Body text — normal paragraph style, not uppercase */}
-                  <div style={{fontFamily:'var(--sans)', fontSize: 13, color:'var(--fg-muted)', lineHeight: 1.6}}>
-                    {t.flexible.body}
-                  </div>
+                  {/* Spacer column kept for grid balance — no body copy */}
+                  <div />
                   {/* Price */}
                   <div className="credit-price" style={{fontSize: 22, whiteSpace:'nowrap'}}>
                     {t.flexible.price}
