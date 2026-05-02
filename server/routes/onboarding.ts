@@ -223,18 +223,25 @@ router.post('/setup', validate({ body: SetupBodySchema }), async (req, res) => {
       nextMonth.setMonth(nextMonth.getMonth() + 1);
       const subscriptionId = randomUUID();
 
+      // Seed in PENDING state — user must activate trial, choose paid plan,
+      // or be granted demo access before the SPA lets them in. The paywall
+      // (src/components/billing/Paywall.tsx) renders for status='pending_subscription'.
       const { error: billingError } = await supabase.from('billing_subscriptions').insert({
-        id:                   subscriptionId,
-        org_id:               orgId,
-        plan_id:              'starter',
-        status:               'active',
-        seats_included:       1,
-        seats_used:           1,
-        credits_included:     500,
-        credits_used:         0,
-        current_period_start: now.toISOString(),
-        current_period_end:   nextMonth.toISOString(),
-        created_at:           now.toISOString(),
+        id:                      subscriptionId,
+        org_id:                  orgId,
+        plan_id:                 null,
+        status:                  'pending_subscription',
+        seats_included:          1,
+        seats_used:              1,
+        credits_included:        0,
+        credits_used:            0,
+        ai_credits_included:     0,
+        ai_credits_used_period:  0,
+        ai_credits_topup_balance: 0,
+        trial_used:              false,
+        current_period_start:    now.toISOString(),
+        current_period_end:      nextMonth.toISOString(),
+        created_at:              now.toISOString(),
       });
       if (billingError) {
         // Billing seed is treated as non-fatal — the user can still operate

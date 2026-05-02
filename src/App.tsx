@@ -22,6 +22,7 @@ import SuperAgent from './components/SuperAgent';
 import GlobalSearch from './components/GlobalSearch';
 import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
+import Paywall from './components/billing/Paywall';
 import { supabase, supabaseAuthEnabled, ensureSupabaseClient } from './api/supabase';
 import { NavigateInput, NavigationTarget, Page } from './types';
 
@@ -159,6 +160,16 @@ export default function App() {
   const [orgSetupName, setOrgSetupName] = useState('');
   const [orgSetupLoading, setOrgSetupLoading] = useState(false);
   const [orgSetupError, setOrgSetupError] = useState('');
+  // Billing gate: null = loading, snapshot otherwise. Drives Paywall vs app.
+  const [accessSnapshot, setAccessSnapshot] = useState<{
+    canUseApp: boolean;
+    reason: 'no_subscription' | 'trial_expired' | 'past_due_grace_ended' | 'canceled' | null;
+    status: string;
+    trialUsed: boolean;
+    canActivateTrial: boolean;
+  } | null>(null);
+  const [orgIdForBilling, setOrgIdForBilling] = useState<string | null>(null);
+  const [accessReloadKey, setAccessReloadKey] = useState(0);
 
   const currentPage = navigationTarget.page;
 
@@ -238,12 +249,66 @@ export default function App() {
         const body = await res.json().catch(() => null) as any;
         const tenantId = body?.context?.tenant_id || body?.memberships?.[0]?.tenant_id;
         setHasMembership(Boolean(tenantId));
+        if (tenantId) setOrgIdForBilling(tenantId);
       } catch {
         if (!cancelled) setHasMembership(true);
       }
     })();
     return () => { cancelled = true; };
   }, [authenticated]);
+
+  // Billing access check: runs after membership is confirmed.
+  // The result decides whether to render the Paywall or the app.
+  useEffect(() => {
+    if (!authenticated || hasMembership !== true) {
+      setAccessSnapshot(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) return;
+        const res = await fetch('/api/billing/access', {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization:  `Bearer ${token}`,
+          },
+        });
+        if (cancelled) return;
+        if (!res.ok) {
+          // Fail open in dev / when billing is misconfigured — but log loudly.
+          console.warn('[billing.access] fetch failed', res.status);
+          setAccessSnapshot({
+            canUseApp: true,
+            reason: null,
+            status: 'unknown',
+            trialUsed: false,
+            canActivateTrial: false,
+          });
+          return;
+        }
+        const body = await res.json();
+        setAccessSnapshot({
+          canUseApp: !!body.canUseApp,
+          reason: body.reason ?? null,
+          status: body.status ?? 'unknown',
+          trialUsed: !!body.trialUsed,
+          canActivateTrial: !!body.canActivateTrial,
+        });
+      } catch (e) {
+        if (!cancelled) {
+          // Fail open on transient errors.
+          setAccessSnapshot({
+            canUseApp: true, reason: null, status: 'unknown',
+            trialUsed: false, canActivateTrial: false,
+          });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authenticated, hasMembership, accessReloadKey]);
 
   const submitOrgSetup = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -392,6 +457,33 @@ export default function App() {
       <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
+    );
+  }
+
+  // Loading billing access state.
+  if (hasSupabaseAuth && authenticated && hasMembership === true && accessSnapshot === null) {
+    return (
+      <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Paywall: forced choice between trial, paid plan, or demo request.
+  if (hasSupabaseAuth && authenticated && hasMembership === true && accessSnapshot && !accessSnapshot.canUseApp) {
+    return (
+      <Paywall
+        reason={accessSnapshot.reason}
+        status={accessSnapshot.status}
+        trialUsed={accessSnapshot.trialUsed}
+        canActivateTrial={accessSnapshot.canActivateTrial}
+        orgId={orgIdForBilling}
+        onAccessGranted={() => setAccessReloadKey((k) => k + 1)}
+        onSignOut={async () => {
+          await supabase.auth.signOut();
+          window.location.href = '/';
+        }}
+      />
     );
   }
 

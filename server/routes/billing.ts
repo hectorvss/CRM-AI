@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { sendError } from '../http/errors.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
@@ -17,11 +18,87 @@ import {
 } from '../integrations/stripe/plans.js';
 import { logger } from '../utils/logger.js';
 import { getUsageSummary } from '../services/aiUsageMeter.js';
+import { getAccessSnapshot, activateTrial } from '../services/accessGate.js';
 
 const router = Router();
 const billingRepository = createBillingRepository();
 const auditRepository = createAuditRepository();
 router.use(extractMultiTenant);
+
+// ── GET /api/billing/access ─────────────────────────────────────────────────
+// Used by the SPA to decide whether to render the app or the paywall.
+// Public to authenticated users (no permission required) so a brand-new
+// member with zero permissions can still see why they're locked out.
+router.get('/access', async (req: MultiTenantRequest, res) => {
+  try {
+    if (!req.tenantId) {
+      return sendError(res, 401, 'NO_TENANT', 'Tenant context required');
+    }
+    const snapshot = await getAccessSnapshot(req.tenantId);
+    return res.json(snapshot);
+  } catch (err: any) {
+    logger.error('billing.access failed', { error: err?.message });
+    return sendError(res, 500, 'ACCESS_CHECK_FAILED', 'Could not load access state');
+  }
+});
+
+// ── POST /api/billing/activate-trial ────────────────────────────────────────
+router.post('/activate-trial', async (req: MultiTenantRequest, res) => {
+  try {
+    if (!req.tenantId) {
+      return sendError(res, 401, 'NO_TENANT', 'Tenant context required');
+    }
+    const snapshot = await activateTrial(req.tenantId, req.userId ?? null);
+    await auditRepository.write({
+      action:     'TRIAL_ACTIVATED',
+      entityType: 'subscription',
+      entityId:   snapshot.subscriptionId ?? req.tenantId,
+      tenantId:   req.tenantId,
+      workspaceId: req.workspaceId ?? null,
+      userId:     req.userId ?? 'system',
+      newValue:   { trialEndsAt: snapshot.trialEndsAt },
+    } as any);
+    return res.json(snapshot);
+  } catch (err: any) {
+    if (err?.message?.includes('already been activated')) {
+      return sendError(res, 409, 'TRIAL_ALREADY_USED', err.message);
+    }
+    logger.error('billing.activate-trial failed', { error: err?.message });
+    return sendError(res, 500, 'TRIAL_ACTIVATION_FAILED', 'Could not activate trial');
+  }
+});
+
+// ── POST /api/billing/request-demo ──────────────────────────────────────────
+// Captures a sales-extended demo request from inside the app paywall.
+// Stores in demo_leads (same table as the public landing demo form) with
+// the authenticated user prefilled and source='in_app_paywall'.
+router.post('/request-demo', async (req: MultiTenantRequest, res) => {
+  try {
+    if (!req.tenantId) {
+      return sendError(res, 401, 'NO_TENANT', 'Tenant context required');
+    }
+    const { name, email, company, volume, note } = req.body as Record<string, unknown>;
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('demo_leads').insert({
+      id: crypto.randomUUID(),
+      name: String(name ?? '').slice(0, 160),
+      email: String(email ?? '').toLowerCase().slice(0, 200),
+      company: String(company ?? '').slice(0, 160) || null,
+      volume: String(volume ?? '').slice(0, 80) || null,
+      note: String(note ?? '').slice(0, 4000) || null,
+      source: 'in_app_paywall',
+      created_at: new Date().toISOString(),
+    });
+    if (error) {
+      logger.error('billing.request-demo: insert failed', { error: error.message });
+      return sendError(res, 500, 'LEAD_INSERT_FAILED', 'Could not save demo request');
+    }
+    return res.status(201).json({ ok: true });
+  } catch (err: any) {
+    logger.error('billing.request-demo failed', { error: err?.message });
+    return sendError(res, 500, 'REQUEST_DEMO_FAILED', 'Could not submit demo request');
+  }
+});
 
 // Get subscription details for an organization
 router.get('/:orgId/subscription', requirePermission('billing.read'), async (req: MultiTenantRequest, res) => {
