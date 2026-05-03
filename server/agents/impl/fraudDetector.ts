@@ -1,7 +1,5 @@
 import { randomUUID } from 'crypto';
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -12,10 +10,7 @@ export const fraudDetectorImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId, runId } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
 
     const prompt = `You are an expert fraud analyst for an e-commerce CRM.
@@ -72,27 +67,19 @@ Return a JSON object with exactly these fields:
           citations: knowledgeBundle.citations,
           agentRunId: runId,
         };
-        if (useSupabase) {
-          const { error } = await supabase!.from('audit_events').insert({
-            id: randomUUID(),
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-            actor_type: 'agent',
-            action: `fraud_assessment:${fraudRisk}`,
-            entity_type: 'case',
-            entity_id: caseId,
-            new_value: `Fraud risk ${fraudRisk}: ${signals.slice(0, 3).join('; ')}`,
-            metadata: payload,
-            occurred_at: now,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT INTO audit_events
-              (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-            VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
-          `).run(randomUUID(), tenantId, workspaceId, `fraud_assessment:${fraudRisk}`, caseId, `Fraud risk ${fraudRisk}: ${signals.slice(0, 3).join('; ')}`, JSON.stringify(payload), now);
-        }
+        const { error } = await supabase.from('audit_events').insert({
+          id: randomUUID(),
+          tenant_id: tenantId,
+          workspace_id: workspaceId,
+          actor_type: 'agent',
+          action: `fraud_assessment:${fraudRisk}`,
+          entity_type: 'case',
+          entity_id: caseId,
+          new_value: `Fraud risk ${fraudRisk}: ${signals.slice(0, 3).join('; ')}`,
+          metadata: payload,
+          occurred_at: now,
+        });
+        if (error) throw error;
       } catch (err: any) {
         logger.error('Failed to write fraud audit event', { caseId, error: err?.message });
       }
@@ -100,11 +87,11 @@ Return a JSON object with exactly these fields:
 
     if (fraudRisk === 'high' || fraudRisk === 'critical') {
       try {
-        if (useSupabase) {
-          await supabase!.from('cases').update({ risk_level: fraudRisk === 'critical' ? 'critical' : 'high', updated_at: now }).eq('id', caseId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
-        } else {
-          db!.prepare('UPDATE cases SET risk_level = ?, updated_at = ? WHERE id = ? AND tenant_id = ? AND workspace_id = ?').run(fraudRisk === 'critical' ? 'critical' : 'high', now, caseId, tenantId, workspaceId);
-        }
+        await supabase.from('cases')
+          .update({ risk_level: fraudRisk === 'critical' ? 'critical' : 'high', updated_at: now })
+          .eq('id', caseId)
+          .eq('tenant_id', tenantId)
+          .eq('workspace_id', workspaceId);
       } catch {
         // non-critical
       }
@@ -113,31 +100,22 @@ Return a JSON object with exactly these fields:
         try {
           const actionPayload = JSON.stringify({ reason: blockReason ?? 'Fraud detected', recommendation });
           const evidence = JSON.stringify({ fraudRisk, signals, confidence, agentRunId: runId });
-          if (useSupabase) {
-            const { error } = await supabase!.from('approval_requests').insert({
-              id: randomUUID(),
-              case_id: caseId,
-              tenant_id: tenantId,
-              workspace_id: workspaceId,
-              requested_by: 'fraud-detector',
-              requested_by_type: 'agent',
-              action_type: 'block_customer',
-              action_payload: actionPayload,
-              risk_level: fraudRisk === 'critical' ? 'critical' : 'high',
-              evidence_package: evidence,
-              status: 'pending',
-              created_at: now,
-              updated_at: now,
-            });
-            if (error) throw error;
-          } else {
-            db!.prepare(`
-              INSERT OR IGNORE INTO approval_requests
-                (id, case_id, tenant_id, workspace_id, requested_by, requested_by_type,
-                 action_type, action_payload, risk_level, evidence_package, status, created_at, updated_at)
-              VALUES (?, ?, ?, ?, 'fraud-detector', 'agent', 'block_customer', ?, ?, ?, 'pending', ?, ?)
-            `).run(randomUUID(), caseId, tenantId, workspaceId, actionPayload, fraudRisk === 'critical' ? 'critical' : 'high', evidence, now, now);
-          }
+          const { error } = await supabase.from('approval_requests').insert({
+            id: randomUUID(),
+            case_id: caseId,
+            tenant_id: tenantId,
+            workspace_id: workspaceId,
+            requested_by: 'fraud-detector',
+            requested_by_type: 'agent',
+            action_type: 'block_customer',
+            action_payload: actionPayload,
+            risk_level: fraudRisk === 'critical' ? 'critical' : 'high',
+            evidence_package: evidence,
+            status: 'pending',
+            created_at: now,
+            updated_at: now,
+          });
+          if (error) throw error;
         } catch {
           // non-critical
         }

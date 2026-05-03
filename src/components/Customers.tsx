@@ -45,7 +45,6 @@ interface Customer {
   recentCases?: Array<{
     id: string;
     caseNumber?: string;
-    case_number?: string;
     type?: string;
     status?: string;
   }>;
@@ -69,7 +68,7 @@ interface Customer {
 
 type ApiLinkedIdentity = {
   system?: string | null;
-  external_id?: string | null;
+  externalId?: string | null;
 };
 
 type ApiReconciliationDomain = {
@@ -129,7 +128,7 @@ function normalizeReconciliation(raw?: any): NonNullable<Customer['reconciliatio
   return {
     status: raw?.status === 'Blocked' ? 'Blocked' : raw?.status === 'Warning' ? 'Warning' : raw?.status === 'Conflict' ? 'Conflict' : 'Healthy',
     mismatches: Number(raw?.mismatches) || 0,
-    lastChecked: raw?.lastChecked || raw?.last_checked || 'N/A',
+    lastChecked: raw?.lastChecked || 'N/A',
     domains,
   };
 }
@@ -173,12 +172,12 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
   const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
   const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
   const [editCustomerForm, setEditCustomerForm] = useState({
-    canonical_name: '',
-    canonical_email: '',
+    canonicalName: '',
+    canonicalEmail: '',
     phone: '',
     segment: '',
-    risk_level: '',
-    preferred_channel: '',
+    riskLevel: '',
+    preferredChannel: '',
   });
 
   // Fetch canonical customers from the backend — no mock data used.
@@ -200,40 +199,40 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
   }, [focusCustomerId, selectedCustomerId]);
 
   const mapApiCustomer = (c: any) => {
-    const name    = c.canonical_name || c.name || 'Unknown';
-    const email   = c.canonical_email || c.email || '';
-    const ltv     = c.lifetime_value ?? c.ltv ?? 0;
+    const name    = c.canonicalName || c.name || 'Unknown';
+    const email   = c.canonicalEmail || c.email || '';
+    const ltv     = c.lifetimeValue ?? c.ltv ?? 0;
     const segment = c.segment || 'regular';
-    const linkedIdentities = Array.isArray(c.linked_identities) ? c.linked_identities as ApiLinkedIdentity[] : [];
+    const linkedIdentities = Array.isArray(c.linkedIdentities) ? c.linkedIdentities as ApiLinkedIdentity[] : [];
     const sources = linkedIdentities.length > 0
-      ? linkedIdentities.map(identity => normalizeSource(identity.system, identity.external_id))
+      ? linkedIdentities.map(identity => normalizeSource(identity.system, identity.externalId))
       : [normalizeSource(c.company || name)];
     return {
       id:       c.id,
       name,
       email,
-      avatar:   c.avatar_url || buildInitialsAvatar(name),
+      avatar:   c.avatarUrl || buildInitialsAvatar(name),
       role:     c.role     || 'Customer',
       company:  c.company  || 'Personal',
       location: c.location || 'N/A',
       timezone: c.timezone || 'N/A',
-      since:    c.created_at ? new Date(c.created_at).getFullYear().toString() : 'N/A',
+      since:    c.createdAt ? new Date(c.createdAt).getFullYear().toString() : 'N/A',
       segment:  (segment === 'vip' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
       ltv:      `$${Number(ltv).toLocaleString()}`,
       orders:   [],
-      openTickets: Number(c.open_cases || 0),
+      openTickets: Number(c.openCases || 0),
       aiImpact: {
-        resolved:  Number(c.ai_impact_resolved  ?? 0),
-        approvals: Number(c.ai_impact_approvals ?? 0) || undefined,
-        escalated: Number(c.ai_impact_escalated ?? 0) || undefined,
+        resolved:  Number(c.aiImpactResolved  ?? 0),
+        approvals: Number(c.aiImpactApprovals ?? 0) || undefined,
+        escalated: Number(c.aiImpactEscalated ?? 0) || undefined,
       },
-      topIssue: c.top_issue || 'N/A',
-      risk: (c.risk_level === 'high' || c.risk_level === 'critical')
+      topIssue: c.topIssue || 'N/A',
+      risk: (c.riskLevel === 'high' || c.riskLevel === 'critical')
         ? 'Churn Risk'
-        : c.risk_level === 'medium' ? 'Watchlist' : 'Healthy',
+        : c.riskLevel === 'medium' ? 'Watchlist' : 'Healthy',
       sources,
       plan:        c.plan        || 'Standard',
-      nextRenewal: c.next_renewal ? new Date(c.next_renewal).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
+      nextRenewal: c.nextRenewal ? new Date(c.nextRenewal).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A',
       reconciliation: defaultReconciliation,
     };
   };
@@ -307,12 +306,12 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     const listCustomer = customers.find(c => c.id === selectedCustomerId) || null;
     if (!apiSelectedState) return listCustomer;
 
-    const customer          = apiSelectedState.customer           || {};
-    const linkedIdentities  = apiSelectedState.linked_identities  || [];
-    const unresolvedConflicts = apiSelectedState.unresolved_conflicts || [];
-    const recentCases       = apiSelectedState.recent_cases        || [];
+    const customer          = apiSelectedState.customer            || {};
+    const linkedIdentities  = apiSelectedState.linkedIdentities    || [];
+    const unresolvedConflicts = apiSelectedState.unresolvedConflicts || [];
+    const recentCases       = apiSelectedState.recentCases         || [];
 
-    // Orders: use the orders with line_items from state_snapshot.systems
+    // Orders: use the orders with line items from stateSnapshot.systems
     const orderNodes = apiSelectedState.systems?.orders?.nodes || [];
     const orders: Order[] = orderNodes.map((node: any) => ({
       id:       node.label || node.id,
@@ -320,7 +319,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
       total:    node.total != null ? `$${Number(node.total).toLocaleString()}` : 'N/A',
       status:   (['in_transit', 'packed', 'processing'].includes(node.value) ? 'Processing' : node.status === 'critical' ? 'Processing' : 'Delivered') as Order['status'],
       tracking: node.tracking ?? undefined,
-      items:    (node.line_items || []).map((li: any) => ({
+      items:    (node.lineItems || []).map((li: any) => ({
         name:  li.name,
         sku:   li.sku   || '',
         price: li.price != null ? `$${Number(li.price).toFixed(2)}` : 'N/A',
@@ -333,57 +332,56 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
       mismatches: unresolvedConflicts.length,
       lastChecked: 'just now',
       domains: unresolvedConflicts.map((c: any) => ({
-        domain:         c.conflict_type   || 'Unknown conflict',
-        systems:        [{ name: 'Case', value: c.case_number || c.case_id }, { name: 'Action', value: c.recommended_action || 'Review required' }],
+        domain:         c.conflictType   || 'Unknown conflict',
+        systems:        [{ name: 'Case', value: c.caseNumber || c.caseId }, { name: 'Action', value: c.recommendedAction || 'Review required' }],
         age:            'recent',
         severity:       (c.severity === 'critical' ? 'High' : c.severity === 'warning' ? 'Medium' : 'Low') as 'High' | 'Medium' | 'Low',
         sourceOfTruth:  'Case Runtime',
         writebackStatus: 'Requires approval' as const,
-        action:         c.recommended_action || 'Review case',
+        action:         c.recommendedAction || 'Review case',
         actionType:     'approval' as const,
-        context:        c.recommended_action || 'State conflict detected across systems.',
+        context:        c.recommendedAction || 'State conflict detected across systems.',
       })),
     };
 
     // AI recommendations from DB column
     const aiRecs: Array<{ action: string; priority: string; reason: string }> =
-      Array.isArray(customer.ai_recommendations) ? customer.ai_recommendations : [];
+      Array.isArray(customer.aiRecommendations) ? customer.aiRecommendations : [];
 
     return {
-      id:          customer.id            || listCustomer?.id    || '',
-      name:        customer.canonical_name || listCustomer?.name  || 'Unknown',
-      email:       customer.canonical_email|| listCustomer?.email || '',
-      avatar:      customer.avatar_url     || buildInitialsAvatar(customer.canonical_name || listCustomer?.name || 'Unknown'),
+      id:          customer.id             || listCustomer?.id      || '',
+      name:        customer.canonicalName  || listCustomer?.name    || 'Unknown',
+      email:       customer.canonicalEmail || listCustomer?.email   || '',
+      avatar:      customer.avatarUrl      || buildInitialsAvatar(customer.canonicalName || listCustomer?.name || 'Unknown'),
       role:        customer.role           || listCustomer?.role    || 'Customer',
       company:     customer.company        || listCustomer?.company || 'Personal',
       location:    customer.location       || listCustomer?.location|| 'N/A',
       timezone:    customer.timezone       || listCustomer?.timezone|| 'N/A',
-      since:       customer.created_at ? new Date(customer.created_at).getFullYear().toString() : (listCustomer?.since || 'N/A'),
+      since:       customer.createdAt ? new Date(customer.createdAt).getFullYear().toString() : (listCustomer?.since || 'N/A'),
       segment:     (customer.segment === 'vip' ? 'VIP Enterprise' : 'Standard') as 'VIP Enterprise' | 'Standard',
-      openTickets: apiSelectedState.metrics?.open_cases ?? 0,
+      openTickets: apiSelectedState.metrics?.openCases ?? 0,
       aiImpact: {
-        resolved:  Number(customer.ai_impact_resolved  ?? 0),
-        approvals: Number(customer.ai_impact_approvals ?? 0) || undefined,
-        escalated: Number(customer.ai_impact_escalated ?? 0) || undefined,
+        resolved:  Number(customer.aiImpactResolved  ?? 0),
+        approvals: Number(customer.aiImpactApprovals ?? 0) || undefined,
+        escalated: Number(customer.aiImpactEscalated ?? 0) || undefined,
       },
-      topIssue:    unresolvedConflicts[0]?.conflict_type || customer.top_issue || listCustomer?.topIssue || 'N/A',
-      risk:        (customer.risk_level === 'high' || customer.risk_level === 'critical') ? 'Churn Risk'
-                 : customer.risk_level === 'medium' ? 'Watchlist' : 'Healthy',
-      fraudRisk:   customer.fraud_risk || 'low',
-      aiExecutiveSummary: customer.ai_executive_summary || null,
+      topIssue:    unresolvedConflicts[0]?.conflictType || customer.topIssue || listCustomer?.topIssue || 'N/A',
+      risk:        (customer.riskLevel === 'high' || customer.riskLevel === 'critical') ? 'Churn Risk'
+                 : customer.riskLevel === 'medium' ? 'Watchlist' : 'Healthy',
+      fraudRisk:   customer.fraudRisk || 'low',
+      aiExecutiveSummary: customer.aiExecutiveSummary || null,
       aiRecommendations:  aiRecs,
       sources:     linkedIdentities.length > 0
-        ? linkedIdentities.map((id: any) => normalizeSource(id.system, id.external_id))
+        ? linkedIdentities.map((id: any) => normalizeSource(id.system, id.externalId))
         : (listCustomer?.sources || []),
       plan:        customer.plan        || listCustomer?.plan        || 'Standard',
-      ltv:         `$${Number(apiSelectedState.metrics?.lifetime_value || customer.lifetime_value || 0).toLocaleString()}`,
-      nextRenewal: customer.next_renewal
-        ? new Date(customer.next_renewal).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      ltv:         `$${Number(apiSelectedState.metrics?.lifetimeValue || customer.lifetimeValue || 0).toLocaleString()}`,
+      nextRenewal: customer.nextRenewal
+        ? new Date(customer.nextRenewal).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         : (listCustomer?.nextRenewal || 'N/A'),
       recentCases: recentCases.map((rc: any) => ({
-        id:          rc.id || rc.case_number,
-        caseNumber:  rc.case_number || rc.id,
-        case_number: rc.case_number || rc.id,
+        id:          rc.id || rc.caseNumber,
+        caseNumber:  rc.caseNumber || rc.id,
         type:        rc.type || 'Case',
         status:      rc.status || 'open',
       })),
@@ -394,7 +392,6 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
 
   const selectedCustomerCaseId = selectedCustomer?.recentCases?.[0]?.id
     || selectedCustomer?.recentCases?.[0]?.caseNumber
-    || selectedCustomer?.recentCases?.[0]?.case_number
     || null;
 
   const openCustomerCase = (page: Page) => {
@@ -421,7 +418,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
         externalId: newCustomer.externalId.trim() || undefined,
         company: newCustomer.company.trim() || undefined,
       });
-      setActionMessage(`Customer created: ${created?.canonical_name || created?.name || newCustomer.name || 'New Customer'}`);
+      setActionMessage(`Customer created: ${created?.canonicalName || created?.name || newCustomer.name || 'New Customer'}`);
       setIsCreateCustomerOpen(false);
       setNewCustomer({ name: '', email: '', company: '', source: 'manual', externalId: '' });
       if (created?.id) setSelectedCustomerId(created.id);
@@ -439,22 +436,22 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     }
     try {
       const result = await policyApi.evaluateAndRoute({
-        entity_type: 'case',
-        action_type: 'customer_profile_action',
-        case_id: selectedCustomerCaseId,
-        requested_by: 'user_alex',
-        requested_by_type: 'human',
+        entityType: 'case',
+        actionType: 'customer_profile_action',
+        caseId: selectedCustomerCaseId,
+        requestedBy: 'user_alex',
+        requestedByType: 'human',
         context: {
-          customer_id: selectedCustomer?.id,
-          customer_email: selectedCustomer?.email,
-          customer_name: selectedCustomer?.name,
-          risk_level: selectedCustomer?.risk === 'Churn Risk' ? 'high' : selectedCustomer?.risk === 'Watchlist' ? 'medium' : 'low',
+          customerId: selectedCustomer?.id,
+          customerEmail: selectedCustomer?.email,
+          customerName: selectedCustomer?.name,
+          riskLevel: selectedCustomer?.risk === 'Churn Risk' ? 'high' : selectedCustomer?.risk === 'Watchlist' ? 'medium' : 'low',
         },
       });
-      setActionMessage(result?.approval_request_id
+      setActionMessage(result?.approvalRequestId
         ? `Approval request created for ${selectedCustomerCaseId}`
         : `Policy evaluated for ${selectedCustomerCaseId}: ${result?.decision || 'approved'}`);
-      if (result?.approval_request_id) onNavigate?.('approvals');
+      if (result?.approvalRequestId) onNavigate?.('approvals');
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : 'Failed to create approval.');
     }
@@ -464,12 +461,12 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     if (!selectedCustomer) return;
     const raw = apiSelectedState?.customer ?? {};
     setEditCustomerForm({
-      canonical_name: raw.canonical_name ?? selectedCustomer.name ?? '',
-      canonical_email: raw.canonical_email ?? selectedCustomer.email ?? '',
+      canonicalName: raw.canonicalName ?? selectedCustomer.name ?? '',
+      canonicalEmail: raw.canonicalEmail ?? selectedCustomer.email ?? '',
       phone: raw.phone ?? '',
       segment: raw.segment ?? (selectedCustomer.segment === 'VIP Enterprise' ? 'vip' : 'standard'),
-      risk_level: raw.risk_level ?? 'low',
-      preferred_channel: raw.preferred_channel ?? 'email',
+      riskLevel: raw.riskLevel ?? 'low',
+      preferredChannel: raw.preferredChannel ?? 'email',
     });
     setIsEditCustomerOpen(true);
   }, [selectedCustomer, apiSelectedState]);
@@ -480,13 +477,15 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
     setIsUpdatingCustomer(true);
     setActionMessage(null);
     try {
+      // Payload uses camelCase; the API client (src/api/normalize.ts) converts
+      // the body keys to snake_case before sending.
       const payload: Record<string, any> = {};
-      if (editCustomerForm.canonical_name.trim()) payload.canonical_name = editCustomerForm.canonical_name.trim();
-      if (editCustomerForm.canonical_email.trim()) payload.canonical_email = editCustomerForm.canonical_email.trim();
+      if (editCustomerForm.canonicalName.trim()) payload.canonicalName = editCustomerForm.canonicalName.trim();
+      if (editCustomerForm.canonicalEmail.trim()) payload.canonicalEmail = editCustomerForm.canonicalEmail.trim();
       if (editCustomerForm.phone.trim()) payload.phone = editCustomerForm.phone.trim();
       if (editCustomerForm.segment) payload.segment = editCustomerForm.segment;
-      if (editCustomerForm.risk_level) payload.risk_level = editCustomerForm.risk_level;
-      if (editCustomerForm.preferred_channel) payload.preferred_channel = editCustomerForm.preferred_channel;
+      if (editCustomerForm.riskLevel) payload.riskLevel = editCustomerForm.riskLevel;
+      if (editCustomerForm.preferredChannel) payload.preferredChannel = editCustomerForm.preferredChannel;
 
       await customersApi.update(selectedCustomerId, payload);
       setActionMessage('Customer profile updated successfully.');
@@ -1070,7 +1069,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                           </div>
                           <div className="flex items-center justify-between mb-1.5">
                             <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                              {new Date(event.occurred_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              {new Date(event.occurredAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </p>
                             <span className="text-[10px] font-medium text-gray-400 bg-black/[0.03] dark:bg-white/[0.05] px-1.5 py-0.5 rounded-full">{event.source || event.system || ''}</span>
                           </div>
@@ -1093,7 +1092,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                           <div className="flex items-start justify-between mb-2">
                             <div>
                               <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-[11px] font-semibold text-violet-600 dark:text-violet-400">{c.caseNumber || c.case_number || c.id}</span>
+                                <span className="text-[11px] font-semibold text-violet-600 dark:text-violet-400">{c.caseNumber || c.id}</span>
                                 <h4 className="text-[13px] font-semibold text-gray-950 dark:text-white">{c.type || 'Case'}</h4>
                               </div>
                             </div>
@@ -1155,7 +1154,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                       {logs.map((log: any) => (
                         <div key={log.id} className="flex items-start gap-4 p-2 md:p-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                           <div className="w-28 flex-shrink-0 text-gray-400 dark:text-gray-500 text-[10px]">
-                            {new Date(log.occurred_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            {new Date(log.occurredAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                           </div>
                           <div className="w-16 flex-shrink-0">
                             <span className={`px-1.5 py-0.5 rounded font-medium ${
@@ -1523,8 +1522,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   <label className="space-y-1 col-span-2 text-sm">
                     <span className="text-gray-600 dark:text-gray-300 font-medium">Full name</span>
                     <input
-                      value={editCustomerForm.canonical_name}
-                      onChange={(e) => setEditCustomerForm(f => ({ ...f, canonical_name: e.target.value }))}
+                      value={editCustomerForm.canonicalName}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, canonicalName: e.target.value }))}
                       className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
                       placeholder="Customer name"
                     />
@@ -1533,8 +1532,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                     <span className="text-gray-600 dark:text-gray-300 font-medium">Email</span>
                     <input
                       type="email"
-                      value={editCustomerForm.canonical_email}
-                      onChange={(e) => setEditCustomerForm(f => ({ ...f, canonical_email: e.target.value }))}
+                      value={editCustomerForm.canonicalEmail}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, canonicalEmail: e.target.value }))}
                       className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
                       placeholder="email@example.com"
                     />
@@ -1565,8 +1564,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   <label className="space-y-1 text-sm">
                     <span className="text-gray-600 dark:text-gray-300 font-medium">Risk level</span>
                     <select
-                      value={editCustomerForm.risk_level}
-                      onChange={(e) => setEditCustomerForm(f => ({ ...f, risk_level: e.target.value }))}
+                      value={editCustomerForm.riskLevel}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, riskLevel: e.target.value }))}
                       className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
                     >
                       <option value="low">Low</option>
@@ -1578,8 +1577,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   <label className="space-y-1 text-sm col-span-2">
                     <span className="text-gray-600 dark:text-gray-300 font-medium">Preferred channel</span>
                     <select
-                      value={editCustomerForm.preferred_channel}
-                      onChange={(e) => setEditCustomerForm(f => ({ ...f, preferred_channel: e.target.value }))}
+                      value={editCustomerForm.preferredChannel}
+                      onChange={(e) => setEditCustomerForm(f => ({ ...f, preferredChannel: e.target.value }))}
                       className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white"
                     >
                       <option value="email">Email</option>

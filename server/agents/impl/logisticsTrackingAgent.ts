@@ -6,8 +6,6 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -18,10 +16,7 @@ export const logisticsTrackingAgentImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, tenantId, workspaceId, runId } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
 
     const orders = contextWindow.orders;
@@ -44,23 +39,14 @@ export const logisticsTrackingAgentImpl: AgentImplementation = {
     const alerts: Array<{ orderId: string; type: string; detail: string }> = [];
 
     for (const order of orders) {
-      const orderRow = useSupabase
-        ? await (async () => {
-            const { data, error } = await supabase!
-              .from('orders')
-              .select('fulfillment_status, tracking_number, tracking_url, shipping_address, created_at')
-              .eq('id', order.id)
-              .eq('tenant_id', tenantId)
-              .eq('workspace_id', workspaceId)
-              .maybeSingle();
-            if (error) throw error;
-            return data as any;
-          })()
-        : db!.prepare(`
-            SELECT fulfillment_status, tracking_number, tracking_url,
-                   shipping_address, created_at
-            FROM orders WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-          `).get(order.id, tenantId, workspaceId) as any;
+      const { data: orderRow, error: orderError } = await supabase
+        .from('orders')
+        .select('fulfillment_status, tracking_number, tracking_url, shipping_address, created_at')
+        .eq('id', order.id)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
+      if (orderError) throw orderError;
 
       if (!orderRow) continue;
 
@@ -90,22 +76,14 @@ export const logisticsTrackingAgentImpl: AgentImplementation = {
         alerts.push({ orderId: order.id, type: 'fulfillment_mismatch', detail: `Local: ${fulfillment}, System: ${systemFulfillment}` });
       }
 
-      const returnForOrder = useSupabase
-        ? await (async () => {
-            const { data, error } = await supabase!
-              .from('returns')
-              .select('id, status, carrier_status')
-              .eq('order_id', order.id)
-              .eq('tenant_id', tenantId)
-              .eq('workspace_id', workspaceId)
-              .maybeSingle();
-            if (error) throw error;
-            return data as any;
-          })()
-        : db!.prepare(`
-            SELECT id, status, carrier_status FROM returns
-            WHERE order_id = ? AND tenant_id = ? AND workspace_id = ?
-          `).get(order.id, tenantId, workspaceId) as any;
+      const { data: returnForOrder, error: returnError } = await supabase
+        .from('returns')
+        .select('id, status, carrier_status')
+        .eq('order_id', order.id)
+        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
+        .maybeSingle();
+      if (returnError) throw returnError;
 
       if (returnForOrder && returnForOrder.status === 'approved' && !returnForOrder.carrier_status) {
         alerts.push({
@@ -118,34 +96,19 @@ export const logisticsTrackingAgentImpl: AgentImplementation = {
 
     if (alerts.length > 0) {
       try {
-        if (useSupabase) {
-          const { error } = await supabase!.from('audit_events').insert({
-            id: randomUUID(),
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-            actor_type: 'agent',
-            action: 'logistics_check',
-            entity_type: 'case',
-            entity_id: caseId,
-            new_value: `Logistics agent: ${alerts.length} alert(s) across ${orders.length} order(s)`,
-            metadata: { alerts, trackingInfo, agentRunId: runId },
-            occurred_at: now,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT INTO audit_events
-              (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-            VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
-          `).run(
-            randomUUID(), tenantId, workspaceId,
-            'logistics_check',
-            caseId,
-            `Logistics agent: ${alerts.length} alert(s) across ${orders.length} order(s)`,
-            JSON.stringify({ alerts, trackingInfo, agentRunId: runId }),
-            now,
-          );
-        }
+        const { error } = await supabase.from('audit_events').insert({
+          id: randomUUID(),
+          tenant_id: tenantId,
+          workspace_id: workspaceId,
+          actor_type: 'agent',
+          action: 'logistics_check',
+          entity_type: 'case',
+          entity_id: caseId,
+          new_value: `Logistics agent: ${alerts.length} alert(s) across ${orders.length} order(s)`,
+          metadata: { alerts, trackingInfo, agentRunId: runId },
+          occurred_at: now,
+        });
+        if (error) throw error;
       } catch (err: any) {
         logger.error('Logistics agent audit write failed', { error: err?.message });
       }

@@ -33,7 +33,7 @@ async function handleAiDiagnose(
 
   // Trigger the full conflicts_detected chain (reconciliation-agent, fraud-detector,
   // approval-gatekeeper, etc.) so that diagnosis is comprehensive.
-  enqueue(
+  await enqueue(
     JobType.AGENT_TRIGGER,
     {
       triggerEvent: 'conflicts_detected',
@@ -72,7 +72,7 @@ async function handleAiDraft(
 
   // Enqueue a DRAFT_REPLY job — which has the full implementation in draftReply.ts.
   // This avoids duplicating logic and ensures both entry points use the same pipeline.
-  enqueue(
+  await enqueue(
     JobType.DRAFT_REPLY,
     { caseId, tone: resolvedTone },
     {

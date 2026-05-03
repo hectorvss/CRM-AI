@@ -18,7 +18,7 @@ import {
   createKnowledgeRepository,
   createAuditRepository,
 } from '../data/index.js';
-import { resolveAgentKnowledgeBundleAsync } from '../services/agentKnowledge.js';
+import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
 
 const router = Router();
 router.use(extractMultiTenant);
@@ -85,7 +85,7 @@ router.get('/:id/knowledge-access', requirePermission('agents.read'), async (req
       ? await agentRepository.getCaseKnowledgeContext({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, req.query.caseId)
       : null;
 
-    const bundle = await resolveAgentKnowledgeBundleAsync({
+    const bundle = await resolveAgentKnowledgeBundle({
       tenantId: req.tenantId!,
       workspaceId: req.workspaceId!,
       knowledgeProfile: agent.knowledge_profile ?? null,

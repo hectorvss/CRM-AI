@@ -93,7 +93,8 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 
-  // Build active filter params from filter state — memoised so useApi deps are stable
+  // Build active filter params from filter state — memoised so useApi deps are stable.
+  // These are query-string params, sent as-is to the server (server expects snake_case).
   const activeFilters = useMemo(() => {
     const params: Record<string, string> = {};
     if (filterStatus)    params.status     = filterStatus;
@@ -124,38 +125,38 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   }, [apiCases, selectedId]);
 
   const mapApiCase = (c: any): Conversation => {
-    const orderIds = Array.isArray(c.order_ids) ? c.order_ids : [];
+    const orderIds = Array.isArray(c.orderIds) ? c.orderIds : [];
     return {
       id: c.id,
-      tab: (c.assigned_user_id ? 'assigned' : 'unassigned') as CaseTab,
-      assignee: c.assigned_user_id || c.assigned_user_name || undefined,
-      contactName: c.customer_name || 'Unknown',
-      channel: (c.source_channel as Channel) || 'web_chat',
-      lastMessage: c.latest_message_preview || c.ai_diagnosis || c.type || 'New case',
-      time: c.created_at ? new Date(c.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-',
+      tab: (c.assignedUserId ? 'assigned' : 'unassigned') as CaseTab,
+      assignee: c.assignedUserId || c.assignedUserName || undefined,
+      contactName: c.customerName || 'Unknown',
+      channel: (c.sourceChannel as Channel) || 'web_chat',
+      lastMessage: c.latestMessagePreview || c.aiDiagnosis || c.type || 'New case',
+      time: c.createdAt ? new Date(c.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-',
       priority: c.priority === 'high' || c.priority === 'urgent' ? 'high' : 'normal',
       tags: Array.isArray(c.tags) ? c.tags : [],
       unread: c.status === 'new' || c.status === 'pending',
-      caseId: c.case_number || c.id,
+      caseId: c.caseNumber || c.id,
       orderId: orderIds[0] || 'N/A',
       company: 'Acme Corp',
       brand: 'Acme Store',
       caseType: c.type || 'General',
-      riskLevel: c.risk_level === 'high' || c.risk_level === 'critical' ? 'High' : c.risk_level === 'medium' ? 'Medium' : 'Low',
-      orderStatus: titleCase(c.system_status_summary?.order || c.system_status_summary?.orders || 'N/A'),
-      paymentStatus: titleCase(c.system_status_summary?.payment || c.system_status_summary?.payments || 'N/A'),
-      fulfillmentStatus: titleCase(c.system_status_summary?.fulfillment || 'N/A'),
-      refundStatus: titleCase(c.system_status_summary?.refund || c.system_status_summary?.returns || 'N/A'),
-      approvalStatus: titleCase(c.system_status_summary?.approval || c.approval_state || 'N/A'),
-      context: c.conflict_summary?.root_cause || c.ai_diagnosis || '',
-      assignedTeam: c.assigned_team_name || 'Support',
+      riskLevel: c.riskLevel === 'high' || c.riskLevel === 'critical' ? 'High' : c.riskLevel === 'medium' ? 'Medium' : 'Low',
+      orderStatus: titleCase(c.systemStatusSummary?.order || c.systemStatusSummary?.orders || 'N/A'),
+      paymentStatus: titleCase(c.systemStatusSummary?.payment || c.systemStatusSummary?.payments || 'N/A'),
+      fulfillmentStatus: titleCase(c.systemStatusSummary?.fulfillment || 'N/A'),
+      refundStatus: titleCase(c.systemStatusSummary?.refund || c.systemStatusSummary?.returns || 'N/A'),
+      approvalStatus: titleCase(c.systemStatusSummary?.approval || c.approvalState || 'N/A'),
+      context: c.conflictSummary?.rootCause || c.aiDiagnosis || '',
+      assignedTeam: c.assignedTeamName || 'Support',
       lastSync: '1m ago',
-      slaStatus: c.sla_status === 'at_risk' ? 'SLA risk' : c.sla_status === 'breached' ? 'Overdue' : c.sla_status === 'on_track' ? 'Waiting' : 'Waiting',
-      slaTime: c.sla_resolution_deadline ? formatRelativeTime(c.sla_resolution_deadline) : 'N/A',
-      recommendedNextAction: c.conflict_summary?.recommended_action || c.ai_recommended_action || '',
-      conflictDetected: c.conflict_summary?.root_cause || (c.has_reconciliation_conflicts ? c.conflict_severity : undefined),
-      relatedCases: c.state_snapshot?.related?.linked_cases?.map((linked: any) => ({
-        id: linked.case_number || linked.id,
+      slaStatus: c.slaStatus === 'at_risk' ? 'SLA risk' : c.slaStatus === 'breached' ? 'Overdue' : c.slaStatus === 'on_track' ? 'Waiting' : 'Waiting',
+      slaTime: c.slaResolutionDeadline ? formatRelativeTime(c.slaResolutionDeadline) : 'N/A',
+      recommendedNextAction: c.conflictSummary?.recommendedAction || c.aiRecommendedAction || '',
+      conflictDetected: c.conflictSummary?.rootCause || (c.hasReconciliationConflicts ? c.conflictSeverity : undefined),
+      relatedCases: c.stateSnapshot?.related?.linkedCases?.map((linked: any) => ({
+        id: linked.caseNumber || linked.id,
         type: linked.type || 'Case',
         status: titleCase(linked.status || 'open'),
       })) || [],
@@ -182,12 +183,12 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
     const apiMessages = selectedInboxView?.messages?.map((msg: any) => ({
       id: msg.id,
       type: msg.type === 'agent' ? 'agent' : msg.type === 'internal' ? 'internal' : msg.type === 'system' ? 'system' : msg.direction === 'outbound' ? 'agent' : 'customer',
-      sender: msg.sender_name || (msg.direction === 'outbound' ? 'Agent' : 'Customer'),
+      sender: msg.senderName || (msg.direction === 'outbound' ? 'Agent' : 'Customer'),
       content: msg.content,
-      time: formatTime(msg.sent_at),
+      time: formatTime(msg.sentAt),
       // Surface delivery lifecycle for outbound messages (pending/sent/failed)
-      deliveryStatus: msg.direction === 'outbound' ? (msg.delivery_status ?? 'sent') : undefined,
-      deliveryError: msg.delivery_error ?? null,
+      deliveryStatus: msg.direction === 'outbound' ? (msg.deliveryStatus ?? 'sent') : undefined,
+      deliveryError: msg.deliveryError ?? null,
     })) || selectedBaseConv.messages || [];
     const localMessages = localMessagesByCase[selectedBaseConv.id] || [];
     const knownFingerprints = new Set(apiMessages.map((message: Message) => fingerprintMessage(message)));
@@ -200,14 +201,14 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
     });
     return {
     ...selectedBaseConv,
-    orderId: caseState?.related?.orders?.[0]?.external_order_id || caseState?.identifiers?.order_ids?.[0] || selectedBaseConv.orderId,
-    context: caseState?.conflict?.root_cause || selectedInboxView?.case?.ai_diagnosis || selectedBaseConv.context || 'Canonical analysis pending.',
-    recommendedNextAction: caseState?.conflict?.recommended_action || selectedBaseConv.recommendedNextAction || 'Review canonical state',
-    conflictDetected: caseState?.conflict?.root_cause || selectedBaseConv.conflictDetected,
+    orderId: caseState?.related?.orders?.[0]?.externalOrderId || caseState?.identifiers?.orderIds?.[0] || selectedBaseConv.orderId,
+    context: caseState?.conflict?.rootCause || selectedInboxView?.case?.aiDiagnosis || selectedBaseConv.context || 'Canonical analysis pending.',
+    recommendedNextAction: caseState?.conflict?.recommendedAction || selectedBaseConv.recommendedNextAction || 'Review canonical state',
+    conflictDetected: caseState?.conflict?.rootCause || selectedBaseConv.conflictDetected,
     slaStatus: selectedInboxView?.sla?.label || selectedBaseConv.slaStatus,
     slaTime: selectedInboxView?.sla?.time || selectedBaseConv.slaTime,
-    relatedCases: caseState?.related?.linked_cases?.map((linked: any) => ({
-      id: linked.case_number || linked.id,
+    relatedCases: caseState?.related?.linkedCases?.map((linked: any) => ({
+      id: linked.caseNumber || linked.id,
       type: linked.type || 'Case',
       status: titleCase(linked.status || 'open'),
     })) || selectedBaseConv.relatedCases,
@@ -230,27 +231,27 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
 
     links.push({
       label: 'Order Management System (OMS)',
-      href: firstOrder?.external_order_id ? `https://admin.shopify.com/store/demo/orders/${encodeURIComponent(firstOrder.external_order_id)}` : '#',
+      href: firstOrder?.externalOrderId ? `https://admin.shopify.com/store/demo/orders/${encodeURIComponent(firstOrder.externalOrderId)}` : '#',
       visible: Boolean(firstOrder || selectedConv?.orderId),
     });
     links.push({
       label: 'Payment Gateway (PSP)',
-      href: firstPayment?.external_payment_id ? `https://dashboard.stripe.com/test/payments/${encodeURIComponent(firstPayment.external_payment_id)}` : '#',
+      href: firstPayment?.externalPaymentId ? `https://dashboard.stripe.com/test/payments/${encodeURIComponent(firstPayment.externalPaymentId)}` : '#',
       visible: Boolean(firstPayment || selectedConv?.paymentStatus !== 'N/A'),
     });
     links.push({
       label: 'Carrier Tracking Portal',
-      href: firstOrder?.tracking_url || '#',
-      visible: Boolean(firstOrder?.tracking_number || firstOrder?.tracking_url || selectedConv?.fulfillmentStatus !== 'N/A'),
+      href: firstOrder?.trackingUrl || '#',
+      visible: Boolean(firstOrder?.trackingNumber || firstOrder?.trackingUrl || selectedConv?.fulfillmentStatus !== 'N/A'),
     });
     links.push({
       label: 'Return Record (RMS)',
-      href: firstReturn?.external_return_id ? `https://returns.example.local/${encodeURIComponent(firstReturn.external_return_id)}` : '#',
+      href: firstReturn?.externalReturnId ? `https://returns.example.local/${encodeURIComponent(firstReturn.externalReturnId)}` : '#',
       visible: Boolean(firstReturn || selectedConv?.refundStatus !== 'N/A'),
     });
     links.push({
       label: 'Warehouse (WMS) Ticket',
-      href: firstOrder?.external_order_id ? `https://wms.example.local/orders/${encodeURIComponent(firstOrder.external_order_id)}` : '#',
+      href: firstOrder?.externalOrderId ? `https://wms.example.local/orders/${encodeURIComponent(firstOrder.externalOrderId)}` : '#',
       visible: Boolean(firstOrder || selectedConv?.fulfillmentStatus !== 'N/A'),
     });
 
@@ -271,12 +272,12 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   }, [selectedId]);
 
   useEffect(() => {
-    if (selectedInboxView?.latest_draft?.content) {
-      setComposerText(selectedInboxView.latest_draft.content);
+    if (selectedInboxView?.latestDraft?.content) {
+      setComposerText(selectedInboxView.latestDraft.content);
       return;
     }
     setComposerText('');
-  }, [selectedInboxView?.latest_draft?.id, selectedId]);
+  }, [selectedInboxView?.latestDraft?.id, selectedId]);
 
   // Close emoji picker when clicking outside
   useEffect(() => {
@@ -356,7 +357,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
   };
 
   const handleApplyDraft = () => {
-    const draft = selectedInboxView?.latest_draft?.content;
+    const draft = selectedInboxView?.latestDraft?.content;
     if (draft) {
       setComposeMode('reply');
       setComposerText(draft);
@@ -390,7 +391,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
       if (composeMode === 'internal') {
         await casesApi.addInternalNote(selectedConv.id, content);
       } else {
-        await casesApi.reply(selectedConv.id, content, selectedInboxView?.latest_draft?.id);
+        await casesApi.reply(selectedConv.id, content, selectedInboxView?.latestDraft?.id);
       }
       setRefreshKey(key => key + 1);
     } catch (error) {
@@ -1307,7 +1308,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">Last Sync</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{formatAbsoluteTime(selectedInboxView?.case?.updated_at) || selectedConv.lastSync}</span>
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{formatAbsoluteTime(selectedInboxView?.case?.updatedAt) || selectedConv.lastSync}</span>
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">Channel</span>
@@ -1388,14 +1389,14 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                         </button>
                       </div>
                       <div className="space-y-3">
-                        {selectedInboxView?.internal_notes?.length ? selectedInboxView.internal_notes.map((note: any) => (
+                        {selectedInboxView?.internalNotes?.length ? selectedInboxView.internalNotes.map((note: any) => (
                           <div key={note.id} className="p-3 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-100 dark:border-yellow-800/20">
                             <p className="text-xs text-yellow-900 dark:text-yellow-100 leading-relaxed italic">
                               "{note.content}"
                             </p>
                             <div className="mt-2 flex justify-between items-center text-[10px] text-yellow-700/70">
-                              <span>{note.created_by || 'Internal Note'}</span>
-                              <span>{formatTime(note.created_at)}</span>
+                              <span>{note.createdBy || 'Internal Note'}</span>
+                              <span>{formatTime(note.createdAt)}</span>
                             </div>
                           </div>
                         )) : (

@@ -19,6 +19,26 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowSignup }) => {
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [otpCode, setOtpCode]         = useState('');
 
+  // Map cryptic Supabase auth errors to friendly UX strings. We deliberately
+  // keep the wording generic for invalid-credential cases to avoid leaking
+  // whether an account exists.
+  const friendlyAuthError = (err: any): string => {
+    const raw = String(err?.message || '').toLowerCase();
+    if (raw.includes('invalid login credentials') || raw.includes('invalid_grant')) {
+      return 'Email o contraseña incorrectos. Revisa tus credenciales e inténtalo de nuevo.';
+    }
+    if (raw.includes('email not confirmed')) {
+      return 'Tu email aún no ha sido confirmado. Revisa tu bandeja de entrada y haz click en el enlace de confirmación.';
+    }
+    if (raw.includes('rate limit') || raw.includes('too many')) {
+      return 'Demasiados intentos. Espera unos minutos antes de volver a probar.';
+    }
+    if (raw.includes('network') || raw.includes('fetch')) {
+      return 'No pudimos contactar con el servidor. Comprueba tu conexión y vuelve a intentarlo.';
+    }
+    return err?.message || 'Error al iniciar sesión.';
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -26,13 +46,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowSignup }) => {
 
     try {
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
       if (signInError) throw signInError;
       if (!data.session) {
         // Email confirmation pending or magic-link flow — nothing else to do here.
-        setError('Sign-in did not return a session. Please confirm your email and try again.');
+        setError('La sesión no se ha iniciado. Confirma tu email e inténtalo de nuevo.');
         return;
       }
 
@@ -59,7 +79,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowSignup }) => {
       setChallengeId(challengeData.id);
       setStage('mfa');
     } catch (err: any) {
-      setError(err.message || 'Error signing in');
+      setError(friendlyAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -87,7 +107,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowSignup }) => {
       if (verifyErr) throw verifyErr;
       onLogin();
     } catch (err: any) {
-      setError(err.message || 'Invalid authentication code');
+      const raw = String(err?.message || '').toLowerCase();
+      if (raw.includes('invalid totp') || raw.includes('invalid code') || raw.includes('expired')) {
+        setError('Código incorrecto o expirado. Genera uno nuevo en tu app de autenticación.');
+      } else {
+        setError(err?.message || 'No se pudo verificar el código de autenticación.');
+      }
     } finally {
       setLoading(false);
     }

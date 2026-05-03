@@ -84,26 +84,43 @@ router.post('/sessions/logout', async (req: MultiTenantRequest, res) => {
   }
 });
 
-// Get current user profile
-router.get('/me', requirePermission('settings.read'), async (req: MultiTenantRequest, res) => {
-  const userId = req.userId || 'user_alex';
+// Get current user profile.
+// Self-service endpoint — does NOT require settings.read because the SPA must
+// be able to read its own identity to bootstrap (resolve memberships, gate
+// onboarding, decide which tenant to show). All other /iam/* endpoints remain
+// permission-gated.
+router.get('/me', async (req: MultiTenantRequest, res) => {
+  const userId = req.userId;
+  if (!userId || userId === 'system') {
+    return sendError(res, 401, 'AUTHENTICATION_REQUIRED', 'A signed-in user is required');
+  }
 
   try {
     const user = await iamRepository.getUserById(userId);
     if (!user) {
       return sendError(res, 404, 'USER_NOT_FOUND', 'User not found');
     }
-    
+
+    // Always pull memberships fresh — the multi-tenant middleware may have
+    // resolved a single tenant from the JWT, but the SPA needs the full list
+    // to render the workspace switcher and to confirm post-signup onboarding.
     const memberships = await iamRepository.listUserMemberships(userId);
+
+    // If the request arrived with default/legacy headers (org_default/ws_default)
+    // and the JWT carried no app_metadata claims, the middleware will already
+    // have resolved tenant/workspace from the user's first membership. We surface
+    // that real context here so the frontend can replace its defaults.
+    const resolvedTenantId    = req.tenantId    || memberships[0]?.tenant_id    || null;
+    const resolvedWorkspaceId = req.workspaceId || memberships[0]?.workspace_id || null;
 
     res.json({
       ...user,
       memberships,
       context: {
-        tenant_id: req.tenantId,
-        workspace_id: req.workspaceId,
-        role_id: req.roleId,
-        permissions: req.permissions || [],
+        tenant_id:    resolvedTenantId,
+        workspace_id: resolvedWorkspaceId,
+        role_id:      req.roleId || null,
+        permissions:  req.permissions || [],
       },
     });
   } catch (error) {

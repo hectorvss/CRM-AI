@@ -2,13 +2,14 @@ begin;
 
 -- Case graph demo expansion: knowledge, integrations, AI Studio, refunds, and workflows.
 
-insert into knowledge_domains (id, tenant_id, name, description, created_at)
+insert into knowledge_domains (id, tenant_id, workspace_id, name, description, created_at)
 values
-  ('kd_refunds', 'org_default', 'Refund Operations', 'Refund lifecycle, bank clearance, and chargeback handling.', timestamp '2026-04-15 12:30:00+00'),
-  ('kd_integrations', 'org_default', 'Integrations', 'Connector runbooks and system sync guidance.', timestamp '2026-04-15 12:30:00+00'),
-  ('kd_ai_studio', 'org_default', 'AI Studio', 'Agent policies, guardrails, and rollout controls.', timestamp '2026-04-15 12:30:00+00')
+  ('kd_refunds', 'org_default', 'ws_default', 'Refund Operations', 'Refund lifecycle, bank clearance, and chargeback handling.', timestamp '2026-04-15 12:30:00+00'),
+  ('kd_integrations', 'org_default', 'ws_default', 'Integrations', 'Connector runbooks and system sync guidance.', timestamp '2026-04-15 12:30:00+00'),
+  ('kd_ai_studio', 'org_default', 'ws_default', 'AI Studio', 'Agent policies, guardrails, and rollout controls.', timestamp '2026-04-15 12:30:00+00')
 on conflict (id) do update set
   tenant_id = excluded.tenant_id,
+  workspace_id = excluded.workspace_id,
   name = excluded.name,
   description = excluded.description;
 

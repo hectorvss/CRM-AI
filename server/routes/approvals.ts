@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
-import { createApprovalRepository } from '../data/index.js';
+import { createApprovalRepository, createAuditRepository } from '../data/index.js';
 import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { logger } from '../utils/logger.js';
@@ -9,6 +9,7 @@ import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 
 const router = Router();
 const approvalRepository = createApprovalRepository();
+const auditRepository = createAuditRepository();
 
 router.use(extractMultiTenant);
 
@@ -19,12 +20,19 @@ router.get('/', async (req: MultiTenantRequest, res) => {
       workspaceId: req.workspaceId!,
       userId: req.userId,
     };
-    const approvals = await approvalRepository.list(scope, {
+    const limitRaw = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : NaN;
+    const offsetRaw = typeof req.query.offset === 'string' ? parseInt(req.query.offset, 10) : NaN;
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
+
+    const result = await approvalRepository.list(scope, {
       status: typeof req.query.status === 'string' ? req.query.status : undefined,
       risk_level: typeof req.query.risk_level === 'string' ? req.query.risk_level : undefined,
       assigned_to: typeof req.query.assigned_to === 'string' ? req.query.assigned_to : undefined,
+      limit,
+      offset,
     });
-    res.json(approvals);
+    res.json({ items: result.items, total: result.total, hasMore: result.hasMore, limit, offset });
   } catch (error) {
     logger.error('Error listing approvals:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -102,7 +110,16 @@ router.post('/:id/decide', requirePermission('approvals.decide'), async (req: Mu
       );
     }
 
-    fireWorkflowEvent(
+    await auditRepository.log(scope, {
+      actorId: decidedBy,
+      action: decision === 'approved' ? 'APPROVAL_APPROVED' : 'APPROVAL_REJECTED',
+      entityType: 'approval_request',
+      entityId: req.params.id,
+      newValue: { decision, caseId: result.caseId },
+      metadata: { note: note ?? null, executionPlanId: result.executionPlanId ?? null },
+    });
+
+    await fireWorkflowEvent(
       { tenantId: scope.tenantId, workspaceId: scope.workspaceId, userId: scope.userId },
       'approval.decided',
       { approvalId: req.params.id, decision, caseId: result.caseId, decidedBy },
@@ -111,7 +128,7 @@ router.post('/:id/decide', requirePermission('approvals.decide'), async (req: Mu
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     logger.error('Error deciding approval:', error);
-    res.status(message === 'Approval is not pending' ? 400 : 500).json({ error: message });
+    res.status(message === 'Approval is not pending' ? 409 : 500).json({ error: message });
   }
 });
 

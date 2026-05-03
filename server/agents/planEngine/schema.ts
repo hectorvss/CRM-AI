@@ -41,7 +41,17 @@ export function stringSchema(opts: StringOpts = {}): Schema<string> {
     parse(input) {
       if (input === undefined || input === null || input === '') {
         if (required) return fail('value is required');
-        return ok('' as string);
+        // Optional string fields used to coerce empty/missing input to ''.
+        // The LLM frequently emits "" for optional UUID-shaped args
+        // (domainId, customerId, etc.); passing that through to a Postgres
+        // FK lookup throws 23503 ("Key (domain_id)=() is not present").
+        // Returning undefined makes downstream `args.foo ?? null` patterns
+        // do the right thing automatically.
+        return ok(undefined as unknown as string);
+      }
+      // Trim and re-check: "   " from the LLM should also collapse to undefined.
+      if (typeof input === 'string' && input.trim() === '' && !required) {
+        return ok(undefined as unknown as string);
       }
       if (typeof input !== 'string') return fail(`expected string, got ${typeof input}`);
       if (opts.min !== undefined && input.length < opts.min) return fail(`string shorter than min=${opts.min}`);

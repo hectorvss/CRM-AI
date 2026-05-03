@@ -34,6 +34,28 @@ import { getSupabaseAdmin } from '../../db/supabase.js';
 import { createApprovalRepository } from '../../data/approvals.js';
 import { broadcastSSE } from '../../routes/sse.js';
 
+/**
+ * Stringify a thrown value so the message is readable in UI/logs even when
+ * the throw is a plain object (Supabase, fetch errors, etc.) rather than an
+ * Error instance.
+ */
+function formatThrownError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    const parts = [obj.message, obj.details, obj.hint, obj.code].filter(
+      (value) => value !== undefined && value !== null && value !== '',
+    );
+    if (parts.length > 0) return parts.join(' | ');
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return '[unserialisable error]';
+    }
+  }
+  return String(err);
+}
+
 export interface ExecutorDeps {
   /** Create an approval request when policy says `require_approval`. Returns approval id. */
   createApproval: (input: {
@@ -51,6 +73,22 @@ export interface ExecuteOptions {
   dryRun?: boolean;
   /** Force all approval-requiring steps to be skipped instead of creating approvals. Used in shadow/test runs. */
   skipApprovals?: boolean;
+  /** Hard cap on the number of steps in a plan. Defaults to PLAN_ENGINE_MAX_STEPS env or 50. */
+  maxSteps?: number;
+}
+
+/**
+ * Resolve the effective max-step limit for a plan execution. The Plan Engine
+ * is LLM-driven, so a hallucinating model (or a malicious prompt-injected
+ * upstream payload) could in principle generate hundreds of steps. The
+ * executor refuses to run any plan exceeding this cap and records a
+ * synthetic `rejected_by_policy` trace so the run is auditable.
+ */
+function resolveMaxSteps(options: ExecuteOptions): number {
+  if (typeof options.maxSteps === 'number' && options.maxSteps > 0) return options.maxSteps;
+  const envCap = Number(process.env.PLAN_ENGINE_MAX_STEPS ?? '');
+  if (Number.isFinite(envCap) && envCap > 0) return envCap;
+  return 50;
 }
 
 /** Topologically sort plan steps by dependsOn. Throws on cycles or unknown refs. */
@@ -274,6 +312,25 @@ export async function executePlan(
     summary: '',
   };
 
+  // 0. Hard cap on plan size — fail closed before any tool runs.
+  const maxSteps = resolveMaxSteps(options);
+  if (Array.isArray(plan.steps) && plan.steps.length > maxSteps) {
+    trace.status = 'rejected_by_policy';
+    trace.summary = `Plan rejected: ${plan.steps.length} steps exceeds maxSteps=${maxSteps}`;
+    trace.endedAt = new Date().toISOString();
+    logger.warn('PlanEngine rejected oversized plan', {
+      planId: plan.planId,
+      stepCount: plan.steps.length,
+      maxSteps,
+    });
+    if (deps.persistTrace) {
+      try { await deps.persistTrace(trace); } catch (err) {
+        logger.error('PlanEngine failed to persist oversize-rejection trace', err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+    return trace;
+  }
+
   // 1. Evaluate policy for the entire plan upfront (static check).
   const activeRules = await loadActiveRules(context);
   const decisions = await evaluatePlan(plan, toolRegistry, {
@@ -394,16 +451,23 @@ export async function executePlan(
             value: { approvalId, status: 'pending_approval' },
           }), stop: true, pendingApproval: true };
         } catch (err) {
+          try {
+            console.error('[planEngine] createApproval threw', { tool: step.tool, error: err });
+          } catch {
+            // ignore logger failures
+          }
           return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
             ok: false,
-            error: `Failed to create approval: ${err instanceof Error ? err.message : String(err)}`,
+            error: `Failed to create approval: ${formatThrownError(err)}`,
             errorCode: 'APPROVAL_CREATE_FAILED',
           }), stop: true };
         }
       }
 
-      // Dry-run short-circuit
-      if (options.dryRun && tool.sideEffect !== 'read') {
+      // Dry-run short-circuit. Tools marked `safeOnDryRun` (e.g. knowledge.*
+      // — versioned + soft-deletable) execute for real even in dry-run, so
+      // the agent's "I created X" reply matches what actually landed in DB.
+      if (options.dryRun && tool.sideEffect !== 'read' && !tool.safeOnDryRun) {
         return { stepId: step.id, span: makeSyntheticSpan(step, decision.riskLevel, {
           ok: true,
           value: { skipped: true, reason: 'dry-run' },
@@ -444,9 +508,19 @@ export async function executePlan(
           (args) => tool.run({ args, context: { ...context, dryRun: options.dryRun === true } }),
         );
       } catch (err) {
+        // Supabase errors are plain objects, not Error instances, so
+        // String(err) yields "[object Object]" and hides the real cause.
+        // Pull common fields (message, details, hint, code) before falling
+        // back to JSON serialisation.
+        const message = formatThrownError(err);
+        try {
+          console.error('[planEngine] tool threw', { tool: step.tool, error: err, message });
+        } catch {
+          // ignore logger failures
+        }
         result = {
           ok: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: message,
           errorCode: 'TOOL_THREW',
         };
       }

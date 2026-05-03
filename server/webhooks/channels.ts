@@ -1,26 +1,29 @@
 /**
  * server/webhooks/channels.ts
  *
- * Inbound webhook handlers for direct messaging channels:
- *   POST /webhooks/whatsapp  — Meta Business API (WhatsApp Cloud API)
- *   POST /webhooks/email     — Postmark / SendGrid Inbound
+ * Inbound webhook handlers for direct messaging channels — Flow 10.
  *
- * Flow for both channels:
- *  1. Parse and validate the incoming payload
- *  2. Deduplicate using the platform's message ID
- *  3. Persist a canonical_event with the normalised message payload
- *  4. Respond 200 immediately
- *  5. Enqueue CHANNEL_INGEST for background processing
+ *   GET  /webhooks/whatsapp   — Meta verification handshake
+ *   POST /webhooks/whatsapp   — Inbound WhatsApp messages (HMAC-signed by Meta)
+ *   POST /webhooks/email      — Postmark inbound (basic-auth or shared-secret guarded)
+ *   POST /webhooks/sms        — Twilio inbound SMS (X-Twilio-Signature)
+ *   POST /webhooks/web-chat   — Embedded widget messages (shared API key)
  *
- * Design notes:
- *  - We do NOT enqueue WEBHOOK_PROCESS here — channel messages bypass the
- *    commerce webhook pipeline and go straight to CHANNEL_INGEST.
- *  - The normalised_payload stored in canonical_events must conform to the
- *    NormalizedChannelMessage interface defined in channelIngest.ts.
- *  - WhatsApp GET requests are used for webhook verification (challenge echo).
+ * Contract for every channel:
+ *  1. SIGNATURE / SHARED-SECRET FIRST. If the integration is not configured
+ *     we return 503 + WEBHOOK_NOT_CONFIGURED. If it is configured but the
+ *     incoming signature is bad we return 401. Only then do we touch the body.
+ *  2. PERSIST CANONICAL EVENT. The webhook stores a `canonical_events` row
+ *     with the full `NormalizedChannelMessage` payload + tenant_id +
+ *     workspace_id + dedupe_key, so the CHANNEL_INGEST worker can pick up
+ *     where we left off if the request dies.
+ *  3. ENQUEUE CHANNEL_INGEST. The async worker (Flow 5) drains it.
+ *  4. RESPOND 200 ONLY AFTER PERSISTENCE. We persist before acking so the
+ *     handler is idempotent under provider retries.
  */
 
 import { Router, Request, Response } from 'express';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { randomUUID } from 'crypto';
 import { createIntegrationRepository } from '../data/integrations.js';
 import { enqueue } from '../queue/client.js';
@@ -28,62 +31,152 @@ import { JobType } from '../queue/types.js';
 import { config }  from '../config.js';
 import { logger }  from '../utils/logger.js';
 import { resolveTenantWorkspaceContext } from '../middleware/multiTenant.js';
+import { integrationRegistry } from '../integrations/registry.js';
+import type { WhatsAppAdapter } from '../integrations/whatsapp.js';
+import type { NormalizedChannelMessage } from '../integrations/types.js';
 
-// ── WhatsApp (Meta Business API) ──────────────────────────────────────────────
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+function notConfigured(res: Response, code: string, missing: string[]): void {
+  res.status(503).json({
+    error:   'WEBHOOK_NOT_CONFIGURED',
+    code,
+    message: `${code.replace(/_/g, ' ')} on this deployment.`,
+    missing,
+  });
+}
+
+function unauthorized(res: Response, message = 'Invalid signature'): void {
+  res.status(401).json({ error: 'UNAUTHORIZED', message });
+}
+
+async function persistAndEnqueue(opts: {
+  tenantId:    string;
+  workspaceId: string | null;
+  channel:     NormalizedChannelMessage['channel'];
+  message:     NormalizedChannelMessage;
+  dedupeKey:   string;
+  sourceSystem: string;
+}): Promise<{ eventId: string; deduped: boolean }> {
+  const integrationRepo = createIntegrationRepository();
+  const scope = { tenantId: opts.tenantId };
+
+  const existing = await integrationRepo
+    .getWebhookEventByDedupeKey(scope, opts.dedupeKey)
+    .catch(() => null);
+  if (existing) return { eventId: existing.id, deduped: true };
+
+  const eventId = randomUUID();
+  const now     = new Date().toISOString();
+
+  await integrationRepo.createCanonicalEvent(scope, {
+    id:                    eventId,
+    source_system:         opts.sourceSystem,
+    source_entity_type:    'customer',
+    source_entity_id:      opts.message.senderId,
+    event_type:            'message.inbound',
+    event_category:        'message',
+    canonical_entity_type: 'customer',
+    canonical_entity_id:   opts.message.senderId,
+    normalized_payload:    opts.message,
+    dedupe_key:            opts.dedupeKey,
+    status:                'received',
+    tenant_id:             opts.tenantId,
+    workspace_id:          opts.workspaceId,
+    occurred_at:           opts.message.sentAt,
+    ingested_at:           now,
+    updated_at:            now,
+  });
+
+  await enqueue(
+    JobType.CHANNEL_INGEST,
+    {
+      canonicalEventId: eventId,
+      channel:          opts.channel,
+      rawMessageId:     opts.message.externalMessageId,
+    },
+    {
+      tenantId:    opts.tenantId,
+      workspaceId: opts.workspaceId ?? undefined,
+      traceId:     eventId,
+      priority:    3,
+    },
+  );
+
+  return { eventId, deduped: false };
+}
+
+function extractDisplayName(from: string): string | undefined {
+  const match = from.match(/^([^<]+)<[^>]+>/);
+  return match ? match[1].trim() : undefined;
+}
+
+// ── WhatsApp (Meta Business Cloud API) ──────────────────────────────────────
 
 export const whatsappWebhookRouter = Router();
 
 /**
- * GET /webhooks/whatsapp
- * Meta's webhook verification handshake.
- * Responds with hub.challenge if hub.verify_token matches config.
+ * GET /webhooks/whatsapp — Meta's webhook verification handshake.
+ * Responds with hub.challenge if hub.verify_token matches the configured token.
  */
 whatsappWebhookRouter.get('/', (req: Request, res: Response) => {
   const mode      = req.query['hub.mode'];
   const token     = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  const expectedToken = config.channels?.whatsappVerifyToken ?? process.env.WHATSAPP_VERIFY_TOKEN;
+  const adapter = integrationRegistry.get<WhatsAppAdapter>('whatsapp');
+  const expectedToken =
+    adapter?.getVerifyToken() ||
+    config.channels?.whatsappVerifyToken ||
+    process.env.WHATSAPP_VERIFY_TOKEN ||
+    '';
+
+  if (!expectedToken) {
+    logger.warn('WhatsApp webhook GET: WHATSAPP_VERIFY_TOKEN not configured');
+    notConfigured(res, 'WHATSAPP_NOT_CONFIGURED', ['WHATSAPP_VERIFY_TOKEN']);
+    return;
+  }
 
   if (mode === 'subscribe' && token === expectedToken) {
     logger.info('WhatsApp webhook verified');
-    res.status(200).send(challenge);
-  } else {
-    logger.warn('WhatsApp webhook verification failed', { mode, token });
-    res.status(403).send('Forbidden');
+    res.status(200).send(String(challenge ?? ''));
+    return;
   }
+
+  logger.warn('WhatsApp webhook verification failed', { mode });
+  res.status(403).send('Forbidden');
 });
 
 /**
- * POST /webhooks/whatsapp
- * Incoming messages from Meta Business API.
+ * POST /webhooks/whatsapp — Inbound WhatsApp messages from Meta.
  *
- * Meta payload structure (simplified):
- * {
- *   "object": "whatsapp_business_account",
- *   "entry": [{
- *     "id": "<WABA_ID>",
- *     "changes": [{
- *       "value": {
- *         "messaging_product": "whatsapp",
- *         "contacts": [{ "wa_id": "<phone>", "profile": { "name": "<name>" } }],
- *         "messages": [{
- *           "id": "<msg_id>",
- *           "from": "<phone>",
- *           "timestamp": "<unix>",
- *           "type": "text",
- *           "text": { "body": "<content>" }
- *         }]
- *       },
- *       "field": "messages"
- *     }]
- *   }]
- * }
+ * Meta signs each delivery with HMAC-SHA256 over the raw body using the App
+ * Secret as key. The signature is in `x-hub-signature-256` as `sha256=<hex>`.
  */
 whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
+  const headers = req.headers as Record<string, string>;
+
   if (!rawBody) {
-    res.status(400).send('bad request');
+    res.status(400).json({ error: 'BAD_REQUEST', message: 'Missing raw body' });
+    return;
+  }
+
+  const adapter = integrationRegistry.get<WhatsAppAdapter>('whatsapp');
+
+  // ── 503 when the webhook secret is not configured ─────────────────────────
+  if (!adapter || !adapter.hasWebhookSecret()) {
+    if (headers['x-hub-signature-256']) {
+      logger.warn('WhatsApp webhook arrived but WHATSAPP_WEBHOOK_SECRET is not set');
+    }
+    notConfigured(res, 'WHATSAPP_NOT_CONFIGURED', ['WHATSAPP_WEBHOOK_SECRET']);
+    return;
+  }
+
+  // ── 401 when signature is missing or invalid ─────────────────────────────
+  if (!adapter.verifyWebhook(rawBody, headers)) {
+    logger.warn('WhatsApp webhook: invalid HMAC signature');
+    unauthorized(res, 'Invalid x-hub-signature-256');
     return;
   }
 
@@ -91,19 +184,22 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
   try {
     body = JSON.parse(rawBody);
   } catch {
-    logger.warn('WhatsApp webhook: invalid JSON');
-    res.status(400).send('bad request');
+    res.status(400).json({ error: 'BAD_REQUEST', message: 'Body is not valid JSON' });
     return;
   }
 
-  // Respond immediately — Meta retries if no 200 within 20 s
-  res.status(200).send('ok');
-
-  const integrationRepo = createIntegrationRepository();
+  // Resolve tenant — channel webhooks usually arrive without our headers,
+  // so we fall back to the first workspace via resolveTenantWorkspaceContext.
   const context = await resolveTenantWorkspaceContext(
-    req.headers['x-tenant-id'] as string | undefined,
-    req.headers['x-workspace-id'] as string | undefined,
+    headers['x-tenant-id']    as string | undefined,
+    headers['x-workspace-id'] as string | undefined,
   );
+
+  // Ack 200 first only AFTER the loop succeeds for at least the persistence
+  // step; we wrap each message in try/catch so a single bad message doesn't
+  // abort the rest. Meta acks on 200 within 20 s.
+  const persisted: string[] = [];
+  const skipped:   string[] = [];
 
   try {
     const entries: any[] = body?.entry ?? [];
@@ -114,206 +210,377 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
       for (const change of changes) {
         if (change?.field !== 'messages') continue;
 
-        const value    = change?.value ?? {};
+        const value:    any   = change?.value ?? {};
         const messages: any[] = value?.messages ?? [];
         const contacts: any[] = value?.contacts ?? [];
 
-        for (const waMsgRaw of messages) {
-          // Only handle text messages in Phase 2; media skipped for now
-          if (waMsgRaw.type !== 'text') continue;
-
-          const externalMessageId = waMsgRaw.id as string;
-          const from              = waMsgRaw.from as string;
-          const sentAt            = new Date(parseInt(waMsgRaw.timestamp, 10) * 1000).toISOString();
-          const content           = waMsgRaw.text?.body as string ?? '';
-          const contact           = contacts.find((c: any) => c.wa_id === from);
-          const senderName        = contact?.profile?.name as string | undefined;
-
-          // Deduplicate by externalMessageId using the real repo method
-          const dedupeKey = `whatsapp:message:${externalMessageId}`;
-          const existing = await integrationRepo.getWebhookEventByDedupeKey(
-            { tenantId: context.tenantId },
-            dedupeKey,
-          ).catch(() => null);
-
-          if (existing) {
-            logger.debug('WhatsApp: duplicate message, skipping', { externalMessageId });
+        for (const waMsg of messages) {
+          if (waMsg.type !== 'text') {
+            skipped.push(waMsg.id);
             continue;
           }
 
-          const normalized = {
+          const externalMessageId = String(waMsg.id);
+          const from              = String(waMsg.from);
+          const sentAt            = new Date(parseInt(waMsg.timestamp, 10) * 1000).toISOString();
+          const content           = (waMsg.text?.body as string) ?? '';
+          const contact           = contacts.find((c: any) => c.wa_id === from);
+          const senderName        = (contact?.profile?.name as string) ?? null;
+
+          const message: NormalizedChannelMessage = {
             messageContent:    content,
             senderId:          from,
-            senderName:        senderName ?? null,
-            channel:           'whatsapp' as const,
+            senderName,
+            channel:           'whatsapp',
             externalMessageId,
             sentAt,
           };
 
-          const eventId = randomUUID();
-          const now     = new Date().toISOString();
-
-          await integrationRepo.createCanonicalEvent({ tenantId: context.tenantId }, {
-            id: eventId,
-            source_system: 'whatsapp',
-            source_entity_type: 'customer',
-            source_entity_id: from,
-            event_type: 'message.inbound',
-            occurred_at: sentAt,
-            canonical_entity_type: 'customer',
-            canonical_entity_id: from,
-            normalized_payload: normalized,
-            dedupe_key: dedupeKey,
-            status: 'received',
-            tenant_id: context.tenantId,
-            workspace_id: context.workspaceId,
-            ingested_at: now,
-            updated_at: now,
+          const dedupeKey = `whatsapp:message:${externalMessageId}`;
+          const result = await persistAndEnqueue({
+            tenantId:    context.tenantId,
+            workspaceId: context.workspaceId,
+            channel:     'whatsapp',
+            message,
+            dedupeKey,
+            sourceSystem: 'whatsapp',
           });
 
-          enqueue(
-            JobType.CHANNEL_INGEST,
-            { canonicalEventId: eventId, channel: 'whatsapp', rawMessageId: externalMessageId },
-            { tenantId: context.tenantId, workspaceId: context.workspaceId, traceId: eventId, priority: 3 },
-          );
-
-          logger.info('WhatsApp message enqueued', { from, externalMessageId });
+          if (result.deduped) {
+            logger.debug('WhatsApp: duplicate message, skipped', { externalMessageId });
+            skipped.push(externalMessageId);
+          } else {
+            persisted.push(externalMessageId);
+            logger.info('WhatsApp message enqueued', { from, externalMessageId });
+          }
         }
       }
     }
   } catch (err) {
-    logger.error('WhatsApp webhook processing error', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    logger.error('WhatsApp webhook processing error', err);
+    // Persistence failed mid-loop — surface 500 so Meta retries.
+    res.status(500).json({ error: 'INTERNAL_ERROR' });
+    return;
   }
+
+  res.status(200).json({ ok: true, persisted: persisted.length, skipped: skipped.length });
 });
 
-// ── Email (Postmark / SendGrid Inbound) ───────────────────────────────────────
+// ── Email (Postmark inbound) ─────────────────────────────────────────────────
 
 export const emailWebhookRouter = Router();
 
 /**
  * POST /webhooks/email
  *
- * Supports two common inbound email webhook formats:
+ * Postmark posts JSON to a URL we configure in their dashboard. There is no
+ * cryptographic signature; the recommended hardening is HTTP basic auth on
+ * the URL or a shared secret in a custom header. We accept either:
+ *   - URL contains user:pass that matches POSTMARK_INBOUND_USER / _PASSWORD
+ *   - Header `X-Postmark-Token` matches POSTMARK_INBOUND_TOKEN
  *
- * Postmark:
- * { "MessageID": "...", "From": "...", "Subject": "...", "TextBody": "...", "Attachments": [] }
- *
- * SendGrid:
- * { "message-id": "...", "from": "...", "subject": "...", "text": "...", "attachments": "0" }
- *
- * We detect the format by checking for Postmark's capital-cased keys.
+ * If Postmark is not configured AT ALL (no server token), we 503. If it is
+ * configured but the request lacks a matching shared secret, we 401.
  */
 emailWebhookRouter.post('/', async (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
+
+  // 503 — Postmark not configured at all.
+  const postmarkConfigured = Boolean(config.channels?.postmark?.serverToken);
+  if (!postmarkConfigured) {
+    notConfigured(res, 'POSTMARK_NOT_CONFIGURED', ['POSTMARK_SERVER_TOKEN']);
+    return;
+  }
+
+  // 401 — shared secret check (only enforced when one is configured).
+  const sharedSecret =
+    process.env.POSTMARK_INBOUND_TOKEN ||
+    process.env.POSTMARK_WEBHOOK_TOKEN ||
+    '';
+  if (sharedSecret) {
+    const provided =
+      (req.headers['x-postmark-token']   as string | undefined) ||
+      (req.headers['x-postmark-secret']  as string | undefined) ||
+      (req.query['token']                as string | undefined) ||
+      '';
+    const a = Buffer.from(provided);
+    const b = Buffer.from(sharedSecret);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      logger.warn('Postmark inbound: invalid token');
+      unauthorized(res, 'Invalid Postmark inbound token');
+      return;
+    }
+  }
+
   if (!rawBody) {
-    res.status(400).send('bad request');
+    res.status(400).json({ error: 'BAD_REQUEST' });
     return;
   }
 
   let body: any;
   try {
-    // Postmark sends JSON; SendGrid sends multipart/form-data encoded as JSON
     body = JSON.parse(rawBody);
   } catch {
-    // SendGrid multipart fallback: body is already parsed by express if content-type matches
     body = req.body ?? {};
   }
 
-  // Respond immediately
-  res.status(200).send('ok');
+  const externalMessageId: string = (body.MessageID ?? body['message-id'] ?? randomUUID());
+  const from:    string = body.From    ?? body.from    ?? '';
+  const subject: string = body.Subject ?? body.subject ?? '';
+  const textContent: string = body.TextBody ?? body.text ?? '';
+  const sentAt: string = body.Date
+    ? new Date(body.Date).toISOString()
+    : new Date().toISOString();
 
-  const integrationRepo = createIntegrationRepository();
+  if (!from || !textContent) {
+    logger.debug('Email webhook: empty from or body, ignoring');
+    res.status(200).json({ ok: true, skipped: true, reason: 'empty' });
+    return;
+  }
+
+  const emailMatch = from.match(/<([^>]+)>/) ?? [null, from];
+  const senderEmail = (emailMatch[1] ?? from).trim().toLowerCase();
+
+  const attachments: string[] = Array.isArray(body.Attachments)
+    ? body.Attachments.map((a: any) => a?.Name ?? 'attachment')
+    : [];
+
+  const message: NormalizedChannelMessage = {
+    messageContent:    textContent,
+    senderId:          senderEmail,
+    senderName:        extractDisplayName(from) ?? null,
+    channel:           'email',
+    externalMessageId: String(externalMessageId),
+    sentAt,
+    subject,
+    attachments,
+  };
+
   const context = await resolveTenantWorkspaceContext(
-    req.headers['x-tenant-id'] as string | undefined,
+    req.headers['x-tenant-id']    as string | undefined,
     req.headers['x-workspace-id'] as string | undefined,
   );
 
   try {
-    // Normalise across Postmark / SendGrid
-    const isPostmark = Boolean(body.MessageID);
-
-    const externalMessageId: string = (isPostmark ? body.MessageID : body['message-id']) ?? randomUUID();
-    const from: string               = (isPostmark ? body.From      : body.from)        ?? '';
-    const subject: string            = (isPostmark ? body.Subject   : body.subject)     ?? '';
-    const textContent: string        = (isPostmark ? body.TextBody  : body.text)        ?? '';
-    const sentAt: string             = (isPostmark ? body.Date      : body.date)
-      ? new Date(isPostmark ? body.Date : body.date).toISOString()
-      : new Date().toISOString();
-
-    const attachments: string[] = isPostmark
-      ? (body.Attachments ?? []).map((a: any) => a.Name ?? 'attachment')
-      : [];
-
-    if (!from || !textContent) {
-      logger.debug('Email webhook: empty from or body, skipping');
-      return;
-    }
-
-    // Extract plain email address from "Name <email@example.com>" format
-    const emailMatch = from.match(/<([^>]+)>/) ?? [null, from];
-    const senderEmail = (emailMatch[1] ?? from).trim().toLowerCase();
-
-    const dedupeKey = `email:message:${externalMessageId}`;
-    const existing = await (integrationRepo as any).getCanonicalEventByDedupeKey?.(dedupeKey);
-
-    if (existing) {
-      logger.debug('Email: duplicate message, skipping', { externalMessageId });
-      return;
-    }
-
-    const normalized = {
-      messageContent:    textContent,
-      senderId:          senderEmail,
-      senderName:        extractDisplayName(from),
-      channel:           'email' as const,
-      externalMessageId,
-      sentAt,
-      subject,
-      attachments,
-    };
-
-    const eventId = randomUUID();
-    const now     = new Date().toISOString();
-
-    await integrationRepo.createCanonicalEvent({ tenantId: context.tenantId }, {
-      id: eventId,
-      source_system: 'email',
-      source_entity_type: 'customer',
-      source_entity_id: senderEmail,
-      event_type: 'message.inbound',
-      occurred_at: sentAt,
-      canonical_entity_type: 'customer',
-      canonical_entity_id: senderEmail,
-      normalized_payload: normalized,
-      dedupe_key: dedupeKey,
-      status: 'received',
-      tenant_id: context.tenantId,
-      workspace_id: context.workspaceId,
-      ingested_at: now,
-      updated_at: now,
+    const result = await persistAndEnqueue({
+      tenantId:    context.tenantId,
+      workspaceId: context.workspaceId,
+      channel:     'email',
+      message,
+      dedupeKey:   `email:message:${externalMessageId}`,
+      sourceSystem: 'postmark',
     });
-
-    enqueue(
-      JobType.CHANNEL_INGEST,
-      { canonicalEventId: eventId, channel: 'email', rawMessageId: externalMessageId },
-      { tenantId: context.tenantId, workspaceId: context.workspaceId, traceId: eventId, priority: 3 },
-    );
-
-    logger.info('Email message enqueued', { from: senderEmail, subject, externalMessageId });
-
+    res.status(200).json({ ok: true, eventId: result.eventId, deduped: result.deduped });
+    logger.info('Email message persisted', { from: senderEmail, subject });
   } catch (err) {
-    logger.error('Email webhook processing error', {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    logger.error('Email webhook persistence failed', err);
+    res.status(500).json({ error: 'INTERNAL_ERROR' });
   }
 });
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── SMS (Twilio inbound) ─────────────────────────────────────────────────────
 
-function extractDisplayName(from: string): string | undefined {
-  // 'John Doe <john@example.com>' → 'John Doe'
-  const match = from.match(/^([^<]+)<[^>]+>/);
-  return match ? match[1].trim() : undefined;
+export const smsWebhookRouter = Router();
+
+/**
+ * Validates Twilio's `X-Twilio-Signature` header per the docs:
+ *   sig = base64( HMAC-SHA1( authToken, fullUrl + sortedFormParams ) )
+ *
+ * The full URL is the absolute URL Twilio POSTed to; we reconstruct it from
+ * `req.protocol`, `req.get('host')` and `req.originalUrl`.
+ */
+function verifyTwilioSignature(req: Request, params: Record<string, string>): boolean {
+  const authToken = config.channels?.twilio?.authToken;
+  if (!authToken) return false;
+
+  const provided = req.headers['x-twilio-signature'] as string | undefined;
+  if (!provided) return false;
+
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined) || req.protocol;
+  const host  = req.headers['host'] as string;
+  const url   = `${proto}://${host}${req.originalUrl}`;
+
+  const sortedKeys = Object.keys(params).sort();
+  const dataToSign = sortedKeys.reduce(
+    (acc, key) => acc + key + (params[key] ?? ''),
+    url,
+  );
+
+  const expected = createHmac('sha1', authToken)
+    .update(Buffer.from(dataToSign, 'utf-8'))
+    .digest('base64');
+
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }
+
+/**
+ * POST /webhooks/sms — Twilio inbound SMS.
+ *
+ * Twilio posts application/x-www-form-urlencoded with fields like From, To,
+ * Body, MessageSid, etc. Our raw-body capture middleware preserves the raw
+ * string; we parse it ourselves so signature verification has identical
+ * bytes.
+ */
+smsWebhookRouter.post('/', async (req: Request, res: Response) => {
+  const rawBody = (req as any).rawBody as string | undefined;
+
+  // 503 if Twilio creds missing.
+  const twilioConfigured = Boolean(
+    config.channels?.twilio?.accountSid &&
+    config.channels?.twilio?.authToken &&
+    config.channels?.twilio?.fromNumber,
+  );
+  if (!twilioConfigured) {
+    notConfigured(res, 'TWILIO_NOT_CONFIGURED', [
+      'TWILIO_ACCOUNT_SID',
+      'TWILIO_AUTH_TOKEN',
+      'TWILIO_FROM_NUMBER',
+    ]);
+    return;
+  }
+
+  if (!rawBody) {
+    res.status(400).json({ error: 'BAD_REQUEST' });
+    return;
+  }
+
+  // Parse the urlencoded body into a flat map for signing + business logic.
+  const params: Record<string, string> = {};
+  for (const [k, v] of new URLSearchParams(rawBody).entries()) {
+    params[k] = v;
+  }
+
+  if (!verifyTwilioSignature(req, params)) {
+    logger.warn('Twilio webhook: invalid X-Twilio-Signature');
+    unauthorized(res, 'Invalid X-Twilio-Signature');
+    return;
+  }
+
+  const externalMessageId = params.MessageSid || randomUUID();
+  const from              = params.From      || '';
+  const content           = params.Body      || '';
+
+  if (!from || !content) {
+    res.status(200).json({ ok: true, skipped: true, reason: 'empty' });
+    return;
+  }
+
+  const message: NormalizedChannelMessage = {
+    messageContent:    content,
+    senderId:          from,
+    senderName:        null,
+    channel:           'sms',
+    externalMessageId,
+    sentAt:            new Date().toISOString(),
+  };
+
+  const context = await resolveTenantWorkspaceContext(
+    req.headers['x-tenant-id']    as string | undefined,
+    req.headers['x-workspace-id'] as string | undefined,
+  );
+
+  try {
+    const result = await persistAndEnqueue({
+      tenantId:    context.tenantId,
+      workspaceId: context.workspaceId,
+      channel:     'sms',
+      message,
+      dedupeKey:   `sms:message:${externalMessageId}`,
+      sourceSystem: 'twilio',
+    });
+    // Twilio expects an empty TwiML response or 204; 200 OK works too.
+    res.status(200).type('text/xml').send('<Response/>');
+    logger.info('SMS message persisted', { from, sid: externalMessageId, eventId: result.eventId });
+  } catch (err) {
+    logger.error('SMS webhook persistence failed', err);
+    res.status(500).json({ error: 'INTERNAL_ERROR' });
+  }
+});
+
+// ── Web chat widget ──────────────────────────────────────────────────────────
+
+export const webChatWebhookRouter = Router();
+
+/**
+ * POST /webhooks/web-chat
+ *
+ * Embedded web-chat widget messages. There is no provider signature; we
+ * authenticate via a shared API key (`WEB_CHAT_API_KEY`) sent by the widget
+ * in the `x-web-chat-key` header. If the key is not configured we 503.
+ */
+webChatWebhookRouter.post('/', async (req: Request, res: Response) => {
+  const rawBody = (req as any).rawBody as string | undefined;
+
+  const expected = process.env.WEB_CHAT_API_KEY?.trim() ?? '';
+  if (!expected) {
+    notConfigured(res, 'WEB_CHAT_NOT_CONFIGURED', ['WEB_CHAT_API_KEY']);
+    return;
+  }
+
+  const provided = (req.headers['x-web-chat-key'] as string | undefined) ?? '';
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    unauthorized(res, 'Invalid x-web-chat-key');
+    return;
+  }
+
+  if (!rawBody) {
+    res.status(400).json({ error: 'BAD_REQUEST' });
+    return;
+  }
+
+  let body: any;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    res.status(400).json({ error: 'BAD_REQUEST', message: 'Body is not valid JSON' });
+    return;
+  }
+
+  const sessionId  = String(body.sessionId ?? body.session_id ?? randomUUID());
+  const externalId = String(body.messageId ?? body.message_id ?? randomUUID());
+  const content    = String(body.content   ?? body.text       ?? '');
+
+  if (!content) {
+    res.status(200).json({ ok: true, skipped: true, reason: 'empty' });
+    return;
+  }
+
+  const message: NormalizedChannelMessage = {
+    messageContent:    content,
+    senderId:          sessionId,
+    senderName:        body.name ?? body.senderName ?? null,
+    channel:           'web_chat',
+    externalMessageId: externalId,
+    sentAt:            body.sentAt ?? new Date().toISOString(),
+  };
+
+  const context = await resolveTenantWorkspaceContext(
+    req.headers['x-tenant-id']    as string | undefined,
+    req.headers['x-workspace-id'] as string | undefined,
+  );
+
+  try {
+    const result = await persistAndEnqueue({
+      tenantId:    context.tenantId,
+      workspaceId: context.workspaceId,
+      channel:     'web_chat',
+      message,
+      dedupeKey:   `web_chat:message:${externalId}`,
+      sourceSystem: 'web_chat',
+    });
+    res.status(200).json({ ok: true, eventId: result.eventId, deduped: result.deduped });
+  } catch (err) {
+    logger.error('Web chat webhook persistence failed', err);
+    res.status(500).json({ error: 'INTERNAL_ERROR' });
+  }
+});

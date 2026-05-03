@@ -1,3 +1,7 @@
+// API response normalized to camelCase via src/api/normalize.ts.
+// Components consume these types directly; no defensive `field || field_other`
+// fallbacks should remain anywhere in the UI layer.
+
 export type Page = 'inbox' | 'super_agent' | 'home' | 'ai_studio' | 'workflows' | 'approvals' | 'knowledge' | 'customers' | 'tools_integrations' | 'reports' | 'settings' | 'orders' | 'returns' | 'payments' | 'case_graph' | 'upgrade' | 'profile';
 
 export type NavigationEntityType =
@@ -87,7 +91,6 @@ export interface Order {
     canonical: string;
   };
   canonicalContext?: Record<string, any>;
-  canonical_context?: Record<string, any>;
   relatedCases: { id: string; type: string; status: string }[];
   tab: OrderTab;
   conflictDetected?: string;

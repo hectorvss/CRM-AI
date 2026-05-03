@@ -1,9 +1,14 @@
 /**
  * CRM AI — API Client
  * All frontend ↔ backend communication goes through this module.
+ *
+ * Wire format: the backend speaks snake_case end-to-end. This client is the
+ * SINGLE place that converts payloads to/from camelCase via `./normalize.ts`,
+ * so consumers (components, hooks) only ever see camelCase.
  */
 
 import { supabase } from './supabase';
+import { camelToSnakeDeep, snakeToCamelDeep } from './normalize';
 
 const BASE = '/api';
 
@@ -155,15 +160,68 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  // Normalize request body keys to snake_case so callers can author payloads
+  // in camelCase. We only touch JSON bodies (string body that parses as JSON
+  // or a plain object body). Non-JSON bodies (FormData, Blob, ArrayBuffer)
+  // pass through untouched.
+  let outgoingBody: BodyInit | undefined = options?.body as BodyInit | undefined;
+  if (options?.body !== undefined && options.body !== null) {
+    if (typeof options.body === 'string') {
+      const trimmed = options.body.trim();
+      if (trimmed.length > 0 && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+        try {
+          const parsed = JSON.parse(options.body);
+          outgoingBody = JSON.stringify(camelToSnakeDeep(parsed));
+        } catch {
+          // Body wasn't valid JSON after all; send as-is.
+          outgoingBody = options.body;
+        }
+      }
+    } else if (
+      typeof FormData !== 'undefined' && options.body instanceof FormData
+    ) {
+      outgoingBody = options.body;
+    } else if (
+      typeof Blob !== 'undefined' && options.body instanceof Blob
+    ) {
+      outgoingBody = options.body;
+    } else if (
+      typeof ArrayBuffer !== 'undefined' && options.body instanceof ArrayBuffer
+    ) {
+      outgoingBody = options.body;
+    } else if (typeof options.body === 'object') {
+      outgoingBody = JSON.stringify(camelToSnakeDeep(options.body as any));
+    }
+  }
+
   const res = await fetch(`${BASE}${path}`, {
-    headers,
     ...options,
+    headers,
+    body: outgoingBody,
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.message || err.error || `API error ${res.status}`);
+    const apiError = new Error(err.message || err.error || `API error ${res.status}`) as Error & {
+      status?: number;
+      code?: string;
+      details?: unknown;
+    };
+    apiError.status = res.status;
+    apiError.code = err.code || err.error;
+    apiError.details = err.details;
+    throw apiError;
   }
-  return res.json();
+  // Response: convert snake_case keys to camelCase so components consume a
+  // consistent shape regardless of the wire format.
+  const text = await res.text();
+  if (!text) return undefined as unknown as T;
+  try {
+    const parsed = JSON.parse(text);
+    return snakeToCamelDeep<T>(parsed);
+  } catch {
+    // Non-JSON response (rare for our API). Return raw text typed as-is.
+    return text as unknown as T;
+  }
 }
 
 function unwrapList<T = any>(payload: any): T[] {
@@ -343,10 +401,44 @@ export const returnsApi = {
 };
 
 // ── Approvals ─────────────────────────────────────────────
+export interface ApprovalsListParams {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  risk_level?: string;
+  assigned_to?: string;
+}
+
+export interface ApprovalsListResponse<T = any> {
+  items: T[];
+  total: number;
+  hasMore: boolean;
+  limit: number;
+  offset: number;
+}
+
 export const approvalsApi = {
-  list: (params?: Record<string, string>) => {
-    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request<any>(`/approvals${qs}`).then(unwrapList);
+  list: (params?: ApprovalsListParams): Promise<ApprovalsListResponse> => {
+    const search = new URLSearchParams();
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        if (value === undefined || value === null) continue;
+        search.set(key, String(value));
+      }
+    }
+    const qs = search.toString();
+    return request<any>(`/approvals${qs ? `?${qs}` : ''}`).then((payload) => {
+      const items = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.items)
+        ? payload.items
+        : unwrapList(payload);
+      const total = typeof payload?.total === 'number' ? payload.total : items.length;
+      const hasMore = typeof payload?.hasMore === 'boolean' ? payload.hasMore : false;
+      const limit = typeof payload?.limit === 'number' ? payload.limit : (params?.limit ?? items.length);
+      const offset = typeof payload?.offset === 'number' ? payload.offset : (params?.offset ?? 0);
+      return { items, total, hasMore, limit, offset };
+    });
   },
   get: (id: string) => request<any>(`/approvals/${id}`),
   context: (id: string) => request<any>(`/approvals/${id}/context`),
@@ -785,6 +877,8 @@ export const superAgentApi = {
       mode?: string;
       autonomyLevel?: 'supervised' | 'assisted' | 'autonomous';
       model?: string;
+      // Pass sessionId via context.sessionId to keep conversation memory
+      // across turns. See server/routes/superAgent.ts /command.
       context?: Record<string, any>;
     },
   ) =>
@@ -833,6 +927,19 @@ export const superAgentApi = {
       }),
     }),
   session: (sessionId: string) => request<any>(`/super-agent/sessions/${encodeURIComponent(sessionId)}`),
+  // Right-sidebar saved-conversations list. Server filters by req.userId so
+  // each user only sees their own threads.
+  listSessions: (limit = 50) =>
+    request<{ sessions: Array<{ id: string; title: string; preview: string; turnCount: number; updatedAt: string; createdAt: string }>; count: number }>(
+      `/super-agent/sessions?limit=${limit}`,
+    ),
+  deleteSession: (sessionId: string) =>
+    request<{ ok: true }>(`/super-agent/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
+  renameSession: (sessionId: string, title: string) =>
+    request<{ ok: true }>(`/super-agent/sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    }),
   sessionTraces: (sessionId: string, limit = 20) =>
     request<any>(`/super-agent/sessions/${encodeURIComponent(sessionId)}/traces?limit=${limit}`),
   trace: (planId: string) => request<any>(`/super-agent/traces/${encodeURIComponent(planId)}`),

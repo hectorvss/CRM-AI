@@ -81,7 +81,7 @@ router.post('/:id/messages', async (req: MultiTenantRequest, res: Response) => {
 
     // Fire workflow trigger for inbound customer messages
     if ((type === 'customer' || type === 'inbound' || !type) && conv.case_id) {
-      fireWorkflowEvent(
+      await fireWorkflowEvent(
         { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
         'message.received',
         { messageId: message.id, conversationId: req.params.id, caseId: conv.case_id, customerId: conv.customer_id, channel: conv.channel, content },

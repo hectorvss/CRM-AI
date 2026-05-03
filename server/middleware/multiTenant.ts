@@ -218,6 +218,9 @@ const TENANT_BYPASS_PATHS: RegExp[] = [
   /^\/api\/public(\/|$)/,
   /^\/api\/onboarding\/setup$/,
   /^\/api\/oauth-connectors(\/|$)/,
+  // Internal cron-driven endpoints have their own bearer auth (INTERNAL_CRON_SECRET).
+  // They iterate workspaces internally; tenant resolution is per-tenant inside each handler.
+  /^\/api\/internal(\/|$)/,
 ];
 
 function shouldBypassTenant(req: Request): boolean {

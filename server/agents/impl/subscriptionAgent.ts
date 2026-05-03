@@ -11,8 +11,6 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -23,10 +21,7 @@ export const subscriptionAgentImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, tenantId, workspaceId, runId } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
 
     const customer = contextWindow.customer;
@@ -54,26 +49,16 @@ export const subscriptionAgentImpl: AgentImplementation = {
       };
     }
 
-    const recurringPayments = useSupabase
-      ? await (async () => {
-          const { data, error } = await supabase!
-            .from('payments')
-            .select('id, amount, status, created_at, external_payment_id')
-            .eq('customer_id', customer.id)
-            .eq('tenant_id', tenantId)
-            .eq('workspace_id', workspaceId)
-            .order('created_at', { ascending: false })
-            .limit(12);
-          if (error) throw error;
-          return data ?? [];
-        })()
-      : db!.prepare(`
-          SELECT id, amount, status, created_at, external_payment_id
-          FROM payments
-          WHERE customer_id = ? AND tenant_id = ? AND workspace_id = ?
-          ORDER BY created_at DESC
-          LIMIT 12
-        `).all(customer.id, tenantId, workspaceId) as any[];
+    const { data: recurringPaymentsData, error: recurringPaymentsError } = await supabase
+      .from('payments')
+      .select('id, amount, status, created_at, external_payment_id')
+      .eq('customer_id', customer.id)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(12);
+    if (recurringPaymentsError) throw recurringPaymentsError;
+    const recurringPayments: any[] = recurringPaymentsData ?? [];
 
     const amounts = recurringPayments.map((p: any) => p.amount);
     const uniqueAmounts = [...new Set(amounts)];
@@ -105,36 +90,19 @@ export const subscriptionAgentImpl: AgentImplementation = {
 
     if (issues.length > 0) {
       try {
-        if (useSupabase) {
-          const { error } = await supabase!.from('audit_events').insert({
-            id: randomUUID(),
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-            actor_type: 'agent',
-            action: 'subscription_check',
-            entity_type: 'case',
-            entity_id: caseId,
-            new_value: `Subscription agent: ${issues.length} issue(s) detected`,
-            metadata: { issues, hasRecurring, paymentCount: recurringPayments.length, agentRunId: runId },
-            occurred_at: now,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT INTO audit_events
-              (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-            VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
-          `).run(
-            randomUUID(),
-            tenantId,
-            workspaceId,
-            'subscription_check',
-            caseId,
-            `Subscription agent: ${issues.length} issue(s) detected`,
-            JSON.stringify({ issues, hasRecurring, paymentCount: recurringPayments.length, agentRunId: runId }),
-            now,
-          );
-        }
+        const { error } = await supabase.from('audit_events').insert({
+          id: randomUUID(),
+          tenant_id: tenantId,
+          workspace_id: workspaceId,
+          actor_type: 'agent',
+          action: 'subscription_check',
+          entity_type: 'case',
+          entity_id: caseId,
+          new_value: `Subscription agent: ${issues.length} issue(s) detected`,
+          metadata: { issues, hasRecurring, paymentCount: recurringPayments.length, agentRunId: runId },
+          occurred_at: now,
+        });
+        if (error) throw error;
       } catch (err: any) {
         logger.error('Subscription agent audit write failed', { error: err?.message });
       }

@@ -149,3 +149,11 @@ export function stopAiCreditsReset(): void {
     resetIntervalId = null;
   }
 }
+
+/**
+ * Single-shot variant invoked by the cron-driven scheduler tick (Vercel).
+ * Equivalent to one cycle of `runAiCreditsReset` — no scheduling state.
+ */
+export async function aiCreditsResetRunOnce(): Promise<{ rolled: number; flexibleEvents: number }> {
+  return runAiCreditsReset();
+}

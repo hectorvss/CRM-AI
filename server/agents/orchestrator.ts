@@ -241,15 +241,15 @@ export const agentTriggerHandler: JobHandler<'agent.trigger'> = async (payload, 
   }
 };
 
-export function triggerAgents(
+export async function triggerAgents(
   event: TriggerEvent,
   caseId: string,
   opts: { tenantId: string; workspaceId: string; traceId?: string; priority?: number; context?: Record<string, unknown> }
-): void {
+): Promise<void> {
   const { tenantId, workspaceId, traceId, priority = 8, context } = opts;
 
   try {
-    enqueue(
+    await enqueue(
       JobType.AGENT_TRIGGER,
       { triggerEvent: event, caseId, context },
       { tenantId, workspaceId, traceId, priority },

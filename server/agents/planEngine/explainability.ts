@@ -262,9 +262,13 @@ function inferIntentFromMessage(message: string): string {
 }
 
 function pickSummary(input: { planRationale?: string; narrative?: string; traceSummary?: string }): string {
+  // "Why this path" should explain TOOL SELECTION, not duplicate the answer.
+  // Order: planRationale (LLM's stated reason for picking these tools) > traceSummary > fallback.
+  // We deliberately drop `narrative` — the narrative is the user-facing answer
+  // and showing it twice (once as the response, once under "Why this path") was
+  // confusing and looked like a copy-paste.
   return (
     input.planRationale?.trim()
-    || input.narrative?.trim()
     || input.traceSummary?.trim()
     || 'No reasoning recorded for this run.'
   );

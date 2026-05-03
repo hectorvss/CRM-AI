@@ -11,7 +11,10 @@ import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { SessionState, Turn, Slot, ConversationTarget } from './types.js';
 
-const SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour default
+// 30 days. Conversations are persistent per user (the chat history sidebar
+// surfaces them); the TTL is a safety net for abandoned threads only —
+// active sessions get their `ttl_at` refreshed on every saveSession call.
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,6 +121,10 @@ export async function saveSession(session: SessionState): Promise<void> {
   try {
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
+    // Refresh the TTL on every write so active threads never expire while
+    // the user is using them.
+    const refreshedTtl = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+    session.ttlAt = refreshedTtl;
     const { error } = await supabase.from('super_agent_sessions').upsert({
       id: session.id,
       user_id: session.userId,
@@ -131,11 +138,152 @@ export async function saveSession(session: SessionState): Promise<void> {
       active_plan_id: session.activePlanId ?? null,
       created_at: session.createdAt,
       updated_at: now,
-      ttl_at: session.ttlAt,
+      ttl_at: refreshedTtl,
     });
     if (error) throw error;
   } catch (err) {
     logger.warn('SessionRepository.save failed', { sessionId: session.id, error: String(err) });
+  }
+}
+
+/**
+ * Saved-conversation summary returned by the sidebar list endpoint.
+ * Strictly scoped: caller must pass userId, tenantId, workspaceId — the
+ * query filters by all three so a user can only see THEIR own threads.
+ */
+export interface SessionSummary {
+  id: string;
+  title: string;
+  preview: string;
+  turnCount: number;
+  updatedAt: string;
+  createdAt: string;
+}
+
+function deriveTitle(turns: Turn[], summary: string): string {
+  const firstUser = turns.find((t) => t.role === 'user' && t.content?.trim());
+  if (firstUser) {
+    const text = firstUser.content.trim().replace(/\s+/g, ' ');
+    return text.length > 60 ? `${text.slice(0, 57).trimEnd()}...` : text;
+  }
+  if (summary && summary.trim()) return summary.trim().slice(0, 60);
+  return 'New conversation';
+}
+
+function derivePreview(turns: Turn[]): string {
+  const lastAssistant = [...turns].reverse().find((t) => t.role === 'assistant' && t.content?.trim());
+  const target = lastAssistant ?? turns[turns.length - 1];
+  if (!target?.content) return '';
+  const text = String(target.content).replace(/\s+/g, ' ').trim();
+  return text.length > 110 ? `${text.slice(0, 107).trimEnd()}...` : text;
+}
+
+/**
+ * List all sessions belonging to a specific user within a tenant+workspace.
+ *
+ * Privacy invariant: every filter (user_id, tenant_id, workspace_id) MUST be
+ * applied — never relax this. The service-role client bypasses RLS, so this
+ * function is the only barrier between users seeing each other's threads.
+ */
+export async function listSessionsForUser(
+  userId: string,
+  tenantId: string,
+  workspaceId: string | null,
+  limit = 50,
+): Promise<SessionSummary[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from('super_agent_sessions')
+      .select('id, turns_json, summary, updated_at, created_at, ttl_at')
+      .eq('user_id', userId)
+      .eq('tenant_id', tenantId)
+      .gt('ttl_at', new Date().toISOString())
+      .order('updated_at', { ascending: false })
+      .limit(limit);
+    if (workspaceId === null) {
+      query = query.is('workspace_id', null);
+    } else {
+      query = query.eq('workspace_id', workspaceId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = data ?? [];
+    return rows
+      .map((row: any) => {
+        const turns = (() => {
+          try { return JSON.parse(row.turns_json || '[]') as Turn[]; } catch { return []; }
+        })();
+        return {
+          id: row.id,
+          title: deriveTitle(turns, row.summary || ''),
+          preview: derivePreview(turns),
+          turnCount: turns.length,
+          updatedAt: typeof row.updated_at === 'string' ? row.updated_at : new Date(row.updated_at).toISOString(),
+          createdAt: typeof row.created_at === 'string' ? row.created_at : new Date(row.created_at).toISOString(),
+        };
+      })
+      // Hide empty sessions (created but never had a user turn) so the
+      // sidebar doesn't fill up with placeholders.
+      .filter((s) => s.turnCount > 0);
+  } catch (err) {
+    logger.warn('SessionRepository.listForUser failed', { userId, error: String(err) });
+    return [];
+  }
+}
+
+/**
+ * Delete a session. Privacy invariant: scoped to the owning user — the
+ * route handler must pass req.userId so a user cannot delete someone else's
+ * thread by guessing its UUID.
+ */
+export async function deleteSessionForUser(
+  sessionId: string,
+  userId: string,
+  tenantId: string,
+): Promise<boolean> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('super_agent_sessions')
+      .delete()
+      .eq('id', sessionId)
+      .eq('user_id', userId)
+      .eq('tenant_id', tenantId)
+      .select('id');
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
+  } catch (err) {
+    logger.warn('SessionRepository.deleteForUser failed', { sessionId, userId, error: String(err) });
+    return false;
+  }
+}
+
+/**
+ * Set or clear the human-readable summary (used as the sidebar title).
+ * Same privacy invariant as delete.
+ */
+export async function renameSessionForUser(
+  sessionId: string,
+  userId: string,
+  tenantId: string,
+  newTitle: string,
+): Promise<boolean> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const trimmed = newTitle.trim().slice(0, 200);
+    const { data, error } = await supabase
+      .from('super_agent_sessions')
+      .update({ summary: trimmed, updated_at: new Date().toISOString() })
+      .eq('id', sessionId)
+      .eq('user_id', userId)
+      .eq('tenant_id', tenantId)
+      .select('id');
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
+  } catch (err) {
+    logger.warn('SessionRepository.renameForUser failed', { sessionId, userId, error: String(err) });
+    return false;
   }
 }
 

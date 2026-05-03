@@ -1,12 +1,18 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { sendError } from '../http/errors.js';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
 
 import { createAuditRepository, createBillingRepository } from '../data/index.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { getStripe } from '../integrations/stripe/client.js';
+import {
+  getStripe,
+  isStripeConfigured,
+  isStripeNotConfiguredError,
+  StripeNotConfiguredError,
+} from '../integrations/stripe/client.js';
 import {
   getPlanPriceId,
   getTopupPriceId,
@@ -24,6 +30,42 @@ const router = Router();
 const billingRepository = createBillingRepository();
 const auditRepository = createAuditRepository();
 router.use(extractMultiTenant);
+
+/**
+ * Send a 503 Service Unavailable for endpoints that require Stripe when the
+ * deployment has not configured `STRIPE_SECRET_KEY` (or `STRIPE_WEBHOOK_SECRET`
+ * for inbound webhooks).  The shape is stable so the SPA can render a
+ * friendly "Billing not available — contact admin" panel.
+ */
+function sendStripeNotConfigured(res: any, err: StripeNotConfiguredError) {
+  return res.status(503).json({
+    error: 'STRIPE_NOT_CONFIGURED',
+    code: 'STRIPE_NOT_CONFIGURED',
+    message: err.message,
+    missingVar: err.missingVar,
+  });
+}
+
+// ── GET /api/billing/config ─────────────────────────────────────────────────
+// Lightweight introspection endpoint the SPA can hit to decide whether to
+// surface Stripe-driven UI (upgrade buttons, manage subscription, etc.).
+// Public to authenticated users; no permission required.
+router.get('/config', async (_req: MultiTenantRequest, res) => {
+  res.json({
+    stripeConfigured: isStripeConfigured(),
+    flexibleUsageConfigured: !!getFlexibleUsagePriceId(),
+    topupPacks: {
+      '5k': !!getTopupPriceId('5k'),
+      '20k': !!getTopupPriceId('20k'),
+      '50k': !!getTopupPriceId('50k'),
+    },
+    plans: {
+      starter: { month: !!getPlanPriceId('starter', 'month'), year: !!getPlanPriceId('starter', 'year') },
+      growth:  { month: !!getPlanPriceId('growth',  'month'), year: !!getPlanPriceId('growth',  'year') },
+      scale:   { month: !!getPlanPriceId('scale',   'month'), year: !!getPlanPriceId('scale',   'year') },
+    },
+  });
+});
 
 // ── GET /api/billing/access ─────────────────────────────────────────────────
 // Used by the SPA to decide whether to render the app or the paywall.
@@ -81,15 +123,16 @@ router.post('/activate-trial', async (req: MultiTenantRequest, res) => {
       }
     }
 
-    await auditRepository.write({
-      action:     'TRIAL_ACTIVATED',
-      entityType: 'subscription',
-      entityId:   snapshot.subscriptionId ?? req.tenantId,
-      tenantId:   req.tenantId,
-      workspaceId: req.workspaceId ?? null,
-      userId:     req.userId ?? 'system',
-      newValue:   { trialEndsAt: snapshot.trialEndsAt, hasMeta },
-    } as any);
+    await auditRepository.log(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId ?? '' },
+      {
+        actorId:    req.userId ?? 'system',
+        action:     'TRIAL_ACTIVATED',
+        entityType: 'subscription',
+        entityId:   snapshot.subscriptionId ?? req.tenantId,
+        newValue:   { trialEndsAt: snapshot.trialEndsAt, hasMeta },
+      },
+    );
 
     return res.json(snapshot);
   } catch (err: any) {
@@ -139,8 +182,8 @@ router.get('/:orgId/subscription', requirePermission('billing.read'), async (req
     const sub = await billingRepository.getSubscription({ tenantId: req.tenantId! }, req.params.orgId);
     res.json(sub);
   } catch (error) {
-    console.error('Error fetching subscription:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    logger.error('billing.subscription.get failed', error as Error, { orgId: req.params.orgId });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Could not load subscription');
   }
 });
 
@@ -150,54 +193,120 @@ router.get('/:orgId/ledger', requirePermission('billing.read'), async (req: Mult
     const ledger = await billingRepository.getLedger({ tenantId: req.tenantId! }, req.params.orgId);
     res.json(ledger);
   } catch (error) {
-    console.error('Error fetching ledger:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    logger.error('billing.ledger.get failed', error as Error, { orgId: req.params.orgId });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Could not load ledger');
   }
+});
+
+// ── PATCH /api/billing/:orgId/subscription ──────────────────────────────────
+// Swap the price on an existing paid subscription (plan upgrade/downgrade or
+// monthly↔annual switch).  Brand-new subscriptions must go through
+// /:orgId/checkout-session — this endpoint refuses if there is no live
+// Stripe subscription to mutate.
+const ChangePlanBodySchema = z.object({
+  plan_id: z.enum(['starter', 'growth', 'scale']),
+  interval: z.enum(['month', 'year']).optional(),
 });
 
 router.patch('/:orgId/subscription', requirePermission('billing.manage'), async (req: MultiTenantRequest, res) => {
   try {
-    const supabase = getSupabaseAdmin();
-    const updates = {
-      plan_id: req.body?.plan_id ?? req.body?.plan,
-      status: req.body?.status,
-      seats_included: req.body?.seats_included ?? req.body?.seats,
-      credits_included: req.body?.credits_included,
-    };
-    Object.keys(updates).forEach((key) => (updates as any)[key] === undefined && delete (updates as any)[key]);
+    const parsed = ChangePlanBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return sendError(
+        res,
+        400,
+        'INVALID_BODY',
+        parsed.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; '),
+      );
+    }
+    const { plan_id: newPlan, interval = 'month' } = parsed.data;
 
-    const { data, error } = await supabase
+    const stripe = getStripe();
+    const supabase = getSupabaseAdmin();
+
+    const { data: sub, error: subErr } = await supabase
       .from('billing_subscriptions')
-      .update(updates)
+      .select('id, plan_id, external_subscription_id, status')
+      .eq('tenant_id', req.tenantId!)
       .eq('org_id', req.params.orgId)
-      .select('*')
       .maybeSingle();
-    if (error) throw error;
+    if (subErr) throw subErr;
+
+    if (!sub || !sub.external_subscription_id || sub.plan_id === 'free') {
+      return sendError(
+        res,
+        409,
+        'NO_PAID_SUBSCRIPTION',
+        'Use checkout-session to start a paid subscription instead',
+      );
+    }
+
+    const newPriceId = getPlanPriceId(newPlan, interval);
+    if (!newPriceId) {
+      return sendError(
+        res,
+        501,
+        'PRICE_ID_NOT_CONFIGURED',
+        `Stripe Price ID for plan="${newPlan}" interval="${interval}" is not configured. ` +
+          `Set STRIPE_PRICE_ID_${newPlan.toUpperCase()}_${interval === 'year' ? 'ANNUAL' : 'MONTHLY'}.`,
+      );
+    }
+
+    const stripeSub = await stripe.subscriptions.retrieve(sub.external_subscription_id);
+    const existingItem = stripeSub.items.data[0];
+    if (!existingItem) {
+      return sendError(res, 500, 'STRIPE_NO_ITEMS', 'Stripe subscription has no items to update');
+    }
+
+    const updated = await stripe.subscriptions.update(sub.external_subscription_id, {
+      items: [{ id: existingItem.id, price: newPriceId }],
+      proration_behavior: 'create_prorations',
+    });
+
+    const oldPlan = sub.plan_id;
+    await supabase
+      .from('billing_subscriptions')
+      .update({ plan_id: newPlan })
+      .eq('id', sub.id);
 
     await auditRepository.log({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
       actorId: req.userId || 'system',
-      action: 'BILLING_SUBSCRIPTION_UPDATED',
+      action: 'BILLING_PLAN_CHANGED',
       entityType: 'subscription',
       entityId: req.params.orgId,
-      newValue: updates,
+      oldValue: { plan: oldPlan },
+      newValue: { plan: newPlan, interval, priceId: newPriceId },
     });
 
-    res.json(data ?? { ok: true, orgId: req.params.orgId, ...updates });
-  } catch (error) {
-    console.error('Error updating subscription:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    res.json({
+      ok: true,
+      plan: newPlan,
+      interval,
+      prorationDate: typeof (updated as any).billing_cycle_anchor === 'number'
+        ? (updated as any).billing_cycle_anchor
+        : undefined,
+    });
+  } catch (error: any) {
+    if (isStripeNotConfiguredError(error)) {
+      return sendStripeNotConfigured(res, error);
+    }
+    logger.error('billing.subscription.patch failed', error as Error, { orgId: req.params.orgId });
+    sendError(res, 500, 'INTERNAL_ERROR', error?.message || 'Could not update subscription');
   }
 });
 
-router.post('/:orgId/top-up', requirePermission('billing.manage'), async (req: MultiTenantRequest, res) => {
+// ── Manual top-up (in-app credit grant, no Stripe) ──────────────────────────
+// Mounted at both /:orgId/top-up and /:orgId/top-ups for back-compat with
+// older clients (`billingApi.topUp` calls /top-ups).
+async function handleManualTopup(req: MultiTenantRequest, res: any) {
   try {
-    const credits = Number(req.body?.credits ?? req.body?.amount ?? 0);
+    const credits = Number(req.body?.credits ?? req.body?.quantity ?? req.body?.amount ?? 0);
     if (!Number.isFinite(credits) || credits <= 0) {
       return sendError(res, 400, 'INVALID_TOP_UP', 'A positive credit amount is required');
     }
 
     const entry = {
-      id: `ledger_${Date.now()}`,
+      id: `ledger_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
       tenant_id: req.tenantId!,
       org_id: req.params.orgId,
       entry_type: 'credit',
@@ -212,6 +321,23 @@ router.post('/:orgId/top-up', requirePermission('billing.manage'), async (req: M
     const { error } = await supabase.from('credit_ledger').insert(entry);
     if (error) throw error;
 
+    // Bump the in-app top-up balance on billing_subscriptions, if the column exists.
+    try {
+      const { data: sub } = await supabase
+        .from('billing_subscriptions')
+        .select('id, ai_credits_topup_balance')
+        .eq('org_id', req.params.orgId)
+        .maybeSingle();
+      if (sub?.id) {
+        await supabase
+          .from('billing_subscriptions')
+          .update({ ai_credits_topup_balance: Number(sub.ai_credits_topup_balance ?? 0) + credits })
+          .eq('id', sub.id);
+      }
+    } catch (subErr: any) {
+      logger.warn('billing.manual-topup: balance update failed (non-fatal)', { error: subErr?.message });
+    }
+
     await auditRepository.log({ tenantId: req.tenantId!, workspaceId: req.workspaceId! }, {
       actorId: req.userId || 'system',
       action: 'BILLING_CREDITS_TOPPED_UP',
@@ -222,16 +348,19 @@ router.post('/:orgId/top-up', requirePermission('billing.manage'), async (req: M
 
     res.status(201).json(entry);
   } catch (error) {
-    console.error('Error topping up credits:', error);
-    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+    logger.error('billing.manual-topup failed', error as Error, { orgId: req.params.orgId });
+    sendError(res, 500, 'INTERNAL_ERROR', 'Could not record top-up');
   }
-});
+}
+router.post('/:orgId/top-up', requirePermission('billing.manage'), handleManualTopup);
+router.post('/:orgId/top-ups', requirePermission('billing.manage'), handleManualTopup);
 
 // ── Stripe-backed endpoints ─────────────────────────────────────────────────
 
 /**
  * Resolve (and lazily create) the Stripe customer for an organization.
  * Persists the customer ID into billing_subscriptions.external_customer_id.
+ * May throw `StripeNotConfiguredError`.
  */
 async function ensureStripeCustomer(
   orgId: string,
@@ -369,6 +498,9 @@ router.post('/:orgId/checkout-session', requirePermission('billing.manage'), asy
 
     res.json({ url: session.url, sessionId: session.id });
   } catch (error: any) {
+    if (isStripeNotConfiguredError(error)) {
+      return sendStripeNotConfigured(res, error);
+    }
     logger.error('Stripe checkout-session error', error, { orgId: req.params.orgId });
     sendError(res, 500, 'STRIPE_CHECKOUT_FAILED', error?.message || 'Could not create checkout session');
   }
@@ -404,6 +536,9 @@ router.post('/:orgId/portal-session', requirePermission('billing.manage'), async
 
     res.json({ url: portal.url });
   } catch (error: any) {
+    if (isStripeNotConfiguredError(error)) {
+      return sendStripeNotConfigured(res, error);
+    }
     logger.error('Stripe portal-session error', error, { orgId: req.params.orgId });
     sendError(res, 500, 'STRIPE_PORTAL_FAILED', error?.message || 'Could not create portal session');
   }
@@ -476,6 +611,9 @@ router.post('/:orgId/topup-checkout', requirePermission('billing.manage'), async
 
     res.json({ url: session.url, sessionId: session.id, pack, credits });
   } catch (error: any) {
+    if (isStripeNotConfiguredError(error)) {
+      return sendStripeNotConfigured(res, error);
+    }
     logger.error('Stripe topup-checkout error', error, { orgId: req.params.orgId });
     sendError(res, 500, 'STRIPE_TOPUP_FAILED', error?.message || 'Could not create top-up checkout session');
   }
@@ -539,6 +677,9 @@ router.post('/:orgId/flexible-usage/enable', requirePermission('billing.manage')
 
     res.json({ enabled: true, subscriptionItemId: item.id, capCredits });
   } catch (error: any) {
+    if (isStripeNotConfiguredError(error)) {
+      return sendStripeNotConfigured(res, error);
+    }
     logger.error('Stripe flexible-usage/enable error', error, { orgId: req.params.orgId });
     sendError(res, 500, 'FLEXIBLE_USAGE_ENABLE_FAILED', error?.message || 'Could not enable flexible usage');
   }
@@ -589,6 +730,9 @@ router.post('/:orgId/flexible-usage/disable', requirePermission('billing.manage'
 
     res.json({ enabled: false });
   } catch (error: any) {
+    if (isStripeNotConfiguredError(error)) {
+      return sendStripeNotConfigured(res, error);
+    }
     logger.error('Stripe flexible-usage/disable error', error, { orgId: req.params.orgId });
     sendError(res, 500, 'FLEXIBLE_USAGE_DISABLE_FAILED', error?.message || 'Could not disable flexible usage');
   }
@@ -598,7 +742,12 @@ router.post('/:orgId/flexible-usage/disable', requirePermission('billing.manage'
 
 /**
  * GET /api/billing/usage
+ *
  * Returns the AI credits usage summary for the caller's workspace.
+ * Reads from billing_subscriptions (plan, included credits, top-up balance,
+ * flexible usage) and ai_usage_events (flexible-tier consumption this period).
+ *
+ * Independent of Stripe configuration: works as long as the schema is in place.
  */
 router.get('/usage', requirePermission('billing.read'), async (req: MultiTenantRequest, res) => {
   try {
@@ -635,6 +784,29 @@ router.get('/usage/events', requirePermission('billing.read'), async (req: Multi
   } catch (error: any) {
     logger.error('Billing usage events fetch error', error, { tenantId: req.tenantId });
     sendError(res, 500, 'USAGE_EVENTS_FETCH_FAILED', error?.message || 'Could not load usage events');
+  }
+});
+
+/**
+ * GET /api/billing/credit-grants
+ * Lists the most recent credit grants (plan renewals + top-ups + manual)
+ * for the workspace.  Used by the Billing → Credits tab.
+ */
+router.get('/credit-grants', requirePermission('billing.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('credit_grants')
+      .select('*')
+      .eq('tenant_id', req.tenantId!)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    res.json({ grants: data ?? [] });
+  } catch (error: any) {
+    logger.error('Billing credit-grants fetch error', error, { tenantId: req.tenantId });
+    sendError(res, 500, 'CREDIT_GRANTS_FETCH_FAILED', error?.message || 'Could not load credit grants');
   }
 });
 

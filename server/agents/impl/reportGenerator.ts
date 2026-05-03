@@ -5,8 +5,6 @@
  */
 
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -17,10 +15,7 @@ export const reportGeneratorImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId, triggerEvent } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
 
     const contextStr = contextWindow.toPromptString();
     const isResolution = triggerEvent === 'case_resolved';
@@ -83,29 +78,14 @@ Focus on:
     }
 
     const now = new Date().toISOString();
-    if (useSupabase) {
-      const { error } = await supabase!.from('cases').update({
-        ai_diagnosis: diagnosis,
-        ai_root_cause: rootCause,
-        ai_recommended_action: recommendedAction,
-        ai_confidence: confidence,
-        updated_at: now,
-      }).eq('id', caseId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
-      if (error) throw error;
-    } else {
-      db!.prepare(`
-        UPDATE cases SET
-          ai_diagnosis = ?,
-          ai_root_cause = ?,
-          ai_recommended_action = ?,
-          ai_confidence = ?,
-          updated_at = ?
-        WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-      `).run(
-        diagnosis, rootCause, recommendedAction, confidence, now,
-        caseId, tenantId, workspaceId,
-      );
-    }
+    const { error } = await supabase.from('cases').update({
+      ai_diagnosis: diagnosis,
+      ai_root_cause: rootCause,
+      ai_recommended_action: recommendedAction,
+      ai_confidence: confidence,
+      updated_at: now,
+    }).eq('id', caseId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
+    if (error) throw error;
 
     const costCredits = Math.ceil(tokensUsed / 1000);
     return {

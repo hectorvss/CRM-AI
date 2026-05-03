@@ -87,6 +87,19 @@ const Signup: React.FC<SignupProps> = ({ onSignup, onShowLogin }) => {
         workspaceId: string;
       };
 
+      // ── Refresh session so the new app_metadata claims (tenant_id, workspace_id)
+      // populated by /onboarding/setup land in the JWT BEFORE we hand control
+      // back to the app. Without this, the very first request the dashboard
+      // makes carries an old JWT (no claims) and the backend either resolves
+      // the wrong tenant or rejects the request as anonymous.
+      try {
+        await supabase.auth.refreshSession();
+      } catch (refreshErr) {
+        // Non-fatal — backend will still read app_metadata via getUser(token).
+        // Log only; the App.tsx membership probe is the safety net.
+        console.warn('[signup] refreshSession after onboarding failed', refreshErr);
+      }
+
       setStep('done');
       // Small delay so user sees the "done" state before the app navigates
       setTimeout(() => onSignup(tenantId, workspaceId), 800);

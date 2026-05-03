@@ -328,7 +328,7 @@ async function handleResolutionExecute(
     await caseRepo.update(scope, plan.case_id, { has_reconciliation_conflicts: 0 });
 
     // Fire agent chain: QA check + report generation + audit log on resolution
-    triggerAgents('case_resolved', plan.case_id, {
+    await triggerAgents('case_resolved', plan.case_id, {
       tenantId:     scope.tenantId,
       workspaceId:  scope.workspaceId,
       traceId:      ctx.traceId,

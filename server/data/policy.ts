@@ -10,11 +10,25 @@ export interface PolicyScope {
 
 export type PolicyDecision = 'allow' | 'conditional' | 'approval_required' | 'block';
 
+export interface PolicyEvaluateOptions {
+  /**
+   * When true (default), the evaluation is persisted to `policy_evaluations`
+   * before being returned. Set to `false` for synthetic / preview evaluations
+   * that should not appear in the audit feed.
+   */
+  persist?: boolean;
+  /**
+   * Optional pre-generated evaluation id. If omitted, evaluatePolicy generates
+   * one. The id is included in the returned object as `evaluationId`.
+   */
+  evaluationId?: string;
+}
+
 export interface PolicyRepository {
   listRules(scope: PolicyScope, entityType?: string, isActive?: boolean): Promise<any[]>;
   createRule(scope: PolicyScope, data: any): Promise<any>;
   updateRule(scope: PolicyScope, id: string, data: any): Promise<any>;
-  evaluate(scope: PolicyScope, entityType: string, actionType: string | null, context: Record<string, any>, caseId: string | null): Promise<any>;
+  evaluate(scope: PolicyScope, entityType: string, actionType: string | null, context: Record<string, any>, caseId: string | null, options?: PolicyEvaluateOptions): Promise<any>;
   listEvaluations(scope: PolicyScope, filters: { decision?: string; entityType?: string; caseId?: string }): Promise<any[]>;
   getMetrics(scope: PolicyScope): Promise<any>;
   resolveAssigneeByRole(scope: PolicyScope, role: string | null): Promise<string | null>;
@@ -104,7 +118,7 @@ function resolveDecision(rule: any): { decision: PolicyDecision; requiresApprova
 
 async function listRulesSupabase(scope: PolicyScope, entityType?: string, isActive?: boolean) {
   const supabase = getSupabaseAdmin();
-  let query = supabase.from('policy_rules').select('*').eq('tenant_id', scope.tenantId);
+  let query = supabase.from('policy_rules').select('*').eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId);
   if (entityType) query = query.eq('entity_type', entityType);
   if (isActive !== undefined) query = query.eq('is_active', isActive);
   query = query.order('created_at', { ascending: false });
@@ -120,6 +134,7 @@ async function createRuleSupabase(scope: PolicyScope, data: any) {
   const rule = {
     id,
     tenant_id: scope.tenantId,
+    workspace_id: scope.workspaceId,
     knowledge_article_id: data.knowledge_article_id || null,
     name: data.name,
     description: data.description || null,
@@ -153,7 +168,7 @@ async function createRuleSupabase(scope: PolicyScope, data: any) {
 
 async function updateRuleSupabase(scope: PolicyScope, id: string, data: any) {
   const supabase = getSupabaseAdmin();
-  const { data: existing, error: getError } = await supabase.from('policy_rules').select('*').eq('id', id).eq('tenant_id', scope.tenantId).single();
+  const { data: existing, error: getError } = await supabase.from('policy_rules').select('*').eq('id', id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).single();
   if (getError) throw getError;
 
   const updates = {
@@ -169,7 +184,7 @@ async function updateRuleSupabase(scope: PolicyScope, id: string, data: any) {
     updated_at: new Date().toISOString()
   };
 
-  const { error } = await supabase.from('policy_rules').update(updates).eq('id', id).eq('tenant_id', scope.tenantId);
+  const { error } = await supabase.from('policy_rules').update(updates).eq('id', id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId);
   if (error) throw error;
 
   await supabase.from('audit_events').insert({
@@ -188,7 +203,7 @@ async function updateRuleSupabase(scope: PolicyScope, id: string, data: any) {
 }
 
 
-async function evaluatePolicy(scope: PolicyScope, entityType: string, actionType: string | null, context: Record<string, any>, caseId: string | null) {
+async function evaluatePolicy(scope: PolicyScope, entityType: string, actionType: string | null, context: Record<string, any>, caseId: string | null, options?: PolicyEvaluateOptions) {
   const rules = await createPolicyRepository().listRules(scope, entityType, true);
 
   const matchedRules: any[] = [];
@@ -231,7 +246,47 @@ async function evaluatePolicy(scope: PolicyScope, entityType: string, actionType
     }
   }
 
-  return { matchedRules, finalDecision, requiresApproval, matchedRuleId, matchedRule, reason, conflictDetected, conflictingRuleIds };
+  const evaluationId = options?.evaluationId || randomUUID();
+  const result = {
+    evaluationId,
+    matchedRules,
+    finalDecision,
+    requiresApproval,
+    matchedRuleId,
+    matchedRule,
+    reason,
+    conflictDetected,
+    conflictingRuleIds,
+  };
+
+  // Auto-persist by default. Callers can opt out with `{ persist: false }` for
+  // synthetic / preview evaluations. tenant_id + workspace_id are propagated
+  // from `scope` inside persistEvaluationSupabase.
+  if (options?.persist !== false) {
+    try {
+      await persistEvaluationSupabase(scope, {
+        id: evaluationId,
+        entityType,
+        actionType,
+        caseId,
+        context,
+        matchedRules,
+        matchedRuleId,
+        decision: finalDecision,
+        requiresApproval,
+        conflictDetected,
+        conflictingRuleIds,
+        reason,
+      });
+    } catch (err) {
+      // Don't fail the evaluation if persistence fails — surface a console
+      // warning so the missing audit row is observable but the caller still
+      // receives the decision.
+      console.error('evaluatePolicy: failed to persist evaluation', err);
+    }
+  }
+
+  return result;
 }
 
 async function listEvaluationsSupabase(scope: PolicyScope, filters: any) {

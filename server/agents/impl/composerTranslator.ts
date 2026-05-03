@@ -7,8 +7,6 @@
 
 import { randomUUID } from 'crypto';
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -19,10 +17,7 @@ export const composerTranslatorImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId, triggerEvent } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
 
     const isResolution = triggerEvent === 'case_resolved';
     const hasConflicts = contextWindow.conflicts.length > 0;
@@ -73,78 +68,54 @@ Return a JSON object with exactly these fields:
 
     const now = new Date().toISOString();
     try {
-      if (useSupabase) {
-        const { error } = await supabase!.from('draft_replies').insert({
-          id: randomUUID(),
-          case_id: caseId,
-          tenant_id: tenantId,
-          workspace_id: workspaceId,
-          content: draft,
-          generated_by: 'composer-translator',
-          tone: tone ?? 'professional',
-          confidence,
-          has_policies: policyConstraints.length > 0 ? 1 : 0,
-          citations: JSON.stringify(knowledgeBundle.citations),
-          status: 'pending_review',
-          generated_at: now,
-        });
-        if (error) throw error;
-      } else {
-        db!.prepare(`
-          INSERT INTO draft_replies
-            (id, case_id, tenant_id, workspace_id, content, tone, status, generated_by, generated_at)
-          VALUES (?, ?, ?, ?, ?, ?, 'pending_review', 'composer-translator', ?)
-        `).run(randomUUID(), caseId, tenantId, workspaceId, draft, tone ?? 'professional', now);
-      }
+      const { error } = await supabase.from('draft_replies').insert({
+        id: randomUUID(),
+        case_id: caseId,
+        tenant_id: tenantId,
+        workspace_id: workspaceId,
+        content: draft,
+        generated_by: 'composer-translator',
+        tone: tone ?? 'professional',
+        confidence,
+        has_policies: policyConstraints.length > 0 ? 1 : 0,
+        citations: JSON.stringify(knowledgeBundle.citations),
+        status: 'pending_review',
+        generated_at: now,
+      });
+      if (error) throw error;
     } catch (err: any) {
       logger.error('Failed to store composed draft', { caseId, error: err?.message });
     }
 
     if (internalNote) {
       try {
-        if (useSupabase) {
-          const { error } = await supabase!.from('internal_notes').insert({
-            id: randomUUID(),
-            case_id: caseId,
-            content: internalNote,
-            created_by: 'composer-translator',
-            created_by_type: 'system',
-            created_at: now,
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT INTO internal_notes
-              (id, case_id, content, created_by, created_by_type, created_at, tenant_id, workspace_id)
-            VALUES (?, ?, ?, 'composer-translator', 'system', ?, ?, ?)
-          `).run(randomUUID(), caseId, internalNote, now, tenantId, workspaceId);
-        }
+        const { error } = await supabase.from('internal_notes').insert({
+          id: randomUUID(),
+          case_id: caseId,
+          content: internalNote,
+          created_by: 'composer-translator',
+          created_by_type: 'system',
+          created_at: now,
+          tenant_id: tenantId,
+          workspace_id: workspaceId,
+        });
+        if (error) throw error;
       } catch { /* non-critical */ }
     }
 
     try {
-      if (useSupabase) {
-        const { error } = await supabase!.from('audit_events').insert({
-          id: randomUUID(),
-          tenant_id: tenantId,
-          workspace_id: workspaceId,
-          actor_type: 'system',
-          action: 'DRAFT_COMPOSED',
-          entity_type: 'case',
-          entity_id: caseId,
-          metadata: { tone, language, policyConstraints, hasInternalNote: Boolean(internalNote) },
-          occurred_at: now,
-        });
-        if (error) throw error;
-      } else {
-        db!.prepare(`
-          INSERT INTO audit_events
-            (id, tenant_id, workspace_id, actor_id, actor_type, action, entity_type, entity_id, metadata, occurred_at)
-          VALUES (?, ?, ?, ?, 'system', ?, 'case', ?, ?, ?)
-        `).run(randomUUID(), tenantId, workspaceId, 'composer-translator', 'DRAFT_COMPOSED', caseId, JSON.stringify({ tone, language, policyConstraints, hasInternalNote: Boolean(internalNote) }), now);
-      }
+      const { error } = await supabase.from('audit_events').insert({
+        id: randomUUID(),
+        tenant_id: tenantId,
+        workspace_id: workspaceId,
+        actor_type: 'system',
+        action: 'DRAFT_COMPOSED',
+        entity_type: 'case',
+        entity_id: caseId,
+        metadata: { tone, language, policyConstraints, hasInternalNote: Boolean(internalNote) },
+        occurred_at: now,
+      });
+      if (error) throw error;
     } catch { /* non-critical */ }
 
     const costCredits = Math.ceil(tokensUsed / 1000);

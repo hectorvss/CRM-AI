@@ -9,3 +9,6 @@ tmp-*.err
 .env*
 !.env.example
 .vercel
+
+# Local-only working folders (kept out of build & Tailwind content scan)
+.figma-extract/

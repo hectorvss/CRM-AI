@@ -4,6 +4,17 @@ import { supabase } from '../api/supabase';
 import type { NavigateFn, NavigationTarget, Page } from '../types';
 import CreditBanner from './billing/CreditBanner';
 import { useAICredits } from '../hooks/useAICredits';
+import {
+  AssistantMessage,
+  Markdown,
+  StreamingCaret,
+  ThinkingPill,
+  ToolCallCard,
+  UserMessage,
+  type ToolCallData,
+} from './ai-chat/ChatPrimitives';
+import { InlineApprovalCard } from './ai-chat/InlineApprovalCard';
+import ConversationsSidebar from './ai-chat/ConversationsSidebar';
 
 type MessageSection = {
   title: string;
@@ -777,7 +788,11 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [isSending, setIsSending] = useState(false);
   const { blocked: aiCreditsBlocked } = useAICredits();
   const [composerText, setComposerText] = useState('');
-  const [mode, setMode] = useState<SuperAgentMode>('investigate');
+  // Default to "operate" so the agent actually persists its plan steps. The
+  // policy engine still gates high-risk writes (refunds > threshold, order
+  // cancels post-fulfilment, settings, etc.) via approvals — investigate is
+  // for planning-only sessions.
+  const [mode, setMode] = useState<SuperAgentMode>('operate');
   const [planMode, setPlanMode] = useState(false);
   const [autonomyLevel, setAutonomyLevel] = useState<SuperAgentAutonomy>('assisted');
   const [selectedModelId, setSelectedModelId] = useState<string>(MODEL_OPTIONS[0].id);
@@ -795,6 +810,10 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const [isStreamConnected, setIsStreamConnected] = useState(false);
   const [liveAlerts, setLiveAlerts] = useState<ProactiveAlert[]>([]);
   const [planSessionId, setPlanSessionId] = useState<string | null>(null);
+  // Right-side conversations sidebar (saved threads).
+  const [conversationsOpen, setConversationsOpen] = useState(false);
+  const [conversationsRefreshKey, setConversationsRefreshKey] = useState(0);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [recentTraces, setRecentTraces] = useState<Array<{ planId: string; status: string; summary: string; startedAt: string; endedAt: string }>>([]);
   const [traceMetrics, setTraceMetrics] = useState<{ total: number; success: number; partial: number; failed: number; pendingApproval: number; rejectedByPolicy: number; averageLatencyMs: number; averageSpanCount: number } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -937,7 +956,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       });
       es.addEventListener('super-agent:run_started', ((e: MessageEvent) => {
         const data = parseData(e);
-        setStreamActivity((cur) => (!cur || data.runId !== cur.runId) ? cur : { ...cur, statusLine: 'Connecting modules...' });
+        setStreamActivity((cur) => (!cur || data.runId !== cur.runId) ? cur : { ...cur, statusLine: 'Thinking…' });
       }) as EventListener);
       es.addEventListener('super-agent:message_chunk', ((e: MessageEvent) => {
         updateIfCurrent(e, (d, c) => ({ ...c, text: `${c.text}${d.chunk || ''}` }));
@@ -1145,6 +1164,70 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
     }
   }
 
+  // ── Saved-conversation handlers (right sidebar) ─────────────────────────
+  // Reset the visible chat so the next turn starts a new session. The
+  // backend will allocate a fresh sessionId on the first /command call;
+  // until then planSessionId is null (no memory).
+  function handleNewConversation() {
+    setMessages([]);
+    setPlanSessionId(null);
+    setStreamActivity(null);
+    setComposerText('');
+    setPendingAction(null);
+  }
+
+  // Load a previously-saved conversation. The backend enforces ownership:
+  // GET /super-agent/sessions/:id only returns the row if it belongs to
+  // req.userId, so a guessed UUID can't expose someone else's thread.
+  async function handleSelectSession(sessionId: string) {
+    if (sessionId === planSessionId || isLoadingSession) return;
+    setIsLoadingSession(true);
+    try {
+      const data = await superAgentApi.session(sessionId);
+      const session = data?.session;
+      if (!session) throw new Error('Conversation not found');
+      const turns = Array.isArray(session.turns) ? session.turns : [];
+      const replay: ConversationMessage[] = [];
+      let counter = 0;
+      for (const turn of turns) {
+        const id = `replay-${sessionId}-${counter++}`;
+        const content = String(turn?.content ?? '').trim();
+        if (!content) continue;
+        if (turn.role === 'user') {
+          replay.push({ id, role: 'user', text: content });
+        } else if (turn.role === 'assistant') {
+          replay.push({
+            id,
+            role: 'assistant',
+            payload: {
+              id,
+              input: '',
+              summary: content,
+              narrative: content,
+              statusLine: '',
+              sections: [],
+              actions: [],
+              contextPanel: null,
+              agents: [],
+              suggestedReplies: [],
+              consultedModules: [],
+              runId: turn.planId ?? null,
+            },
+          });
+        }
+      }
+      setMessages(replay);
+      setPlanSessionId(sessionId);
+      setStreamActivity(null);
+      setComposerText('');
+      setPendingAction(null);
+    } catch (err) {
+      setFlashMessage(err instanceof Error ? err.message : 'Failed to load conversation');
+    } finally {
+      setIsLoadingSession(false);
+    }
+  }
+
   async function sendPrompt(promptOverride?: string) {
     const prompt = (promptOverride ?? composerText).trim();
     if (!prompt || isSending || isExecuting) return;
@@ -1164,7 +1247,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       id: `assistant-live-${runId}`,
       input: finalPrompt,
       summary: isPlanMode ? 'Planning your request...' : 'Thinking through your request...',
-      statusLine: isStreamConnected ? (isPlanMode ? 'Planning' : 'Thinking') : 'Connecting',
+      statusLine: isStreamConnected ? (isPlanMode ? 'Planning' : 'Thinking') : 'Thinking',
       sections: [],
       actions: [],
       contextPanel: null,
@@ -1181,7 +1264,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
       { id: `user-${Date.now()}`, role: 'user', text: finalPrompt },
       { id: livePayload.id, role: 'assistant', payload: livePayload },
     ]);
-    setStreamActivity({ runId, statusLine: isStreamConnected ? 'Connecting...' : 'Waiting...', text: '', steps: [], agents: [], error: null });
+    setStreamActivity({ runId, statusLine: isStreamConnected ? 'Thinking…' : 'Waiting...', text: '', steps: [], agents: [], error: null });
 
     try {
       const result = isPlanMode
@@ -1197,9 +1280,17 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             mode,
             autonomyLevel,
             model: selectedModelId,
-            context: buildCommandContext(),
+            // Persist the session across turns so the agent remembers prior
+            // messages. The backend reads sessionId from context.sessionId
+            // (see server/routes/superAgent.ts /command handler).
+            context: {
+              ...buildCommandContext(),
+              ...(planSessionId ? { sessionId: planSessionId } : {}),
+            },
           });
       if (result.sessionId) setPlanSessionId(result.sessionId);
+      // Refresh the saved-conversations sidebar so the latest turn appears at the top.
+      setConversationsRefreshKey((k) => k + 1);
       const payload = isPlanMode
         ? planResponseToPayload(result, result.trace || null)
         : normalizeAssistantPayload(result.response as Partial<AssistantPayload>, finalPrompt, result.response?.runId || runId);
@@ -1287,7 +1378,7 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
   const showObservabilityPanel = activeSection === 'live-runs' || activeSection === 'guardrails';
 
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
+    <div className="flex-1 flex h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
       <div className="relative flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
 
 
@@ -1383,38 +1474,91 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             ) : null}
 
             {/* Messages */}
-            {messages.map((msg) =>
-              msg.role === 'user' ? (
-                <div key={msg.id} className="flex gap-3 text-[15px] leading-7">
-                  <span className="w-24 shrink-0 text-right text-[13px] text-gray-400 dark:text-gray-500">You</span>
-                  <div className="min-w-0 flex-1 font-medium text-gray-900 dark:text-white">
-                    {msg.text}
-                  </div>
-                </div>
-              ) : (
-                <div key={msg.id} className={msg.muted ? 'opacity-50' : ''}>
-                  {/* Show thinking card if actively thinking (empty text, thinking status) */}
-                  {msg.payload.summary === 'Thinking through your request...' && !msg.payload.narrative ? (
-                    <ThinkingCard />
+            {messages.map((msg) => {
+              if (msg.role === 'user') {
+                return (
+                  <UserMessage key={msg.id}>{msg.text}</UserMessage>
+                );
+              }
+              const isThinking = msg.payload.summary === 'Thinking through your request...' && !msg.payload.narrative;
+              const isStreaming = isSending && streamMessageIdRef.current === msg.payload.id && !isThinking;
+              const toolCalls: ToolCallData[] = (msg.payload.steps || []).map((step) => ({
+                id: step.id,
+                name: step.label || 'tool',
+                status: step.status,
+                detail: step.detail,
+                result: step.detail || undefined,
+              }));
+              return (
+                <div key={msg.id} className={msg.muted ? 'opacity-60' : ''}>
+                  {isThinking ? (
+                    <ThinkingPill
+                      label={msg.payload.statusLine || 'Thinking'}
+                      detail={msg.payload.consultedModules?.length ? `Consulting ${msg.payload.consultedModules.join(', ')}…` : null}
+                    />
                   ) : (
-                    <div className="max-w-4xl space-y-2">
-                      <div className="flex gap-3 text-[13px] leading-6 text-gray-400 dark:text-gray-500">
-                        <span className="w-24 shrink-0 text-right">Agent</span>
-                        <div className="min-w-0 flex-1">
-                        {msg.payload.statusLine ? <span>{msg.payload.statusLine}</span> : null}
-                        {msg.payload.runId ? <span>Run {msg.payload.runId.slice(0, 8)}</span> : null}
-                        </div>
+                    <AssistantMessage>
+                      {/* The plain narrative — written like a normal reply, no bubble. */}
+                      <div className="text-[15px] leading-7">
+                        <Markdown text={msg.payload.narrative || msg.payload.summary || ''} />
+                        {isStreaming ? <StreamingCaret /> : null}
                       </div>
 
-                      {msg.payload.narrative ? (
-                        <div className="space-y-2 text-[15px] leading-7 text-gray-900 dark:text-white">
-                          {msg.payload.narrative.split('\n').map((line: string, idx: number) => (
-                            <TranscriptLine key={idx} label={idx === 0 ? 'Reply' : ''}>{line}</TranscriptLine>
+                      {/* Inline approval cards — surface gated actions (refund > threshold,
+                          cancel post-fulfilment, etc.) right in the chat with Approve/Reject
+                          buttons. Each renders its own state and decides via the backend. */}
+                      {(() => {
+                        const approvalActions = (msg.payload.actions || []).filter(
+                          (a) => a.targetPage === 'approvals' && a.focusId,
+                        );
+                        if (approvalActions.length === 0) return null;
+                        return (
+                          <div className="flex flex-col gap-2">
+                            {approvalActions.map((a) => (
+                              <InlineApprovalCard
+                                key={a.id}
+                                approvalId={a.focusId as string}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Everything technical (tool calls, reasoning, consulted modules, agents)
+                          collapses into a single <details>. Collapsed by default. */}
+                      {(toolCalls.length > 0
+                        || msg.payload.reasoningTrail
+                        || (msg.payload.consultedModules?.length ?? 0) > 0
+                        || (msg.payload.agents?.length ?? 0) > 0
+                        || msg.payload.runId) ? (
+                        <details className="group mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+                          <summary className="flex cursor-pointer list-none items-center gap-1.5 select-none hover:text-gray-700 dark:hover:text-gray-200">
+                            <svg
+                              aria-hidden
+                              viewBox="0 0 12 12"
+                              className="h-3 w-3 transition-transform group-open:rotate-90"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                            >
+                              <path d="M4 2 L8 6 L4 10" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <span>
+                              {toolCalls.length > 0
+                                ? `${toolCalls.length} step${toolCalls.length === 1 ? '' : 's'}`
+                                : 'Investigation'}
+                              {msg.payload.runId ? ` · Run ${msg.payload.runId.slice(0, 8)}` : ''}
+                            </span>
+                          </summary>
+                          <div className="mt-3 space-y-3 border-l border-gray-200 pl-4 dark:border-gray-700">
+
+                      {toolCalls.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {toolCalls.map((call) => (
+                            <ToolCallCard key={call.id} call={call} />
                           ))}
                         </div>
-                      ) : (
-                        <TranscriptLine label="Reply">{msg.payload.summary}</TranscriptLine>
-                      )}
+                      ) : null}
 
                       {msg.payload.reasoningTrail ? (
                         <div className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950/70">
@@ -1500,94 +1644,107 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                         </div>
                       ) : null}
 
-                      {compactList([
-                        msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
-                        msg.payload.steps?.length ? `Steps: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
-                      ], ' · ') ? (
-                        <TranscriptLine label="Used" tone="muted">
-                          {compactList([
-                            msg.payload.consultedModules.length ? `Data: ${compactList(msg.payload.consultedModules, ', ')}` : null,
-                            msg.payload.steps?.length ? `Steps: ${compactList(msg.payload.steps.slice(0, 2).map((step) => step.detail ? step.detail : step.label), ' · ')}` : null,
-                          ], ' · ')}
-                        </TranscriptLine>
-                      ) : null}
-
-                      {/* Agent Cards */}
-                      {msg.payload.agents.length > 0 ? (
-                        <div className="space-y-1">
-                          {msg.payload.agents.map((agent) => (
-                            <TranscriptLine key={agent.slug} label="Agent" tone={agent.status === 'blocked' ? 'danger' : agent.status === 'executed' ? 'success' : 'muted'}>
-                              <span className="font-medium">{agent.name}</span>
-                              <span className="ml-2 text-gray-400">{agent.summary}</span>
-                            </TranscriptLine>
+                      {msg.payload.consultedModules.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                          <span className="uppercase tracking-[0.18em] text-gray-400">Read</span>
+                          {msg.payload.consultedModules.map((mod) => (
+                            <span key={mod} className="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                              {mod}
+                            </span>
                           ))}
                         </div>
                       ) : null}
 
-                      {/* Streaming Steps */}
-                      {msg.payload.steps && msg.payload.steps.length > 0 ? (
-                        <StreamingStepsComponent steps={msg.payload.steps} />
+                      {msg.payload.agents.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {msg.payload.agents.map((agent) => (
+                            <span
+                              key={agent.slug}
+                              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] ${
+                                agent.status === 'blocked'
+                                  ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'
+                                  : agent.status === 'executed'
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                  : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                              }`}
+                            >
+                              <span className="font-medium">{agent.name}</span>
+                              <span className="opacity-70">{agent.summary}</span>
+                            </span>
+                          ))}
+                        </div>
                       ) : null}
 
                       {msg.payload.timelineEvents && msg.payload.timelineEvents.length > 0 ? (
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                           {msg.payload.timelineEvents
                             .filter((event) => !msg.payload.steps?.some((step) => step.id === event.id))
                             .map((event) => (
-                              <TranscriptLine key={`${msg.id}-${event.id}`} label={eventLabel(event)} tone={eventTone(event)}>
-                                <span className="font-medium">{event.label}</span>
-                                {event.detail ? <span className="ml-2 text-gray-400">{event.detail}</span> : null}
-                              </TranscriptLine>
+                              <ToolCallCard
+                                key={`${msg.id}-${event.id}`}
+                                call={{
+                                  id: event.id,
+                                  name: event.tool || eventLabel(event),
+                                  status: event.status === 'failed' ? 'failed' : event.status === 'running' ? 'running' : 'completed',
+                                  detail: event.label,
+                                  result: event.detail || undefined,
+                                }}
+                              />
                             ))}
                         </div>
                       ) : null}
 
-                      {msg.payload.actions.length > 0 ? (
-                        <TranscriptLine label="Actions">
-                        <div className="flex flex-wrap gap-2">
-                          {msg.payload.actions.slice(0, 2).map((action) => (
+                      {msg.payload.reasoningTrail || msg.payload.artifacts?.length ? null : null}
+
+                      {(() => {
+                        // Skip navigation buttons for approvals — they're rendered
+                        // as InlineApprovalCard above with proper accept/reject UX.
+                        const visible = msg.payload.actions.filter(
+                          (a) => !(a.targetPage === 'approvals' && a.focusId),
+                        );
+                        return visible.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {visible.slice(0, 4).map((action) => (
                             <button
                               key={action.id}
                               type="button"
                               onClick={() => handleAction(action)}
                               disabled={action.allowed === false}
-                              className={`rounded-md px-2 py-1 text-[13px] font-medium transition-colors disabled:opacity-40 ${
+                              className={`rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                                 action.type === 'execute'
-                                  ? 'text-amber-600 hover:bg-gray-100 dark:text-amber-400 dark:hover:bg-gray-800'
-                                  : 'text-blue-600 hover:bg-gray-100 dark:text-blue-400 dark:hover:bg-gray-800'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/40'
+                                  : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800'
                               }`}
                             >
                               {action.label}
                             </button>
                           ))}
                         </div>
-                        </TranscriptLine>
-                      ) : null}
+                        ) : null;
+                      })()}
 
                       {msg.payload.suggestedReplies.length > 0 ? (
-                        <TranscriptLine label="Try" tone="muted">
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2 pt-0.5">
                           {msg.payload.suggestedReplies.slice(0, 3).map((reply) => (
                             <button
                               key={`${msg.id}-${reply}`}
                               type="button"
                               onClick={() => void sendPrompt(reply)}
-                              className="rounded-md px-2 py-1 text-[13px] text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                              className="rounded-full border border-dashed border-gray-300 px-3 py-1 text-[12px] text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:text-gray-100"
                             >
                               {reply}
                             </button>
                           ))}
                         </div>
-                        </TranscriptLine>
                       ) : null}
 
-                      {/* Interoperability Chips */}
+                      {/* Interoperability Chips (hidden, kept for future surfacing) */}
                       {(msg.payload.consultedModules?.length ?? 0) > 0 && (
                         <div className="hidden">
                           {msg.payload.consultedModules.map((mod) => {
                             const meta = MODULE_ICONS[mod.toLowerCase()] || MODULE_ICONS.system;
                             return (
-                              <div key={mod} className="flex items-center gap-1 rounded-md border border-gray-100 bg-gray-50/50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500 dark:border-gray-800 dark:bg-gray-900/50">
+                              <div key={mod} className="flex items-center gap-1">
                                 <span className={`material-symbols-outlined text-[10px] ${meta.color}`}>{meta.icon}</span>
                                 <span>{mod}</span>
                               </div>
@@ -1595,11 +1752,14 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
                           })}
                         </div>
                       )}
-                    </div>
+                          </div>
+                        </details>
+                      ) : null}
+                    </AssistantMessage>
                   )}
                 </div>
-              )
-            )}
+              );
+            })}
 
             <div ref={bottomRef} />
           </div>
@@ -1912,6 +2072,16 @@ export default function SuperAgent({ onNavigate, activeTarget }: SuperAgentProps
             </div>
           </div>
         </div>
+      </div>
+      <div className="my-2 mr-2 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-card dark:border-gray-800 dark:bg-card-dark">
+        <ConversationsSidebar
+          open={conversationsOpen}
+          onToggle={() => setConversationsOpen((v) => !v)}
+          activeSessionId={planSessionId}
+          onSelect={(id) => void handleSelectSession(id)}
+          onNewConversation={handleNewConversation}
+          refreshKey={conversationsRefreshKey}
+        />
       </div>
     </div>
   );

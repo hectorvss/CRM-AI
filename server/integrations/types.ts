@@ -26,7 +26,82 @@ export type IntegrationSystem =
   | 'netsuite'
   | 'whatsapp'
   | 'sendgrid'
-  | 'klaviyo';
+  | 'klaviyo'
+  | 'postmark'
+  | 'twilio'
+  | 'email'
+  | 'sms'
+  | 'web_chat';
+
+// ── Not-configured error ──────────────────────────────────────────────────────
+
+/**
+ * Thrown by integration adapters and channel senders when the credentials
+ * required to talk to the external service are absent.
+ *
+ * Routes catch this and respond with HTTP 503 + a machine-readable
+ * `code` so that the UI can surface a clear "not configured" message
+ * instead of a generic 500.
+ *
+ * Subclasses keep a stable `code` per integration so callers can branch
+ * on it without parsing message strings.
+ */
+export class IntegrationNotConfiguredError extends Error {
+  readonly code: string;
+  readonly integration: IntegrationSystem;
+  readonly missingVars: string[];
+
+  constructor(
+    integration: IntegrationSystem,
+    missingVars: string[],
+    code?: string,
+    message?: string,
+  ) {
+    super(
+      message ??
+      `${integration} integration is not configured. Missing: ${missingVars.join(', ')}. ` +
+      `Configure the required environment variables to enable ${integration}.`,
+    );
+    this.name = 'IntegrationNotConfiguredError';
+    this.integration = integration;
+    this.missingVars = missingVars;
+    this.code = code ?? `${integration.toUpperCase()}_NOT_CONFIGURED`;
+  }
+}
+
+export class ShopifyNotConfiguredError extends IntegrationNotConfiguredError {
+  constructor(missingVars: string[]) {
+    super('shopify', missingVars, 'SHOPIFY_NOT_CONFIGURED');
+  }
+}
+
+export class WhatsAppNotConfiguredError extends IntegrationNotConfiguredError {
+  constructor(missingVars: string[]) {
+    super('whatsapp', missingVars, 'WHATSAPP_NOT_CONFIGURED');
+  }
+}
+
+export class PostmarkNotConfiguredError extends IntegrationNotConfiguredError {
+  constructor(missingVars: string[]) {
+    super('postmark', missingVars, 'POSTMARK_NOT_CONFIGURED');
+  }
+}
+
+export class TwilioNotConfiguredError extends IntegrationNotConfiguredError {
+  constructor(missingVars: string[]) {
+    super('twilio', missingVars, 'TWILIO_NOT_CONFIGURED');
+  }
+}
+
+export function isIntegrationNotConfiguredError(
+  err: unknown,
+): err is IntegrationNotConfiguredError {
+  return err instanceof IntegrationNotConfiguredError ||
+    (typeof err === 'object' &&
+     err !== null &&
+     typeof (err as any).code === 'string' &&
+     (err as any).code.endsWith('_NOT_CONFIGURED'));
+}
 
 // ── Base canonical types ──────────────────────────────────────────────────────
 
@@ -226,11 +301,51 @@ export interface IncomingWebhookEvent {
 export interface IntegrationAdapter {
   readonly system: IntegrationSystem;
 
+  /**
+   * True when the adapter has all credentials it needs to talk to the
+   * external service. Adapters created in "stub mode" (no creds) report
+   * `false` here so the registry can answer health-check queries without
+   * forcing a 5xx on every read.
+   *
+   * Optional for backwards compatibility: legacy / sandbox adapters that
+   * don't set the field are treated as configured.
+   */
+  readonly configured?: boolean;
+
   /** Verify a webhook signature. Returns true if valid. */
   verifyWebhook(rawBody: string, headers: Record<string, string>): boolean;
 
   /** Health check — resolves if credentials are valid */
   ping(): Promise<void>;
+}
+
+// ── Normalized channel message ────────────────────────────────────────────────
+
+/**
+ * Canonical inbound channel message stored in `canonical_events.normalized_payload`.
+ * Mirrors the `NormalizedChannelMessage` consumed by `pipeline/channelIngest.ts`.
+ *
+ * Kept here so webhook handlers and the worker share one source of truth.
+ */
+export interface NormalizedChannelMessage {
+  /** The raw message content (plain text, HTML stripped for email) */
+  messageContent: string;
+  /** Sender identifier: phone number, email address, or session ID */
+  senderId: string;
+  /** Human-readable sender name if available */
+  senderName?: string | null;
+  /** Channel the message arrived on */
+  channel: 'email' | 'web_chat' | 'whatsapp' | 'sms';
+  /** Platform-native message ID (for dedup) */
+  externalMessageId: string;
+  /** ISO timestamp the message was sent */
+  sentAt: string;
+  /** Optional: a prior conversation/thread ID from the channel */
+  externalThreadId?: string;
+  /** Optional: subject line (email only) */
+  subject?: string;
+  /** Optional: attachments list (filenames only for now) */
+  attachments?: string[];
 }
 
 /** Optional read capabilities — adapters implement what they support */

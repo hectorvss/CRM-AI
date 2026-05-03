@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { billingApi } from '../../api/client';
 import type { AICreditsState } from '../../hooks/useAICredits';
 
@@ -7,38 +7,72 @@ interface Props {
   usage: AICreditsState;
 }
 
-const TOPUP_PACKS: Array<{ credits: number; priceEur: number; label: string }> = [
-  { credits: 5_000, priceEur: 79, label: 'Starter pack' },
-  { credits: 20_000, priceEur: 249, label: 'Growth pack' },
-  { credits: 50_000, priceEur: 549, label: 'Scale pack' },
+const TOPUP_PACKS: Array<{ credits: number; pack: '5k' | '20k' | '50k'; priceEur: number; label: string }> = [
+  { credits: 5_000,  pack: '5k',  priceEur: 79,  label: 'Starter pack' },
+  { credits: 20_000, pack: '20k', priceEur: 249, label: 'Growth pack' },
+  { credits: 50_000, pack: '50k', priceEur: 549, label: 'Scale pack' },
 ];
 
 /**
  * Upgrade modal — shows current usage and offers the three escape hatches:
- *   1. Buy a top-up pack (5k / 20k / 50k credits)
+ *   1. Buy a top-up pack (5k / 20k / 50k credits) — Stripe checkout
  *   2. Upgrade plan (Stripe checkout)
  *   3. Enable flexible (post-paid) billing
  *
- * The actual Stripe price IDs / checkout endpoints are wired by Cluster J;
- * this modal calls the existing billingApi.* methods and the new
- * /flexible-usage/toggle endpoint added in Cluster I.
+ * Gracefully handles 503 STRIPE_NOT_CONFIGURED responses by surfacing a
+ * "Billing not available" message instead of crashing.
  */
 export default function UpgradeModal({ onClose, usage }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stripeAvailable, setStripeAvailable] = useState<boolean | null>(null);
 
-  const handleTopup = async (credits: number) => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/billing/config');
+        if (!res.ok) {
+          if (!cancelled) setStripeAvailable(false);
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled) setStripeAvailable(Boolean(body?.stripeConfigured));
+      } catch {
+        if (!cancelled) setStripeAvailable(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleTopup = async (pack: '5k' | '20k' | '50k', credits: number) => {
     setBusy(`topup-${credits}`);
     setError(null);
     try {
-      // Defer the actual Stripe checkout to cluster J's /topup-checkout endpoint
-      // when wired. For now we record the intent through the existing top-up
-      // API which produces a credit ledger entry.
-      const orgId = usage.plan ? (window as any).__CRMAI_ORG_ID__ || '' : '';
-      if (orgId) {
-        await billingApi.topUp(orgId, { type: 'credits', quantity: credits });
+      const orgId = (window as any).__CRMAI_ORG_ID__ || '';
+      if (!orgId) {
+        throw new Error('Workspace context missing — reload the page and try again.');
       }
-      window.location.href = `/billing?topup=${credits}`;
+      // Hit the Stripe topup-checkout endpoint. Surface 503 as a configurator
+      // message rather than a crash.
+      const res = await fetch(`/api/billing/${orgId}/topup-checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pack }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 503 && body?.error === 'STRIPE_NOT_CONFIGURED') {
+        setStripeAvailable(false);
+        throw new Error('Billing is not configured. Contact your workspace administrator.');
+      }
+      if (!res.ok) {
+        throw new Error(body?.message || body?.error || `Top-up failed (HTTP ${res.status})`);
+      }
+      if (body?.url) {
+        window.location.href = body.url;
+      } else {
+        throw new Error('Top-up checkout URL missing');
+      }
     } catch (err: any) {
       setError(err?.message || 'Top-up failed');
     } finally {
@@ -99,14 +133,20 @@ export default function UpgradeModal({ onClose, usage }: Props) {
 
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2 mb-3 text-sm">{error}</div>}
 
+        {stripeAvailable === false && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2 mb-3 text-sm">
+            Billing is not yet configured for this deployment. Please contact your workspace administrator.
+          </div>
+        )}
+
         <h3 className="font-medium mb-2">Buy a top-up pack</h3>
         <div className="grid grid-cols-3 gap-3 mb-5">
           {TOPUP_PACKS.map((pack) => (
             <button
               key={pack.credits}
-              onClick={() => handleTopup(pack.credits)}
-              disabled={!!busy}
-              className="border rounded p-3 text-center hover:border-blue-500 hover:shadow disabled:opacity-50"
+              onClick={() => handleTopup(pack.pack, pack.credits)}
+              disabled={!!busy || stripeAvailable === false}
+              className="border rounded p-3 text-center hover:border-blue-500 hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="text-lg font-semibold">{pack.credits.toLocaleString()}</div>
               <div className="text-xs text-gray-600">credits</div>
@@ -119,8 +159,8 @@ export default function UpgradeModal({ onClose, usage }: Props) {
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={handleUpgrade}
-            disabled={!!busy}
-            className="flex-1 min-w-[180px] bg-blue-600 text-white rounded px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+            disabled={!!busy || stripeAvailable === false}
+            className="flex-1 min-w-[180px] bg-blue-600 text-white rounded px-4 py-2 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Upgrade plan
           </button>

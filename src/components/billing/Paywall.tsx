@@ -731,6 +731,32 @@ export default function Paywall({
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stripeAvailable, setStripeAvailable] = useState<boolean | null>(null);
+
+  // Probe whether Stripe is wired up on the backend so we can hide the
+  // upgrade buttons on environments where the workspace admin has not yet
+  // configured STRIPE_SECRET_KEY in Vercel.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        const res = await fetch('/api/billing/config', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          if (!cancelled) setStripeAvailable(false);
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled) setStripeAvailable(Boolean(body?.stripeConfigured));
+      } catch {
+        if (!cancelled) setStripeAvailable(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Trial signup form state
   const [trialForm, setTrialForm] = useState({
@@ -902,7 +928,11 @@ export default function Paywall({
         body: JSON.stringify({ plan: plan.id, interval }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error || `Checkout error (HTTP ${res.status})`);
+      if (res.status === 503 && body?.error === 'STRIPE_NOT_CONFIGURED') {
+        setStripeAvailable(false);
+        throw new Error('Billing is not configured for this workspace. Please contact your administrator.');
+      }
+      if (!res.ok) throw new Error(body?.message || body?.error || `Checkout error (HTTP ${res.status})`);
       if (body?.url) window.location.href = body.url;
       else throw new Error('Checkout session URL missing');
     } catch (e: any) {
@@ -978,6 +1008,13 @@ export default function Paywall({
               </div>
             )}
 
+            {stripeAvailable === false && (
+              <div className="pw-warn">
+                Billing is not yet configured for this deployment. Plan checkout is unavailable —
+                please contact your workspace administrator or <a href="mailto:support@clain.io">support@clain.io</a>.
+              </div>
+            )}
+
             {/* Toggle */}
             <div className="pw-toggle-row">
               <span className="pw-toggle-label" style={{ fontWeight: interval === 'month' ? 600 : 400, opacity: interval === 'month' ? 1 : 0.5 }}>
@@ -1022,10 +1059,15 @@ export default function Paywall({
                     </ul>
                     <button
                       onClick={() => handlePickPlan(plan)}
-                      disabled={loadingPlan !== null}
+                      disabled={loadingPlan !== null || stripeAvailable === false}
                       className={`pw-btn ${plan.featured ? 'pw-btn-primary' : 'pw-btn-ghost'}`}
+                      title={stripeAvailable === false ? 'Billing not configured for this deployment' : undefined}
                     >
-                      {isLoading ? 'Loading…' : <>{plan.cta} <span className="pw-arrow">→</span></>}
+                      {isLoading
+                        ? 'Loading…'
+                        : stripeAvailable === false
+                          ? 'Unavailable'
+                          : <>{plan.cta} <span className="pw-arrow">→</span></>}
                     </button>
                   </div>
                 );

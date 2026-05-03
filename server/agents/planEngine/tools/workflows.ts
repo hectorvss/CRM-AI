@@ -6,8 +6,6 @@
 
 import { randomUUID } from 'crypto';
 import { createWorkflowRepository, createCaseRepository, createCustomerRepository, createConversationRepository, createAgentRepository } from '../../../data/index.js';
-import { getDb } from '../../../db/client.js';
-import { getDatabaseProvider } from '../../../db/provider.js';
 import { getSupabaseAdmin } from '../../../db/supabase.js';
 import { sendEmail, sendWhatsApp, sendSms } from '../../../pipeline/channelSenders.js';
 import { logger } from '../../../utils/logger.js';
@@ -31,8 +29,8 @@ async function enrichWorkflow(workflow: any, tenantId: string) {
     workflowRepo.getMetrics(workflow.id, tenantId),
   ]);
   const currentVersion = workflow.current_version_id
-    ? await workflowRepo.getVersion(workflow.current_version_id)
-    : await workflowRepo.getLatestVersion(workflow.id);
+    ? await workflowRepo.getVersion(workflow.current_version_id, { tenantId })
+    : await workflowRepo.getLatestVersion(workflow.id, { tenantId });
 
   return {
     ...workflow,
@@ -272,7 +270,7 @@ export const workflowUpdateDraftTool: ToolSpec<{
 
     const versions = await workflowRepo.listVersions(workflow.id);
     const currentVersion = workflow.current_version_id
-      ? await workflowRepo.getVersion(workflow.current_version_id)
+      ? await workflowRepo.getVersion(workflow.current_version_id, { tenantId: scope.tenantId })
       : versions[0];
     const draftVersion = versions.find((version: any) => String(version.status || '').toLowerCase() === 'draft');
     const targetVersion = draftVersion || null;
@@ -371,8 +369,8 @@ export const workflowValidateTool: ToolSpec<{ workflowId?: string; nodes?: unkno
       const workflow = await workflowRepo.getDefinition(args.workflowId, scope.tenantId, scope.workspaceId);
       if (!workflow) return { ok: false, error: 'Workflow not found', errorCode: 'NOT_FOUND' };
       const version = workflow.current_version_id
-        ? await workflowRepo.getVersion(workflow.current_version_id)
-        : await workflowRepo.getLatestVersion(workflow.id);
+        ? await workflowRepo.getVersion(workflow.current_version_id, { tenantId: scope.tenantId })
+        : await workflowRepo.getLatestVersion(workflow.id, { tenantId: scope.tenantId });
       nodes = parseWorkflowArray(version?.nodes);
       edges = parseWorkflowArray(version?.edges);
     }
@@ -473,38 +471,20 @@ async function persistWorkflowRun(
   planId?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
-  const ctx = JSON.stringify({ source: 'plan-engine', planId: planId ?? null });
-
-  if (getDatabaseProvider() === 'supabase') {
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('workflow_runs').insert({
-      id: runId,
-      workflow_version_id: versionId,
-      tenant_id: scope.tenantId,
-      trigger_type: 'manual.run',
-      trigger_payload: payload ?? {},
-      status: 'running',
-      context: { source: 'plan-engine', planId: planId ?? null },
-      started_at: now,
-      ended_at: null,
-      error: null,
-    });
-    if (error) throw error;
-  } else {
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO workflow_runs
-        (id, workflow_version_id, tenant_id, trigger_type, trigger_payload, status, context, started_at)
-      VALUES (?, ?, ?, 'manual.run', ?, 'running', ?, ?)
-    `).run(
-      runId,
-      versionId,
-      scope.tenantId,
-      JSON.stringify(payload ?? {}),
-      ctx,
-      now,
-    );
-  }
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from('workflow_runs').insert({
+    id: runId,
+    workflow_version_id: versionId,
+    tenant_id: scope.tenantId,
+    trigger_type: 'manual.run',
+    trigger_payload: payload ?? {},
+    status: 'running',
+    context: { source: 'plan-engine', planId: planId ?? null },
+    started_at: now,
+    ended_at: null,
+    error: null,
+  });
+  if (error) throw error;
 }
 
 /** Mark a run as completed or failed in the DB. */
@@ -514,24 +494,13 @@ async function finaliseRun(
   errorMsg?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
-  if (getDatabaseProvider() === 'supabase') {
-    const supabase = getSupabaseAdmin();
-    await supabase.from('workflow_runs').update({
-      status,
-      completed_at: now,
-      updated_at: now,
-      ...(errorMsg ? { error: errorMsg } : {}),
-    }).eq('id', runId);
-  } else {
-    const db = getDb();
-    if (errorMsg) {
-      db.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, updated_at = ?, error = ? WHERE id = ?')
-        .run(status, now, now, errorMsg, runId);
-    } else {
-      db.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?')
-        .run(status, now, now, runId);
-    }
-  }
+  const supabase = getSupabaseAdmin();
+  await supabase.from('workflow_runs').update({
+    status,
+    completed_at: now,
+    updated_at: now,
+    ...(errorMsg ? { error: errorMsg } : {}),
+  }).eq('id', runId);
 }
 
 type WorkflowNode = {
@@ -845,7 +814,7 @@ export const workflowTriggerTool: ToolSpec<WorkflowTriggerArgs, unknown> = {
     }
 
     // 1. Load workflow version definition (nodes + edges)
-    const version = await workflowRepo.getVersion(workflow.current_version_id);
+    const version = await workflowRepo.getVersion(workflow.current_version_id, { tenantId: scope.tenantId });
     if (!version) {
       return { ok: false, error: 'Workflow version not found', errorCode: 'VERSION_NOT_FOUND' };
     }

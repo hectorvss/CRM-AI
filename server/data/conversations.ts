@@ -156,8 +156,8 @@ async function appendMessageSupabase(scope: ConversationScope, input: AppendMess
     sent_at: now,
     created_at: now,
     tenant_id: scope.tenantId,
-    delivery_status: input.deliveryStatus ?? 'sent',
-    delivery_error: input.deliveryError ?? null,
+    // Note: messages has no delivery_status / delivery_error / workspace_id
+    // columns — keep this payload minimal to avoid 42703 inserts.
   };
 
   const { error: insertError } = await supabase.from('messages').insert(payload);

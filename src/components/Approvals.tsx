@@ -21,38 +21,40 @@ interface ApprovalsProps {
   focusApprovalId?: string | null;
 }
 
+// Shape of approval rows after src/api/normalize.ts converts the snake_case
+// API payload to camelCase.
 type ApprovalRecord = {
   id: string;
-  case_id?: string | null;
-  case_number?: string | null;
-  customer_name?: string | null;
-  customer_segment?: string | null;
-  action_type?: string | null;
-  risk_level?: string | null;
+  caseId?: string | null;
+  caseNumber?: string | null;
+  customerName?: string | null;
+  customerSegment?: string | null;
+  actionType?: string | null;
+  riskLevel?: string | null;
   status?: string | null;
   priority?: string | null;
-  assigned_to?: string | null;
-  assigned_team_id?: string | null;
-  assigned_user_name?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  decision_by?: string | null;
-  decision_note?: string | null;
-  execution_plan_id?: string | null;
-  expires_at?: string | null;
-  action_payload?: Record<string, any> | null;
-  evidence_package?: Record<string, any> | null;
+  assignedTo?: string | null;
+  assignedTeamId?: string | null;
+  assignedUserName?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  decisionBy?: string | null;
+  decisionNote?: string | null;
+  executionPlanId?: string | null;
+  expiresAt?: string | null;
+  actionPayload?: Record<string, any> | null;
+  evidencePackage?: Record<string, any> | null;
 };
 
 type ApprovalContext = {
   approval: ApprovalRecord;
   case?: any;
   customer?: any;
-  case_state?: any;
+  caseState?: any;
   conversation?: any;
   messages?: any[];
-  internal_notes?: any[];
-  evidence?: { approvals?: any[]; reconciliation_issues?: any[]; linked_cases?: any[] };
+  internalNotes?: any[];
+  evidence?: { approvals?: any[]; reconciliationIssues?: any[]; linkedCases?: any[] };
 } | null;
 
 const titleCase = (value: string) => value
@@ -90,34 +92,34 @@ const statusStyles = (status?: string | null) => {
 
 const statusLabel = (status?: string | null) => titleCase(status || 'pending');
 
-const extractSummary = (item: ApprovalRecord) => item.evidence_package?.summary
-  || item.action_payload?.summary
-  || item.action_payload?.reason
-  || item.action_type
+const extractSummary = (item: ApprovalRecord) => item.evidencePackage?.summary
+  || item.actionPayload?.summary
+  || item.actionPayload?.reason
+  || item.actionType
   || 'Approval required';
 
 function normalizeApproval(item: any): ApprovalRecord {
   return {
     id: item.id,
-    case_id: item.case_id || null,
-    case_number: item.case_number || null,
-    customer_name: item.customer_name || null,
-    customer_segment: item.customer_segment || null,
-    action_type: item.action_type || null,
-    risk_level: item.risk_level || null,
+    caseId: item.caseId || null,
+    caseNumber: item.caseNumber || null,
+    customerName: item.customerName || null,
+    customerSegment: item.customerSegment || null,
+    actionType: item.actionType || null,
+    riskLevel: item.riskLevel || null,
     status: item.status || 'pending',
     priority: item.priority || 'normal',
-    assigned_to: item.assigned_to || null,
-    assigned_team_id: item.assigned_team_id || null,
-    assigned_user_name: item.assigned_user_name || null,
-    created_at: item.created_at || null,
-    updated_at: item.updated_at || null,
-    decision_by: item.decision_by || null,
-    decision_note: item.decision_note || null,
-    execution_plan_id: item.execution_plan_id || null,
-    expires_at: item.expires_at || null,
-    action_payload: item.action_payload || {},
-    evidence_package: item.evidence_package || {},
+    assignedTo: item.assignedTo || null,
+    assignedTeamId: item.assignedTeamId || null,
+    assignedUserName: item.assignedUserName || null,
+    createdAt: item.createdAt || null,
+    updatedAt: item.updatedAt || null,
+    decisionBy: item.decisionBy || null,
+    decisionNote: item.decisionNote || null,
+    executionPlanId: item.executionPlanId || null,
+    expiresAt: item.expiresAt || null,
+    actionPayload: item.actionPayload || {},
+    evidencePackage: item.evidencePackage || {},
   };
 }
 
@@ -181,6 +183,8 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [focusedItem, setFocusedItem] = useState<FocusItem | null>(null);
   const [activeModal, setActiveModal] = useState<ApprovalModalAction>(null);
+  const PAGE_SIZE = 50;
+  const [offset, setOffset] = useState(0);
 
   const requestRef = useRef<HTMLDivElement | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
@@ -189,11 +193,18 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
   const policyRef = useRef<HTMLDivElement | null>(null);
   const systemsRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: apiApprovals, loading, error, refetch } = useApi(() => approvalsApi.list(), [], []);
+  const { data: apiApprovalsPage, loading, error, refetch } = useApi(
+    () => approvalsApi.list({ limit: PAGE_SIZE, offset }),
+    [offset],
+    { items: [], total: 0, hasMore: false, limit: PAGE_SIZE, offset } as any,
+  );
+  const apiApprovals = Array.isArray((apiApprovalsPage as any)?.items) ? (apiApprovalsPage as any).items : [];
+  const totalApprovals = typeof (apiApprovalsPage as any)?.total === 'number' ? (apiApprovalsPage as any).total : apiApprovals.length;
+  const hasMore = Boolean((apiApprovalsPage as any)?.hasMore);
   const approvals = useMemo(
-    () => (Array.isArray(apiApprovals) ? apiApprovals.map(normalizeApproval) : [])
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()),
-    [apiApprovals],
+    () => apiApprovals.map(normalizeApproval)
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()),
+    [apiApprovalsPage],
   );
 
   useEffect(() => {
@@ -225,7 +236,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
   );
 
   useEffect(() => {
-    setDecisionNote(selectedApproval?.decision_note || '');
+    setDecisionNote(selectedApproval?.decisionNote || '');
     setDecisionError(null);
     setFocusedItem(null);
   }, [selectedApproval?.id]);
@@ -241,7 +252,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
     return approvals.filter((item) => {
       if ((item.status || 'pending') !== filter) return false;
       if (!q) return true;
-      return [item.id, item.case_number, item.customer_name, item.assigned_user_name, item.action_type]
+      return [item.id, item.caseNumber, item.customerName, item.assignedUserName, item.actionType]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
     });
@@ -251,28 +262,28 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
   const selectedCustomer = selectedContext?.customer || null;
   const selectedMessages = Array.isArray(selectedContext?.messages) ? selectedContext.messages : [];
   const linkedApprovals = Array.isArray(selectedContext?.evidence?.approvals) ? selectedContext.evidence.approvals : [];
-  const reconciliationIssues = Array.isArray(selectedContext?.evidence?.reconciliation_issues) ? selectedContext.evidence.reconciliation_issues : [];
-  const linkedCases = Array.isArray(selectedContext?.evidence?.linked_cases) ? selectedContext.evidence.linked_cases : [];
-  const timeline = Array.isArray(selectedContext?.case_state?.timeline) ? selectedContext.case_state.timeline.slice(-8).reverse() : [];
-  const systems = selectedContext?.case_state?.systems ? Object.values(selectedContext.case_state.systems) : [];
-  const evidenceNotes = selectedApproval?.evidence_package?.notes || selectedApproval?.action_payload?.notes || selectedApproval?.action_payload?.policy_notes || null;
-  const policyText = selectedApproval?.evidence_package?.policy_text
-    || selectedApproval?.action_payload?.policy_text
-    || selectedApproval?.action_payload?.reason
+  const reconciliationIssues = Array.isArray(selectedContext?.evidence?.reconciliationIssues) ? selectedContext.evidence.reconciliationIssues : [];
+  const linkedCases = Array.isArray(selectedContext?.evidence?.linkedCases) ? selectedContext.evidence.linkedCases : [];
+  const timeline = Array.isArray(selectedContext?.caseState?.timeline) ? selectedContext.caseState.timeline.slice(-8).reverse() : [];
+  const systems = selectedContext?.caseState?.systems ? Object.values(selectedContext.caseState.systems) : [];
+  const evidenceNotes = selectedApproval?.evidencePackage?.notes || selectedApproval?.actionPayload?.notes || selectedApproval?.actionPayload?.policyNotes || null;
+  const policyText = selectedApproval?.evidencePackage?.policyText
+    || selectedApproval?.actionPayload?.policyText
+    || selectedApproval?.actionPayload?.reason
     || 'A human manager must review this action before any connector writeback is executed.';
-  const caseId = selectedCase?.id || selectedApproval?.case_id || null;
-  const caseNumber = selectedCase?.case_number || selectedApproval?.case_number || selectedApproval?.case_id || 'N/A';
-  const customerName = selectedCustomer?.canonical_name || selectedApproval?.customer_name || 'Unknown customer';
-  const customerSegment = selectedCustomer?.segment || selectedApproval?.customer_segment || 'N/A';
-  const approvalTitle = titleCase(selectedApproval?.action_type || 'Approval');
+  const caseId = selectedCase?.id || selectedApproval?.caseId || null;
+  const caseNumber = selectedCase?.caseNumber || selectedApproval?.caseNumber || selectedApproval?.caseId || 'N/A';
+  const customerName = selectedCustomer?.canonicalName || selectedApproval?.customerName || 'Unknown customer';
+  const customerSegment = selectedCustomer?.segment || selectedApproval?.customerSegment || 'N/A';
+  const approvalTitle = titleCase(selectedApproval?.actionType || 'Approval');
   const approvalSummary = extractSummary(selectedApproval || normalizeApproval({}));
-  const approvalAmount = selectedApproval?.action_payload?.amount || selectedApproval?.action_payload?.refund_amount || selectedApproval?.action_payload?.goodwill_credit_amount || null;
+  const approvalAmount = selectedApproval?.actionPayload?.amount || selectedApproval?.actionPayload?.refundAmount || selectedApproval?.actionPayload?.goodwillCreditAmount || null;
   const selectedStatus = selectedApproval?.status || 'pending';
   const approvalContextItems: ModalContextItem[] = selectedApproval ? [
-    { label: 'Action', value: titleCase(selectedApproval.action_type || 'Approval') },
+    { label: 'Action', value: titleCase(selectedApproval.actionType || 'Approval') },
     { label: 'Case', value: caseNumber },
     { label: 'Customer', value: customerName },
-    { label: 'Risk', value: titleCase(selectedApproval.risk_level || 'Unknown'), accent: (selectedApproval.risk_level || '').toLowerCase() === 'high' },
+    { label: 'Risk', value: titleCase(selectedApproval.riskLevel || 'Unknown'), accent: (selectedApproval.riskLevel || '').toLowerCase() === 'high' },
   ] : [];
 
   const approvalModalConfig = useMemo(() => {
@@ -401,7 +412,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                 <button
                   key={status}
                   type="button"
-                  onClick={() => setFilter(status)}
+                  onClick={() => { setFilter(status); setOffset(0); }}
                   className={`pb-3 text-sm transition-colors border-b-2 ${
                     filter === status
                       ? 'font-semibold text-gray-900 dark:text-white border-black dark:border-white'
@@ -426,7 +437,10 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
             <section className="w-full bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Queue</h2>
-                <span className="text-xs text-gray-500">{filteredApprovals.length} items</span>
+                <span className="text-xs text-gray-500">
+                  {filteredApprovals.length} of {totalApprovals} items
+                  {totalApprovals > 0 ? ` · page ${Math.floor(offset / PAGE_SIZE) + 1}` : ''}
+                </span>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {filteredApprovals.length === 0 ? (
@@ -441,22 +455,47 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{titleCase(item.action_type || 'Approval')}</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{titleCase(item.actionType || 'Approval')}</span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${statusStyles(item.status)}`}>{statusLabel(item.status)}</span>
                         </div>
                         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">
-                          {item.customer_name || 'Unknown customer'}
-                          {item.case_number ? ` · ${item.case_number}` : ''}
+                          {item.customerName || 'Unknown customer'}
+                          {item.caseNumber ? ` · ${item.caseNumber}` : ''}
                         </p>
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-500 truncate">{extractSummary(item)}</p>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{item.risk_level ? titleCase(item.risk_level) : 'Risk unknown'}</p>
-                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{formatDate(item.created_at)}</p>
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{item.riskLevel ? titleCase(item.riskLevel) : 'Risk unknown'}</p>
+                        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{formatDate(item.createdAt)}</p>
                       </div>
                     </div>
                   </button>
                 ))}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {totalApprovals > 0
+                    ? `Showing ${Math.min(offset + 1, totalApprovals)}–${Math.min(offset + PAGE_SIZE, totalApprovals)} of ${totalApprovals}`
+                    : 'No items'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOffset((value) => Math.max(0, value - PAGE_SIZE))}
+                    disabled={offset === 0 || loading}
+                    className="px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOffset((value) => value + PAGE_SIZE)}
+                    disabled={!hasMore || loading}
+                    className="px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </section>
           ) : (
@@ -484,7 +523,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-[0.18em] border ${statusStyles(selectedApproval.status)}`}>
                           {statusLabel(selectedApproval.status)}
                         </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">Created {formatDate(selectedApproval.created_at)}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Created {formatDate(selectedApproval.createdAt)}</span>
                       </div>
                       <h2 className="mt-4 text-2xl font-semibold text-gray-900 dark:text-white tracking-[-0.02em]">
                         {approvalTitle} {approvalAmount ? `· ${formatMoney(approvalAmount)}` : ''}
@@ -498,7 +537,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         <span className="text-gray-300 dark:text-gray-600">•</span>
                         <span className="inline-flex items-center gap-1.5">
                           <span className="material-symbols-outlined text-[18px] text-violet-500">smart_toy</span>
-                          Requested by <span className="font-medium text-violet-600 dark:text-violet-400">{selectedApproval.assigned_user_name || selectedApproval.assigned_to || 'Autopilot'}</span>
+                          Requested by <span className="font-medium text-violet-600 dark:text-violet-400">{selectedApproval.assignedUserName || selectedApproval.assignedTo || 'Autopilot'}</span>
                         </span>
                         <span className="text-gray-300 dark:text-gray-600">•</span>
                         <span className="inline-flex items-center gap-1.5">
@@ -532,7 +571,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                       <p className="text-xs text-gray-400 dark:text-gray-500">
                         {selectedStatus === 'pending'
                           ? 'Approving updates the case, workflow, and linked records in the backend.'
-                          : `This approval is already ${statusLabel(selectedStatus).toLowerCase()}${selectedApproval.decision_by ? ` by ${selectedApproval.decision_by}` : ''}.`}
+                          : `This approval is already ${statusLabel(selectedStatus).toLowerCase()}${selectedApproval.decisionBy ? ` by ${selectedApproval.decisionBy}` : ''}.`}
                       </p>
                     </div>
                   </div>
@@ -564,19 +603,19 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         )}
                       >
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                          <FieldRow label="Action" value={titleCase(selectedApproval.action_type || 'Approval')} />
+                          <FieldRow label="Action" value={titleCase(selectedApproval.actionType || 'Approval')} />
                           <FieldRow label="Case" value={caseNumber} />
-                          <FieldRow label="Risk" value={titleCase(selectedApproval.risk_level || 'unknown')} />
-                          <FieldRow label="Due" value={formatDate(selectedApproval.expires_at)} />
-                          <FieldRow label="Assigned to" value={selectedApproval.assigned_user_name || selectedApproval.assigned_to || 'Unassigned'} />
-                          <FieldRow label="Team" value={selectedApproval.assigned_team_id || 'Operations'} />
+                          <FieldRow label="Risk" value={titleCase(selectedApproval.riskLevel || 'unknown')} />
+                          <FieldRow label="Due" value={formatDate(selectedApproval.expiresAt)} />
+                          <FieldRow label="Assigned to" value={selectedApproval.assignedUserName || selectedApproval.assignedTo || 'Unassigned'} />
+                          <FieldRow label="Team" value={selectedApproval.assignedTeamId || 'Operations'} />
                           <div className="md:col-span-2 py-2 border-b border-gray-100 dark:border-gray-800">
                             <p className="text-xs uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Policy reason</p>
                             <p className="mt-2 text-sm leading-6 text-gray-900 dark:text-white">{approvalSummary}</p>
                           </div>
                           <div className="md:col-span-2 py-2">
                             <p className="text-xs uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Decision note</p>
-                            <p className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">{selectedApproval.decision_note || 'Pending decision'}</p>
+                            <p className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">{selectedApproval.decisionNote || 'Pending decision'}</p>
                           </div>
                         </div>
                       </SectionCard>
@@ -594,7 +633,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                               if (latest) {
                                 focusArtifact(
                                   {
-                                    title: latest.sender_name || latest.sender_id || 'Message',
+                                    title: latest.senderName || latest.senderId || 'Message',
                                     subtitle: latest.direction || latest.type || 'message',
                                     detail: latest.content,
                                     kind: 'Conversation',
@@ -626,7 +665,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                               type="button"
                               onClick={() => focusArtifact(
                                 {
-                                  title: message.sender_name || message.sender_id || 'Message',
+                                  title: message.senderName || message.senderId || 'Message',
                                   subtitle: message.direction || message.type || 'message',
                                   detail: message.content,
                                   kind: 'Conversation',
@@ -636,11 +675,11 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                               className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 p-4 text-left transition-colors hover:border-gray-300 dark:hover:border-gray-600"
                             >
                               <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-semibold text-gray-900 dark:text-white">{message.sender_name || message.sender_id || 'System'}</p>
+                                <p className="text-sm font-semibold text-gray-900 dark:text-white">{message.senderName || message.senderId || 'System'}</p>
                                 <span className="text-[11px] uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{message.direction || message.type || 'message'}</span>
                               </div>
                               <p className="mt-2 text-sm text-gray-700 dark:text-gray-300 leading-6">{message.content}</p>
-                              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{formatDate(message.sent_at || message.created_at)}</p>
+                              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{formatDate(message.sentAt || message.createdAt)}</p>
                             </button>
                           )) : (
                             <p className="text-sm text-gray-500 dark:text-gray-400">No conversation messages returned yet.</p>
@@ -703,7 +742,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center justify-between gap-3">
                                   <p className="text-sm font-medium text-gray-900 dark:text-white">{entry.domain || 'event'}</p>
-                                  <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(entry.occurred_at)}</span>
+                                  <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(entry.occurredAt)}</span>
                                 </div>
                                 <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400 leading-6">{entry.content}</p>
                               </div>
@@ -730,8 +769,8 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         {selectedStatus !== 'pending' ? (
                           <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
                             This approval is already {statusLabel(selectedStatus).toLowerCase()}
-                            {selectedApproval.decision_by ? ` by ${selectedApproval.decision_by}` : ''}.
-                            {selectedApproval.decision_note ? <span className="block mt-1">Note: {selectedApproval.decision_note}</span> : null}
+                            {selectedApproval.decisionBy ? ` by ${selectedApproval.decisionBy}` : ''}.
+                            {selectedApproval.decisionNote ? <span className="block mt-1">Note: {selectedApproval.decisionNote}</span> : null}
                           </div>
                         ) : (
                           <div className="space-y-3">
@@ -770,7 +809,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                           <div className="space-y-4">
                             <div>
                               <p className="text-xs uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Triggering policy</p>
-                              <h4 className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{titleCase(selectedApproval.action_type || 'Approval')} policy review</h4>
+                              <h4 className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{titleCase(selectedApproval.actionType || 'Approval')} policy review</h4>
                               <p className="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-300">{policyText}</p>
                             </div>
                             <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/40 px-4 py-3">
@@ -873,14 +912,14 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
 
                             {linkedCases.length > 0 ? linkedCases.map((item: any) => (
                               <button
-                                key={`${item.id}-${item.link_type || 'case'}`}
+                                key={`${item.id}-${item.linkType || 'case'}`}
                                 type="button"
                                 onClick={() => openCaseGraph(item.id)}
                                 className="w-full flex items-center justify-between gap-4 rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-3 text-left transition-colors hover:border-gray-300 dark:hover:border-gray-600"
                               >
                                 <div className="min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.case_number || item.id}</p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{item.type || item.link_type || 'Linked case'}</p>
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{item.caseNumber || item.id}</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{item.type || item.linkType || 'Linked case'}</p>
                                 </div>
                                 <span className="material-symbols-outlined text-gray-300 text-sm">open_in_new</span>
                               </button>

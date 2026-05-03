@@ -90,17 +90,10 @@ router.post('/evaluate', requirePermission('approvals.read'), async (req: MultiT
     if (!entityType) return sendError(res, 400, 'INVALID_POLICY_EVAL', 'entity_type is required');
 
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    // evaluatePolicy auto-persists to `policy_evaluations`. The returned
+    // `evaluationId` is the row id we should reference in audit / responses.
     const evaluationResult = await policyRepository.evaluate(scope, entityType, actionType, context, caseId);
-    
-    const evaluationId = crypto.randomUUID();
-    await policyRepository.persistEvaluation(scope, {
-      id: evaluationId,
-      entityType,
-      actionType,
-      caseId,
-      context,
-      ...evaluationResult
-    });
+    const evaluationId = evaluationResult.evaluationId;
 
     await auditRepository.log(scope, {
       action: 'POLICY_EVALUATED',
@@ -151,17 +144,10 @@ router.post('/evaluate-and-route', requirePermission('cases.write'), async (req:
     if (!entityType) return sendError(res, 400, 'INVALID_POLICY_EVAL', 'entity_type is required');
 
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    // evaluatePolicy auto-persists; reuse the generated id for downstream
+    // audit + approval-request evidence.
     const evaluation = await policyRepository.evaluate(scope, entityType, actionType, context, caseId);
-    
-    const evaluationId = crypto.randomUUID();
-    await policyRepository.persistEvaluation(scope, {
-      id: evaluationId,
-      entityType,
-      actionType,
-      caseId,
-      context,
-      ...evaluation
-    });
+    const evaluationId = evaluation.evaluationId;
 
     let approvalRequest: any = null;
     if (evaluation.finalDecision === 'approval_required') {

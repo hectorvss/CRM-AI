@@ -407,7 +407,7 @@ async function seedData() {
   ]);
 
   await upsert('knowledge_domains', [
-    { id: 'kd_returns', tenant_id: tenantId, name: 'Returns and Refunds', description: 'Policies for returns, refunds, inspections and PSP writebacks.', created_at: now },
+    { id: 'kd_returns', tenant_id: tenantId, workspace_id: workspaceId, name: 'Returns and Refunds', description: 'Policies for returns, refunds, inspections and PSP writebacks.', created_at: now },
   ]);
 
   await upsert('knowledge_articles', [

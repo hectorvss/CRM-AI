@@ -43,19 +43,20 @@ export default function Home({ onNavigate }: HomeProps) {
     () => casesApi.list({ status: 'open', limit: '5' }),
     [], [] as any[]
   );
-  const { data: pendingApprovals, loading: approvalsLoading } = useApi(
-    () => approvalsApi.list({ status: 'pending', limit: '5' }),
-    [], [] as any[]
+  const { data: pendingApprovalsPage, loading: approvalsLoading } = useApi(
+    () => approvalsApi.list({ status: 'pending', limit: 5 }),
+    [], { items: [], total: 0, hasMore: false, limit: 5, offset: 0 } as any
   );
+  const pendingApprovals = pendingApprovalsPage?.items ?? [];
   const { data: allOpen } = useApi(
     () => casesApi.list({ status: 'open', limit: '999' }),
     [], [] as any[]
   );
 
   const openCount      = Array.isArray(allOpen) ? allOpen.length : '—';
-  const pendingCount   = Array.isArray(pendingApprovals) ? pendingApprovals.length : '—';
-  const slaRisk        = Array.isArray(allOpen) ? allOpen.filter((c: any) => c.sla_status === 'at_risk' || c.sla_status === 'breached').length : '—';
-  const aiResolution   = overview?.kpis?.find((k: any) => k.label?.toLowerCase().includes('resolution'))?.value ?? overview?.ai_resolution_rate ?? '—';
+  const pendingCount   = pendingApprovalsPage?.total ?? (Array.isArray(pendingApprovals) ? pendingApprovals.length : '—');
+  const slaRisk        = Array.isArray(allOpen) ? allOpen.filter((c: any) => c.slaStatus === 'at_risk' || c.slaStatus === 'breached').length : '—';
+  const aiResolution   = overview?.kpis?.find((k: any) => k.label?.toLowerCase().includes('resolution'))?.value ?? overview?.aiResolutionRate ?? '—';
 
   const wsName = workspace?.name || workspace?.workspace?.name || 'Workspace';
   const today  = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -171,18 +172,18 @@ export default function Home({ onNavigate }: HomeProps) {
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-xs font-mono text-gray-400">{c.case_number || c.id?.slice(0, 8)}</span>
+                          <span className="text-xs font-mono text-gray-400">{c.caseNumber || c.id?.slice(0, 8)}</span>
                           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${PRIORITY_COLOR[c.priority] || PRIORITY_COLOR.low}`}>
                             {titleCase(c.priority)}
                           </span>
-                          {c.sla_status && c.sla_status !== 'on_track' && (
-                            <span className={`material-symbols-outlined text-[14px] ${SLA_COLOR[c.sla_status] || ''}`}>timer</span>
+                          {c.slaStatus && c.slaStatus !== 'on_track' && (
+                            <span className={`material-symbols-outlined text-[14px] ${SLA_COLOR[c.slaStatus] || ''}`}>timer</span>
                           )}
                         </div>
                         <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
-                          {c.ai_diagnosis || titleCase(c.type) || 'Open case'}
+                          {c.aiDiagnosis || titleCase(c.type) || 'Open case'}
                         </p>
-                        <p className="text-xs text-gray-400 mt-0.5">{c.customer_name || 'Unknown'} · {formatRelative(c.created_at)}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{c.customerName || 'Unknown'} · {formatRelative(c.createdAt)}</p>
                       </div>
                       <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-lg mt-0.5 flex-shrink-0">chevron_right</span>
                     </button>
@@ -228,26 +229,26 @@ export default function Home({ onNavigate }: HomeProps) {
                       className="w-full px-5 py-3.5 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-left"
                     >
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                        a.action_type?.includes('refund') ? 'bg-red-50 dark:bg-red-900/20' :
-                        a.action_type?.includes('cancel') ? 'bg-orange-50 dark:bg-orange-900/20' :
+                        a.actionType?.includes('refund') ? 'bg-red-50 dark:bg-red-900/20' :
+                        a.actionType?.includes('cancel') ? 'bg-orange-50 dark:bg-orange-900/20' :
                         'bg-blue-50 dark:bg-blue-900/20'
                       }`}>
                         <span className={`material-symbols-outlined text-[16px] ${
-                          a.action_type?.includes('refund') ? 'text-red-500' :
-                          a.action_type?.includes('cancel') ? 'text-orange-500' :
+                          a.actionType?.includes('refund') ? 'text-red-500' :
+                          a.actionType?.includes('cancel') ? 'text-orange-500' :
                           'text-blue-500'
                         }`}>
-                          {a.action_type?.includes('refund') ? 'currency_exchange' :
-                           a.action_type?.includes('cancel') ? 'cancel' :
-                           a.action_type?.includes('publish') ? 'publish' : 'pending_actions'}
+                          {a.actionType?.includes('refund') ? 'currency_exchange' :
+                           a.actionType?.includes('cancel') ? 'cancel' :
+                           a.actionType?.includes('publish') ? 'publish' : 'pending_actions'}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-gray-800 dark:text-gray-200 truncate font-medium">
-                          {titleCase(a.action_type) || 'Approval needed'}
+                          {titleCase(a.actionType) || 'Approval needed'}
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5 truncate">
-                          {a.requested_by || 'System'} · {formatRelative(a.created_at)}
+                          {a.requestedBy || 'System'} · {formatRelative(a.createdAt)}
                         </p>
                       </div>
                       <span className="material-symbols-outlined text-gray-300 dark:text-gray-600 text-lg mt-0.5 flex-shrink-0">chevron_right</span>

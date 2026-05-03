@@ -23,6 +23,7 @@ import { z } from 'zod';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { sendError } from '../http/errors.js';
 import { logger } from '../utils/logger.js';
+import { seedDemoCase } from '../data/demoSeed.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -98,9 +99,14 @@ router.post('/setup', validate({ body: SetupBodySchema }), async (req, res) => {
       }
 
       return res.json({
-        tenantId:    existingMember.tenant_id,
-        workspaceId: existingMember.workspace_id,
-        created:     false,
+        // Wire convention is snake_case (BLUEPRINT A3); we keep the camelCase
+        // aliases for callers that still read them (Signup.tsx) until the
+        // dashboard normalization layer (Flow 2) lands.
+        tenant_id:    existingMember.tenant_id,
+        workspace_id: existingMember.workspace_id,
+        tenantId:     existingMember.tenant_id,
+        workspaceId:  existingMember.workspace_id,
+        created:      false,
       });
     }
 
@@ -217,6 +223,18 @@ router.post('/setup', validate({ body: SetupBodySchema }), async (req, res) => {
       if (memberError) throw new Error(`member insert: ${memberError.message}`);
       created.memberId = memberId;
 
+      // ── 5b. Plant a demo customer case ──────────────────────────────────
+      // Drops a fully-formed luxury-fashion refund-with-chargeback scenario
+      // into the workspace so the new owner can immediately exercise the
+      // agent, integrations, approvals, knowledge etc. Failures inside the
+      // seeder are non-fatal — the seeder logs and returns false rather
+      // than throwing, so onboarding never blocks on demo data.
+      void seedDemoCase({
+        tenantId: orgId,
+        workspaceId,
+        ownerUserId: authUser.id,
+      });
+
       // ── 6. Seed a starter billing subscription ───────────────────────────
       const now = new Date();
       const nextMonth = new Date(now);
@@ -311,9 +329,12 @@ router.post('/setup', validate({ body: SetupBodySchema }), async (req, res) => {
     });
 
     return res.status(201).json({
-      tenantId:    orgId,
+      // Snake_case wire convention with camelCase aliases (see note above).
+      tenant_id:    orgId,
+      workspace_id: workspaceId,
+      tenantId:     orgId,
       workspaceId,
-      created:     true,
+      created:      true,
     });
 
   } catch (err: any) {

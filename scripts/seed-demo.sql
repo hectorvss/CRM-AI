@@ -110,13 +110,14 @@ on conflict (id) do update set
   closed_at = excluded.closed_at;
 
 -- ─── Policy Rules ─────────────────────────────────────────────────────────────
-insert into policy_rules (id, tenant_id, knowledge_article_id, name, description, entity_type, conditions, action_mapping, approval_mapping, escalation_mapping, is_active, version, created_at)
+insert into policy_rules (id, tenant_id, workspace_id, knowledge_article_id, name, description, entity_type, conditions, action_mapping, approval_mapping, escalation_mapping, is_active, version, created_at)
 values
-  ('pr_cancel_approval', 'org_default', null, 'Cancellation approval rule', 'Packed orders require review before cancellation', 'order', jsonb_build_array(jsonb_build_object('field', 'fulfillment_status', 'operator', 'equals', 'value', 'packed')), jsonb_build_object('cancel_order', true, 'notify_warehouse', true), jsonb_build_object('requires_approval', true), jsonb_build_object('priority', 'high'), true, 1, timestamp '2026-04-14 11:39:45+00'),
-  ('pr_chargeback_review', 'org_default', null, 'Chargeback review rule', 'Chargebacks and blocked refunds need manual review', 'payment', jsonb_build_array(jsonb_build_object('field', 'status', 'operator', 'in', 'value', jsonb_build_array('disputed', 'blocked'))), jsonb_build_object('freeze_refund', true, 'escalate_to_finance', true), jsonb_build_object('requires_approval', true), jsonb_build_object('priority', 'critical'), true, 1, timestamp '2026-04-14 11:39:45+00'),
-  ('pr_replacement_approval', 'org_default', null, 'Replacement approval rule', 'Damaged item replacements must wait for warehouse confirmation', 'return', jsonb_build_array(jsonb_build_object('field', 'refund_status', 'operator', 'equals', 'value', 'refund_pending')), jsonb_build_object('approve_replacement', true), jsonb_build_object('requires_approval', true), jsonb_build_object('priority', 'high'), true, 1, timestamp '2026-04-14 11:39:45+00')
+  ('pr_cancel_approval', 'org_default', 'ws_default', null, 'Cancellation approval rule', 'Packed orders require review before cancellation', 'order', jsonb_build_array(jsonb_build_object('field', 'fulfillment_status', 'operator', 'equals', 'value', 'packed')), jsonb_build_object('cancel_order', true, 'notify_warehouse', true), jsonb_build_object('requires_approval', true), jsonb_build_object('priority', 'high'), true, 1, timestamp '2026-04-14 11:39:45+00'),
+  ('pr_chargeback_review', 'org_default', 'ws_default', null, 'Chargeback review rule', 'Chargebacks and blocked refunds need manual review', 'payment', jsonb_build_array(jsonb_build_object('field', 'status', 'operator', 'in', 'value', jsonb_build_array('disputed', 'blocked'))), jsonb_build_object('freeze_refund', true, 'escalate_to_finance', true), jsonb_build_object('requires_approval', true), jsonb_build_object('priority', 'critical'), true, 1, timestamp '2026-04-14 11:39:45+00'),
+  ('pr_replacement_approval', 'org_default', 'ws_default', null, 'Replacement approval rule', 'Damaged item replacements must wait for warehouse confirmation', 'return', jsonb_build_array(jsonb_build_object('field', 'refund_status', 'operator', 'equals', 'value', 'refund_pending')), jsonb_build_object('approve_replacement', true), jsonb_build_object('requires_approval', true), jsonb_build_object('priority', 'high'), true, 1, timestamp '2026-04-14 11:39:45+00')
 on conflict (id) do update set
   tenant_id = excluded.tenant_id,
+  workspace_id = excluded.workspace_id,
   knowledge_article_id = excluded.knowledge_article_id,
   name = excluded.name,
   description = excluded.description,

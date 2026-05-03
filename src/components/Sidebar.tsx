@@ -41,12 +41,12 @@ export default function Sidebar({ currentPage, currentSection, onPageChange, isO
   // Permissions
   const { has, isAdmin, isSuperAdmin, loading: permissionsLoading } = usePermissions();
   // Real pending approvals count
-  const { data: pendingApprovals } = useApi(
-    () => approvalsApi.list({ status: 'pending', limit: '99' }),
+  const { data: pendingApprovalsPage } = useApi(
+    () => approvalsApi.list({ status: 'pending', limit: 99 }),
     [],
-    [] as any[]
+    { items: [], total: 0, hasMore: false, limit: 99, offset: 0 } as any
   );
-  const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0;
+  const pendingCount = pendingApprovalsPage?.total ?? (Array.isArray((pendingApprovalsPage as any)?.items) ? (pendingApprovalsPage as any).items.length : 0);
 
   const userName  = me?.name  || me?.email?.split('@')[0] || 'User';
   const userRole  = me?.context?.role_id || me?.role  || me?.role_id || 'Agent';

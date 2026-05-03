@@ -370,7 +370,7 @@ async function autoCreateCaseAndFireEvent(
 
   // ── Fire workflow event ────────────────────────────────────────────────────
   const eventType = topicToWorkflowEvent(source, topic);
-  fireWorkflowEvent(
+  await fireWorkflowEvent(
     scope,
     eventType,
     {

@@ -3,6 +3,11 @@ import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenan
 import { requirePermission } from '../middleware/authorization.js';
 import { createAuditRepository } from '../data/index.js';
 import { createCommerceRepository } from '../data/commerce.js';
+import {
+  createApprovalRequest,
+  findCaseIdForEntity,
+  findPendingApprovalRequest,
+} from '../data/approvals.js';
 import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { logger } from '../utils/logger.js';
@@ -114,7 +119,7 @@ router.patch('/:id/status', requirePermission('orders.write'), async (req: Multi
     });
 
     const updated = await commerceRepo.getOrder(scope, req.params.id);
-    fireWorkflowEvent(
+    await fireWorkflowEvent(
       { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
       'order.updated',
       { orderId: req.params.id, status: newStatus, previousStatus: order.status },
@@ -138,6 +143,27 @@ router.post('/:id/cancel', requirePermission('orders.write'), async (req: MultiT
     const reason = String(req.body?.reason ?? '').trim() || 'Cancelled from CRM-AI';
 
     if (isBlocked) {
+      // Resolve case_id (cancellation must be linked to a case for the manager queue).
+      const caseId = await findCaseIdForEntity({
+        tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId,
+        entity: 'order',
+        entityId: req.params.id,
+      });
+
+      // Idempotency: avoid creating duplicate approval rows for the same order.
+      let existing: any = null;
+      if (caseId) {
+        existing = await findPendingApprovalRequest({
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId,
+          caseId,
+          requestType: 'order_cancel',
+          entityKey: 'order_id',
+          entityValue: req.params.id,
+        });
+      }
+
       await commerceRepo.updateOrder(scope, req.params.id, {
         status: order.status,
         approval_status: 'approval_needed',
@@ -147,20 +173,53 @@ router.post('/:id/cancel', requirePermission('orders.write'), async (req: MultiT
         last_update: reason,
       });
 
+      let approvalRequestId: string | null = existing?.id ?? null;
+      if (!existing && caseId) {
+        const riskLevel = ['high', 'critical'].includes(String(order.risk_level ?? '').toLowerCase())
+          ? (String(order.risk_level).toLowerCase() as 'high' | 'critical')
+          : 'medium';
+        const created = await createApprovalRequest({
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId,
+          caseId,
+          requestType: 'order_cancel',
+          requestedBy: req.userId || 'system',
+          requestedByType: req.userId ? 'human' : 'system',
+          riskLevel,
+          metadata: {
+            order_id: req.params.id,
+            fulfillment_status: order.fulfillment_status ?? null,
+            current_status: order.status ?? null,
+            reason,
+          },
+          evidencePackage: {
+            previous_approval_status: order.approval_status,
+            conflict_detected: `Cancellation requested while fulfillment is ${fulfillment}`,
+          },
+        });
+        approvalRequestId = created.id;
+      } else if (!caseId) {
+        logger.warn('orders.cancel: blocked cancellation has no linked case; cannot create approval_request row', {
+          orderId: req.params.id,
+        });
+      }
+
       await auditRepository.log(scope, {
         actorId: req.userId || 'system',
-        action: 'ORDER_CANCEL_BLOCKED',
+        action: 'ORDER_CANCEL_APPROVAL_REQUESTED',
         entityType: 'order',
         entityId: req.params.id,
         oldValue: { status: order.status, fulfillment_status: order.fulfillment_status },
-        newValue: { approval_status: 'approval_needed', conflict_detected: fulfillment },
-        metadata: { reason },
+        newValue: { approval_status: 'approval_needed', conflict_detected: fulfillment, approval_request_id: approvalRequestId },
+        metadata: { reason, approval_request_id: approvalRequestId, case_id: caseId, fulfillment_status: order.fulfillment_status },
       });
 
       return res.status(409).json({
         error: 'Cancellation requires approval',
         blocked: true,
         reason: `Order is already ${fulfillment}`,
+        approvalRequestId,
+        caseId,
       });
     }
 
@@ -208,7 +267,7 @@ router.post('/:id/cancel', requirePermission('orders.write'), async (req: MultiT
     });
 
     const updated = await commerceRepo.getOrder(scope, req.params.id);
-    fireWorkflowEvent(
+    await fireWorkflowEvent(
       { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
       'order.updated',
       { orderId: req.params.id, status: 'cancelled', previousStatus: order.status, reason, executedVia },

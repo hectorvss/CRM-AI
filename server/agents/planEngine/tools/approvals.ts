@@ -50,9 +50,10 @@ export const approvalListTool: ToolSpec<{ status?: string; limit?: number }, unk
   returns: s.any('Array of approval objects'),
   async run({ args, context }) {
     const scope: ApprovalScope = { tenantId: context.tenantId, workspaceId: context.workspaceId ?? '' };
-    const filters = { status: args.status ?? 'pending' };
-    const all = await approvalRepo.list(scope, filters);
-    return { ok: true, value: (all as any[]).slice(0, args.limit ?? 20) };
+    const limit = args.limit ?? 20;
+    const filters = { status: args.status ?? 'pending', limit, offset: 0 };
+    const result = await approvalRepo.list(scope, filters);
+    return { ok: true, value: result.items.slice(0, limit) };
   },
 };
 

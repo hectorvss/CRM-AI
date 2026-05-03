@@ -19,7 +19,7 @@ async function enrichArticlesSupabase(scope: KnowledgeScope, articles: any[]) {
   const domainIds = Array.from(new Set(articles.map((item) => item.domain_id).filter(Boolean)));
   const ownerIds = Array.from(new Set(articles.map((item) => item.owner_user_id).filter(Boolean)));
   const [domainsRes, usersRes] = await Promise.all([
-    domainIds.length ? supabase.from('knowledge_domains').select('id, name').in('id', domainIds) : Promise.resolve({ data: [], error: null } as any),
+    domainIds.length ? supabase.from('knowledge_domains').select('id, name').in('id', domainIds).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId) : Promise.resolve({ data: [], error: null } as any),
     ownerIds.length ? supabase.from('users').select('id, name').in('id', ownerIds) : Promise.resolve({ data: [], error: null } as any),
   ]);
   for (const result of [domainsRes, usersRes]) {
@@ -161,7 +161,8 @@ async function listDomainsSupabase(scope: KnowledgeScope) {
   const { data: domains, error } = await supabase
     .from('knowledge_domains')
     .select('*')
-    .eq('tenant_id', scope.tenantId);
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId);
   if (error) throw error;
 
   const withCounts = await Promise.all((domains ?? []).map(async (domain) => {
@@ -185,6 +186,7 @@ async function listPoliciesSupabase(scope: KnowledgeScope) {
     .from('policy_rules')
     .select('*')
     .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId)
     .eq('is_active', true);
   if (error) throw error;
   return data ?? [];

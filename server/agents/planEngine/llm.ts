@@ -12,6 +12,8 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
+import { pickGeminiModel } from '../../ai/modelSelector.js';
+import { SAAS_PRODUCT_CONTEXT, ASSISTANT_TONE_GUIDE } from '../../ai/systemContext.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { redactSensitiveText, redactStructuredValue } from './safety.js';
@@ -167,9 +169,10 @@ ${argFields}`;
     })
     .join('\n\n');
 
-  // Persona — overridable via AI Studio Reasoning tab
-  const persona = agentConfig?.personaOverride
-    ?? 'You are the Super Agent, the supreme orchestrator for a mission-critical Enterprise Operations OS. Your primary directive is to ensure absolute consistency and interoperability across all SaaS modules (CRM, Commerce, Payments, Logistics, Knowledge, and Workflows). You do not just answer questions; you proactively detect and resolve multi-system contradictions, identify "ghost" states, and maintain a unified source of truth.';
+  // Persona — overridable via AI Studio Reasoning tab.
+  // Defaults to the canonical product context so every Super Agent run starts
+  // with full domain knowledge of how Clain works.
+  const persona = agentConfig?.personaOverride ?? SAAS_PRODUCT_CONTEXT;
 
   // Knowledge snippets injected by AI Studio Knowledge tab
   const knowledgeSection = agentConfig?.knowledgeSnippets?.length
@@ -445,8 +448,10 @@ class GeminiProvider implements LLMProvider {
     const systemPrompt = buildSystemPrompt(req.availableTools, agentConfig, req.mode);
     const contextMessages = buildContextMessages(req);
 
-    // Resolve model/generation overrides from AI Studio Reasoning tab
-    const modelName = agentConfig?.model ?? this.modelName;
+    // Resolve model/generation overrides. Priority:
+    // 1. Per-tenant agent_versions override (AI Studio Reasoning tab)
+    // 2. Task-aware default from modelSelector (rewrites deprecated models)
+    const modelName = pickGeminiModel('super_agent_plan', agentConfig?.model ?? this.modelName);
     const temperature = normalizeTemperature(agentConfig?.temperature, 0.2);
     const maxOutputTokens = normalizeMaxOutputTokens(agentConfig?.maxOutputTokens, 2048);
 
@@ -527,9 +532,13 @@ class GeminiProvider implements LLMProvider {
   }
 
   async composeNarrative(req: NarrativeRequest): Promise<string> {
+    // This is the user-facing assistant reply — quality matters more than cost.
+    // Flash is the sweet spot; Lite was dropping detail and producing terse,
+    // unhelpful answers ("Executed 1 step successfully"). 800 tokens gives
+    // room for short Q&A AND multi-paragraph investigations without truncation.
     const model = this.genAI.getGenerativeModel({
-      model: this.modelName,
-      generationConfig: { temperature: 0.4, maxOutputTokens: 280 },
+      model: pickGeminiModel('copilot_chat', this.modelName),
+      generationConfig: { temperature: 0.4, maxOutputTokens: 800 },
     });
 
     const spansText = (req.spans || [])
@@ -558,17 +567,23 @@ class GeminiProvider implements LLMProvider {
           ? 'Note: execution failed — say so honestly and suggest next step.'
           : '';
 
-    const prompt = `User said: "${redactSensitiveText(req.userMessage)}"
+    const prompt = `${SAAS_PRODUCT_CONTEXT}
+
+${ASSISTANT_TONE_GUIDE}
+
+# This turn
+
+User asked: "${redactSensitiveText(req.userMessage)}"
 
 ${modeGuidance}
 ${statusHint}
 
-What was actually executed (system trace):
-${spansText || 'No tools executed — pure conversation.'}
+Tool results you must answer from (these are the only verified facts you have):
+${spansText || 'No tools executed — answer from general knowledge or ask for clarification.'}
 
-Final system summary: ${redactSensitiveText(req.traceSummary || '(none)')}
+System status: ${redactSensitiveText(req.traceSummary || '(none)')}
 
-Write the assistant reply as 2-4 short conversational sentences in the user's language (default English; switch to Spanish if the user wrote in Spanish). Plain prose only — no bullet lists, no markdown, no JSON, no preamble like "Here's what I found:".`;
+Now write the reply, following every rule above. Do not preface, do not narrate, do not echo raw JSON. Just answer.`;
 
     try {
       return await withGeminiRetry(
@@ -592,8 +607,9 @@ Write the assistant reply as 2-4 short conversational sentences in the user's la
     userMessage: string;
     steps: Array<{ tool: string; result: unknown }>;
   }): Promise<string> {
+    // Tool result summarisation — mechanical, Lite is sufficient.
     const model = this.genAI.getGenerativeModel({
-      model: this.modelName,
+      model: pickGeminiModel('summarise_conversation', this.modelName),
       generationConfig: { temperature: 0.3, maxOutputTokens: 256 },
     });
 

@@ -6,8 +6,6 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import { enqueue } from '../../queue/client.js';
@@ -22,10 +20,7 @@ export const customerCommunicationAgentImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, tenantId, workspaceId, traceId, permissions, triggerEvent } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
     const nowMs = Date.now();
 
@@ -93,27 +88,19 @@ export const customerCommunicationAgentImpl: AgentImplementation = {
     }
 
     try {
-      if (useSupabase) {
-        const { error } = await supabase!.from('audit_events').insert({
-          id: randomUUID(),
-          tenant_id: tenantId,
-          workspace_id: workspaceId,
-          actor_type: 'agent',
-          action: `communication_decision:${decision}`,
-          entity_type: 'case',
-          entity_id: caseId,
-          new_value: objective,
-          metadata: { decision, tone, trigger: triggerEvent },
-          occurred_at: now,
-        });
-        if (error) throw error;
-      } else {
-        db!.prepare(`
-          INSERT INTO audit_events
-            (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-          VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
-        `).run(randomUUID(), tenantId, workspaceId, `communication_decision:${decision}`, caseId, objective, JSON.stringify({ decision, tone, trigger: triggerEvent }), now);
-      }
+      const { error } = await supabase.from('audit_events').insert({
+        id: randomUUID(),
+        tenant_id: tenantId,
+        workspace_id: workspaceId,
+        actor_type: 'agent',
+        action: `communication_decision:${decision}`,
+        entity_type: 'case',
+        entity_id: caseId,
+        new_value: objective,
+        metadata: { decision, tone, trigger: triggerEvent },
+        occurred_at: now,
+      });
+      if (error) throw error;
     } catch { /* non-critical */ }
 
     return {

@@ -38,6 +38,9 @@ import superAgentRouter from './routes/superAgent.js';
 import onboardingRouter from './routes/onboarding.js';
 import publicConfigRouter from './routes/publicConfig.js';
 import { oauthConnectorsRouter } from './routes/oauthConnectors.js';
+import { shopifyOAuthRouter } from './routes/shopifyOAuth.js';
+import { stripeOAuthRouter } from './routes/stripeOAuth.js';
+import internalRouter from './routes/internal.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { superAgentLimiter, aiLimiter, onboardingLimiter } from './middleware/rateLimit.js';
 import { webhookRouter } from './webhooks/router.js';
@@ -146,6 +149,15 @@ app.use('/api/onboarding', onboardingLimiter, onboardingRouter);
 app.use('/api/public', publicConfigRouter);
 // OAuth callback must be public (no x-tenant-id header in the provider redirect)
 app.use('/api/oauth-connectors', oauthConnectorsRouter);
+// Shopify OAuth: install pages need extractMultiTenant (which the router applies
+// per-route); the /callback endpoint is public-by-design (Shopify is the caller).
+app.use('/api/integrations/shopify', shopifyOAuthRouter);
+// Stripe Connect OAuth + manual key fallback. /callback is public; the rest
+// require auth via extractMultiTenant inside the router.
+app.use('/api/integrations/stripe', stripeOAuthRouter);
+// Internal cron-driven endpoints (worker tick, scheduler tick). Auth via INTERNAL_CRON_SECRET.
+// Mounted BEFORE multi-tenant middleware skip list since they have their own auth.
+app.use('/api/internal', internalRouter);
 
 // ── Health check (enhanced) ───────────────────────────────
 app.get('/api/health', async (_req, res) => {

@@ -35,6 +35,8 @@ import type {
 import { parseCommandIntent as parseSuperAgentCommandIntent } from '../agents/superAgent/intent.js';
 import type { Plan } from '../agents/planEngine/types.js';
 import { buildReasoningTrail, type ReasoningTrail } from '../agents/planEngine/explainability.js';
+import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 
 const router = Router();
 
@@ -2670,7 +2672,8 @@ async function handleCustomerIntent(req: MultiTenantRequest, scope: CommandScope
 }
 
 async function handleApprovalQueueIntent(req: MultiTenantRequest, scope: CommandScope, input: string, agents: any[]) {
-  const approvals = await approvalRepository.list(scope, { status: 'pending' });
+  const approvalsResult = await approvalRepository.list(scope, { status: 'pending', limit: 200, offset: 0 });
+  const approvals = approvalsResult.items;
   const top = approvals.slice(0, 5);
 
   return createResponse({
@@ -3403,15 +3406,18 @@ router.get('/bootstrap', async (req: MultiTenantRequest, res) => {
   try {
     const scope = getScope(req);
     const permissionMatrix = buildPermissionMatrix(req);
-    const [workspace, cases, orders, payments, approvals, agents, allCustomers] = await Promise.all([
+    const [workspace, cases, orders, payments, approvalsPage, agents, allCustomers] = await Promise.all([
       workspaceRepository.getById(scope.workspaceId, scope.tenantId),
       hasPermission(req, 'cases.read') ? caseRepository.list(scope, {}) : Promise.resolve([]),
       hasPermission(req, 'cases.read') ? commerceRepository.listOrders(scope, {}) : Promise.resolve([]),
       hasPermission(req, 'cases.read') ? commerceRepository.listPayments(scope, {}) : Promise.resolve([]),
-      hasPermission(req, 'approvals.read') ? approvalRepository.list(scope, { status: 'pending' }) : Promise.resolve([]),
+      hasPermission(req, 'approvals.read')
+        ? approvalRepository.list(scope, { status: 'pending', limit: 200, offset: 0 })
+        : Promise.resolve({ items: [], total: 0, hasMore: false }),
       hasPermission(req, 'agents.read') ? agentRepository.listAgents(scope) : Promise.resolve([]),
       hasPermission(req, 'cases.read') ? customerRepository.list(scope, {}) : Promise.resolve([]),
     ]);
+    const approvals = Array.isArray(approvalsPage) ? approvalsPage : approvalsPage.items;
 
     const counts = {
       cases: cases.length,
@@ -3513,10 +3519,17 @@ router.post('/command', validate({ body: CommandBodySchema }), async (req: Multi
   try {
     const scope = getScope(req);
     const input = String(req.body?.input || '').trim();
-    const runId = String(req.body?.runId || crypto.randomUUID());
+    const runId = String(req.body?.runId || req.body?.run_id || crypto.randomUUID());
     const mode = String(req.body?.mode || 'investigate') === 'operate' ? 'operate' : 'investigate';
-    const commandContext = (req.body?.context || {}) as CommandContext;
-    const sessionId = commandContext.sessionId || runId;
+    const commandContext = (req.body?.context || {}) as CommandContext & { session_id?: string };
+    // The client normalises payload keys to snake_case, so accept either form.
+    // Top-level sessionId is also honoured for callers that prefer that shape.
+    const sessionId =
+      commandContext.sessionId ||
+      (commandContext as any).session_id ||
+      req.body?.sessionId ||
+      req.body?.session_id ||
+      runId;
     const agents = hasPermission(req, 'agents.read') ? await agentRepository.listAgents(scope) : [];
     await planEngine.ensureSession(sessionId, req.userId || 'system', scope.tenantId, scope.workspaceId || null);
     const sessionMemory = await planEngine.getCommandContext(sessionId);
@@ -3535,29 +3548,23 @@ router.post('/command', validate({ body: CommandBodySchema }), async (req: Multi
     }
 
     // ── Fire trigger.chat_message for any workflows listening ─────────────────
-    // Dispatched asynchronously (fire-and-forget) so it doesn't block the
-    // SuperAgent response. Workflows whose start node has channel='superagent'
-    // (or 'any') will receive the message as triggerPayload.
-    void (async () => {
-      try {
-        const { executeWorkflowsByEvent } = await import('./workflows.js');
-        await executeWorkflowsByEvent(
-          { tenantId: scope.tenantId, workspaceId: scope.workspaceId || '', userId: req.userId },
-          'trigger.chat_message',
-          {
-            channel: 'superagent',
-            message: input,
-            sessionId,
-            runId,
-            userId: req.userId || null,
-          },
-        );
-      } catch (err: any) {
-        logger.warn('SuperAgent: trigger.chat_message dispatch failed', {
-          sessionId, error: String(err?.message ?? err),
-        });
-      }
-    })();
+    // Routed through the durable workflow event bus: the event is persisted to
+    // `workflow_event_log` and dispatched to the workflow engine. If the engine
+    // call fails or the serverless function terminates before dispatch finishes,
+    // the recovery sweeper (`recoverPendingEvents`) will retry it on the next
+    // scheduler tick. Workflows whose start node has channel='superagent' (or
+    // 'any') will receive the message as triggerPayload.
+    await fireWorkflowEvent(
+      { tenantId: scope.tenantId, workspaceId: scope.workspaceId || '', userId: req.userId },
+      'trigger.chat_message',
+      {
+        channel: 'superagent',
+        message: input,
+        sessionId,
+        runId,
+        userId: req.userId || null,
+      },
+    );
 
     emitSuperAgentEvent(scope, 'run_started', { runId, input });
     emitSuperAgentEvent(scope, 'step_started', {
@@ -4212,18 +4219,70 @@ router.get('/catalog', (req: MultiTenantRequest, res) => {
   }
 });
 
+// ── Saved conversations (right sidebar) ──────────────────────────────────────
+//
+// Privacy invariant: every endpoint here MUST scope by req.userId so a user
+// can only ever see / load / mutate their own threads. The service-role
+// Supabase client bypasses RLS, so application-layer scoping is the only
+// barrier. Don't relax it — the repo functions enforce the same filter.
+
+router.get('/sessions', async (req: MultiTenantRequest, res) => {
+  try {
+    if (!req.userId) return res.status(401).json({ error: 'Authentication required' });
+    const limit = Math.min(Math.max(Number(req.query.limit ?? 50) || 50, 1), 100);
+    const sessions = await planEngine.listSessionsForUser(
+      req.userId,
+      req.tenantId!,
+      req.workspaceId ?? null,
+      limit,
+    );
+    return res.json({ sessions, count: sessions.length });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to list conversations' });
+  }
+});
+
 router.get('/sessions/:sessionId', async (req: MultiTenantRequest, res) => {
   try {
-    if (!canInspectSuperAgent(req)) {
-      return res.status(403).json({ error: 'Missing permission to inspect Super Agent sessions' });
-    }
     const session = await planEngine.getSession(req.params.sessionId);
     if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    // Enforce ownership for the chat-history sidebar. Inspector roles
+    // (audit / cases readers) keep their broader view-any capability.
+    const isOwner = session.userId === req.userId
+      && session.tenantId === req.tenantId
+      && (session.workspaceId ?? null) === (req.workspaceId ?? null);
+    if (!isOwner && !canInspectSuperAgent(req)) {
       return res.status(404).json({ error: 'Session not found' });
     }
     return res.json({ session });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to load Super Agent session' });
+  }
+});
+
+router.delete('/sessions/:sessionId', async (req: MultiTenantRequest, res) => {
+  try {
+    if (!req.userId) return res.status(401).json({ error: 'Authentication required' });
+    const ok = await planEngine.deleteSessionForUser(req.params.sessionId, req.userId, req.tenantId!);
+    if (!ok) return res.status(404).json({ error: 'Session not found' });
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+});
+
+router.patch('/sessions/:sessionId', async (req: MultiTenantRequest, res) => {
+  try {
+    if (!req.userId) return res.status(401).json({ error: 'Authentication required' });
+    const title = String(req.body?.title ?? '').trim();
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    const ok = await planEngine.renameSessionForUser(req.params.sessionId, req.userId, req.tenantId!, title);
+    if (!ok) return res.status(404).json({ error: 'Session not found' });
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to rename conversation' });
   }
 });
 
@@ -4312,84 +4371,111 @@ router.get('/cron/check', async (req: MultiTenantRequest, res) => {
     const now = new Date();
     const in4h = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const scope = { tenantId: 'org_default', workspaceId: '' };
+    const totalAlerts: Array<{ tenantId: string; type: string; severity: string; title: string }> = [];
 
-    const [allCases, allCustomers] = await Promise.all([
-      caseRepository.list(scope, {}) as Promise<any[]>,
-      customerRepository.list(scope, {}) as Promise<any[]>,
-    ]);
+    // Iterate every active workspace. In single-tenant deploys
+    // DEFAULT_TENANT_ID/DEFAULT_WORKSPACE_ID can short-circuit to one scope.
+    const overrideTenant = process.env.DEFAULT_TENANT_ID;
+    const overrideWorkspace = process.env.DEFAULT_WORKSPACE_ID;
 
-    const alerts: Array<{ type: string; severity: string; title: string }> = [];
-
-    // SLA breach scan
-    const slaBreached = (allCases as any[]).filter((c: any) =>
-      c.sla_resolution_deadline
-      && c.status !== 'closed' && c.status !== 'resolved'
-      && new Date(c.sla_resolution_deadline) < now,
-    );
-    const slaAtRisk = (allCases as any[]).filter((c: any) =>
-      c.sla_resolution_deadline
-      && c.status !== 'closed' && c.status !== 'resolved'
-      && new Date(c.sla_resolution_deadline) <= new Date(in4h)
-      && new Date(c.sla_resolution_deadline) >= now,
-    );
-    if (slaBreached.length > 0) {
-      broadcastSSE('org_default', 'super-agent:workspace_alert', {
-        type: 'sla_breach_risk', severity: 'critical',
-        title: `${slaBreached.length} case${slaBreached.length > 1 ? 's' : ''} with breached SLA`,
-        description: `${slaBreached.length} open case${slaBreached.length > 1 ? 's have' : ' has'} exceeded the SLA resolution deadline.`,
-        suggestedQuery: 'Show cases with breached SLA', scannedAt: now.toISOString(),
-      });
-      alerts.push({ type: 'sla_breach_risk', severity: 'critical', title: `${slaBreached.length} SLA breaches` });
-    }
-    if (slaAtRisk.length > 0) {
-      broadcastSSE('org_default', 'super-agent:workspace_alert', {
-        type: 'sla_breach_risk', severity: 'warning',
-        title: `${slaAtRisk.length} case${slaAtRisk.length > 1 ? 's' : ''} approaching SLA breach`,
-        description: `${slaAtRisk.length} open case${slaAtRisk.length > 1 ? 's are' : ' is'} within 4 hours of the SLA deadline.`,
-        suggestedQuery: 'Show cases near SLA breach', scannedAt: now.toISOString(),
-      });
-      alerts.push({ type: 'sla_at_risk', severity: 'warning', title: `${slaAtRisk.length} near SLA breach` });
+    let scopes: Array<{ tenantId: string; workspaceId: string }> = [];
+    if (overrideTenant && overrideWorkspace) {
+      scopes = [{ tenantId: overrideTenant, workspaceId: overrideWorkspace }];
+    } else {
+      const supabase = getSupabaseAdmin();
+      const { data: workspaces } = await supabase
+        .from('workspaces')
+        .select('id, org_id');
+      scopes = (workspaces ?? [])
+        .filter((w: any) => w.org_id && w.id)
+        .map((w: any) => ({ tenantId: w.org_id, workspaceId: w.id }));
     }
 
-    // Churn risk scan
-    const churnRisk = (allCustomers as any[]).filter((c: any) => {
-      if (c.fraud_flag) return false;
-      const dormant = c.last_order_at ? new Date(c.last_order_at) < new Date(thirtyDaysAgo) : false;
-      return Number(c.open_cases ?? 0) >= 3
-        || (dormant && (Number(c.refund_rate ?? 0) > 0.3 || Number(c.dispute_rate ?? 0) > 0.2));
-    });
-    if (churnRisk.length > 0) {
-      broadcastSSE('org_default', 'super-agent:workspace_alert', {
-        type: 'churn_risk', severity: 'warning',
-        title: `${churnRisk.length} customer${churnRisk.length > 1 ? 's' : ''} at churn risk`,
-        description: 'Customers showing churn signals: multiple open cases, high refund/dispute rate, or prolonged inactivity.',
-        suggestedQuery: 'Show customers at risk of churning', scannedAt: now.toISOString(),
-      });
-      alerts.push({ type: 'churn_risk', severity: 'warning', title: `${churnRisk.length} churn risks` });
-    }
+    for (const scope of scopes) {
+      try {
+        const [allCases, allCustomers] = await Promise.all([
+          caseRepository.list(scope, {}) as Promise<any[]>,
+          customerRepository.list(scope, {}) as Promise<any[]>,
+        ]);
 
-    // Fraud flag scan
-    const fraudCustomers = (allCustomers as any[]).filter((c: any) => c.fraud_flag);
-    if (fraudCustomers.length > 0) {
-      broadcastSSE('org_default', 'super-agent:workspace_alert', {
-        type: 'fraud_flag', severity: 'critical',
-        title: `${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} flagged for fraud`,
-        description: 'Customer profiles with active fraud flags requiring review.',
-        suggestedQuery: 'Show customers with fraud flag', scannedAt: now.toISOString(),
-      });
-      alerts.push({ type: 'fraud_flag', severity: 'critical', title: `${fraudCustomers.length} fraud flags` });
+        const alerts: Array<{ type: string; severity: string; title: string }> = [];
+
+        // SLA breach scan
+        const slaBreached = (allCases as any[]).filter((c: any) =>
+          c.sla_resolution_deadline
+          && c.status !== 'closed' && c.status !== 'resolved'
+          && new Date(c.sla_resolution_deadline) < now,
+        );
+        const slaAtRisk = (allCases as any[]).filter((c: any) =>
+          c.sla_resolution_deadline
+          && c.status !== 'closed' && c.status !== 'resolved'
+          && new Date(c.sla_resolution_deadline) <= new Date(in4h)
+          && new Date(c.sla_resolution_deadline) >= now,
+        );
+        if (slaBreached.length > 0) {
+          broadcastSSE(scope.tenantId, 'super-agent:workspace_alert', {
+            type: 'sla_breach_risk', severity: 'critical',
+            title: `${slaBreached.length} case${slaBreached.length > 1 ? 's' : ''} with breached SLA`,
+            description: `${slaBreached.length} open case${slaBreached.length > 1 ? 's have' : ' has'} exceeded the SLA resolution deadline.`,
+            suggestedQuery: 'Show cases with breached SLA', scannedAt: now.toISOString(),
+          });
+          alerts.push({ type: 'sla_breach_risk', severity: 'critical', title: `${slaBreached.length} SLA breaches` });
+        }
+        if (slaAtRisk.length > 0) {
+          broadcastSSE(scope.tenantId, 'super-agent:workspace_alert', {
+            type: 'sla_breach_risk', severity: 'warning',
+            title: `${slaAtRisk.length} case${slaAtRisk.length > 1 ? 's' : ''} approaching SLA breach`,
+            description: `${slaAtRisk.length} open case${slaAtRisk.length > 1 ? 's are' : ' is'} within 4 hours of the SLA deadline.`,
+            suggestedQuery: 'Show cases near SLA breach', scannedAt: now.toISOString(),
+          });
+          alerts.push({ type: 'sla_at_risk', severity: 'warning', title: `${slaAtRisk.length} near SLA breach` });
+        }
+
+        // Churn risk scan
+        const churnRisk = (allCustomers as any[]).filter((c: any) => {
+          if (c.fraud_flag) return false;
+          const dormant = c.last_order_at ? new Date(c.last_order_at) < new Date(thirtyDaysAgo) : false;
+          return Number(c.open_cases ?? 0) >= 3
+            || (dormant && (Number(c.refund_rate ?? 0) > 0.3 || Number(c.dispute_rate ?? 0) > 0.2));
+        });
+        if (churnRisk.length > 0) {
+          broadcastSSE(scope.tenantId, 'super-agent:workspace_alert', {
+            type: 'churn_risk', severity: 'warning',
+            title: `${churnRisk.length} customer${churnRisk.length > 1 ? 's' : ''} at churn risk`,
+            description: 'Customers showing churn signals: multiple open cases, high refund/dispute rate, or prolonged inactivity.',
+            suggestedQuery: 'Show customers at risk of churning', scannedAt: now.toISOString(),
+          });
+          alerts.push({ type: 'churn_risk', severity: 'warning', title: `${churnRisk.length} churn risks` });
+        }
+
+        // Fraud flag scan
+        const fraudCustomers = (allCustomers as any[]).filter((c: any) => c.fraud_flag);
+        if (fraudCustomers.length > 0) {
+          broadcastSSE(scope.tenantId, 'super-agent:workspace_alert', {
+            type: 'fraud_flag', severity: 'critical',
+            title: `${fraudCustomers.length} customer${fraudCustomers.length > 1 ? 's' : ''} flagged for fraud`,
+            description: 'Customer profiles with active fraud flags requiring review.',
+            suggestedQuery: 'Show customers with fraud flag', scannedAt: now.toISOString(),
+          });
+          alerts.push({ type: 'fraud_flag', severity: 'critical', title: `${fraudCustomers.length} fraud flags` });
+        }
+
+        for (const a of alerts) totalAlerts.push({ tenantId: scope.tenantId, ...a });
+      } catch (perScopeErr) {
+        logger.warn('Super Agent cron check: per-scope failure', {
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId,
+          error: perScopeErr instanceof Error ? perScopeErr.message : String(perScopeErr),
+        });
+      }
     }
 
     logger.info('Super Agent cron check completed', {
-      slaBreached: slaBreached.length,
-      slaAtRisk: slaAtRisk.length,
-      churnRisk: churnRisk.length,
-      fraudCustomers: fraudCustomers.length,
-      alertsBroadcast: alerts.length,
+      scopesScanned: scopes.length,
+      alertsBroadcast: totalAlerts.length,
     });
 
-    res.json({ ok: true, scannedAt: now.toISOString(), alertsBroadcast: alerts.length, summary: alerts });
+    res.json({ ok: true, scannedAt: now.toISOString(), scopesScanned: scopes.length, alertsBroadcast: totalAlerts.length, summary: totalAlerts });
   } catch (error) {
     logger.error('Super Agent cron check error', error instanceof Error ? error : new Error(String(error)));
     res.status(500).json({ error: 'Cron check failed' });

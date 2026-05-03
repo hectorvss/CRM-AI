@@ -1,21 +1,15 @@
-import { Router } from 'express';
 import { randomUUID } from 'crypto';
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
+import { Router } from 'express';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
-import { logAudit, parseRow } from '../db/utils.js';
 import { createAgentRepository, createKnowledgeRepository } from '../data/index.js';
-import { resolveAgentKnowledgeBundleAsync } from '../services/agentKnowledge.js';
+import { resolveAgentKnowledgeBundle } from '../services/agentKnowledge.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 
 const router = Router();
 const knowledgeRepository = createKnowledgeRepository();
 const agentRepository = createAgentRepository();
 
 router.use(extractMultiTenant);
-
-function parseJsonPolicy(row: any) {
-  return parseRow(row);
-}
 
 const TOPIC_STOP_WORDS = new Set([
   'the', 'and', 'for', 'with', 'that', 'from', 'this', 'have', 'about', 'after', 'before',
@@ -104,70 +98,43 @@ async function fetchKnowledgeGapInputs(req: MultiTenantRequest) {
   const articles = await knowledgeRepository.listArticles(scope, {});
   const domains = await knowledgeRepository.listDomains(scope);
 
-  if (getDatabaseProvider() === 'supabase') {
-    const { getSupabaseAdmin } = await import('../db/supabase.js');
-    const supabase = getSupabaseAdmin();
-    const [casesRes, messagesRes, approvalsRes] = await Promise.all([
-      supabase
-        .from('cases')
-        .select('id, case_number, type, sub_type, intent, status, priority, risk_level, sla_status, created_at')
-        .eq('tenant_id', req.tenantId)
-        .eq('workspace_id', req.workspaceId)
-        .order('created_at', { ascending: false })
-        .limit(120),
-      supabase
-        .from('messages')
-        .select('case_id, content, sent_at')
-        .eq('tenant_id', req.tenantId)
-        .eq('workspace_id', req.workspaceId)
-        .order('sent_at', { ascending: false })
-        .limit(240),
-      supabase
-        .from('approval_requests')
-        .select('case_id, status, risk_level, action_type, created_at')
-        .eq('tenant_id', req.tenantId)
-        .eq('workspace_id', req.workspaceId)
-        .order('created_at', { ascending: false })
-        .limit(180),
-    ]);
+  const supabase = getSupabaseAdmin();
+  const [casesRes, messagesRes, approvalsRes] = await Promise.all([
+    supabase
+      .from('cases')
+      .select('id, case_number, type, sub_type, intent, status, priority, risk_level, sla_status, created_at')
+      .eq('tenant_id', req.tenantId)
+      .eq('workspace_id', req.workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(120),
+    // `messages` is scoped by tenant_id only (no workspace_id column);
+    // we narrow to the workspace by intersecting with the cases query below.
+    supabase
+      .from('messages')
+      .select('case_id, content, sent_at')
+      .eq('tenant_id', req.tenantId)
+      .order('sent_at', { ascending: false })
+      .limit(240),
+    supabase
+      .from('approval_requests')
+      .select('case_id, status, risk_level, action_type, created_at')
+      .eq('tenant_id', req.tenantId)
+      .eq('workspace_id', req.workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(180),
+  ]);
 
-    for (const result of [casesRes, messagesRes, approvalsRes]) {
-      if (result.error) throw result.error;
-    }
-
-    return {
-      articles,
-      domains,
-      cases: casesRes.data ?? [],
-      messages: messagesRes.data ?? [],
-      approvals: approvalsRes.data ?? [],
-    };
+  for (const result of [casesRes, messagesRes, approvalsRes]) {
+    if (result.error) throw result.error;
   }
 
-  const db = getDb();
-  const cases = db.prepare(`
-    SELECT id, case_number, type, sub_type, intent, status, priority, risk_level, sla_status, created_at
-    FROM cases
-    WHERE tenant_id = ? AND workspace_id = ?
-    ORDER BY created_at DESC
-    LIMIT 120
-  `).all(req.tenantId, req.workspaceId).map(parseRow);
-  const messages = db.prepare(`
-    SELECT case_id, content, sent_at
-    FROM messages
-    WHERE tenant_id = ? AND workspace_id = ?
-    ORDER BY sent_at DESC
-    LIMIT 240
-  `).all(req.tenantId, req.workspaceId).map(parseRow);
-  const approvals = db.prepare(`
-    SELECT case_id, status, risk_level, action_type, created_at
-    FROM approval_requests
-    WHERE tenant_id = ? AND workspace_id = ?
-    ORDER BY created_at DESC
-    LIMIT 180
-  `).all(req.tenantId, req.workspaceId).map(parseRow);
-
-  return { articles, domains, cases, messages, approvals };
+  return {
+    articles,
+    domains,
+    cases: casesRes.data ?? [],
+    messages: messagesRes.data ?? [],
+    approvals: approvalsRes.data ?? [],
+  };
 }
 
 function buildGapAnalysis(input: { articles: any[]; domains: any[]; cases: any[]; messages: any[]; approvals: any[] }) {
@@ -322,311 +289,80 @@ function buildGapAnalysis(input: { articles: any[]; domains: any[]; cases: any[]
 }
 
 router.get('/articles', async (req: MultiTenantRequest, res) => {
-  if (getDatabaseProvider() === 'supabase') {
-    try {
-      const articles = await knowledgeRepository.listArticles(
-        { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-        {
-          domain_id: typeof req.query.domain_id === 'string' ? req.query.domain_id : undefined,
-          type: typeof req.query.type === 'string' ? req.query.type : undefined,
-          status: typeof req.query.status === 'string' ? req.query.status : undefined,
-          q: typeof req.query.q === 'string' ? req.query.q : undefined,
-        },
-      );
-      return res.json(articles);
-    } catch (error) {
-      console.error('Error fetching knowledge articles via supabase:', error);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+  try {
+    const articles = await knowledgeRepository.listArticles(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      {
+        domain_id: typeof req.query.domain_id === 'string' ? req.query.domain_id : undefined,
+        type: typeof req.query.type === 'string' ? req.query.type : undefined,
+        status: typeof req.query.status === 'string' ? req.query.status : undefined,
+        q: typeof req.query.q === 'string' ? req.query.q : undefined,
+      },
+    );
+    return res.json(articles);
+  } catch (error) {
+    console.error('Error fetching knowledge articles:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const db = getDb();
-  const tenantId = req.tenantId!;
-  const workspaceId = req.workspaceId!;
-  const { domain_id, type, status, q } = req.query;
-
-  let query = `
-    SELECT a.*, d.name as domain_name, u.name as owner_name
-    FROM knowledge_articles a
-    LEFT JOIN knowledge_domains d ON a.domain_id = d.id
-    LEFT JOIN users u ON a.owner_user_id = u.id
-    WHERE a.tenant_id = ? AND a.workspace_id = ?
-  `;
-  const params: any[] = [tenantId, workspaceId];
-  if (domain_id) { query += ' AND a.domain_id = ?'; params.push(domain_id); }
-  if (type) { query += ' AND a.type = ?'; params.push(type); }
-  if (status) { query += ' AND a.status = ?'; params.push(status); }
-  if (q) {
-    query += ' AND (a.title LIKE ? OR a.content LIKE ?)';
-    const term = `%${q}%`;
-    params.push(term, term);
-  }
-  query += ' ORDER BY a.citation_count DESC, a.updated_at DESC';
-
-  res.json(db.prepare(query).all(...params).map(parseRow));
 });
 
 router.post('/articles', async (req: MultiTenantRequest, res) => {
   try {
-    if (getDatabaseProvider() === 'supabase') {
-      const {
-        title,
-        content,
-        content_structured = null,
-      } = req.body;
-      if (!title || !content) {
-        return res.status(400).json({ error: 'title and content are required' });
-      }
-      const article = await knowledgeRepository.createArticle(
-        { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-        req.body,
-      );
-      return res.status(201).json(article);
-    }
-
-    const db = getDb();
-    const tenantId = req.tenantId!;
-    const workspaceId = req.workspaceId!;
-    const {
-      title,
-      content,
-      type = 'article',
-      status = 'draft',
-      domain_id = null,
-      owner_user_id = req.userId ?? null,
-      review_cycle_days = 90,
-      linked_workflow_ids = [],
-      linked_approval_policy_ids = [],
-      content_structured = null,
-    } = req.body;
-
+    const { title, content } = req.body ?? {};
     if (!title || !content) {
       return res.status(400).json({ error: 'title and content are required' });
     }
-
-    const fallbackOwner = db.prepare('SELECT id FROM users LIMIT 1').get() as { id: string } | undefined;
-    const resolvedOwner = owner_user_id
-      ? ((db.prepare('SELECT id FROM users WHERE id = ?').get(owner_user_id) as { id: string } | undefined)?.id ?? fallbackOwner?.id ?? null)
-      : (fallbackOwner?.id ?? null);
-    const now = new Date().toISOString();
-    const id = randomUUID();
-    db.prepare(`
-      INSERT INTO knowledge_articles (
-        id, tenant_id, workspace_id, domain_id, title, content, content_structured, type, status,
-        owner_user_id, review_cycle_days, last_reviewed_at, next_review_at,
-        version, linked_workflow_ids, linked_approval_policy_ids, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
-    `).run(
-      id,
-      tenantId,
-      workspaceId,
-      domain_id,
-      title,
-      content,
-      content_structured ? JSON.stringify(content_structured) : null,
-      type,
-      status,
-      resolvedOwner,
-      review_cycle_days,
-      now,
-      new Date(Date.now() + review_cycle_days * 24 * 60 * 60 * 1000).toISOString(),
-      JSON.stringify(linked_workflow_ids),
-      JSON.stringify(linked_approval_policy_ids),
-      now,
-      now,
+    const article = await knowledgeRepository.createArticle(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      req.body,
     );
-
-    const article = db.prepare(`
-      SELECT a.*, d.name as domain_name, u.name as owner_name
-      FROM knowledge_articles a
-      LEFT JOIN knowledge_domains d ON a.domain_id = d.id
-      LEFT JOIN users u ON a.owner_user_id = u.id
-      WHERE a.id = ?
-    `).get(id);
-
-    logAudit(db, {
-      tenantId,
-      workspaceId,
-      actorId: req.userId ?? 'system',
-      action: 'KNOWLEDGE_ARTICLE_CREATED',
-      entityType: 'knowledge_article',
-      entityId: id,
-      newValue: article,
-    });
-
-    res.status(201).json(parseRow(article));
+    return res.status(201).json(article);
   } catch (error) {
     console.error('Error creating knowledge article:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.get('/articles/:id', async (req: MultiTenantRequest, res) => {
-  if (getDatabaseProvider() === 'supabase') {
-    try {
-      const article = await knowledgeRepository.getArticle(
-        { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-        req.params.id,
-      );
-      if (!article) return res.status(404).json({ error: 'Not found' });
-      return res.json(article);
-    } catch (error) {
-      console.error('Error fetching knowledge article via supabase:', error);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+  try {
+    const article = await knowledgeRepository.getArticle(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      req.params.id,
+    );
+    if (!article) return res.status(404).json({ error: 'Not found' });
+    return res.json(article);
+  } catch (error) {
+    console.error('Error fetching knowledge article:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const db = getDb();
-  const article = db.prepare(`
-    SELECT a.*, d.name as domain_name, u.name as owner_name
-    FROM knowledge_articles a
-    LEFT JOIN knowledge_domains d ON a.domain_id = d.id
-    LEFT JOIN users u ON a.owner_user_id = u.id
-    WHERE a.id = ? AND a.tenant_id = ? AND a.workspace_id = ?
-  `).get(req.params.id, req.tenantId, req.workspaceId);
-  if (!article) return res.status(404).json({ error: 'Not found' });
-  res.json(parseRow(article));
 });
 
 router.put('/articles/:id', async (req: MultiTenantRequest, res) => {
   try {
-    if (getDatabaseProvider() === 'supabase') {
-      const article = await knowledgeRepository.updateArticle(
-        { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-        req.params.id,
-        req.body,
-      );
-      if (!article) return res.status(404).json({ error: 'Not found' });
-      return res.json(article);
-    }
-
-    const db = getDb();
-    const tenantId = req.tenantId!;
-    const workspaceId = req.workspaceId!;
-    const existing = db.prepare(`
-      SELECT *
-      FROM knowledge_articles
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).get(req.params.id, tenantId, workspaceId) as any;
-
-    if (!existing) return res.status(404).json({ error: 'Not found' });
-
-    const merged = {
-      ...parseRow(existing),
-      ...req.body,
-    };
-    const fallbackOwner = db.prepare('SELECT id FROM users LIMIT 1').get() as { id: string } | undefined;
-    const resolvedOwner = merged.owner_user_id
-      ? ((db.prepare('SELECT id FROM users WHERE id = ?').get(merged.owner_user_id) as { id: string } | undefined)?.id ?? fallbackOwner?.id ?? null)
-      : (fallbackOwner?.id ?? null);
-    const nextVersion = merged.content !== existing.content || merged.title !== existing.title
-      ? (Number(existing.version) || 1) + 1
-      : Number(existing.version) || 1;
-    const now = new Date().toISOString();
-    const mergedStructured = merged.content_structured ?? existing.content_structured ?? null;
-
-    db.prepare(`
-      UPDATE knowledge_articles
-      SET domain_id = ?, title = ?, content = ?, content_structured = ?, type = ?, status = ?,
-          owner_user_id = ?, review_cycle_days = ?, version = ?,
-          linked_workflow_ids = ?, linked_approval_policy_ids = ?, updated_at = ?
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(
-      merged.domain_id ?? null,
-      merged.title,
-      merged.content,
-      mergedStructured ? JSON.stringify(mergedStructured) : null,
-      merged.type ?? 'article',
-      merged.status ?? existing.status,
-      resolvedOwner,
-      merged.review_cycle_days ?? existing.review_cycle_days ?? 90,
-      nextVersion,
-      JSON.stringify(merged.linked_workflow_ids ?? []),
-      JSON.stringify(merged.linked_approval_policy_ids ?? []),
-      now,
+    const article = await knowledgeRepository.updateArticle(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
       req.params.id,
-      tenantId,
-      workspaceId,
+      req.body,
     );
-
-    const article = db.prepare(`
-      SELECT a.*, d.name as domain_name, u.name as owner_name
-      FROM knowledge_articles a
-      LEFT JOIN knowledge_domains d ON a.domain_id = d.id
-      LEFT JOIN users u ON a.owner_user_id = u.id
-      WHERE a.id = ?
-    `).get(req.params.id);
-
-    logAudit(db, {
-      tenantId,
-      workspaceId,
-      actorId: req.userId ?? 'system',
-      action: 'KNOWLEDGE_ARTICLE_UPDATED',
-      entityType: 'knowledge_article',
-      entityId: req.params.id,
-      oldValue: parseRow(existing),
-      newValue: article,
-    });
-
-    res.json(parseRow(article));
+    if (!article) return res.status(404).json({ error: 'Not found' });
+    return res.json(article);
   } catch (error) {
     console.error('Error updating knowledge article:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 router.post('/articles/:id/publish', async (req: MultiTenantRequest, res) => {
   try {
-    if (getDatabaseProvider() === 'supabase') {
-      const article = await knowledgeRepository.publishArticle(
-        { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-        req.params.id,
-      );
-      if (!article) return res.status(404).json({ error: 'Not found' });
-      return res.json(article);
-    }
-
-    const db = getDb();
-    const tenantId = req.tenantId!;
-    const workspaceId = req.workspaceId!;
-    const existing = db.prepare(`
-      SELECT *
-      FROM knowledge_articles
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).get(req.params.id, tenantId, workspaceId) as any;
-
-    if (!existing) return res.status(404).json({ error: 'Not found' });
-
-    const now = new Date().toISOString();
-    db.prepare(`
-      UPDATE knowledge_articles
-      SET status = 'published', last_reviewed_at = ?, updated_at = ?
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(now, now, req.params.id, tenantId, workspaceId);
-
-    const article = db.prepare(`
-      SELECT a.*, d.name as domain_name, u.name as owner_name
-      FROM knowledge_articles a
-      LEFT JOIN knowledge_domains d ON a.domain_id = d.id
-      LEFT JOIN users u ON a.owner_user_id = u.id
-      WHERE a.id = ?
-    `).get(req.params.id);
-
-    logAudit(db, {
-      tenantId,
-      workspaceId,
-      actorId: req.userId ?? 'system',
-      action: 'KNOWLEDGE_ARTICLE_PUBLISHED',
-      entityType: 'knowledge_article',
-      entityId: req.params.id,
-      oldValue: parseRow(existing),
-      newValue: article,
-    });
-
-    res.json(parseRow(article));
+    const article = await knowledgeRepository.publishArticle(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      req.params.id,
+    );
+    if (!article) return res.status(404).json({ error: 'Not found' });
+    return res.json(article);
   } catch (error) {
     console.error('Error publishing knowledge article:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -666,7 +402,7 @@ router.post('/test', async (req: MultiTenantRequest, res) => {
       const caseContext = caseId
         ? await agentRepository.getCaseKnowledgeContext(scope, caseId)
         : undefined;
-      const bundle = await resolveAgentKnowledgeBundleAsync({
+      const bundle = await resolveAgentKnowledgeBundle({
         tenantId: req.tenantId!,
         workspaceId: req.workspaceId!,
         knowledgeProfile: agent.knowledge_profile ?? null,
@@ -787,56 +523,27 @@ router.post('/test', async (req: MultiTenantRequest, res) => {
 });
 
 router.get('/domains', async (req: MultiTenantRequest, res) => {
-  if (getDatabaseProvider() === 'supabase') {
-    try {
-      const domains = await knowledgeRepository.listDomains(
-        { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-      );
-      return res.json(domains);
-    } catch (error) {
-      console.error('Error fetching knowledge domains via supabase:', error);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+  try {
+    const domains = await knowledgeRepository.listDomains(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+    );
+    return res.json(domains);
+  } catch (error) {
+    console.error('Error fetching knowledge domains:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const db = getDb();
-  const domains = db.prepare(`
-    SELECT *
-    FROM knowledge_domains
-    WHERE tenant_id = ?
-  `).all(req.tenantId);
-
-  res.json(domains.map((d: any) => {
-    const count = db.prepare(`
-      SELECT COUNT(*) as c
-      FROM knowledge_articles
-      WHERE domain_id = ? AND tenant_id = ? AND workspace_id = ? AND status = 'published'
-    `).get(d.id, req.tenantId, req.workspaceId) as any;
-    return { ...d, article_count: count.c };
-  }));
 });
 
 router.get('/policies', async (req: MultiTenantRequest, res) => {
-  if (getDatabaseProvider() === 'supabase') {
-    try {
-      const policies = await knowledgeRepository.listPolicies(
-        { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-      );
-      return res.json(policies);
-    } catch (error) {
-      console.error('Error fetching policies via supabase:', error);
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+  try {
+    const policies = await knowledgeRepository.listPolicies(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+    );
+    return res.json(policies);
+  } catch (error) {
+    console.error('Error fetching policies:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const db = getDb();
-  res.json(
-    db.prepare(`
-      SELECT *
-      FROM policy_rules
-      WHERE tenant_id = ? AND is_active = 1
-    `).all(req.tenantId).map(parseJsonPolicy),
-  );
 });
 
 // ── Domain write endpoints ─────────────────────────────────────────────────────
@@ -852,32 +559,23 @@ router.post('/domains', async (req: MultiTenantRequest, res) => {
       return res.status(400).json({ error: 'name is required' });
     }
 
-    const now   = new Date().toISOString();
-    const id    = randomUUID();
-    const tenantId = req.tenantId!;
-
-    if (getDatabaseProvider() === 'supabase') {
-      const { getSupabaseAdmin } = await import('../db/supabase.js');
-      const supabase = getSupabaseAdmin();
-      const { data, error } = await supabase
-        .from('knowledge_domains')
-        .insert({ id, tenant_id: tenantId, name: String(name).trim(), description: description ?? null, created_at: now })
-        .select()
-        .single();
-      if (error) throw error;
-      return res.status(201).json(data);
-    }
-
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO knowledge_domains (id, tenant_id, name, description, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, tenantId, String(name).trim(), description ?? null, now);
-    const domain = db.prepare('SELECT * FROM knowledge_domains WHERE id = ?').get(id);
-    res.status(201).json(domain);
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('knowledge_domains')
+      .insert({
+        id: randomUUID(),
+        tenant_id: req.tenantId!,
+        workspace_id: req.workspaceId!,
+        name: String(name).trim(),
+        description: description ?? null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return res.status(201).json(data);
   } catch (error) {
     console.error('Error creating knowledge domain:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -887,42 +585,32 @@ router.post('/domains', async (req: MultiTenantRequest, res) => {
  */
 router.patch('/domains/:id', async (req: MultiTenantRequest, res) => {
   try {
-    const tenantId  = req.tenantId!;
-    const domainId  = req.params.id;
+    const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const domainId = req.params.id;
     const { name, description } = req.body ?? {};
 
-    if (getDatabaseProvider() === 'supabase') {
-      const { getSupabaseAdmin } = await import('../db/supabase.js');
-      const supabase = getSupabaseAdmin();
-      const updates: Record<string, any> = {};
-      if (name !== undefined)        updates.name        = String(name).trim();
-      if (description !== undefined) updates.description = description;
-      const { data, error } = await supabase
-        .from('knowledge_domains')
-        .update(updates)
-        .eq('id', domainId)
-        .eq('tenant_id', tenantId)
-        .select()
-        .single();
-      if (error) { if ((error as any).code === 'PGRST116') return res.status(404).json({ error: 'Not found' }); throw error; }
-      if (!data) return res.status(404).json({ error: 'Not found' });
-      return res.json(data);
+    const supabase = getSupabaseAdmin();
+    const updates: Record<string, any> = {};
+    if (name !== undefined) updates.name = String(name).trim();
+    if (description !== undefined) updates.description = description;
+    const { data, error } = await supabase
+      .from('knowledge_domains')
+      .update(updates)
+      .eq('id', domainId)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
+      .select()
+      .single();
+    if (error) {
+      if ((error as any).code === 'PGRST116') return res.status(404).json({ error: 'Not found' });
+      throw error;
     }
-
-    const db = getDb();
-    const existing = db.prepare('SELECT * FROM knowledge_domains WHERE id = ? AND tenant_id = ?').get(domainId, tenantId) as any;
-    if (!existing) return res.status(404).json({ error: 'Not found' });
-    const parts: string[] = [];
-    const params: any[] = [];
-    if (name !== undefined)        { parts.push('name = ?');        params.push(String(name).trim()); }
-    if (description !== undefined) { parts.push('description = ?'); params.push(description); }
-    if (parts.length) {
-      db.prepare(`UPDATE knowledge_domains SET ${parts.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...params, domainId, tenantId);
-    }
-    res.json(db.prepare('SELECT * FROM knowledge_domains WHERE id = ?').get(domainId));
+    if (!data) return res.status(404).json({ error: 'Not found' });
+    return res.json(data);
   } catch (error) {
     console.error('Error updating knowledge domain:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -932,45 +620,33 @@ router.patch('/domains/:id', async (req: MultiTenantRequest, res) => {
  */
 router.delete('/domains/:id', async (req: MultiTenantRequest, res) => {
   try {
-    const tenantId  = req.tenantId!;
+    const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
-    const domainId  = req.params.id;
+    const domainId = req.params.id;
 
-    if (getDatabaseProvider() === 'supabase') {
-      const { getSupabaseAdmin } = await import('../db/supabase.js');
-      const supabase = getSupabaseAdmin();
-      // Safety guard: block delete if published articles reference this domain
-      const { count } = await supabase
-        .from('knowledge_articles')
-        .select('id', { count: 'exact', head: true })
-        .eq('domain_id', domainId)
-        .eq('tenant_id', tenantId)
-        .eq('workspace_id', workspaceId)
-        .eq('status', 'published');
-      if ((count ?? 0) > 0) {
-        return res.status(409).json({ error: 'Cannot delete a domain that still has published articles. Archive or reassign those articles first.' });
-      }
-      const { error } = await supabase
-        .from('knowledge_domains')
-        .delete()
-        .eq('id', domainId)
-        .eq('tenant_id', tenantId);
-      if (error) throw error;
-      return res.json({ success: true });
-    }
-
-    const db = getDb();
-    const articleCount = (db.prepare(`
-      SELECT COUNT(*) as c FROM knowledge_articles WHERE domain_id = ? AND tenant_id = ? AND workspace_id = ? AND status = 'published'
-    `).get(domainId, tenantId, workspaceId) as any)?.c ?? 0;
-    if (articleCount > 0) {
+    const supabase = getSupabaseAdmin();
+    // Safety guard: block delete if published articles reference this domain
+    const { count } = await supabase
+      .from('knowledge_articles')
+      .select('id', { count: 'exact', head: true })
+      .eq('domain_id', domainId)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'published');
+    if ((count ?? 0) > 0) {
       return res.status(409).json({ error: 'Cannot delete a domain that still has published articles. Archive or reassign those articles first.' });
     }
-    db.prepare('DELETE FROM knowledge_domains WHERE id = ? AND tenant_id = ?').run(domainId, tenantId);
-    res.json({ success: true });
+    const { error } = await supabase
+      .from('knowledge_domains')
+      .delete()
+      .eq('id', domainId)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId);
+    if (error) throw error;
+    return res.json({ success: true });
   } catch (error) {
     console.error('Error deleting knowledge domain:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -982,58 +658,38 @@ router.delete('/domains/:id', async (req: MultiTenantRequest, res) => {
  */
 router.post('/policies', async (req: MultiTenantRequest, res) => {
   try {
-    const { name, description, rule_type, conditions, actions, priority } = req.body ?? {};
+    const { name, description, entity_type, conditions, action_mapping, approval_mapping, escalation_mapping, knowledge_article_id } = req.body ?? {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ error: 'name is required' });
     }
 
-    const now       = new Date().toISOString();
-    const id        = randomUUID();
-    const tenantId  = req.tenantId!;
+    const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
 
-    if (getDatabaseProvider() === 'supabase') {
-      const { getSupabaseAdmin } = await import('../db/supabase.js');
-      const supabase = getSupabaseAdmin();
-      const { data, error } = await supabase
-        .from('policy_rules')
-        .insert({
-          id,
-          tenant_id:    tenantId,
-          workspace_id: workspaceId,
-          name:         String(name).trim(),
-          description:  description ?? null,
-          rule_type:    rule_type ?? 'general',
-          conditions:   conditions ?? null,
-          actions:      actions ?? null,
-          priority:     priority ?? 0,
-          is_active:    true,
-          created_at:   now,
-          updated_at:   now,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return res.status(201).json(data);
-    }
-
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO policy_rules (id, tenant_id, workspace_id, name, description, rule_type, conditions, actions, priority, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-    `).run(
-      id, tenantId, workspaceId,
-      String(name).trim(), description ?? null,
-      rule_type ?? 'general',
-      conditions ? JSON.stringify(conditions) : null,
-      actions    ? JSON.stringify(actions)    : null,
-      priority ?? 0,
-      now, now,
-    );
-    res.status(201).json(parseJsonPolicy(db.prepare('SELECT * FROM policy_rules WHERE id = ?').get(id)));
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('policy_rules')
+      .insert({
+        id: randomUUID(),
+        tenant_id: tenantId,
+        workspace_id: workspaceId,
+        knowledge_article_id: knowledge_article_id ?? null,
+        name: String(name).trim(),
+        description: description ?? null,
+        entity_type: entity_type ?? 'general',
+        conditions: conditions ?? [],
+        action_mapping: action_mapping ?? {},
+        approval_mapping: approval_mapping ?? null,
+        escalation_mapping: escalation_mapping ?? null,
+        is_active: true,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return res.status(201).json(data);
   } catch (error) {
     console.error('Error creating policy rule:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -1043,52 +699,39 @@ router.post('/policies', async (req: MultiTenantRequest, res) => {
  */
 router.patch('/policies/:id', async (req: MultiTenantRequest, res) => {
   try {
-    const tenantId   = req.tenantId!;
+    const tenantId = req.tenantId!;
     const workspaceId = req.workspaceId!;
-    const policyId   = req.params.id;
-    const { name, description, rule_type, conditions, actions, priority, is_active } = req.body ?? {};
+    const policyId = req.params.id;
+    const { name, description, entity_type, conditions, action_mapping, approval_mapping, escalation_mapping, is_active, knowledge_article_id } = req.body ?? {};
 
-    if (getDatabaseProvider() === 'supabase') {
-      const { getSupabaseAdmin } = await import('../db/supabase.js');
-      const supabase = getSupabaseAdmin();
-      const updates: Record<string, any> = { updated_at: new Date().toISOString() };
-      if (name        !== undefined) updates.name        = String(name).trim();
-      if (description !== undefined) updates.description = description;
-      if (rule_type   !== undefined) updates.rule_type   = rule_type;
-      if (conditions  !== undefined) updates.conditions  = conditions;
-      if (actions     !== undefined) updates.actions     = actions;
-      if (priority    !== undefined) updates.priority    = priority;
-      if (is_active   !== undefined) updates.is_active   = Boolean(is_active);
-      const { data, error } = await supabase
-        .from('policy_rules')
-        .update(updates)
-        .eq('id', policyId)
-        .eq('tenant_id', tenantId)
-        .select()
-        .single();
-      if (error) { if ((error as any).code === 'PGRST116') return res.status(404).json({ error: 'Not found' }); throw error; }
-      if (!data) return res.status(404).json({ error: 'Not found' });
-      return res.json(data);
+    const supabase = getSupabaseAdmin();
+    const updates: Record<string, any> = {};
+    if (name !== undefined) updates.name = String(name).trim();
+    if (description !== undefined) updates.description = description;
+    if (entity_type !== undefined) updates.entity_type = entity_type;
+    if (conditions !== undefined) updates.conditions = conditions;
+    if (action_mapping !== undefined) updates.action_mapping = action_mapping;
+    if (approval_mapping !== undefined) updates.approval_mapping = approval_mapping;
+    if (escalation_mapping !== undefined) updates.escalation_mapping = escalation_mapping;
+    if (knowledge_article_id !== undefined) updates.knowledge_article_id = knowledge_article_id;
+    if (is_active !== undefined) updates.is_active = Boolean(is_active);
+    const { data, error } = await supabase
+      .from('policy_rules')
+      .update(updates)
+      .eq('id', policyId)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
+      .select()
+      .single();
+    if (error) {
+      if ((error as any).code === 'PGRST116') return res.status(404).json({ error: 'Not found' });
+      throw error;
     }
-
-    const db = getDb();
-    const existing = db.prepare('SELECT * FROM policy_rules WHERE id = ? AND tenant_id = ?').get(policyId, tenantId) as any;
-    if (!existing) return res.status(404).json({ error: 'Not found' });
-    const now = new Date().toISOString();
-    const parts: string[] = ['updated_at = ?'];
-    const params: any[]   = [now];
-    if (name        !== undefined) { parts.push('name = ?');        params.push(String(name).trim()); }
-    if (description !== undefined) { parts.push('description = ?'); params.push(description); }
-    if (rule_type   !== undefined) { parts.push('rule_type = ?');   params.push(rule_type); }
-    if (conditions  !== undefined) { parts.push('conditions = ?');  params.push(JSON.stringify(conditions)); }
-    if (actions     !== undefined) { parts.push('actions = ?');     params.push(JSON.stringify(actions)); }
-    if (priority    !== undefined) { parts.push('priority = ?');    params.push(priority); }
-    if (is_active   !== undefined) { parts.push('is_active = ?');   params.push(is_active ? 1 : 0); }
-    db.prepare(`UPDATE policy_rules SET ${parts.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...params, policyId, tenantId);
-    res.json(parseJsonPolicy(db.prepare('SELECT * FROM policy_rules WHERE id = ?').get(policyId)));
+    if (!data) return res.status(404).json({ error: 'Not found' });
+    return res.json(data);
   } catch (error) {
     console.error('Error updating policy rule:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -1098,28 +741,22 @@ router.patch('/policies/:id', async (req: MultiTenantRequest, res) => {
  */
 router.delete('/policies/:id', async (req: MultiTenantRequest, res) => {
   try {
-    const tenantId  = req.tenantId!;
-    const policyId  = req.params.id;
-    const now       = new Date().toISOString();
+    const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
+    const policyId = req.params.id;
 
-    if (getDatabaseProvider() === 'supabase') {
-      const { getSupabaseAdmin } = await import('../db/supabase.js');
-      const supabase = getSupabaseAdmin();
-      const { error } = await supabase
-        .from('policy_rules')
-        .update({ is_active: false, updated_at: now })
-        .eq('id', policyId)
-        .eq('tenant_id', tenantId);
-      if (error) throw error;
-      return res.json({ success: true });
-    }
-
-    const db = getDb();
-    db.prepare('UPDATE policy_rules SET is_active = 0, updated_at = ? WHERE id = ? AND tenant_id = ?').run(now, policyId, tenantId);
-    res.json({ success: true });
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('policy_rules')
+      .update({ is_active: false })
+      .eq('id', policyId)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId);
+    if (error) throw error;
+    return res.json({ success: true });
   } catch (error) {
     console.error('Error deactivating policy rule:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

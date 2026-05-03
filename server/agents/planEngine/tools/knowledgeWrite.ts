@@ -18,6 +18,24 @@ function scope(context: { tenantId: string; workspaceId: string | null; userId: 
   };
 }
 
+/** Pull a readable string out of any thrown value (Supabase errors are POJOs). */
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    const parts = [obj.message, obj.details, obj.hint, obj.code].filter(
+      (value) => value !== undefined && value !== null && value !== '',
+    );
+    if (parts.length > 0) return parts.join(' | ');
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return '[unserialisable error]';
+    }
+  }
+  return String(err);
+}
+
 export const knowledgeListTool: ToolSpec<{ q?: string; domainId?: string; status?: string; type?: string; limit?: number }, unknown> = {
   name: 'knowledge.list',
   version: '1.0.0',
@@ -81,7 +99,10 @@ export const knowledgeCreateTool: ToolSpec<{
   description: 'Create a knowledge article or operational playbook entry.',
   category: 'knowledge',
   sideEffect: 'write',
-  risk: 'high',
+  // Knowledge writes are versioned + soft-deletable (low blast radius);
+  // the agent should be able to author drafts without an approval gate.
+  risk: 'low',
+  safeOnDryRun: true,
   idempotent: false,
   requiredPermission: 'knowledge.write',
   args: s.object({
@@ -96,19 +117,30 @@ export const knowledgeCreateTool: ToolSpec<{
   }),
   returns: s.any('Created knowledge article'),
   async run({ args, context }) {
-    if (context.dryRun) {
-      return { ok: true, value: { dryRun: true, title: args.title } };
+    // Knowledge writes are versioned + soft-deletable, so we persist them even
+    // when the planner runs in investigate (dry-run) mode. Otherwise the agent
+    // reports "article created" while nothing actually lands in the DB.
+    let article;
+    try {
+      // Empty strings from the LLM ("") must become null — the FK on
+      // domain_id treats "" as a non-existent UUID and rejects the insert.
+      const domainId = args.domainId && args.domainId.trim() !== '' ? args.domainId : null;
+      article = await knowledgeRepo.createArticle(scope(context), {
+        title: args.title,
+        content: args.content,
+        domain_id: domainId,
+        type: args.type ?? 'article',
+        status: args.status ?? 'draft',
+        review_cycle_days: args.reviewCycleDays ?? 90,
+        linked_workflow_ids: args.linkedWorkflowIds ?? [],
+        linked_approval_policy_ids: args.linkedApprovalPolicyIds ?? [],
+      });
+    } catch (err) {
+      try {
+        console.error('[knowledge.create] repo threw', { error: err, scope: scope(context) });
+      } catch { /* noop */ }
+      return { ok: false, error: describeError(err), errorCode: 'CREATE_FAILED' };
     }
-    const article = await knowledgeRepo.createArticle(scope(context), {
-      title: args.title,
-      content: args.content,
-      domain_id: args.domainId ?? null,
-      type: args.type ?? 'article',
-      status: args.status ?? 'draft',
-      review_cycle_days: args.reviewCycleDays ?? 90,
-      linked_workflow_ids: args.linkedWorkflowIds ?? [],
-      linked_approval_policy_ids: args.linkedApprovalPolicyIds ?? [],
-    });
     if (!article) return { ok: false, error: 'Failed to create knowledge article', errorCode: 'CREATE_FAILED' };
     await context.audit({
       action: 'PLAN_ENGINE_KNOWLEDGE_CREATED',
@@ -137,7 +169,9 @@ export const knowledgeUpdateTool: ToolSpec<{
   description: 'Update a knowledge article or playbook.',
   category: 'knowledge',
   sideEffect: 'write',
-  risk: 'high',
+  // Updates are versioned + soft-deletable; safe to execute without approval.
+  risk: 'low',
+  safeOnDryRun: true,
   idempotent: false,
   requiredPermission: 'knowledge.write',
   args: s.object({
@@ -153,19 +187,30 @@ export const knowledgeUpdateTool: ToolSpec<{
   }),
   returns: s.any('Updated knowledge article'),
   async run({ args, context }) {
-    if (context.dryRun) {
-      return { ok: true, value: { dryRun: true, articleId: args.articleId } };
+    // Versioned + soft-deletable: persist on dry-run too (see knowledge.create).
+    let article;
+    try {
+      // Same empty-string FK guard as knowledge.create.
+      const domainId =
+        args.domainId === undefined ? undefined
+        : args.domainId && args.domainId.trim() !== '' ? args.domainId
+        : null;
+      article = await knowledgeRepo.updateArticle(scope(context), args.articleId, {
+        title: args.title,
+        content: args.content,
+        domain_id: domainId,
+        type: args.type,
+        status: args.status,
+        review_cycle_days: args.reviewCycleDays,
+        linked_workflow_ids: args.linkedWorkflowIds,
+        linked_approval_policy_ids: args.linkedApprovalPolicyIds,
+      });
+    } catch (err) {
+      try {
+        console.error('[knowledge.update] repo threw', { error: err, articleId: args.articleId });
+      } catch { /* noop */ }
+      return { ok: false, error: describeError(err), errorCode: 'UPDATE_FAILED' };
     }
-    const article = await knowledgeRepo.updateArticle(scope(context), args.articleId, {
-      title: args.title,
-      content: args.content,
-      domain_id: args.domainId,
-      type: args.type,
-      status: args.status,
-      review_cycle_days: args.reviewCycleDays,
-      linked_workflow_ids: args.linkedWorkflowIds,
-      linked_approval_policy_ids: args.linkedApprovalPolicyIds,
-    });
     if (!article) return { ok: false, error: 'Knowledge article not found', errorCode: 'NOT_FOUND' };
     await context.audit({
       action: 'PLAN_ENGINE_KNOWLEDGE_UPDATED',
@@ -184,7 +229,9 @@ export const knowledgePublishTool: ToolSpec<{ articleId: string }, unknown> = {
   description: 'Publish a knowledge article.',
   category: 'knowledge',
   sideEffect: 'write',
-  risk: 'high',
+  // Publishing only flips a status flag; previous versions are preserved.
+  risk: 'low',
+  safeOnDryRun: true,
   idempotent: false,
   requiredPermission: 'knowledge.write',
   args: s.object({
@@ -192,9 +239,7 @@ export const knowledgePublishTool: ToolSpec<{ articleId: string }, unknown> = {
   }),
   returns: s.any('Published knowledge article'),
   async run({ args, context }) {
-    if (context.dryRun) {
-      return { ok: true, value: { dryRun: true, articleId: args.articleId, status: 'published' } };
-    }
+    // Publishing only flips a status flag; persist on dry-run too.
     const article = await knowledgeRepo.publishArticle(scope(context), args.articleId);
     if (!article) return { ok: false, error: 'Knowledge article not found', errorCode: 'NOT_FOUND' };
     await context.audit({

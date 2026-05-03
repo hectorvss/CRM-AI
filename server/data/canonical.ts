@@ -63,7 +63,11 @@ async function fetchCaseGraphRowsSupabase(scope: CanonicalScope, caseId: string)
     orderIds.length ? supabase.from('order_events').select('*').in('order_id', orderIds).order('time', { ascending: true }) : Promise.resolve({ data: [] }),
     orderIds.length ? supabase.from('order_line_items').select('*').in('order_id', orderIds).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: true }) : Promise.resolve({ data: [] }),
     returnIds.length ? supabase.from('return_events').select('*').in('return_id', returnIds).order('time', { ascending: true }) : Promise.resolve({ data: [] }),
-    supabase.from('webhook_events').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('received_at', { ascending: true }),
+    // webhook_events has no case_id column; the linkage to a case is
+    // indirect (canonical_event_id → canonical_events.case_id). For the
+    // canonical bundle view, return [] so the route stops 500-ing — a
+    // future migration can add the join properly.
+    Promise.resolve({ data: [] } as any),
     supabase.from('agent_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('started_at', { ascending: true }),
   ]);
 

@@ -42,6 +42,17 @@ import {
 } from '../errors.js';
 import type { IntegrationSystem } from './types.js';
 
+// Re-export the not-configured error so adapters / routes can import it from
+// either './base.js' or './types.js' without coupling to the file layout.
+export {
+  IntegrationNotConfiguredError,
+  ShopifyNotConfiguredError,
+  WhatsAppNotConfiguredError,
+  PostmarkNotConfiguredError,
+  TwilioNotConfiguredError,
+  isIntegrationNotConfiguredError,
+} from './types.js';
+
 // ── Configuration ─────────────────────────────────────────────────────────────
 
 export interface BaseClientOptions {

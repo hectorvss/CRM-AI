@@ -10,7 +10,6 @@
  * Refactored to use repository pattern (provider-agnostic).
  */
 
-import { randomUUID }    from 'crypto';
 import { createCaseRepository, createCommerceRepository, createCustomerRepository } from '../data/index.js';
 import { enqueue }       from '../queue/client.js';
 import { triggerAgents } from '../agents/orchestrator.js';
@@ -35,6 +34,10 @@ interface ConflictResult {
   actualStates:       Record<string, unknown>;
   sourceOfTruth:      string;
   detectedBy:         string;
+  /** Human-readable summary of the conflict (populated into `summary` column). */
+  summary:            string;
+  /** Categorical label (populated into `issue_type` column). */
+  issueType:          string;
 }
 
 // ── Payment comparator ─────────────────────────────────────────────────────────
@@ -49,19 +52,22 @@ function comparePayment(order: any, payment: any): ConflictResult[] {
 
   // Amount mismatch: order total vs payment captured
   if (Math.abs(orderTotal - paymentAmount) > 0.01) {
+    const currency = order.currency || 'USD';
     conflicts.push({
       entityType:         'payment',
       entityId:           payment.id,
       conflictDomain:     'payment',
       severity:           Math.abs(orderTotal - paymentAmount) > 10 ? 'high' : 'medium',
       conflictingSystems: ['shopify', 'stripe'],
-      expectedState:      `Payment amount should equal order total: ${orderTotal} ${order.currency}`,
+      expectedState:      `Payment amount should equal order total: ${orderTotal} ${currency}`,
       actualStates: {
         shopify_order_total:   orderTotal,
         stripe_payment_amount: paymentAmount,
       },
       sourceOfTruth: 'shopify',
       detectedBy:    'payment_amount_comparator',
+      summary:       `Payment amount mismatch: Shopify order total ${orderTotal} ${currency} vs Stripe captured ${paymentAmount} ${currency}`,
+      issueType:     'payment_amount_mismatch',
     });
   }
 
@@ -96,6 +102,8 @@ function comparePayment(order: any, payment: any): ConflictResult[] {
       },
       sourceOfTruth: 'shopify',
       detectedBy:    'payment_status_comparator',
+      summary:       `Payment status drift: Stripe reports '${paymentStatus}' while Shopify order status is '${orderFinancial}'`,
+      issueType:     'payment_status_drift',
     });
   }
 
@@ -114,6 +122,8 @@ function comparePayment(order: any, payment: any): ConflictResult[] {
       },
       sourceOfTruth: 'stripe',
       detectedBy:    'dispute_detector',
+      summary:       `Active Stripe dispute ${payment.dispute_id} on payment (status: ${payment.dispute_status ?? 'unknown'})`,
+      issueType:     'payment_dispute_active',
     });
   }
 
@@ -145,6 +155,8 @@ function compareFulfillment(order: any): ConflictResult[] {
       },
       sourceOfTruth: 'shopify',
       detectedBy:    'fulfillment_status_comparator',
+      summary:       `Fulfillment drift: Shopify reports '${shopifyStatus}' but internal order status is '${internalStatus ?? 'unknown'}'`,
+      issueType:     'fulfillment_status_drift',
     });
   }
 
@@ -163,6 +175,8 @@ function compareFulfillment(order: any): ConflictResult[] {
       },
       sourceOfTruth: 'shopify',
       detectedBy:    'tracking_number_checker',
+      summary:       `Order marked fulfilled in Shopify but has no tracking number recorded`,
+      issueType:     'tracking_missing',
     });
   }
 
@@ -180,13 +194,14 @@ function compareReturn(ret: any, payment: any | null): ConflictResult[] {
   const returnValue   = parseFloat(ret.return_value ?? '0');
 
   if (returnStatus === 'approved' && refundAmount < 0.01 && returnValue > 0) {
+    const currency = ret.currency ?? 'USD';
     conflicts.push({
       entityType:         'return',
       entityId:           ret.id,
       conflictDomain:     'returns',
       severity:           'high',
       conflictingSystems: ['shopify', 'stripe'],
-      expectedState:      `A refund of ~${returnValue} ${ret.currency ?? 'USD'} should have been issued for approved return`,
+      expectedState:      `A refund of ~${returnValue} ${currency} should have been issued for approved return`,
       actualStates: {
         return_status:       returnStatus,
         stripe_refund_amount: refundAmount,
@@ -194,6 +209,8 @@ function compareReturn(ret: any, payment: any | null): ConflictResult[] {
       },
       sourceOfTruth: 'shopify',
       detectedBy:    'return_refund_comparator',
+      summary:       `Approved return missing refund: expected ~${returnValue} ${currency} via Stripe, found ${refundAmount} ${currency}`,
+      issueType:     'refund_missing',
     });
   }
 
@@ -211,6 +228,8 @@ function compareReturn(ret: any, payment: any | null): ConflictResult[] {
       },
       sourceOfTruth: 'stripe',
       detectedBy:    'return_status_sync_checker',
+      summary:       `Return shows status '${returnStatus}' but Stripe already issued a refund of ${refundAmount}`,
+      issueType:     'return_status_drift',
     });
   }
 
@@ -236,6 +255,8 @@ function compareIdentity(customer: any, linkedIds: any[]): ConflictResult[] {
       },
       sourceOfTruth: 'internal',
       detectedBy:    'identity_linker',
+      summary:       `Customer has no linked external identities`,
+      issueType:     'identity_unlinked',
     });
   }
 
@@ -254,6 +275,8 @@ function compareIdentity(customer: any, linkedIds: any[]): ConflictResult[] {
       },
       sourceOfTruth: 'internal',
       detectedBy:    'risk_flag_checker',
+      summary:       `Customer flagged ${customer.risk_level} risk — case requires elevated review`,
+      issueType:     'identity_high_risk',
     });
   }
 
@@ -358,6 +381,7 @@ async function handleReconcileCase(
     const issueId = await caseRepo.upsertReconciliationIssue(scope, {
       case_id: payload.caseId,
       tenant_id: tenantId,
+      workspace_id: workspaceId,
       entity_type: conflict.entityType,
       entity_id: conflict.entityId,
       conflict_domain: conflict.conflictDomain,
@@ -367,7 +391,10 @@ async function handleReconcileCase(
       expected_state: conflict.expectedState,
       actual_states: conflict.actualStates,
       source_of_truth_system: conflict.sourceOfTruth,
-      detected_by: conflict.detectedBy
+      detected_by: conflict.detectedBy,
+      summary: conflict.summary,
+      issue_type: conflict.issueType,
+      detected_at: new Date().toISOString(),
     });
 
     newIssueIds.push(issueId);
@@ -414,7 +441,7 @@ async function handleReconcileCase(
     log.debug('Enqueued RESOLUTION_PLAN', { issueCount: newIssueIds.length });
 
     // Fire agent chain for conflict analysis
-    triggerAgents('conflicts_detected', payload.caseId, {
+    await triggerAgents('conflicts_detected', payload.caseId, {
       tenantId,
       workspaceId,
       traceId: ctx.traceId,

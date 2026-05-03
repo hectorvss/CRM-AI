@@ -88,39 +88,40 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
     []
   );
 
-  // Map API data shape to component shape
+  // Map API data shape to component shape. The API client normalizes all
+  // responses to camelCase via src/api/normalize.ts, so this mapper only
+  // needs camelCase property accesses.
   const mapApiOrder = (o: any): Order => ({
     id: o.id,
-    customerName: o.customer_name || o.external_order_id || 'Unknown',
-    orderId: o.external_order_id,
+    customerName: o.customerName || o.externalOrderId || 'Unknown',
+    orderId: o.externalOrderId,
     brand: o.brand || 'Acme Store',
-    date: formatDate(o.order_date),
-    total: `$${Number(o.total_amount || 0).toFixed(2)}`,
+    date: formatDate(o.orderDate),
+    total: `$${Number(o.totalAmount || 0).toFixed(2)}`,
     currency: o.currency || 'USD',
     country: o.country || 'US',
-    channel: o.canonical_context?.case_state?.channel_context?.channel || o.brand || 'Shopify',
-    orderStatus: titleCase(o.status || o.system_states?.oms || 'Unknown'),
-    paymentStatus: o.system_states?.psp || 'Unknown',
-    fulfillmentStatus: o.system_states?.wms || 'N/A',
-    returnStatus: titleCase(o.system_states?.returns_platform || 'N/A'),
-    refundStatus: titleCase(o.system_states?.refund_status || 'N/A'),
-    approvalStatus: titleCase(o.approval_status || 'N/A'),
-    riskLevel: o.risk_level === 'high' ? 'High' : o.risk_level === 'medium' ? 'Medium' : 'Low',
-    orderType: o.order_type || 'Standard',
+    channel: o.canonicalContext?.caseState?.channelContext?.channel || o.brand || 'Shopify',
+    orderStatus: titleCase(o.status || o.systemStates?.oms || 'Unknown'),
+    paymentStatus: o.systemStates?.psp || 'Unknown',
+    fulfillmentStatus: o.systemStates?.wms || 'N/A',
+    returnStatus: titleCase(o.systemStates?.returnsPlatform || 'N/A'),
+    refundStatus: titleCase(o.systemStates?.refundStatus || 'N/A'),
+    approvalStatus: titleCase(o.approvalStatus || 'N/A'),
+    riskLevel: o.riskLevel === 'high' ? 'High' : o.riskLevel === 'medium' ? 'Medium' : 'Low',
+    orderType: o.orderType || 'Standard',
     summary: o.summary || '',
-    lastUpdate: formatRelativeLabel(o.last_update),
+    lastUpdate: formatRelativeLabel(o.lastUpdate),
     badges: Array.isArray(o.badges) ? o.badges : [],
     tab: o.tab || 'all',
-    conflictDetected: o.conflict_detected || '',
-    recommendedNextAction: o.recommended_action || '',
-    context: o.canonical_context?.case_state?.conflict?.root_cause || o.summary || '',
-    systemStates: typeof o.system_states === 'object' && o.system_states ? o.system_states : {
+    conflictDetected: o.conflictDetected || '',
+    recommendedNextAction: o.recommendedAction || '',
+    context: o.canonicalContext?.caseState?.conflict?.rootCause || o.summary || '',
+    systemStates: typeof o.systemStates === 'object' && o.systemStates ? o.systemStates : {
       oms: 'Unknown', psp: 'Unknown', wms: 'Unknown', carrier: 'Unknown', canonical: 'Unknown'
     },
-    canonicalContext: o.canonical_context || o.canonicalContext || null,
-    canonical_context: o.canonical_context || o.canonicalContext || null,
-    relatedCases: Array.isArray(o.related_cases) ? o.related_cases.map((c: any) => ({
-      id: c.case_number || c.id,
+    canonicalContext: o.canonicalContext || null,
+    relatedCases: Array.isArray(o.relatedCases) ? o.relatedCases.map((c: any) => ({
+      id: c.caseNumber || c.id,
       type: c.type || 'Case',
       status: titleCase(c.status || 'open')
     })) : [],
@@ -128,7 +129,7 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
       id: e.id || String(i),
       type: e.type || 'system',
       content: e.content,
-      time: e.time || e.occurred_at || '-',
+      time: e.time || e.occurredAt || '-',
       system: e.system || e.source,
     }))
   });
@@ -202,7 +203,6 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
       timeline: detail.timeline.length > 0 ? detail.timeline : selectedOrderBase.timeline,
       relatedCases: detail.relatedCases.length > 0 ? detail.relatedCases : selectedOrderBase.relatedCases,
       canonicalContext: detail.canonicalContext ?? selectedOrderBase.canonicalContext,
-      canonical_context: detail.canonical_context ?? selectedOrderBase.canonical_context,
     };
   }, [selectedOrderBase, selectedOrderDetailRaw]);
 
@@ -230,10 +230,8 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
 
   const selectedOrderCaseId = selectedOrder?.relatedCases?.[0]?.id || null;
   const selectedOrderPaymentId =
-    (selectedOrder as any)?.canonicalContext?.case_state?.identifiers?.payment_ids?.[0]
-    || (selectedOrder as any)?.canonical_context?.case_state?.identifiers?.payment_ids?.[0]
-    || (selectedOrder as any)?.canonicalContext?.identifiers?.payment_ids?.[0]
-    || (selectedOrder as any)?.canonical_context?.identifiers?.payment_ids?.[0]
+    selectedOrder?.canonicalContext?.caseState?.identifiers?.paymentIds?.[0]
+    || selectedOrder?.canonicalContext?.identifiers?.paymentIds?.[0]
     || null;
 
   const handleApplyToComposer = () => {

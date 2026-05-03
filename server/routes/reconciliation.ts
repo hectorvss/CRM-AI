@@ -19,18 +19,19 @@ const commerceRepo = createCommerceRepository();
 const caseRepo = createCaseRepository();
 const auditRepo = createAuditRepository();
 
+const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, warning: 1 };
+
+function pickWorstSeverity(severities: Array<string | null | undefined>): string | null {
+  const present = severities.filter((s): s is string => Boolean(s));
+  if (present.length === 0) return null;
+  return present.reduce((worst, s) => (SEVERITY_RANK[s] ?? 0) > (SEVERITY_RANK[worst] ?? 0) ? s : worst);
+}
+
 async function recalcCaseConflictState(scope: any, caseId: string) {
-  const issues = await reconRepo.listIssues(scope, { 
-    case_id: caseId, 
-    status: 'open' 
-  });
-  
-  // Also check in_progress and escalated as per original logic
   const activeIssues = await reconRepo.listIssues(scope, { case_id: caseId });
-  const hasActive = activeIssues.some(i => ['open', 'in_progress', 'escalated'].includes(i.status));
-  
-  const hasOpen = hasActive;
-  const severity = hasOpen ? (activeIssues.find(i => ['open', 'in_progress', 'escalated'].includes(i.status))?.severity || 'warning') : null;
+  const openLike = activeIssues.filter(i => ['open', 'in_progress', 'escalated'].includes(i.status));
+  const hasOpen = openLike.length > 0;
+  const severity = hasOpen ? (pickWorstSeverity(openLike.map(i => i.severity)) ?? 'warning') : null;
 
   await caseRepo.updateConflictState(scope, caseId, hasOpen, severity);
 }
@@ -151,10 +152,11 @@ router.get('/issues', async (req: MultiTenantRequest, res) => {
     }
     const scope = { tenantId: req.tenantId, workspaceId: req.workspaceId };
     const filters = {
-      status: req.query.status as string,
-      severity: req.query.severity as string,
-      entity_type: req.query.entity_type as string,
-      case_id: req.query.case_id as string
+      status: req.query.status as string | undefined,
+      severity: req.query.severity as string | undefined,
+      entity_type: req.query.entity_type as string | undefined,
+      issue_type: req.query.issue_type as string | undefined,
+      case_id: req.query.case_id as string | undefined,
     };
 
     const issues = await reconRepo.listIssues(scope, filters);

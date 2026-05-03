@@ -1,17 +1,37 @@
 /**
  * server/queue/scheduledJobs.ts
  *
- * Startup-time recurring job scheduler.
+ * Scheduled (recurring) maintenance jobs.
  *
- * Uses setInterval to periodically enqueue maintenance jobs. This is intentionally
- * simple (no cron library, no Redis) — the queue worker's idempotency and dedup
- * logic ensure that overlapping intervals don't cause duplicate processing.
+ * Two execution modes share the same sweepers:
  *
- * Scheduled tasks:
- *  - SLA_CHECK every 5 minutes — sweeps all open cases for deadline breaches
- *  - RECONCILE_SCHEDULED every 15 minutes — catches stale unreconciled cases
+ *   1. Long-lived process (local `dev:server`, classic Node deploy):
+ *      `startScheduledJobs()` arms one `setInterval` per sweeper at its
+ *      configured cadence. `stopScheduledJobs()` clears them all.
  *
- * The intervals are only started after the queue worker is running.
+ *   2. Serverless (Vercel): `runScheduledTasksOnce()` is invoked from the
+ *      cron-triggered endpoint `/api/internal/scheduler/tick` once per
+ *      minute. It uses a module-level tracker to know which sweepers are
+ *      due (so a 15-minute reconcile only fires every 15th tick).
+ *
+ * Each sweep is wrapped in its own try/catch — a failure in one task does
+ * not abort the rest. A simple in-process re-entrancy lock guards against
+ * overlapping invocations (cron + manual fire).
+ *
+ * Scheduled tasks tracked here:
+ *   - SLA enqueue                   every  5 min
+ *   - Reconcile enqueue             every 15 min
+ *   - Workflow delay resume         every  2 min
+ *   - Workflow schedule sweeper     every  1 min
+ *   - Super Agent scheduled actions every  1 min
+ *   - Orphaned workflow run sweep   every 10 min
+ *   - In-memory session prune       every 30 min
+ *   - Event bus recovery            every  5 min
+ *   - Event log prune               every 60 min
+ *   - Churn risk scan               every 24 h
+ *   - Audit export sweeper          every 60 min
+ *   - Flexible usage reporter       every 24 h
+ *   - AI credits period reset       every 60 min
  */
 
 import { enqueueDelayed } from './client.js';
@@ -24,9 +44,21 @@ import { createSuperAgentOpsRepository } from '../data/superAgentOps.js';
 import { fireWorkflowEvent, recoverPendingEvents, pruneEventLog } from '../lib/workflowEventBus.js';
 import { pruneExpiredSessions } from '../agents/planEngine/sessionRepository.js';
 import { continueWorkflowRun } from '../routes/workflows.js';
-import { startAuditExportSweeper, stopAuditExportSweeper } from '../jobs/auditExport.js';
-import { startFlexibleUsageReporter, stopFlexibleUsageReporter } from '../jobs/flexibleUsageReport.js';
-import { startAiCreditsReset, stopAiCreditsReset } from '../jobs/aiCreditsReset.js';
+import {
+  startAuditExportSweeper,
+  stopAuditExportSweeper,
+  auditExportRunOnce,
+} from '../jobs/auditExport.js';
+import {
+  startFlexibleUsageReporter,
+  stopFlexibleUsageReporter,
+  flexibleUsageReportRunOnce,
+} from '../jobs/flexibleUsageReport.js';
+import {
+  startAiCreditsReset,
+  stopAiCreditsReset,
+  aiCreditsResetRunOnce,
+} from '../jobs/aiCreditsReset.js';
 
 let slaIntervalId:              ReturnType<typeof setInterval> | null = null;
 let reconcileIntervalId:        ReturnType<typeof setInterval> | null = null;
@@ -49,7 +81,10 @@ const SESSION_PRUNE_INTERVAL_MS      = 30 * 60 * 1_000;   // 30 minutes
 const EVENT_BUS_RECOVERY_INTERVAL_MS =  5 * 60 * 1_000;   // 5 minutes — retry stuck events
 const EVENT_LOG_PRUNE_INTERVAL_MS    = 60 * 60 * 1_000;   // 1 hour — remove old executed rows
 const CHURN_RISK_SCAN_INTERVAL_MS    = 24 * 60 * 60 * 1_000; // 24 hours (daily)
-const SUPER_AGENT_SCHEDULE_INTERVAL_MS =  1 * 60 * 1_000;   // 1 minute â€” due reminders / delayed actions
+const SUPER_AGENT_SCHEDULE_INTERVAL_MS =  1 * 60 * 1_000;   // 1 minute — due reminders / delayed actions
+const AUDIT_EXPORT_INTERVAL_MS       = 60 * 60 * 1_000;   // 1 hour
+const FLEXIBLE_USAGE_INTERVAL_MS     = 24 * 60 * 60 * 1_000; // 24 hours
+const AI_CREDITS_RESET_INTERVAL_MS   = 60 * 60 * 1_000;   // 1 hour
 
 /**
  * Iterates over all active workspaces and invokes the per-scope callback.
@@ -228,7 +263,7 @@ export function startScheduledJobs(): void {
  * Finds workflow_runs in 'waiting' status where the delay_until stored in
  * context has passed, and resumes them via the /resume endpoint internally.
  */
-async function resumeExpiredWorkflowDelays(tenantId: string): Promise<void> {
+export async function resumeExpiredWorkflowDelays(tenantId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const now = new Date().toISOString();
 
@@ -297,7 +332,7 @@ async function resumeExpiredWorkflowDelays(tenantId: string): Promise<void> {
  * If their cron expression is due (based on last run timestamp), fires the event.
  * Uses a simple "has the cron minute elapsed since last run?" heuristic.
  */
-async function sweepScheduledWorkflows(tenantId: string, workspaceId: string): Promise<void> {
+export async function sweepScheduledWorkflows(tenantId: string, workspaceId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const now = new Date();
 
@@ -335,7 +370,7 @@ async function sweepScheduledWorkflows(tenantId: string, workspaceId: string): P
       // Simple cron evaluation: parse the 5 cron fields and check if "now" matches
       if (cronMatchesNow(cron, now)) {
         logger.info(`Schedule sweep: triggering workflow ${version.workflow_id} (cron: ${cron})`);
-        fireWorkflowEvent(
+        await fireWorkflowEvent(
           { tenantId, workspaceId },
           'trigger.schedule',
           { workflowId: version.workflow_id, cron, scheduledAt: now.toISOString() },
@@ -397,6 +432,7 @@ export function stopScheduledJobs(): void {
   sessionPruneIntervalId     = null;
   eventBusRecoveryIntervalId = null;
   eventLogPruneIntervalId    = null;
+  churnRiskScanIntervalId    = null;
   logger.info('Scheduled job intervals stopped');
 }
 
@@ -406,7 +442,7 @@ export function stopScheduledJobs(): void {
  * - delayed workflow triggers are fired through the workflow event bus
  * - delayed queue jobs are enqueued once due
  */
-async function sweepSuperAgentScheduledActions(tenantId: string, workspaceId: string): Promise<void> {
+export async function sweepSuperAgentScheduledActions(tenantId: string, workspaceId: string): Promise<void> {
   const opsRepo = createSuperAgentOpsRepository();
   const auditRepo = createAuditRepository();
   const due = await opsRepo.claimDueScheduledActions({ tenantId, workspaceId }, new Date().toISOString(), 25);
@@ -419,7 +455,7 @@ async function sweepSuperAgentScheduledActions(tenantId: string, workspaceId: st
       const payload = (action.payload || {}) as Record<string, any>;
 
       if (payload.workflowId) {
-        fireWorkflowEvent({ tenantId, workspaceId }, 'trigger.schedule', {
+        await fireWorkflowEvent({ tenantId, workspaceId }, 'trigger.schedule', {
           workflowId: payload.workflowId,
           scheduledActionId: action.id,
           title: action.title,
@@ -470,7 +506,7 @@ async function sweepSuperAgentScheduledActions(tenantId: string, workspaceId: st
  * and marks them as 'failed'. This recovers from server crashes that left runs
  * in an intermediate state.
  */
-async function sweepOrphanedWorkflowRuns(tenantId: string): Promise<void> {
+export async function sweepOrphanedWorkflowRuns(tenantId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const threshold = new Date(Date.now() - ORPHAN_THRESHOLD_MS).toISOString();
 
@@ -502,4 +538,253 @@ async function sweepOrphanedWorkflowRuns(tenantId: string): Promise<void> {
 
     logger.info(`Orphaned run ${run.id} marked as failed (started ${run.started_at})`);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Single-shot scheduler (Vercel cron path)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ScheduledTaskName =
+  | 'sla'
+  | 'reconcile'
+  | 'workflow_delay'
+  | 'schedule_sweeper'
+  | 'super_agent_schedule'
+  | 'orphan_sweeper'
+  | 'session_prune'
+  | 'event_bus_recovery'
+  | 'event_log_prune'
+  | 'churn_risk_scan'
+  | 'audit_export'
+  | 'flexible_usage_report'
+  | 'ai_credits_reset';
+
+export interface RunScheduledTasksResult {
+  ran: ScheduledTaskName[];
+  skipped: string[];
+  errors: Array<{ task: ScheduledTaskName | 'concurrent'; error: string }>;
+}
+
+interface TaskDefinition {
+  name: ScheduledTaskName;
+  intervalMs: number;
+  run: (signal?: AbortSignal) => Promise<void>;
+}
+
+/**
+ * Per-task last-run timestamp (epoch ms). Module-level so consecutive cron
+ * invocations within the same warm Lambda share state. On a cold start the
+ * tracker is empty, so every task fires on the first tick after deploy —
+ * that is acceptable since each sweep is idempotent.
+ */
+const lastRun: Record<string, number> = Object.create(null);
+
+let isRunning = false;
+
+/**
+ * Run a single pass of every scheduled task whose interval has elapsed.
+ *
+ * Designed to be invoked by the Vercel cron endpoint
+ * `/api/internal/scheduler/tick` every minute. Each task has its own
+ * try/catch so a single failure never blocks the rest. A module-level
+ * `isRunning` flag prevents reentrancy if the cron and a manual fire
+ * overlap; the second caller returns immediately with `skipped: ['concurrent']`.
+ */
+export async function runScheduledTasksOnce(opts: { signal?: AbortSignal } = {}): Promise<RunScheduledTasksResult> {
+  const { signal } = opts;
+
+  if (isRunning) {
+    logger.warn('runScheduledTasksOnce: another invocation already in progress, skipping');
+    return { ran: [], skipped: ['concurrent'], errors: [] };
+  }
+  isRunning = true;
+
+  const result: RunScheduledTasksResult = { ran: [], skipped: [], errors: [] };
+  const startedAt = Date.now();
+
+  try {
+    const tasks = buildTaskDefinitions();
+    for (const task of tasks) {
+      if (signal?.aborted) {
+        result.skipped.push(`${task.name}:aborted`);
+        continue;
+      }
+
+      const last = lastRun[task.name] ?? 0;
+      // Fire on the first tick ever (last === 0) regardless of interval.
+      const due = last === 0 || Date.now() - last >= task.intervalMs;
+      if (!due) {
+        result.skipped.push(task.name);
+        continue;
+      }
+
+      // Optimistically mark this task as having run so concurrent ticks
+      // (different invocations sharing this warm Lambda) don't double-fire.
+      lastRun[task.name] = Date.now();
+
+      try {
+        await task.run(signal);
+        result.ran.push(task.name);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        result.errors.push({ task: task.name, error: message });
+        logger.warn(`Scheduled task '${task.name}' failed`, { error: message });
+      }
+    }
+  } finally {
+    isRunning = false;
+  }
+
+  logger.info('runScheduledTasksOnce completed', {
+    durationMs: Date.now() - startedAt,
+    ran: result.ran,
+    skippedCount: result.skipped.length,
+    errorsCount: result.errors.length,
+  });
+
+  return result;
+}
+
+/**
+ * Run a per-tenant async function for every active scope, swallowing
+ * per-scope errors (they are already logged inside `forEachActiveScope`)
+ * but still throwing if `forEachActiveScope` itself fails catastrophically.
+ */
+async function runForEachScope(
+  fn: (scope: { tenantId: string; workspaceId: string }) => Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  await forEachActiveScope(async (scope) => {
+    if (signal?.aborted) return;
+    await fn(scope);
+  });
+}
+
+function buildTaskDefinitions(): TaskDefinition[] {
+  return [
+    {
+      name: 'sla',
+      intervalMs: SLA_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await enqueueDelayed(JobType.SLA_CHECK, {}, 0, {
+            tenantId: scope.tenantId,
+            workspaceId: scope.workspaceId,
+            priority: 9,
+          });
+        }, signal),
+    },
+    {
+      name: 'reconcile',
+      intervalMs: RECONCILE_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await enqueueDelayed(JobType.RECONCILE_SCHEDULED, {}, 0, {
+            tenantId: scope.tenantId,
+            workspaceId: scope.workspaceId,
+            priority: 9,
+          });
+        }, signal),
+    },
+    {
+      name: 'workflow_delay',
+      intervalMs: WORKFLOW_DELAY_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await resumeExpiredWorkflowDelays(scope.tenantId);
+        }, signal),
+    },
+    {
+      name: 'schedule_sweeper',
+      intervalMs: SCHEDULE_SWEEPER_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await sweepScheduledWorkflows(scope.tenantId, scope.workspaceId);
+        }, signal),
+    },
+    {
+      name: 'super_agent_schedule',
+      intervalMs: SUPER_AGENT_SCHEDULE_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await sweepSuperAgentScheduledActions(scope.tenantId, scope.workspaceId);
+        }, signal),
+    },
+    {
+      name: 'orphan_sweeper',
+      intervalMs: ORPHAN_SWEEPER_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await sweepOrphanedWorkflowRuns(scope.tenantId);
+        }, signal),
+    },
+    {
+      name: 'session_prune',
+      intervalMs: SESSION_PRUNE_INTERVAL_MS,
+      // Sessions are global in-memory; no per-tenant iteration needed.
+      run: async () => {
+        const pruned = await pruneExpiredSessions();
+        if (pruned > 0) logger.info(`Session pruner: removed ${pruned} expired session(s)`);
+      },
+    },
+    {
+      name: 'event_bus_recovery',
+      intervalMs: EVENT_BUS_RECOVERY_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await recoverPendingEvents(scope.tenantId, scope.workspaceId);
+        }, signal),
+    },
+    {
+      name: 'event_log_prune',
+      intervalMs: EVENT_LOG_PRUNE_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await pruneEventLog(scope.tenantId);
+        }, signal),
+    },
+    {
+      name: 'churn_risk_scan',
+      intervalMs: CHURN_RISK_SCAN_INTERVAL_MS,
+      run: async (signal) =>
+        runForEachScope(async (scope) => {
+          await enqueueDelayed(JobType.CHURN_RISK_SCAN, {}, 0, {
+            tenantId: scope.tenantId,
+            workspaceId: scope.workspaceId,
+            priority: 6,
+          });
+        }, signal),
+    },
+    {
+      name: 'audit_export',
+      intervalMs: AUDIT_EXPORT_INTERVAL_MS,
+      run: async () => {
+        await auditExportRunOnce();
+      },
+    },
+    {
+      name: 'flexible_usage_report',
+      intervalMs: FLEXIBLE_USAGE_INTERVAL_MS,
+      run: async () => {
+        await flexibleUsageReportRunOnce();
+      },
+    },
+    {
+      name: 'ai_credits_reset',
+      intervalMs: AI_CREDITS_RESET_INTERVAL_MS,
+      run: async () => {
+        await aiCreditsResetRunOnce();
+      },
+    },
+  ];
+}
+
+/**
+ * Test-only helper: reset the internal last-run tracker so the next
+ * `runScheduledTasksOnce` call fires every task. Not exported through any
+ * production code path.
+ */
+export function __resetScheduledTaskTrackerForTests(): void {
+  for (const key of Object.keys(lastRun)) delete lastRun[key];
+  isRunning = false;
 }

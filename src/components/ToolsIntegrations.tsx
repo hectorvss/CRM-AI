@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { connectorsApi } from '../api/client';
 import { useApi, useMutation } from '../api/hooks';
 import { supabase } from '../api/supabase';
+import ShopifyConnectModal from './integrations/ShopifyConnectModal';
+import StripeConnectModal from './integrations/StripeConnectModal';
 
 // ── Credential field schemas per connector system ────────────────────────────
 // These define which auth_config fields are shown in the "Connect" modal.
@@ -184,6 +186,123 @@ export default function ToolsIntegrations() {
   const [oauthStatus, setOauthStatus] = useState<Record<string, 'connecting' | 'done' | 'error'>>({});
   const popupRef = useRef<Window | null>(null);
 
+  // Shopify dedicated modal state (separate flow: OAuth-first + manual fallback).
+  const [shopifyModalOpen, setShopifyModalOpen] = useState(false);
+  const [shopifyExisting, setShopifyExisting] = useState<{
+    id?: string;
+    shop_domain?: string;
+    scope?: string;
+    auth_type?: string;
+    last_health_check_at?: string | null;
+    capabilities?: { reads?: string[]; writes?: string[]; webhooks?: string[] } | null;
+  } | null>(null);
+  const [shopifyToast, setShopifyToast] = useState<string | null>(null);
+
+  // Stripe dedicated modal — same OAuth-first + manual fallback pattern.
+  const [stripeModalOpen, setStripeModalOpen] = useState(false);
+  const [stripeExisting, setStripeExisting] = useState<{
+    stripe_user_id?: string;
+    publishable_key?: string;
+    scope?: string;
+    livemode?: boolean;
+    last_health_check_at?: string | null;
+    capabilities?: { reads?: string[]; writes?: string[]; webhook_events?: string[] } | null;
+  } | null>(null);
+  const [stripeToast, setStripeToast] = useState<string | null>(null);
+
+  // ── Detect OAuth callback redirect (?connected=shopify&shop=...) ─────────
+  // Shopify's /callback handler redirects here after a successful install.
+  // Surface a toast, refresh the connector list and clean the URL so a
+  // browser refresh doesn't re-trigger the toast.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('connected') === 'shopify') {
+      const shop = params.get('shop');
+      setShopifyToast(shop ? `Shopify conectado: ${shop}` : 'Shopify conectado');
+      params.delete('connected');
+      params.delete('shop');
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
+      window.history.replaceState({}, '', next);
+      setTimeout(() => setShopifyToast(null), 4500);
+    }
+    if (params.get('connected') === 'stripe') {
+      const account = params.get('account');
+      const live = params.get('livemode') === '1';
+      setStripeToast(account
+        ? `Stripe conectado: ${account}${live ? ' · Live' : ' · Test'}`
+        : 'Stripe conectado');
+      params.delete('connected');
+      params.delete('account');
+      params.delete('livemode');
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}`;
+      window.history.replaceState({}, '', next);
+      setTimeout(() => setStripeToast(null), 4500);
+    }
+  }, []);
+
+  // ── Load current Shopify connector status (powers the modal pre-fill) ────
+  async function refreshShopifyStatus() {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const apiBase = (import.meta as any).env?.VITE_API_URL ?? '';
+      const res = await fetch(`${apiBase}/api/integrations/shopify/status`, {
+        headers: { Authorization: `Bearer ${token ?? ''}` },
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.connected) {
+        setShopifyExisting({
+          shop_domain: json.shop_domain,
+          scope: json.scope,
+          last_health_check_at: json.last_health_check_at,
+          capabilities: json.capabilities,
+        });
+      } else {
+        setShopifyExisting(null);
+      }
+    } catch {
+      // non-fatal — modal still opens with empty state
+    }
+  }
+
+  useEffect(() => {
+    void refreshShopifyStatus();
+  }, []);
+
+  // ── Stripe status (parallel to Shopify) ─────────────────────────────────
+  async function refreshStripeStatus() {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const apiBase = (import.meta as any).env?.VITE_API_URL ?? '';
+      const res = await fetch(`${apiBase}/api/integrations/stripe/status`, {
+        headers: { Authorization: `Bearer ${token ?? ''}` },
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.connected) {
+        setStripeExisting({
+          stripe_user_id: json.stripe_user_id,
+          publishable_key: json.publishable_key,
+          scope: json.scope,
+          livemode: json.livemode,
+          last_health_check_at: json.last_health_check_at,
+          capabilities: json.capabilities,
+        });
+      } else {
+        setStripeExisting(null);
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
+  useEffect(() => {
+    void refreshStripeStatus();
+  }, []);
+
   async function handleOAuthConnect(system: string) {
     setOauthStatus(prev => ({ ...prev, [system]: 'connecting' }));
     try {
@@ -234,6 +353,20 @@ export default function ToolsIntegrations() {
   }, [refetch]);
 
   function openConfigModal(integration: Integration) {
+    // Shopify gets a dedicated modal: OAuth-first with a manual-credentials
+    // fallback behind an "Advanced" expander. The generic credentials modal
+    // (below) is skipped for shopify so users never see paste-token UI as
+    // their default path.
+    if (integration.id === 'shopify') {
+      void refreshShopifyStatus();
+      setShopifyModalOpen(true);
+      return;
+    }
+    if (integration.id === 'stripe') {
+      void refreshStripeStatus();
+      setStripeModalOpen(true);
+      return;
+    }
     const apiConnector = (apiConnectors as any[])?.find((c: any) => c.system.toLowerCase() === integration.id);
     if (!apiConnector) return;
     const fields = CONNECTOR_CREDENTIAL_SCHEMAS[integration.id] ?? GENERIC_CREDENTIAL_FIELDS;
@@ -267,7 +400,7 @@ export default function ToolsIntegrations() {
 
   const categories: IntegrationCategory[] = ['All Apps', 'Support', 'Commerce', 'Communication', 'CRM', 'Knowledge', 'Productivity', 'Automation', 'AI'];
 
-  const integrations = apiConnectors && apiConnectors.length > 0 
+  const integrations = (apiConnectors && apiConnectors.length > 0
     ? apiConnectors.map(c => ({
         id: c.system.toLowerCase(),
         name: c.system,
@@ -278,7 +411,20 @@ export default function ToolsIntegrations() {
         icon: c.system.charAt(0),
         color: 'bg-indigo-600'
       })) as Integration[]
-    : allIntegrations;
+    : allIntegrations
+  ).map((app): Integration => {
+    // Shopify status is sourced from /api/integrations/shopify/status (the
+    // OAuth-installed connector), not from the static fallback list. So the
+    // card's "Connect / Manage" label and pill match what the merchant has
+    // actually set up.
+    if (app.id === 'shopify') {
+      return { ...app, status: shopifyExisting ? 'Connected' : 'Not Connected' };
+    }
+    if (app.id === 'stripe') {
+      return { ...app, status: stripeExisting ? 'Connected' : 'Not Connected' };
+    }
+    return app;
+  });
 
   const filteredIntegrations = integrations.filter(app => {
     const matchesCategory = activeCategory === 'All Apps' || app.category === activeCategory;
@@ -771,6 +917,42 @@ export default function ToolsIntegrations() {
           </div>
         </div>
       )}
+
+      {/* Shopify dedicated connect modal (OAuth-first with manual fallback) */}
+      <ShopifyConnectModal
+        open={shopifyModalOpen}
+        onClose={() => setShopifyModalOpen(false)}
+        onChanged={() => {
+          void refreshShopifyStatus();
+          refetch();
+        }}
+        existing={shopifyExisting}
+      />
+
+      {/* Stripe dedicated connect modal */}
+      <StripeConnectModal
+        open={stripeModalOpen}
+        onClose={() => setStripeModalOpen(false)}
+        onChanged={() => {
+          void refreshStripeStatus();
+          refetch();
+        }}
+        existing={stripeExisting}
+      />
+
+      {/* OAuth callback toasts (stacked) */}
+      {shopifyToast ? (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-800 shadow-2xl dark:border-emerald-800/40 dark:bg-[#171717] dark:text-emerald-200">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          {shopifyToast}
+        </div>
+      ) : null}
+      {stripeToast ? (
+        <div className="fixed right-6 z-50 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-800 shadow-2xl dark:border-emerald-800/40 dark:bg-[#171717] dark:text-emerald-200" style={{ bottom: shopifyToast ? '5.5rem' : '1.5rem' }}>
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          {stripeToast}
+        </div>
+      ) : null}
     </div>
   );
 }

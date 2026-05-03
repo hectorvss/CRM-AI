@@ -103,9 +103,22 @@ export const integrationRegistry = new IntegrationRegistry();
 
 // ── Bootstrap helper ──────────────────────────────────────────────────────────
 
+interface AdapterRegistration {
+  /** Logical system name (used for diagnostics) */
+  system: IntegrationSystem;
+  /** Resolves the adapter instance. May throw if the adapter cannot be built. */
+  factory: () => Promise<IntegrationAdapter>;
+}
+
 /**
  * Called once at server startup after config is validated.
+ *
  * Imports and registers adapters for every integration that has credentials.
+ * Failures during a single adapter's initialisation are logged and SKIPPED —
+ * the rest of the server keeps booting. Adapters whose credentials are absent
+ * are still registered in "stub mode" (configured=false) so the health check
+ * and capability discovery APIs can surface them as not-configured rather than
+ * silently missing.
  *
  * Structured as a dynamic import so adapters that are not configured never
  * add their SDK dependencies to the startup path.
@@ -113,60 +126,79 @@ export const integrationRegistry = new IntegrationRegistry();
 export async function bootstrapIntegrations(): Promise<void> {
   const { config } = await import('../config.js');
 
-  const registrations: Array<() => Promise<void>> = [];
+  const registrations: AdapterRegistration[] = [];
 
-  if (config.shopify) {
-    registrations.push(async () => {
+  // ── Shopify ────────────────────────────────────────────────────────────────
+  registrations.push({
+    system: 'shopify',
+    factory: async () => {
       const { ShopifyAdapter } = await import('./shopify.js');
-      integrationRegistry.register(
-        new ShopifyAdapter(
-          config.shopify!.shopDomain,
-          config.shopify!.adminApiToken,
-          config.shopify!.webhookSecret
-        )
-      );
-    });
-  }
-
-  if (config.stripe) {
-    registrations.push(async () => {
-      const { StripeAdapter } = await import('./stripe.js');
-      integrationRegistry.register(
-        new StripeAdapter(
-          config.stripe!.secretKey,
-          config.stripe!.webhookSecret
-        )
-      );
-    });
-  }
-
-  // WhatsApp (Meta Business Cloud API) — register whenever any channel creds exist.
-  // The adapter stubs sends gracefully when accessToken/phoneNumberId are absent,
-  // so we register it unconditionally to surface it in healthCheck / capability APIs.
-  registrations.push(async () => {
-    const { WhatsAppAdapter } = await import('./whatsapp.js');
-    integrationRegistry.register(
-      new WhatsAppAdapter(
-        config.channels?.whatsappAccessToken   ?? '',
-        config.channels?.whatsappPhoneNumberId ?? '',
-        config.channels?.whatsappVerifyToken   ?? '',
-      )
-    );
+      return new ShopifyAdapter({
+        shopDomain:    config.shopify?.shopDomain    ?? '',
+        adminApiToken: config.shopify?.adminApiToken ?? '',
+        webhookSecret: config.shopify?.webhookSecret ?? '',
+      });
+    },
   });
 
-  // Run all registrations in parallel; log but don't crash on individual failures
-  const results = await Promise.allSettled(registrations.map(fn => fn()));
-
-  for (const result of results) {
-    if (result.status === 'rejected') {
-      logger.error(
-        'Failed to bootstrap integration adapter',
-        result.reason
-      );
-    }
+  // ── Stripe ─────────────────────────────────────────────────────────────────
+  // Stripe ownership belongs to Flow 9; we only register it if the adapter
+  // file exposes `StripeAdapter`. Anything else (e.g. an in-flux refactor by
+  // Flow 9) must NOT crash this bootstrap.
+  if (config.stripe) {
+    registrations.push({
+      system: 'stripe',
+      factory: async () => {
+        const mod: any = await import('./stripe.js');
+        if (!mod.StripeAdapter) {
+          throw new Error('StripeAdapter export missing from ./stripe.js');
+        }
+        return new mod.StripeAdapter(
+          config.stripe!.secretKey,
+          config.stripe!.webhookSecret,
+        );
+      },
+    });
   }
 
+  // ── WhatsApp (Meta Business Cloud API) ────────────────────────────────────
+  // Always register so health-check surfaces it; `configured=false` if creds missing.
+  registrations.push({
+    system: 'whatsapp',
+    factory: async () => {
+      const { WhatsAppAdapter } = await import('./whatsapp.js');
+      return new WhatsAppAdapter({
+        accessToken:   config.channels?.whatsappAccessToken   ?? '',
+        phoneNumberId: config.channels?.whatsappPhoneNumberId ?? '',
+        verifyToken:   config.channels?.whatsappVerifyToken   ?? '',
+        webhookSecret: config.channels?.whatsappWebhookSecret ?? '',
+      });
+    },
+  });
+
+  // Run all registrations in parallel; log but never crash on individual failures.
+  const results = await Promise.allSettled(
+    registrations.map(async (reg) => {
+      try {
+        const adapter = await reg.factory();
+        integrationRegistry.register(adapter);
+        return reg.system;
+      } catch (err) {
+        logger.warn('Skipping integration adapter (initialisation failed)', {
+          system: reg.system,
+          error:  err instanceof Error ? err.message : String(err),
+        });
+        throw err;   // surfaces in Promise.allSettled rejection branch
+      }
+    }),
+  );
+
+  const failed = results.filter((r) => r.status === 'rejected').length;
+  const okSystems = integrationRegistry.registeredSystems();
+
   logger.info('Integrations bootstrapped', {
-    registered: integrationRegistry.registeredSystems(),
+    registered: okSystems,
+    configured: okSystems.filter((s) => integrationRegistry.get(s)?.configured !== false),
+    failed,
   });
 }

@@ -12,8 +12,6 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -53,10 +51,7 @@ export const knowledgeRetrieverImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, tenantId, workspaceId } = ctx;
     const { case: caseData, conflicts } = contextWindow;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
 
     const signals: string[] = [];
     if (caseData.intent) {
@@ -67,24 +62,15 @@ export const knowledgeRetrieverImpl: AgentImplementation = {
     for (const conflict of conflicts) signals.push(...conflict.domain.split('_'));
     for (const tag of caseData.tags) signals.push(tag.toLowerCase());
 
-    const articles: ArticleRow[] = useSupabase
-      ? await (async () => {
-          const { data, error } = await supabase!
-            .from('knowledge_articles')
-            .select('id, title, content, content_structured, type, domain_id, citation_count')
-            .eq('tenant_id', tenantId)
-            .eq('workspace_id', workspaceId)
-            .eq('status', 'published')
-            .limit(100);
-          if (error) throw error;
-          return (data ?? []) as ArticleRow[];
-        })()
-      : db!.prepare(`
-          SELECT id, title, content, content_structured, type, domain_id, citation_count
-          FROM knowledge_articles
-          WHERE tenant_id = ? AND workspace_id = ? AND status = 'published'
-          LIMIT 100
-        `).all(tenantId, workspaceId) as ArticleRow[];
+    const { data: articlesData, error: articlesError } = await supabase
+      .from('knowledge_articles')
+      .select('id, title, content, content_structured, type, domain_id, citation_count')
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'published')
+      .limit(100);
+    if (articlesError) throw articlesError;
+    const articles: ArticleRow[] = (articlesData ?? []) as ArticleRow[];
 
     if (articles.length === 0) {
       return { success: true, summary: 'No published knowledge articles found' };
@@ -106,31 +92,16 @@ export const knowledgeRetrieverImpl: AgentImplementation = {
 
     for (const article of topArticles) {
       try {
-        if (useSupabase) {
-          const { error } = await supabase!.from('case_knowledge_links').insert({
-            id: randomUUID(),
-            case_id: caseData.id,
-            article_id: article.id,
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-            relevance_score: scored.find(s => s.article.id === article.id)?.score ?? 0,
-            created_at: now,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT OR IGNORE INTO case_knowledge_links
-              (id, case_id, article_id, tenant_id, relevance_score, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `).run(
-            randomUUID(),
-            caseData.id,
-            article.id,
-            tenantId,
-            scored.find(s => s.article.id === article.id)?.score ?? 0,
-            now,
-          );
-        }
+        const { error } = await supabase.from('case_knowledge_links').insert({
+          id: randomUUID(),
+          case_id: caseData.id,
+          article_id: article.id,
+          tenant_id: tenantId,
+          workspace_id: workspaceId,
+          relevance_score: scored.find(s => s.article.id === article.id)?.score ?? 0,
+          created_at: now,
+        });
+        if (error) throw error;
         linkedCount++;
       } catch {
         logger.debug('case_knowledge_links table not found — skipping article link', { articleId: article.id });

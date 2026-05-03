@@ -494,7 +494,7 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
       metadata: { reason },
     });
 
-    fireWorkflowEvent(
+    await fireWorkflowEvent(
       { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
       'case.updated',
       { caseId: req.params.id, status, previousStatus: oldStatus, reason: reason ?? null, customerId: bundle.case.customer_id },
@@ -526,7 +526,7 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
       newValue: { user_id, team_id },
     });
 
-    fireWorkflowEvent(
+    await fireWorkflowEvent(
       { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
       'case.updated',
       { caseId: req.params.id, assignedUserId: user_id ?? null, assignedTeamId: team_id ?? null, change: 'assignment' },

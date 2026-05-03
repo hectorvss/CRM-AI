@@ -647,6 +647,7 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   workflow_version_id TEXT NOT NULL REFERENCES workflow_versions(id),
   case_id TEXT REFERENCES cases(id),
   tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
   trigger_type TEXT DEFAULT 'manual',
   trigger_payload TEXT DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'running',
@@ -677,6 +678,7 @@ CREATE TABLE IF NOT EXISTS workflow_run_steps (
 CREATE TABLE IF NOT EXISTS knowledge_domains (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
@@ -709,6 +711,7 @@ CREATE TABLE IF NOT EXISTS knowledge_articles (
 CREATE TABLE IF NOT EXISTS policy_rules (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
   knowledge_article_id TEXT REFERENCES knowledge_articles(id),
   name TEXT NOT NULL,
   description TEXT,
@@ -759,6 +762,15 @@ CREATE TABLE IF NOT EXISTS canonical_field_decisions (
 
 CREATE INDEX IF NOT EXISTS idx_policy_rules_tenant_entity_active
   ON policy_rules(tenant_id, entity_type, is_active, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_domains_tenant_workspace
+  ON knowledge_domains(tenant_id, workspace_id);
+
+CREATE INDEX IF NOT EXISTS idx_policy_rules_tenant_workspace
+  ON policy_rules(tenant_id, workspace_id);
+
+CREATE INDEX IF NOT EXISTS idx_policy_rules_tenant_workspace_entity_active
+  ON policy_rules(tenant_id, workspace_id, entity_type, is_active, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_policy_evaluations_scope_time
   ON policy_evaluations(tenant_id, workspace_id, created_at DESC);

@@ -204,22 +204,14 @@ const baselineRules: PolicyRule[] = [
     },
   },
 
-  // 8b. Knowledge writes are not part of the public agent surface yet
-  {
-    id: 'knowledge_write_requires_approval',
-    description: 'Knowledge writes require approval',
-    priority: 435,
-    evaluate({ tool }) {
-      if (tool.name.startsWith('knowledge.') && tool.sideEffect === 'write') {
-        return {
-          action: 'require_approval',
-          reason: 'Knowledge writes require approval',
-          riskElevation: 'high',
-        };
-      }
-      return null;
-    },
-  },
+  // 8b. Knowledge writes — allowed without approval.
+  // Knowledge articles, domains and policies are content management
+  // (versioned, soft-deletable, low blast radius). Auto-gating every
+  // write created a deadlock: the agent could neither create nor update
+  // articles because the approval row insert needs a case_id (not always
+  // available). Treated like settings reads — safe to execute.
+  // Re-enable this rule with a higher bar (e.g. only `knowledge.publish`)
+  // if a tenant later wants tighter control.
 
   // 8c. Integration writes can affect inbound/outbound data contracts
   {

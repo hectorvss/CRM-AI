@@ -24,6 +24,7 @@ import Login from './components/auth/Login';
 import Signup from './components/auth/Signup';
 import Paywall from './components/billing/Paywall';
 import { supabase, supabaseAuthEnabled, ensureSupabaseClient } from './api/supabase';
+import { usePlanIntentRedirect } from './hooks/usePlanIntentRedirect';
 import { NavigateInput, NavigationTarget, Page } from './types';
 
 const DEFAULT_TARGET: NavigationTarget = {
@@ -172,6 +173,15 @@ export default function App() {
   const [accessReloadKey, setAccessReloadKey] = useState(0);
 
   const currentPage = navigationTarget.page;
+
+  // Bridge for the landing → pricing → checkout funnel: if the user signed
+  // up via /signup?plan=… we stashed `plan_intent` in user_metadata. Honour
+  // it once they reach /app by sending them to Stripe Checkout. Gated on
+  // membership so /api/onboarding/setup runs against a fully-bootstrapped
+  // user record.
+  const planIntentRedirect = usePlanIntentRedirect(
+    Boolean(authenticated) && hasMembership === true,
+  );
 
   const navigate = useCallback((target: NavigateInput, entityId?: string | null) => {
     setNavigationTarget(normalizeNavigationTarget(target, entityId));
@@ -456,6 +466,20 @@ export default function App() {
     return (
       <div className="bg-background-light dark:bg-background-dark h-screen flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Post-signup checkout bridge: while we're forwarding the user to Stripe,
+  // suppress the Paywall (which would otherwise fight for the same slot for
+  // users who just signed up and have no subscription yet).
+  if (hasSupabaseAuth && authenticated && hasMembership === true && planIntentRedirect.redirecting) {
+    return (
+      <div className="bg-background-light dark:bg-background-dark h-screen flex flex-col items-center justify-center gap-4">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          Redirecting to checkout…
+        </p>
       </div>
     );
   }

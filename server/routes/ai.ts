@@ -9,6 +9,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Router } from 'express';
 import { config } from '../config.js';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
+import { pickGeminiModel } from '../ai/modelSelector.js';
+import { SAAS_PRODUCT_CONTEXT, ASSISTANT_TONE_GUIDE } from '../ai/systemContext.js';
+
+// Resolve once per request — cheap, but isolated so we can swap per route.
+const copilotModel = pickGeminiModel('copilot_chat');
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { requirePermission } from '../middleware/authorization.js';
 import { enqueue } from '../queue/client.js';
@@ -178,7 +183,7 @@ router.get('/studio', requirePermission('agents.read'), async (req: MultiTenantR
         domains: domains.map((d) => ({ id: d.id, name: d.name })),
       },
       modelConfig: {
-        model: config.ai.geminiModel,
+        model: copilotModel,
         apiKeyConfigured: Boolean(config.ai.geminiApiKey),
       },
       featureFlags: {
@@ -330,7 +335,7 @@ router.post('/copilot/:caseId', requirePermission('cases.read'), async (req: Mul
       res.json({
         ok: true,
         source: 'fallback',
-        model: config.ai.geminiModel,
+        model: copilotModel,
         answer: buildFallbackCopilotAnswer(state),
         summary,
       });
@@ -353,30 +358,35 @@ router.post('/copilot/:caseId', requirePermission('cases.read'), async (req: Mul
     const gemini = new GoogleGenerativeAI(config.ai.geminiApiKey);
     const model = gemini.getGenerativeModel({ model: config.ai.geminiModel });
 
-    const prompt = `
-You are an expert support operations copilot embedded inside a CRM case management platform.
-Your personality: sharp, direct, and genuinely helpful — like a senior colleague who has seen it all.
-You have full visibility into every connected system for this case: orders, payments, returns, refunds, approvals, workflows, integrations, and the full event timeline.
+    const prompt = `${SAAS_PRODUCT_CONTEXT}
 
-Your job is to investigate the global state of this case, connect the dots across systems, surface the real root cause, and tell the agent exactly what to do next. Be specific — use the actual IDs, amounts, statuses, and timestamps from the data. If something doesn't add up between systems, say so clearly.
+${ASSISTANT_TONE_GUIDE}
 
-Tone: conversational but precise. No bullet-point spam — write like a real person explaining the situation. 1-4 short paragraphs max unless the question needs more detail.
+# This turn — Case Copilot
 
----
-FULL CONTEXT WINDOW (all connected systems):
-${contextWindow?.toPromptString() || 'Unavailable'}
+You are the inline copilot for a single case. The human support agent is staring at the case in their inbox right now and needs you to make sense of what they're seeing across every connected system. Be the senior colleague at their shoulder.
 
-CANONICAL STATE SNAPSHOT:
+Your specific job on this turn:
+- Read the full context below.
+- Cross-reference systems. If Stripe and the case disagree, say so. If the order says delivered but the customer says not received, surface it.
+- Use real IDs, amounts, statuses, timestamps from the data — never invent them.
+- Recommend the next concrete action.
+
+# Full case context
+
+System trace (every connected system for this case):
+${contextWindow?.toPromptString() || 'Unavailable — the case bundle could not be hydrated. Tell the agent so they know your answer is data-light.'}
+
+Canonical state snapshot:
 ${JSON.stringify(summary, null, 2)}
 
-RECENT CONVERSATION:
+Recent conversation in this copilot session:
 ${safeHistory.length ? safeHistory.map((item) => `${item.role === 'user' ? 'Agent' : 'Copilot'}: ${item.content}`).join('\n') : 'This is the start of the conversation.'}
 
-AGENT QUESTION:
+# Agent's question right now
 ${String(question).trim()}
 
-Respond in plain text only. No markdown headers or bullet lists unless clarity requires it.
-`.trim();
+Now answer, following every rule in the Voice/Rules section above. No preambles, no narration of what you did — just the substantive reply.`;
 
     const result = await withGeminiRetry(
       () => model.generateContent(prompt),
@@ -391,7 +401,7 @@ Respond in plain text only. No markdown headers or bullet lists unless clarity r
       await chargeCredits({
         scope: copilotScope,
         eventType: 'ai_copilot',
-        model: config.ai.geminiModel,
+        model: copilotModel,
         promptTokens: usage.promptTokenCount || 0,
         completionTokens: usage.candidatesTokenCount || 0,
         metadata: { caseId },
@@ -403,7 +413,7 @@ Respond in plain text only. No markdown headers or bullet lists unless clarity r
     res.json({
       ok: true,
       source: 'gemini',
-      model: config.ai.geminiModel,
+      model: copilotModel,
       answer: answer || buildFallbackCopilotAnswer(state),
       summary,
     });
@@ -418,7 +428,7 @@ Respond in plain text only. No markdown headers or bullet lists unless clarity r
         res.json({
           ok: true,
           source: 'fallback',
-          model: config.ai.geminiModel,
+          model: copilotModel,
           answer: buildFallbackCopilotAnswer(state),
           summary: summarizeStateForPrompt(state, resolve),
         });

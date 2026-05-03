@@ -4,11 +4,16 @@ import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenan
 import { requirePermission } from '../middleware/authorization.js';
 import { createAuditRepository } from '../data/index.js';
 import { createCommerceRepository } from '../data/commerce.js';
+import {
+  createApprovalRequest,
+  findCaseIdForEntity,
+  findPendingApprovalRequest,
+} from '../data/approvals.js';
 import { fireWorkflowEvent } from '../lib/workflowEventBus.js';
 import { integrationRegistry } from '../integrations/registry.js';
 import { logger } from '../utils/logger.js';
 import type { WritableRefunds } from '../integrations/types.js';
-import { config } from '../config.js';
+import { getRefundThreshold } from '../utils/refundThreshold.js';
 import { isValidStatus, invalidStatusMessage, RETURN_STATUSES, RETURN_INSPECTION_STATUSES, RETURN_REFUND_STATUSES } from '../utils/statusEnums.js';
 
 const router = Router();
@@ -78,7 +83,8 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
 
     const amount = Number(req.body?.amount ?? payment.amount ?? 0);
     const reason = String(req.body?.reason ?? '').trim() || 'Refund requested from CRM-AI';
-    const sensitive = amount > config.commerce.refundAutoApprovalThreshold || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase());
+    const refundThreshold = getRefundThreshold(payment.currency);
+    const sensitive = amount > refundThreshold || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase());
     const blocked = ['disputed', 'blocked', 'chargeback'].includes(String(payment.status ?? '').toLowerCase());
 
     if (blocked) {
@@ -102,6 +108,33 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
     }
 
     if (sensitive) {
+      const riskLevel = ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase())
+        ? (String(payment.risk_level).toLowerCase() as 'high' | 'critical')
+        : 'medium';
+
+      // Resolve case_id (refund must be linked to a case for the manager queue).
+      const caseId = await findCaseIdForEntity({
+        tenantId: scope.tenantId,
+        workspaceId: scope.workspaceId,
+        entity: 'payment',
+        entityId: req.params.id,
+      });
+
+      // Idempotency: if the payment is already flagged AND a pending approval row exists,
+      // do not create a duplicate. Otherwise we still need to insert the approval row
+      // (this fixes the bug where the flag was set but no approval_request was created).
+      let existing: any = null;
+      if (caseId) {
+        existing = await findPendingApprovalRequest({
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId,
+          caseId,
+          requestType: 'refund',
+          entityKey: 'payment_id',
+          entityValue: req.params.id,
+        });
+      }
+
       await commerceRepo.updatePayment(scope, req.params.id, {
         approval_status: 'approval_needed',
         refund_amount: amount,
@@ -109,16 +142,54 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
         recommended_action: 'Approval required before refund execution.',
         last_update: reason,
       });
+
+      let approvalRequestId: string | null = existing?.id ?? null;
+      if (!existing && caseId) {
+        const created = await createApprovalRequest({
+          tenantId: scope.tenantId,
+          workspaceId: scope.workspaceId,
+          caseId,
+          requestType: 'refund',
+          requestedBy: req.userId || 'system',
+          requestedByType: req.userId ? 'human' : 'system',
+          riskLevel,
+          metadata: {
+            payment_id: req.params.id,
+            amount,
+            currency: (payment as any).currency ?? 'USD',
+            reason,
+            risk_level: payment.risk_level ?? null,
+            refund_type: amount >= Number(payment.amount ?? 0) ? 'full' : 'partial',
+          },
+          evidencePackage: {
+            payment_status: payment.status,
+            previous_approval_status: payment.approval_status,
+          },
+        });
+        approvalRequestId = created.id;
+      } else if (!caseId) {
+        logger.warn('payments.refund: sensitive refund has no linked case; cannot create approval_request row', {
+          paymentId: req.params.id,
+        });
+      }
+
       await auditRepository.log(scope, {
         actorId: req.userId || 'system',
-        action: 'PAYMENT_REFUND_APPROVAL_REQUIRED',
+        action: 'PAYMENT_REFUND_APPROVAL_REQUESTED',
         entityType: 'payment',
         entityId: req.params.id,
         oldValue: { approval_status: payment.approval_status },
-        newValue: { approval_status: 'approval_needed', refund_amount: amount },
-        metadata: { amount, reason, riskLevel: payment.risk_level },
+        newValue: { approval_status: 'approval_needed', refund_amount: amount, approval_request_id: approvalRequestId },
+        metadata: { amount, reason, riskLevel: payment.risk_level, approval_request_id: approvalRequestId, case_id: caseId },
       });
-      return res.status(202).json({ success: true, requiresApproval: true, paymentId: req.params.id, amount });
+      return res.status(202).json({
+        success: true,
+        requiresApproval: true,
+        paymentId: req.params.id,
+        amount,
+        approvalRequestId,
+        caseId,
+      });
     }
 
     // ── Attempt live Stripe refund if adapter is configured ──────────────
@@ -168,7 +239,7 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
       metadata: { reason, executedVia },
     });
     const updated = await commerceRepo.getPayment(scope, req.params.id);
-    fireWorkflowEvent(
+    await fireWorkflowEvent(
       { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
       'payment.refunded',
       { paymentId: req.params.id, status: 'refunded', amount, reason, riskLevel: payment.risk_level, executedVia },

@@ -222,7 +222,7 @@ async function handleChannelIngest(
   });
 
   // ── 7. Enqueue intent classification ─────────────────────────────────────
-  enqueue(
+  await enqueue(
     JobType.INTENT_ROUTE,
     { canonicalEventId: payload.canonicalEventId },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 5 },

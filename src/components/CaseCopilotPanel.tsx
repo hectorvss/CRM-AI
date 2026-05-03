@@ -1,11 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUp, ExternalLink, Sparkles } from 'lucide-react';
 import { aiApi } from '../api/client';
+import {
+  AssistantMessage,
+  Markdown,
+  StreamingCaret,
+  ThinkingPill,
+  UserMessage,
+  useAutoScroll,
+} from './ai-chat/ChatPrimitives';
 
 type CopilotMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   time: string;
+  pending?: boolean;
 };
 
 type CaseCopilotPanelProps = {
@@ -40,17 +50,13 @@ export default function CaseCopilotPanel({
   riskLabel = 'Low',
   suggestedQuestions,
   isLoading = false,
-  onOpenModule,
-  moduleButtonLabel = 'View module',
   onApply,
   applyButtonLabel = 'Apply to Composer',
-  emptyTitle = `Ask me anything about this ${entityLabel.toLowerCase()}`,
-  emptySubtitle = 'I have full context: state, blockers and history.',
 }: CaseCopilotPanelProps) {
   const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
   const [copilotInput, setCopilotInput] = useState('');
   const [isCopilotSending, setIsCopilotSending] = useState(false);
-  const copilotBottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const effectiveSuggestions = useMemo(() => {
     if (suggestedQuestions && suggestedQuestions.length > 0) return suggestedQuestions;
@@ -70,9 +76,15 @@ export default function CaseCopilotPanel({
     setCopilotInput('');
   }, [caseId]);
 
+  const { containerRef, sentinelRef } = useAutoScroll([copilotMessages, isCopilotSending]);
+
+  // Autosize textarea.
   useEffect(() => {
-    copilotBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [copilotMessages, isCopilotSending]);
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 38), 140)}px`;
+  }, [copilotInput]);
 
   const handleCopilotSubmit = useCallback(async (questionOverride?: string) => {
     const question = (questionOverride !== undefined ? questionOverride : copilotInput).trim();
@@ -115,7 +127,7 @@ export default function CaseCopilotPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
+      <div ref={containerRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 space-y-4 min-h-0">
         {copilotMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-6 px-4">
             {isLoading ? (
@@ -144,7 +156,7 @@ export default function CaseCopilotPanel({
                     <button
                       key={q}
                       onClick={() => handleCopilotSubmit(q)}
-                      className="text-[11px] px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-white transition-all font-medium"
+                      className="text-[12px] px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-white transition-all font-medium"
                     >
                       {q}
                     </button>
@@ -154,43 +166,33 @@ export default function CaseCopilotPanel({
             )}
           </div>
         ) : (
-          copilotMessages.map((message) => (
-            <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start items-end gap-2'}`}>
-              {message.role === 'assistant' && (
-                <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
-                  <span className="material-symbols-outlined text-white text-[14px]">auto_awesome</span>
+          copilotMessages.map((message) =>
+            message.role === 'user' ? (
+              <UserMessage key={message.id}>{message.content}</UserMessage>
+            ) : (
+              <AssistantMessage key={message.id}>
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                  <Sparkles size={12} className="text-secondary" />
+                  <span>Copilot</span>
+                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span className="normal-case tracking-normal text-gray-400">{message.time}</span>
                 </div>
-              )}
-              <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed border ${
-                message.role === 'user'
-                  ? 'bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 rounded-br-sm'
-                  : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
-              }`}>
-                <p className="whitespace-pre-wrap">{message.content}</p>
-                <span className={`block mt-2 text-[10px] ${message.role === 'user' ? 'text-gray-500' : 'text-gray-400'}`}>{message.time}</span>
-              </div>
-            </div>
-          ))
+                <Markdown text={message.content} />
+              </AssistantMessage>
+            ),
+          )
         )}
 
         {isCopilotSending && (
-          <div className="flex justify-start">
-            <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5 shadow-card">
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]"></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]"></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce"></span>
-            </div>
-          </div>
+          <ThinkingPill detail={`Reading ${entityLabel.toLowerCase()} context…`} />
         )}
-        <div ref={copilotBottomRef} />
+        <div ref={sentinelRef} />
       </div>
 
-      <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark flex-shrink-0">
-        <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
-          <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg" title="Copilot">
-            <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
-          </button>
-          <input
+      <div className="p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark flex-shrink-0">
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow focus-within:shadow-md focus-within:border-secondary/40 dark:border-gray-700 dark:bg-gray-900">
+          <textarea
+            ref={inputRef}
             value={copilotInput}
             onChange={e => setCopilotInput(e.target.value)}
             onKeyDown={e => {
@@ -200,28 +202,34 @@ export default function CaseCopilotPanel({
               }
             }}
             disabled={!caseId || isCopilotSending || isLoading}
-            className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:opacity-50"
-            placeholder={isLoading ? `Reading ${entityLabel.toLowerCase()} data...` : `Ask Copilot about this ${entityLabel.toLowerCase()}...`}
-            type="text"
+            rows={1}
+            className="block w-full resize-none bg-transparent border-0 outline-none px-4 pt-3 pb-1 text-[14px] leading-6 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 disabled:opacity-50"
+            placeholder={isLoading ? `Reading ${entityLabel.toLowerCase()} data...` : `Ask about this ${entityLabel.toLowerCase()}...`}
           />
-          <div className="flex items-center gap-1">
-            {onApply && (
+          <div className="flex items-center justify-between px-2 pb-2">
+            <div className="flex items-center gap-1 pl-1 text-[11px] text-gray-400">
+              <Sparkles size={12} className="text-secondary" />
+              <span>Copilot</span>
+            </div>
+            <div className="flex items-center gap-1">
+              {onApply && (
+                <button
+                  onClick={onApply}
+                  disabled={isLoading}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 disabled:opacity-40"
+                  title={applyButtonLabel}
+                >
+                  <ExternalLink size={14} />
+                </button>
+              )}
               <button
-                onClick={onApply}
-                disabled={isLoading}
-                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg disabled:opacity-40"
-                title={applyButtonLabel}
+                onClick={() => handleCopilotSubmit()}
+                disabled={!copilotInput.trim() || isCopilotSending || isLoading}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-black text-white transition-opacity hover:opacity-80 disabled:opacity-30 dark:bg-white dark:text-black"
               >
-                <span className="material-symbols-outlined text-[20px]">open_in_new</span>
+                {isCopilotSending ? <StreamingCaret /> : <ArrowUp size={14} />}
               </button>
-            )}
-            <button
-              onClick={() => handleCopilotSubmit()}
-              disabled={!copilotInput.trim() || isCopilotSending || isLoading}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg disabled:opacity-40"
-            >
-              <span className="material-symbols-outlined text-[20px]">arrow_upward</span>
-            </button>
+            </div>
           </div>
         </div>
       </div>

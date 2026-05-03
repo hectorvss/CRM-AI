@@ -79,10 +79,18 @@ export interface Config {
 
   commerce: {
     /**
-     * Refund amount above which manual approval is required.
+     * Legacy refund amount above which manual approval is required.
      * Configurable via REFUND_AUTO_APPROVAL_THRESHOLD (default: 250).
+     * Used as the fallback for currencies not present in
+     * `refundAutoApprovalThresholds`.
      */
     refundAutoApprovalThreshold: number;
+    /**
+     * Per-currency refund auto-approval thresholds. Currency keys are
+     * upper-case ISO 4217 codes. Override at runtime with the JSON env var
+     * `REFUND_THRESHOLDS_JSON`, e.g. `{"USD":300,"EUR":300}`.
+     */
+    refundAutoApprovalThresholds: Record<string, number>;
   };
 
   /** Optional: Direct messaging channel credentials */
@@ -139,6 +147,46 @@ function optionalInt(key: string, defaultValue: number): number {
     return defaultValue;
   }
   return parsed;
+}
+
+/**
+ * Default per-currency refund auto-approval thresholds.
+ * Tuned to roughly match the legacy USD/EUR threshold (~250 USD) for each
+ * currency's typical scale. Override per-currency via `REFUND_THRESHOLDS_JSON`.
+ */
+const DEFAULT_REFUND_THRESHOLDS: Record<string, number> = {
+  USD: 250,
+  EUR: 250,
+  GBP: 200,
+  JPY: 25000,
+  MXN: 5000,
+  BRL: 1500,
+  COP: 1000000,
+  CLP: 200000,
+};
+
+function parseRefundThresholds(): Record<string, number> {
+  const merged: Record<string, number> = { ...DEFAULT_REFUND_THRESHOLDS };
+  const raw = process.env.REFUND_THRESHOLDS_JSON?.trim();
+  if (!raw) return merged;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      console.warn('⚠️  REFUND_THRESHOLDS_JSON must be a JSON object, ignoring');
+      return merged;
+    }
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      const numeric = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        console.warn(`⚠️  REFUND_THRESHOLDS_JSON: invalid value for ${key}, skipping`);
+        continue;
+      }
+      merged[key.toUpperCase()] = numeric;
+    }
+  } catch (err) {
+    console.warn(`⚠️  REFUND_THRESHOLDS_JSON is not valid JSON, ignoring (${(err as Error).message})`);
+  }
+  return merged;
 }
 
 // ── Build config ──────────────────────────────────────────────────────────────
@@ -218,6 +266,7 @@ function buildConfig(): Config {
 
     commerce: {
       refundAutoApprovalThreshold: optionalInt('REFUND_AUTO_APPROVAL_THRESHOLD', 250),
+      refundAutoApprovalThresholds: parseRefundThresholds(),
     },
 
     app: {

@@ -445,6 +445,21 @@ export const planEngine = {
     return sessionRepo.getSession(sessionId);
   },
 
+  /** Saved-conversation sidebar: list this user's threads (strictly scoped). */
+  async listSessionsForUser(userId: string, tenantId: string, workspaceId: string | null, limit?: number) {
+    return sessionRepo.listSessionsForUser(userId, tenantId, workspaceId, limit);
+  },
+
+  /** Saved-conversation sidebar: delete by id, but only if it belongs to the caller. */
+  async deleteSessionForUser(sessionId: string, userId: string, tenantId: string) {
+    return sessionRepo.deleteSessionForUser(sessionId, userId, tenantId);
+  },
+
+  /** Saved-conversation sidebar: rename (sets summary). Same ownership check. */
+  async renameSessionForUser(sessionId: string, userId: string, tenantId: string, newTitle: string) {
+    return sessionRepo.renameSessionForUser(sessionId, userId, tenantId, newTitle);
+  },
+
   /** Retrieve an execution trace by plan id. */
   getTrace(planId: string) {
     return traceRepo.getTrace(planId);

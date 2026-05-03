@@ -118,6 +118,14 @@ export interface ToolSpec<TArgs = unknown, TReturns = unknown> {
   compensate?: string;
   /** Deprecation marker. Deprecated tools are hidden from LLM but still callable. */
   deprecated?: boolean;
+  /**
+   * Opt-in: execute this tool even when the planner runs in dry-run mode.
+   * Reserve for low-risk writes that are versioned + soft-deletable
+   * (e.g. knowledge.create) where the agent's "I created X" reply must
+   * correspond to a real persisted row. The tool's `run` still receives
+   * `ctx.dryRun=true` and may downgrade behaviour internally if it wants.
+   */
+  safeOnDryRun?: boolean;
   /** Implementation. Must honour `ctx.dryRun`. */
   run(invocation: ToolInvocation<TArgs>): Promise<ToolResult<TReturns>>;
 }

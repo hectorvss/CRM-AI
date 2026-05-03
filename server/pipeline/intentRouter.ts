@@ -16,6 +16,7 @@ import { registerHandler } from '../queue/handlers/index.js';
 import { logger } from '../utils/logger.js';
 import { getOrCreateCase, linkEntityToCase } from './caseFactory.js';
 import { triggerAgents } from '../agents/orchestrator.js';
+import { requireScope } from '../lib/scope.js';
 import type { IntentRoutePayload, JobContext } from '../queue/types.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 
@@ -181,17 +182,18 @@ async function handleIntentRoute(
     traceId:         ctx.traceId,
   });
 
-  const supabase    = getSupabaseAdmin();
-  const tenantId    = ctx.tenantId    ?? 'org_default';
-  const workspaceId = ctx.workspaceId ?? 'ws_default';
-  const scope = { tenantId, workspaceId };
+  const supabase = getSupabaseAdmin();
+  const scope = requireScope(ctx, 'intentRouter');
+  const { tenantId, workspaceId } = scope;
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
   const { data: event } = await supabase
     .from('canonical_events')
     .select('*')
     .eq('id', payload.canonicalEventId)
-    .single();
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -214,7 +216,12 @@ async function handleIntentRoute(
   );
 
   // ── 3. Find the message content to classify ──────────────────────────────
-  const normalizedPayload = JSON.parse(event.normalized_payload || '{}');
+  const normalizedPayload: Record<string, any> = (() => {
+    const raw = event.normalized_payload;
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw as Record<string, any>;
+    try { return JSON.parse(raw) as Record<string, any>; } catch { return {}; }
+  })();
   const messageContent: string =
     normalizedPayload.messageContent ??
     normalizedPayload.message ??
@@ -344,6 +351,7 @@ async function handleIntentRoute(
         generated_by:    'intent_router',
         status:          'pending_review',
         tenant_id:       tenantId,
+        workspace_id:    workspaceId,
       });
     }
   }
@@ -360,20 +368,20 @@ async function handleIntentRoute(
   });
 
   // ── 12. Enqueue downstream jobs ───────────────────────────────────────────
-  enqueue(
+  await enqueue(
     JobType.RECONCILE_CASE,
     { caseId: caseResult.id },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 5 }
   );
 
-  enqueue(
+  await enqueue(
     JobType.DRAFT_REPLY,
     { caseId: caseResult.id },
     { tenantId, workspaceId, traceId: ctx.traceId, priority: 8 }
   );
 
   const agentTrigger = caseResult.isNew ? 'case_created' : 'message_received';
-  triggerAgents(agentTrigger, caseResult.id, {
+  await triggerAgents(agentTrigger, caseResult.id, {
     tenantId, workspaceId, traceId: ctx.traceId, priority: 7,
   });
 

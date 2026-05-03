@@ -136,41 +136,42 @@ export function ActionModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-[520px] bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden"
+            className="w-full max-w-[520px] overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-2xl dark:border-white/10 dark:bg-[#171717]"
           >
             {/* ── Header ── */}
-            <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${c.iconBg}`}>
-                  <span className={`material-symbols-outlined text-[20px] ${c.iconColor}`}>{icon}</span>
+            <div className="flex items-start justify-between gap-4 border-b border-black/5 px-6 py-5 dark:border-white/10">
+              <div className="flex items-center gap-3">
+                <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl ${c.iconBg}`}>
+                  <span className={`material-symbols-outlined text-[22px] ${c.iconColor}`}>{icon}</span>
                 </div>
                 <div>
-                  <h2 className="text-[15px] font-bold text-gray-900 dark:text-white leading-snug">{title}</h2>
-                  <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{subtitle}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Action</p>
+                  <h2 className="text-lg font-semibold leading-tight text-gray-950 dark:text-white">{title}</h2>
+                  <p className="mt-0.5 text-[12px] leading-snug text-gray-500 dark:text-gray-400">{subtitle}</p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 transition-colors"
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-950 dark:hover:bg-white/5 dark:hover:text-white"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
             {/* ── Scrollable body ── */}
-            <div className="px-6 py-5 space-y-5 max-h-[58vh] overflow-y-auto custom-scrollbar">
+            <div className="custom-scrollbar max-h-[58vh] space-y-5 overflow-y-auto px-6 py-5">
 
               {/* Context: current record state */}
               {context && context.length > 0 && (
-                <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/40 overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800">
-                    <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Current state</p>
+                <div className="overflow-hidden rounded-2xl border border-black/5 bg-gray-50/70 dark:border-white/10 dark:bg-white/[0.03]">
+                  <div className="border-b border-black/5 px-4 py-2.5 dark:border-white/10">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Current state</p>
                   </div>
-                  <div className="px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2.5">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3.5">
                     {context.map((item) => (
                       <div key={item.label}>
-                        <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-0.5">{item.label}</p>
-                        <p className={`text-[13px] font-semibold truncate ${item.accent ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>{item.value}</p>
+                        <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">{item.label}</p>
+                        <p className={`truncate text-[13px] font-semibold ${item.accent ? 'text-red-600 dark:text-red-400' : 'text-gray-950 dark:text-white'}`}>{item.value}</p>
                       </div>
                     ))}
                   </div>
@@ -179,22 +180,22 @@ export function ActionModal({
 
               {/* Steps: what will happen */}
               <div>
-                <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">What will happen</p>
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">What will happen</p>
                 <div className="space-y-2.5">
                   {steps.map((step, i) => (
                     <div key={i} className="flex gap-3">
-                      <div className="flex-shrink-0 flex flex-col items-center">
-                        <div className={`w-5 h-5 rounded-full ${c.stepDot} flex items-center justify-center`}>
+                      <div className="flex flex-shrink-0 flex-col items-center">
+                        <div className={`flex h-5 w-5 items-center justify-center rounded-full ${c.stepDot}`}>
                           <span className="text-[10px] font-bold text-white">{i + 1}</span>
                         </div>
                         {i < steps.length - 1 && (
-                          <div className="w-px flex-1 bg-gray-200 dark:bg-gray-700 mt-1.5 min-h-[12px]" />
+                          <div className="mt-1.5 min-h-[12px] w-px flex-1 bg-black/10 dark:bg-white/10" />
                         )}
                       </div>
-                      <div className="pb-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-gray-900 dark:text-white leading-snug">{step.text}</p>
+                      <div className="min-w-0 pb-1">
+                        <p className="text-[13px] font-semibold leading-snug text-gray-950 dark:text-white">{step.text}</p>
                         {step.detail && (
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{step.detail}</p>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">{step.detail}</p>
                         )}
                       </div>
                     </div>
@@ -204,18 +205,18 @@ export function ActionModal({
 
               {/* Considerations */}
               {considerations && considerations.length > 0 && (
-                <div className={`rounded-xl border ${c.considerationBg} ${c.considerationBorder} p-4`}>
-                  <div className="flex items-center gap-2 mb-2.5">
+                <div className={`rounded-2xl border p-4 ${c.considerationBg} ${c.considerationBorder}`}>
+                  <div className="mb-2.5 flex items-center gap-2">
                     <span className={`material-symbols-outlined text-[16px] ${c.iconColor}`}>
                       {variant === 'danger' ? 'warning' : 'info'}
                     </span>
-                    <p className={`text-[11px] font-semibold uppercase tracking-wider ${c.considerationText}`}>
+                    <p className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${c.considerationText}`}>
                       {variant === 'danger' ? 'Important — read before confirming' : 'Keep in mind'}
                     </p>
                   </div>
                   <ul className="space-y-1.5">
                     {considerations.map((c2, i) => (
-                      <li key={i} className={`flex items-start gap-2 text-[12px] ${c.considerationText} leading-snug`}>
+                      <li key={i} className={`flex items-start gap-2 text-[12px] leading-snug ${c.considerationText}`}>
                         <span className="mt-0.5 flex-shrink-0">·</span>
                         {c2.text}
                       </li>
@@ -227,7 +228,7 @@ export function ActionModal({
               {/* Optional note textarea */}
               {noteLabel !== undefined && (
                 <div>
-                  <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
                     {noteLabel}
                   </label>
                   <textarea
@@ -235,27 +236,27 @@ export function ActionModal({
                     value={noteValue ?? ''}
                     onChange={(e) => onNoteChange?.(e.target.value)}
                     placeholder={notePlaceholder}
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3.5 py-2.5 text-[13px] text-gray-900 dark:text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-300 dark:focus:border-indigo-700 transition-all"
+                    className="w-full resize-none rounded-2xl border border-black/10 bg-white px-3.5 py-2.5 text-[13px] text-gray-950 placeholder-gray-400 outline-none transition focus:border-gray-950 dark:border-white/10 dark:bg-[#1b1b1b] dark:text-white dark:focus:border-white"
                   />
                 </div>
               )}
             </div>
 
             {/* ── Footer ── */}
-            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 border-t border-black/5 bg-gray-50/50 px-6 py-4 dark:border-white/10 dark:bg-white/[0.02]">
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                className="rounded-full px-4 py-2 text-[13px] font-medium text-gray-600 transition hover:text-gray-950 dark:text-gray-300 dark:hover:text-white"
               >
                 ← Back
               </button>
               <button
                 onClick={onConfirm}
                 disabled={loading}
-                className={`px-5 py-2 rounded-xl text-sm font-bold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2 ${c.confirmBtn}`}
+                className={`flex items-center gap-2 rounded-full px-5 py-2 text-[13px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${c.confirmBtn}`}
               >
                 {loading && (
-                  <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 )}
                 {loading ? 'Processing…' : confirmLabel}
               </button>

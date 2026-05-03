@@ -1,8 +1,6 @@
 import { randomUUID } from 'crypto';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { getDb } from '../db/client.js';
-import { parseRow } from '../db/utils.js';
+import { createAuditRepository } from '../data/audit.js';
 
 type ApprovalDecision = 'approved' | 'rejected';
 
@@ -305,7 +303,7 @@ async function appendEntityEvents(scope: PostApprovalScope, input: {
   }
 }
 
-async function applyPostApprovalDecisionSupabase(
+export async function applyPostApprovalDecision(
   scope: PostApprovalScope,
   approval: any,
   decision: ApprovalDecision,
@@ -514,6 +512,123 @@ async function applyPostApprovalDecisionSupabase(
     if (result.error) throw result.error;
   }
 
+  // ── Re-execute the gated action when approval was granted ──────────────
+  // The original /refund and /cancel routes flag approval_needed and bail out;
+  // when the manager approves, we re-apply the action here and write a
+  // dedicated audit row. Connector writeback (Stripe / Shopify) is deliberately
+  // deferred — the connector marker rows above are the current contract.
+  if (approved) {
+    const requestType: string = approval.action_type ?? actionPayload.request_type ?? '';
+
+    if (requestType === 'refund') {
+      const targetPaymentId = String(actionPayload.payment_id ?? paymentIds[0] ?? '');
+      const refundAmount = Number(actionPayload.amount ?? 0);
+      if (targetPaymentId) {
+        const { data: paymentRow, error: paymentLookupError } = await supabase
+          .from('payments')
+          .select('*')
+          .eq('id', targetPaymentId)
+          .eq('tenant_id', scope.tenantId)
+          .eq('workspace_id', scope.workspaceId)
+          .maybeSingle();
+        if (paymentLookupError) throw paymentLookupError;
+        if (paymentRow) {
+          const existingRefundIds = Array.isArray(paymentRow.refund_ids)
+            ? paymentRow.refund_ids
+            : asArray(paymentRow.refund_ids);
+          const newRefundId = `rf_${randomUUID()}`;
+          const isFull = refundAmount > 0 && refundAmount >= Number(paymentRow.amount ?? 0);
+          const { error: refundUpdateError } = await supabase
+            .from('payments')
+            .update({
+              status: 'refunded',
+              refund_amount: refundAmount,
+              refund_type: isFull ? 'full' : 'partial',
+              approval_status: 'approved',
+              refund_ids: [...existingRefundIds, newRefundId],
+              system_states: {
+                ...(parseMaybeJson<Record<string, any>>(paymentRow.system_states, {})),
+                canonical: 'refunded',
+                crm_ai: 'refunded',
+              },
+              last_update: actionPayload.reason ?? 'Refund executed via approval',
+              updated_at: now,
+            })
+            .eq('id', targetPaymentId)
+            .eq('tenant_id', scope.tenantId)
+            .eq('workspace_id', scope.workspaceId);
+          if (refundUpdateError) throw refundUpdateError;
+
+          await createAuditRepository().log(scope, {
+            actorId: decidedBy,
+            actorType: 'human',
+            action: 'PAYMENT_REFUNDED_VIA_APPROVAL',
+            entityType: 'payment',
+            entityId: targetPaymentId,
+            oldValue: { status: paymentRow.status, approval_status: paymentRow.approval_status },
+            newValue: { status: 'refunded', refund_amount: refundAmount, refund_id: newRefundId },
+            metadata: {
+              approval_request_id: approval.id,
+              reason: actionPayload.reason ?? null,
+              executed_via: 'db-only',
+              connector_writeback: 'deferred',
+            },
+          });
+        }
+      }
+    } else if (requestType === 'order_cancel') {
+      const targetOrderId = String(actionPayload.order_id ?? orderIds[0] ?? '');
+      if (targetOrderId) {
+        const { data: orderRow, error: orderLookupError } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', targetOrderId)
+          .eq('tenant_id', scope.tenantId)
+          .eq('workspace_id', scope.workspaceId)
+          .maybeSingle();
+        if (orderLookupError) throw orderLookupError;
+        if (orderRow) {
+          const { error: cancelUpdateError } = await supabase
+            .from('orders')
+            .update({
+              status: 'cancelled',
+              approval_status: 'approved',
+              has_conflict: false,
+              conflict_detected: null,
+              recommended_action: 'Cancellation executed via approval; connector writeback pending.',
+              last_update: actionPayload.reason ?? 'Cancellation executed via approval',
+              system_states: {
+                ...(parseMaybeJson<Record<string, any>>(orderRow.system_states, {})),
+                canonical: 'cancelled',
+                crm_ai: 'cancelled',
+              },
+              updated_at: now,
+            })
+            .eq('id', targetOrderId)
+            .eq('tenant_id', scope.tenantId)
+            .eq('workspace_id', scope.workspaceId);
+          if (cancelUpdateError) throw cancelUpdateError;
+
+          await createAuditRepository().log(scope, {
+            actorId: decidedBy,
+            actorType: 'human',
+            action: 'ORDER_CANCELLED_VIA_APPROVAL',
+            entityType: 'order',
+            entityId: targetOrderId,
+            oldValue: { status: orderRow.status, approval_status: orderRow.approval_status },
+            newValue: { status: 'cancelled', approval_status: 'approved' },
+            metadata: {
+              approval_request_id: approval.id,
+              reason: actionPayload.reason ?? null,
+              executed_via: 'db-only',
+              connector_writeback: 'deferred',
+            },
+          });
+        }
+      }
+    }
+  }
+
   if (approved && actionPayload.refund_id && paymentIds.length) {
     await supabase.from('refunds').upsert({
       id: String(actionPayload.refund_id),
@@ -664,85 +779,3 @@ async function applyPostApprovalDecisionSupabase(
   };
 }
 
-async function applyPostApprovalDecisionSqlite(
-  scope: PostApprovalScope,
-  approval: any,
-  decision: ApprovalDecision,
-  decidedBy: string,
-  note?: string,
-): Promise<PostApprovalResult> {
-  const db = getDb();
-  const now = new Date().toISOString();
-  const parsedApproval = parseRow(approval) as any;
-  const actionPayload = parseMaybeJson<Record<string, any>>(parsedApproval.action_payload, {});
-  const caseRow = parseRow(db.prepare('SELECT * FROM cases WHERE id = ? AND tenant_id = ?').get(parsedApproval.case_id, scope.tenantId)) as any;
-  const orderIds = unique([actionPayload.order_id, ...asArray(caseRow?.order_ids)]);
-  const paymentIds = unique([actionPayload.payment_id, ...asArray(caseRow?.payment_ids)]);
-  const returnIds = unique([actionPayload.return_id, ...asArray(caseRow?.return_ids)]);
-
-  db.prepare(`
-    UPDATE cases
-    SET approval_state = ?, execution_state = ?, resolution_state = ?, has_reconciliation_conflicts = 0, updated_at = ?
-    WHERE id = ? AND tenant_id = ?
-  `).run(
-    decision,
-    decision === 'approved' ? 'awaiting_external_writeback' : 'stopped',
-    decision === 'approved' ? 'approved_pending_writeback' : 'rejected',
-    now,
-    parsedApproval.case_id,
-    scope.tenantId,
-  );
-
-  for (const orderId of orderIds) {
-    db.prepare(`
-      UPDATE orders SET approval_status = ?, has_conflict = 0, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(decision, orderId, scope.tenantId, scope.workspaceId);
-  }
-  for (const paymentId of paymentIds) {
-    db.prepare(`
-      UPDATE payments SET approval_status = ?, refund_status = ?, has_conflict = 0, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(decision, decision === 'approved' ? 'approved_pending_writeback' : 'rejected', paymentId, scope.tenantId, scope.workspaceId);
-  }
-  for (const returnId of returnIds) {
-    db.prepare(`
-      UPDATE returns SET approval_status = ?, refund_status = ?, has_conflict = 0, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-    `).run(decision, decision === 'approved' ? 'approved_pending_writeback' : 'rejected', returnId, scope.tenantId, scope.workspaceId);
-  }
-
-  db.prepare(`
-    INSERT INTO internal_notes (id, case_id, content, created_by, created_by_type, created_at, tenant_id, workspace_id)
-    VALUES (?, ?, ?, 'post_approval_sync', 'system', ?, ?, ?)
-  `).run(
-    `note_${parsedApproval.id}_post_${decision}`,
-    parsedApproval.case_id,
-    decision === 'approved'
-      ? 'Manager approved the exception. Local commerce state was synchronized.'
-      : 'Manager rejected the exception. Commerce state was synchronized.',
-    now,
-    scope.tenantId,
-    scope.workspaceId,
-  );
-
-  return {
-    caseId: parsedApproval.case_id,
-    decision,
-    shouldEnqueueExecution: false,
-    affected: { orders: orderIds, payments: paymentIds, returns: returnIds, agents: [] },
-  };
-}
-
-export async function applyPostApprovalDecision(
-  scope: PostApprovalScope,
-  approval: any,
-  decision: ApprovalDecision,
-  decidedBy: string,
-  note?: string,
-): Promise<PostApprovalResult> {
-  if (getDatabaseProvider() === 'supabase') {
-    return applyPostApprovalDecisionSupabase(scope, approval, decision, decidedBy, note);
-  }
-  return applyPostApprovalDecisionSqlite(scope, approval, decision, decidedBy, note);
-}

@@ -63,7 +63,16 @@ export default function AICreditsPanel() {
     URL.revokeObjectURL(url);
   };
 
-  if (!usage) return <div className="p-4 text-sm text-gray-500">Loading AI credits…</div>;
+  if (!usage) {
+    if (error) {
+      return (
+        <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          AI credits usage is currently unavailable: {error}
+        </div>
+      );
+    }
+    return <div className="p-4 text-sm text-gray-500">Loading AI credits…</div>;
+  }
 
   const includedRemaining = Math.max(0, usage.included - usage.usedThisPeriod);
   const totalAvailable = includedRemaining + usage.topupBalance;

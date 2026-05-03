@@ -169,3 +169,11 @@ export function stopFlexibleUsageReporter(): void {
   if (intervalId) clearInterval(intervalId);
   intervalId = null;
 }
+
+/**
+ * Single-shot variant invoked by the cron-driven scheduler tick (Vercel).
+ * Equivalent to one cycle of `runFlexibleUsageReport` — no scheduling state.
+ */
+export async function flexibleUsageReportRunOnce(): Promise<FlexibleReportResult[]> {
+  return runFlexibleUsageReport();
+}

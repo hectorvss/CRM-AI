@@ -18,7 +18,11 @@ import { randomUUID } from 'crypto';
 import type Stripe from 'stripe';
 import { createIntegrationRepository } from '../data/integrations.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { getStripe, getStripeWebhookSecret } from '../integrations/stripe/client.js';
+import {
+  getStripe,
+  getStripeWebhookSecret,
+  isStripeNotConfiguredError,
+} from '../integrations/stripe/client.js';
 import {
   resolvePlanFromPriceId as resolvePlanFromPriceIdNew,
   creditsForPlan,
@@ -493,6 +497,15 @@ stripeWebhookRouter.post('/', async (req: Request, res: Response) => {
     const secret = getStripeWebhookSecret();
     event = stripe.webhooks.constructEvent(rawBody, sigHeader, secret);
   } catch (err: any) {
+    // Stripe credentials not configured → 503 with a stable code so Stripe's
+    // retry policy can be tracked but the server doesn't 500.
+    if (isStripeNotConfiguredError(err)) {
+      logger.warn('Stripe webhook received but Stripe not configured', {
+        missingVar: err.missingVar,
+      });
+      res.status(503).json({ error: 'STRIPE_NOT_CONFIGURED', missingVar: err.missingVar });
+      return;
+    }
     logger.warn('Stripe webhook: signature verification failed', { error: err?.message });
     res.status(401).send('invalid signature');
     return;

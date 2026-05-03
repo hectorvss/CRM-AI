@@ -20,6 +20,7 @@ import { sendEmail, sendWhatsApp, sendSms } from '../pipeline/channelSenders.js'
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
 import { config as appConfig } from '../config.js';
+import { getRefundThreshold } from '../utils/refundThreshold.js';
 import { logger } from '../utils/logger.js';
 import { broadcastSSE } from './sse.js';
 
@@ -1263,7 +1264,7 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     const payment = await commerceRepository.getPayment(scope, paymentId);
     if (!payment) return { status: 'failed', error: 'Payment not found' };
     const amount = Number(config.amount || payment.amount || 0);
-    if (amount > appConfig.commerce.refundAutoApprovalThreshold || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase())) {
+    if (amount > getRefundThreshold(payment.currency) || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase())) {
       return { status: 'waiting_approval', output: { reason: 'Refund requires approval', paymentId, amount } };
     }
     await commerceRepository.updatePayment(scope, paymentId, {
@@ -1485,7 +1486,8 @@ async function executeWorkflowNode(scope: { tenantId: string; workspaceId: strin
     // ── Gemini-powered path ────────────────────────────────────────────────
     if (appConfig.ai.geminiApiKey && text.length > 3) {
       const genAI = new GoogleGenerativeAI(appConfig.ai.geminiApiKey);
-      const model = genAI.getGenerativeModel({ model: appConfig.ai.geminiModel || 'gemini-2.0-flash' });
+      const { pickGeminiModel } = await import('../ai/modelSelector.js');
+      const model = genAI.getGenerativeModel({ model: pickGeminiModel('workflow_ai_node', appConfig.ai.geminiModel) });
 
       if (node.key === 'agent.classify') {
         const prompt = `You are a CRM classification engine. Analyze the customer text and return ONLY valid JSON (no markdown fences).
@@ -2419,8 +2421,8 @@ Write ONLY the reply text, no subject line, no JSON.`;
     const definition = await workflowRepository.getDefinition(subWorkflowId, scope.tenantId, scope.workspaceId);
     if (!definition) return { status: 'failed', error: 'Sub-workflow not found' };
     const version = definition.current_version_id
-      ? await workflowRepository.getVersion(definition.current_version_id)
-      : await workflowRepository.getLatestVersion(definition.id);
+      ? await workflowRepository.getVersion(definition.current_version_id, { tenantId: scope.tenantId })
+      : await workflowRepository.getLatestVersion(definition.id, { tenantId: scope.tenantId });
     if (!version) return { status: 'failed', error: 'Sub-workflow has no version' };
     const nestedDepth = Number(context.__subworkflowDepth || 0);
     if (nestedDepth >= 3) return { status: 'blocked', output: { reason: 'Sub-workflow nesting limit reached', subWorkflowId } };
@@ -2566,11 +2568,38 @@ async function executeWorkflowVersion({
   );
   const caseId = triggerPayload?.caseId ?? triggerPayload?.case_id ?? workflowContext.case?.id ?? null;
 
+  // Idempotency: if the trigger payload carries a trace_id and a run already
+  // exists for this version + trace_id, return that run instead of creating a
+  // duplicate. This protects against double-fires from retries / cron sweeps.
+  const traceId = triggerPayload?.trace_id ?? triggerPayload?.traceId ?? null;
+  if (traceId && !retryOfRunId) {
+    const { data: existing } = await supabase
+      .from('workflow_runs')
+      .select('id, status, error')
+      .eq('tenant_id', tenantId)
+      .eq('workflow_version_id', version.id)
+      .eq('trigger_payload->>trace_id', String(traceId))
+      .limit(1);
+    if (existing && existing.length > 0) {
+      const prior = existing[0];
+      logger.info('executeWorkflowVersion: idempotent replay, returning existing run', {
+        traceId, runId: prior.id, status: prior.status,
+      });
+      const { data: priorSteps } = await supabase
+        .from('workflow_run_steps')
+        .select('*')
+        .eq('workflow_run_id', prior.id)
+        .order('started_at', { ascending: true });
+      return { id: prior.id, status: prior.status, error: prior.error ?? null, steps: priorSteps ?? [], retryOfRunId: null };
+    }
+  }
+
   const { error: runError } = await supabase.from('workflow_runs').insert({
     id: runId,
     workflow_version_id: version.id,
     case_id: caseId,
     tenant_id: tenantId,
+    workspace_id: workspaceId,
     trigger_type: triggerType,
     trigger_payload: triggerPayload ?? {},
     status: 'running',
@@ -2660,7 +2689,7 @@ async function executeWorkflowVersion({
     context: { dryRun: false, source: retryOfRunId ? 'workflow_retry' : 'workflow_api', retryOfRunId, workflowContext },
     ended_at: ['completed', 'failed', 'blocked', 'stopped'].includes(finalStatus) ? new Date().toISOString() : null,
     error: finalError,
-  }).eq('id', runId).eq('tenant_id', tenantId);
+  }).eq('id', runId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
   if (updateRunError) throw updateRunError;
 
   await auditRepository.logEvent({ tenantId, workspaceId }, {
@@ -2772,7 +2801,8 @@ export async function continueWorkflowRun({
     .from('workflow_runs')
     .update({ status: 'running', ended_at: null, error: null })
     .eq('id', run.id)
-    .eq('tenant_id', tenantId);
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId);
 
   while (nextNode && !visited.has(nextNode.id) && guard < validation.nodes.length) {
     visited.add(nextNode.id);
@@ -2821,7 +2851,7 @@ export async function continueWorkflowRun({
     context: { ...(run.context ?? {}), workflowContext, resumedFromRunId: run.id },
     ended_at: ['completed', 'failed', 'blocked', 'stopped', 'cancelled'].includes(finalStatus) ? new Date().toISOString() : null,
     error: finalError,
-  }).eq('id', run.id).eq('tenant_id', tenantId);
+  }).eq('id', run.id).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
   if (runError) throw runError;
 
   await auditRepository.logEvent({ tenantId, workspaceId }, {
@@ -2914,7 +2944,7 @@ router.post('/', requirePermission('workflows.write'), async (req: MultiTenantRe
     }
 
     const workflow = await workflowRepository.getDefinition(workflowId, tenantId, workspaceId);
-    const version = await workflowRepository.getVersion(versionId);
+    const version = await workflowRepository.getVersion(versionId, { tenantId });
 
     await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',
@@ -2955,7 +2985,7 @@ router.get('/catalog', requirePermission('workflows.read'), async (_req: MultiTe
 
 router.get('/runs/recent', async (req: MultiTenantRequest, res) => {
   try {
-    const runs = await workflowRepository.listRecentRuns(req.tenantId!);
+    const runs = await workflowRepository.listRecentRuns(req.tenantId!, req.workspaceId!);
     res.json(runs);
   } catch (error) {
     console.error('Error fetching recent runs:', error);
@@ -2966,12 +2996,14 @@ router.get('/runs/recent', async (req: MultiTenantRequest, res) => {
 router.get('/runs/:runId', requirePermission('workflows.read'), async (req: MultiTenantRequest, res) => {
   try {
     const tenantId = req.tenantId!;
+    const workspaceId = req.workspaceId!;
     const supabase = getSupabaseAdmin();
     const { data: run, error: runError } = await supabase
       .from('workflow_runs')
       .select('*, workflow_versions!inner(workflow_id, workflow_definitions!workflow_versions_workflow_id_fkey(name)), cases(case_number)')
       .eq('id', req.params.runId)
       .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
       .maybeSingle();
     if (runError) throw runError;
     if (!run) return res.status(404).json({ error: 'Workflow run not found' });
@@ -3006,6 +3038,7 @@ router.post('/runs/:runId/resume', requirePermission('workflows.trigger'), async
       .select('*, workflow_versions!inner(id, workflow_id, status, nodes, edges, trigger)')
       .eq('id', req.params.runId)
       .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
       .maybeSingle();
 
     if (runError) throw runError;
@@ -3038,9 +3071,13 @@ router.post('/runs/:runId/cancel', requirePermission('workflows.trigger'), async
       .select('*')
       .eq('id', req.params.runId)
       .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
       .maybeSingle();
     if (fetchError) throw fetchError;
     if (!run) return res.status(404).json({ error: 'Workflow run not found' });
+    if (['completed', 'failed', 'cancelled'].includes(String(run.status))) {
+      return res.status(409).json({ error: `Run is already ${run.status} and cannot be cancelled` });
+    }
 
     const { error } = await supabase
       .from('workflow_runs')
@@ -3051,7 +3088,8 @@ router.post('/runs/:runId/cancel', requirePermission('workflows.trigger'), async
         context: { ...(run.context ?? {}), cancelledAt: now, cancelledBy: req.userId ?? 'system' },
       })
       .eq('id', req.params.runId)
-      .eq('tenant_id', tenantId);
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId);
     if (error) throw error;
 
     const step = {
@@ -3093,6 +3131,7 @@ router.post('/runs/:runId/retry', requirePermission('workflows.trigger'), async 
       .select('*, workflow_versions!inner(id, workflow_id, status, nodes, edges, trigger)')
       .eq('id', req.params.runId)
       .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
       .maybeSingle();
 
     if (runError) throw runError;
@@ -3105,7 +3144,8 @@ router.post('/runs/:runId/retry', requirePermission('workflows.trigger'), async 
       .from('workflow_runs')
       .update({ status: 'retrying' })
       .eq('id', previousRun.id)
-      .eq('tenant_id', tenantId);
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId);
 
     const result = await executeWorkflowVersion({
       tenantId,
@@ -3140,7 +3180,7 @@ export async function executeWorkflowsByEvent(
 
   for (const workflow of workflows) {
     if (workflow.version_status !== 'published' || !workflow.current_version_id) continue;
-    const version = await workflowRepository.getVersion(workflow.current_version_id);
+    const version = await workflowRepository.getVersion(workflow.current_version_id, { tenantId });
     if (!version || !workflowMatchesTrigger(version, eventType)) continue;
 
     try {
@@ -3241,7 +3281,7 @@ router.post('/forms/:slug', async (req, res) => {
     const results = [] as any[];
     for (const row of allowed) {
       try {
-        const versions = await workflowRepository.getVersion(row.id);
+        const versions = await workflowRepository.getVersion(row.id, { tenantId: row.tenant_id });
         if (!versions) continue;
         const result = await executeWorkflowVersion({
           tenantId: row.tenant_id,
@@ -3309,9 +3349,9 @@ router.get('/:id', async (req: MultiTenantRequest, res) => {
 
     const versions = await workflowRepository.listVersions(wf.id);
     const runs = await workflowRepository.listRunsByWorkflow(wf.id, tenantId);
-    const currentVersion = await (wf.current_version_id 
-      ? workflowRepository.getVersion(wf.current_version_id) 
-      : workflowRepository.getLatestVersion(wf.id));
+    const currentVersion = await (wf.current_version_id
+      ? workflowRepository.getVersion(wf.current_version_id, { tenantId })
+      : workflowRepository.getLatestVersion(wf.id, { tenantId }));
 
     res.json({
       ...wf,
@@ -3333,9 +3373,9 @@ router.put('/:id', requirePermission('workflows.write'), async (req: MultiTenant
     const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
     if (!wf) return res.status(404).json({ error: 'Not found' });
 
-    const currentVersion = await (wf.current_version_id 
-      ? workflowRepository.getVersion(wf.current_version_id) 
-      : workflowRepository.getLatestVersion(wf.id));
+    const currentVersion = await (wf.current_version_id
+      ? workflowRepository.getVersion(wf.current_version_id, { tenantId })
+      : workflowRepository.getLatestVersion(wf.id, { tenantId }));
 
     const nextVersionNumber = currentVersion ? Number(currentVersion.version_number || 0) + 1 : 1;
     const draftId = currentVersion?.status === 'draft' ? currentVersion.id : crypto.randomUUID();
@@ -3364,7 +3404,7 @@ router.put('/:id', requirePermission('workflows.write'), async (req: MultiTenant
       });
     }
 
-    const draftVersion = await workflowRepository.getVersion(draftId);
+    const draftVersion = await workflowRepository.getVersion(draftId, { tenantId });
 
     await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',
@@ -3395,8 +3435,8 @@ router.post('/:id/validate', requirePermission('workflows.read'), async (req: Mu
     const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
     if (!wf) return res.status(404).json({ error: 'Not found' });
     const version = wf.current_version_id
-      ? await workflowRepository.getVersion(wf.current_version_id)
-      : await workflowRepository.getLatestVersion(wf.id);
+      ? await workflowRepository.getVersion(wf.current_version_id, { tenantId })
+      : await workflowRepository.getLatestVersion(wf.id, { tenantId });
     res.json(validateWorkflowDefinition(req.body?.nodes ?? version?.nodes ?? [], req.body?.edges ?? version?.edges ?? []));
   } catch (error) {
     console.error('Error validating workflow:', error);
@@ -3411,8 +3451,8 @@ router.post('/:id/dry-run', requirePermission('workflows.trigger'), async (req: 
     const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
     if (!wf) return res.status(404).json({ error: 'Not found' });
     const version = wf.current_version_id
-      ? await workflowRepository.getVersion(wf.current_version_id)
-      : await workflowRepository.getLatestVersion(wf.id);
+      ? await workflowRepository.getVersion(wf.current_version_id, { tenantId })
+      : await workflowRepository.getLatestVersion(wf.id, { tenantId });
     const dryRun = await buildDryRun(
       req.body?.nodes ?? version?.nodes ?? [],
       req.body?.edges ?? version?.edges ?? [],
@@ -3440,8 +3480,8 @@ router.post('/:id/step-run', requirePermission('workflows.trigger'), async (req:
     const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
     if (!wf) return res.status(404).json({ error: 'Not found' });
     const version = wf.current_version_id
-      ? await workflowRepository.getVersion(wf.current_version_id)
-      : await workflowRepository.getLatestVersion(wf.id);
+      ? await workflowRepository.getVersion(wf.current_version_id, { tenantId })
+      : await workflowRepository.getLatestVersion(wf.id, { tenantId });
     const nodeId = req.body?.nodeId ?? req.body?.node_id;
     if (!nodeId) return res.status(400).json({ error: 'nodeId is required' });
     const result = await buildStepDryRun(
@@ -3473,8 +3513,8 @@ router.post('/:id/run', requirePermission('workflows.trigger'), async (req: Mult
     const wf = await workflowRepository.getDefinition(req.params.id, tenantId, workspaceId);
     if (!wf) return res.status(404).json({ error: 'Not found' });
     const version = wf.current_version_id
-      ? await workflowRepository.getVersion(wf.current_version_id)
-      : await workflowRepository.getLatestVersion(wf.id);
+      ? await workflowRepository.getVersion(wf.current_version_id, { tenantId })
+      : await workflowRepository.getLatestVersion(wf.id, { tenantId });
     if (!version || version.status !== 'published') {
       return res.status(409).json({ error: 'Workflow must be published before execution' });
     }
@@ -3572,7 +3612,7 @@ router.post('/:id/publish', requirePermission('workflows.write'), async (req: Mu
     });
 
     const updated = await workflowRepository.getDefinition(wf.id, tenantId, workspaceId);
-    const version = await workflowRepository.getVersion(draftVersion.id);
+    const version = await workflowRepository.getVersion(draftVersion.id, { tenantId });
 
     await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',
@@ -3601,8 +3641,8 @@ router.post('/:id/archive', requirePermission('workflows.write'), async (req: Mu
     if (!wf) return res.status(404).json({ error: 'Not found' });
 
     const currentVersion = wf.current_version_id
-      ? await workflowRepository.getVersion(wf.current_version_id)
-      : await workflowRepository.getLatestVersion(wf.id);
+      ? await workflowRepository.getVersion(wf.current_version_id, { tenantId })
+      : await workflowRepository.getLatestVersion(wf.id, { tenantId });
 
     if (!currentVersion) {
       return res.status(400).json({ error: 'No version available to archive' });
@@ -3611,7 +3651,7 @@ router.post('/:id/archive', requirePermission('workflows.write'), async (req: Mu
     await workflowRepository.updateVersion(currentVersion.id, { status: 'archived' });
 
     const updated = await workflowRepository.getDefinition(wf.id, tenantId, workspaceId);
-    const version = await workflowRepository.getVersion(currentVersion.id);
+    const version = await workflowRepository.getVersion(currentVersion.id, { tenantId });
 
     await auditRepository.logEvent({ tenantId, workspaceId }, {
       actorId: req.userId ?? 'system',

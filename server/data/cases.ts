@@ -95,14 +95,14 @@ function buildTimeline(bundle: any) {
     ...(bundle.reconciliation_issues ?? []).map((issue: any) => ({
       id: issue.id,
       entry_type: 'reconciliation_issue',
-      type: issue.issue_type || 'conflict',
-      domain: issue.domain || 'reconciliation',
+      type: issue.issue_type || issue.conflict_domain || 'conflict',
+      domain: issue.conflict_domain || 'reconciliation',
       actor: issue.detected_by || 'system',
-      content: issue.summary || issue.issue_type || 'Conflict detected',
+      content: issue.summary || 'Conflict detected',
       occurred_at: issue.created_at || issue.detected_at,
       icon: 'alert',
       severity: canonicalHealth(issue.severity || 'critical'),
-      source: issue.source_of_truth || null,
+      source: issue.source_of_truth_system || issue.source_of_truth || null,
     })),
     ...(bundle.case_status_history ?? []).map((entry: any) => ({
       id: entry.id,
@@ -308,7 +308,12 @@ function buildTimeline(bundle: any) {
     })),
   ];
 
-  return timeline.sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
+  const toEpoch = (value: unknown): number => {
+    if (!value) return 0;
+    const t = new Date(value as any).getTime();
+    return Number.isFinite(t) ? t : 0;
+  };
+  return timeline.sort((a, b) => toEpoch(a.occurred_at) - toEpoch(b.occurred_at));
 }
 
 function buildCaseState(bundle: any) {
@@ -1154,7 +1159,7 @@ function buildCaseState(bundle: any) {
       has_conflict: conflict.has_conflict,
       conflict_type: conflict.has_conflict ? 'state_conflict' : null,
       root_cause: conflict.root_cause,
-      source_of_truth: bundle.reconciliation_issues?.[0]?.source_of_truth || null,
+      source_of_truth: bundle.reconciliation_issues?.[0]?.source_of_truth_system || null,
       recommended_action: conflict.recommended_action,
       severity: conflict.severity,
       evidence_refs: compactStrings((bundle.reconciliation_issues ?? []).map((item: any) => item.id)),
@@ -1348,17 +1353,22 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     agentRunsResult,
     canonicalEventsResult,
   ] = await Promise.all([
-    caseRow.customer_id ? supabase.from('customers').select('*').eq('id', caseRow.customer_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
+    caseRow.customer_id ? supabase.from('customers').select('*').eq('id', caseRow.customer_id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
     supabase.from('conversations').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('last_message_at', { ascending: false }).limit(1).maybeSingle(),
-    asArray<string>(caseRow.order_ids).length ? supabase.from('orders').select('*').in('id', asArray<string>(caseRow.order_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
-    asArray<string>(caseRow.payment_ids).length ? supabase.from('payments').select('*').in('id', asArray<string>(caseRow.payment_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
-    asArray<string>(caseRow.return_ids).length ? supabase.from('returns').select('*').in('id', asArray<string>(caseRow.return_ids)).eq('tenant_id', scope.tenantId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.order_ids).length ? supabase.from('orders').select('*').in('id', asArray<string>(caseRow.order_ids)).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.payment_ids).length ? supabase.from('payments').select('*').in('id', asArray<string>(caseRow.payment_ids)).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId) : Promise.resolve({ data: [], error: null } as any),
+    asArray<string>(caseRow.return_ids).length ? supabase.from('returns').select('*').in('id', asArray<string>(caseRow.return_ids)).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId) : Promise.resolve({ data: [], error: null } as any),
+    // Tenant-only tables (no workspace_id column in schema): refunds,
+    // case_links, case_status_history, messages, order_events, return_events,
+    // case_knowledge_links, connectors, agents, execution_plans,
+    // tool_action_attempts, webhook_events, workflow_run_steps. Filtering on a
+    // missing column throws PG 42703, breaking the whole case bundle.
     supabase.from('refunds').select('*').eq('tenant_id', scope.tenantId),
-    supabase.from('approval_requests').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
-    supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('detected_at', { ascending: false }),
+    supabase.from('approval_requests').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: false }),
+    supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('detected_at', { ascending: false }),
     supabase.from('case_links').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId),
-    supabase.from('draft_replies').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('generated_at', { ascending: false }),
-    supabase.from('internal_notes').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
+    supabase.from('draft_replies').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('generated_at', { ascending: false }),
+    supabase.from('internal_notes').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: false }),
     supabase.from('messages').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('sent_at', { ascending: true }),
     caseRow.assigned_user_id ? supabase.from('users').select('name, email').eq('id', caseRow.assigned_user_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
     caseRow.assigned_team_id ? supabase.from('teams').select('name').eq('id', caseRow.assigned_team_id).maybeSingle() : Promise.resolve({ data: null, error: null } as any),
@@ -1370,13 +1380,15 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     supabase.from('connectors').select('*').eq('tenant_id', scope.tenantId),
     supabase.from('agents').select('*').eq('tenant_id', scope.tenantId),
     supabase.from('execution_plans').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('generated_at', { ascending: false }),
-    supabase.from('tool_action_attempts').select('*').eq('tenant_id', scope.tenantId).order('started_at', { ascending: false }),
-    supabase.from('policy_rules').select('*').eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
-    supabase.from('policy_evaluations').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('created_at', { ascending: false }),
+    // tool_action_attempts has no case_id column — it's joined to a case via
+    // execution_plan_id. Resolve the actual rows below, after we have plan ids.
+    Promise.resolve({ data: [], error: null } as any),
+    supabase.from('policy_rules').select('*').eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: false }),
+    supabase.from('policy_evaluations').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('created_at', { ascending: false }),
     supabase.from('webhook_events').select('*').eq('tenant_id', scope.tenantId).order('received_at', { ascending: false }),
-    supabase.from('workflow_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('started_at', { ascending: false }),
-    supabase.from('agent_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('started_at', { ascending: false }),
-    supabase.from('canonical_events').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).order('occurred_at', { ascending: false }),
+    supabase.from('workflow_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('started_at', { ascending: false }),
+    supabase.from('agent_runs').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('started_at', { ascending: false }),
+    supabase.from('canonical_events').select('*').eq('case_id', caseId).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId).order('occurred_at', { ascending: false }),
   ]);
 
   for (const result of [customerResult, conversationResult, ordersResult, paymentsResult, returnsResult, refundsResult, approvalsResult, issuesResult, linksResult, draftsResult, notesResult, messagesResult, userResult, teamResult, caseStatusHistoryResult, orderEventsResult, orderLineItemsResult, returnEventsResult, caseKnowledgeLinksResult, connectorsResult, agentsResult, executionPlansResult, toolActionAttemptsResult, policyRulesResult, policyEvaluationsResult, webhookEventsResult, workflowRunsResult, agentRunsResult, canonicalEventsResult]) {
@@ -1389,13 +1401,24 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     : { data: [], error: null } as any;
   if (workflowRunStepsResult?.error) throw workflowRunStepsResult.error;
 
+  // tool_action_attempts → resolved by joining execution_plan_id ∈ this case's plans.
+  const executionPlanIds = compactStrings((executionPlansResult.data ?? []).map((row: any) => row.id));
+  const toolActionAttemptsRows = executionPlanIds.length
+    ? ((await supabase
+        .from('tool_action_attempts')
+        .select('*')
+        .in('execution_plan_id', executionPlanIds)
+        .eq('tenant_id', scope.tenantId)
+        .order('started_at', { ascending: false })).data ?? [])
+    : [];
+
   const relatedCaseIds = compactStrings((linksResult.data ?? []).map((row: any) => row.linked_case_id));
   const linkedCases = relatedCaseIds.length
-    ? ((await supabase.from('cases').select('id, case_number, type, status, priority, risk_level').in('id', relatedCaseIds).eq('tenant_id', scope.tenantId)).data ?? [])
+    ? ((await supabase.from('cases').select('id, case_number, type, status, priority, risk_level').in('id', relatedCaseIds).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)).data ?? [])
     : [];
   const knowledgeArticleIds = compactStrings((caseKnowledgeLinksResult.data ?? []).map((row: any) => row.article_id));
   const knowledgeArticles = knowledgeArticleIds.length
-    ? ((await supabase.from('knowledge_articles').select('*').in('id', knowledgeArticleIds).eq('tenant_id', scope.tenantId)).data ?? [])
+    ? ((await supabase.from('knowledge_articles').select('*').in('id', knowledgeArticleIds).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)).data ?? [])
     : [];
   const agentVersionIds = compactStrings((agentsResult.data ?? []).map((row: any) => row.current_version_id));
   const agentVersions = agentVersionIds.length
@@ -1450,7 +1473,7 @@ async function fetchCaseBundleSupabase(scope: CaseScope, caseId: string) {
     connectors: connectorsResult.data ?? [],
     agents: agentsResult.data ?? [],
     execution_plans: executionPlansResult.data ?? [],
-    tool_action_attempts: toolActionAttemptsResult.data ?? [],
+    tool_action_attempts: toolActionAttemptsRows,
     policy_rules: policyRulesResult.data ?? [],
     policy_evaluations: policyEvaluationsResult.data ?? [],
     webhook_events: webhookEventsResult.data ?? [],
@@ -1709,7 +1732,11 @@ class SupabaseCaseRepository implements CaseRepository {
   }
   async createMessage(scope: CaseScope, data: any) {
     const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('messages').insert({ ...data, tenant_id: scope.tenantId });
+    // messages has no workspace_id column — passing it caused 42703 inserts.
+    const { error } = await supabase.from('messages').insert({
+      ...data,
+      tenant_id: scope.tenantId,
+    });
     if (error) throw error;
   }
   async updateMessage(scope: CaseScope, messageId: string, updates: any) {
@@ -1888,38 +1915,74 @@ class SupabaseCaseRepository implements CaseRepository {
   }
   async getOpenReconciliationIssues(scope: CaseScope, caseId: string) {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.from('reconciliation_issues').select('*').eq('case_id', caseId).eq('status', 'open').eq('tenant_id', scope.tenantId);
+    const { data, error } = await supabase
+      .from('reconciliation_issues')
+      .select('*')
+      .eq('case_id', caseId)
+      .eq('status', 'open')
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId);
     if (error) throw error;
     return data || [];
   }
   async upsertReconciliationIssue(scope: CaseScope, data: any) {
     const supabase = getSupabaseAdmin();
-    const { data: existing, error: findError } = await supabase
+    // Idempotent: dedup by (tenant, workspace, case, entity, conflict_domain, issue_type)
+    // where status is open. issue_type must be part of the key — multiple distinct
+    // issue_types can share the same conflict_domain+entity (e.g. payment_amount_mismatch
+    // and payment_status_drift both attach to the same payment row), and collapsing them
+    // into one would silently lose conflicts.
+    let findQuery = supabase
       .from('reconciliation_issues')
       .select('id')
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
       .eq('case_id', data.case_id)
       .eq('entity_id', data.entity_id)
       .eq('conflict_domain', data.conflict_domain)
-      .eq('status', 'open')
-      .maybeSingle();
+      .eq('status', 'open');
+    if (data.issue_type !== undefined && data.issue_type !== null) {
+      findQuery = findQuery.eq('issue_type', data.issue_type);
+    } else {
+      findQuery = findQuery.is('issue_type', null);
+    }
+    const { data: existing, error: findError } = await findQuery.maybeSingle();
 
     if (findError) throw findError;
 
     if (existing) {
+      const updates: Record<string, unknown> = {
+        severity: data.severity,
+        actual_states: data.actual_states,
+        expected_state: data.expected_state,
+        conflicting_systems: data.conflicting_systems,
+        source_of_truth_system: data.source_of_truth_system,
+        detected_by: data.detected_by,
+        detected_at: new Date().toISOString(),
+      };
+      if (data.summary !== undefined) updates.summary = data.summary;
+      if (data.issue_type !== undefined) updates.issue_type = data.issue_type;
       const { error: updateError } = await supabase
         .from('reconciliation_issues')
-        .update({
-          severity: data.severity,
-          actual_states: data.actual_states,
-          detected_at: new Date().toISOString()
-        })
-        .eq('id', (existing as any).id);
+        .update(updates)
+        .eq('id', (existing as any).id)
+        .eq('tenant_id', scope.tenantId)
+        .eq('workspace_id', scope.workspaceId);
       if (updateError) throw updateError;
       return (existing as any).id;
     }
 
     const id = data.id || crypto.randomUUID();
-    const { error: insertError } = await supabase.from('reconciliation_issues').insert({ ...data, id });
+    const insertRow: Record<string, unknown> = {
+      ...data,
+      id,
+      tenant_id: data.tenant_id ?? scope.tenantId,
+      workspace_id: data.workspace_id ?? scope.workspaceId,
+      detected_at: data.detected_at ?? new Date().toISOString(),
+    };
+    const { error: insertError } = await supabase
+      .from('reconciliation_issues')
+      .insert(insertRow);
     if (insertError) throw insertError;
     return id;
   }

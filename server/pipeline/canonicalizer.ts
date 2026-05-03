@@ -10,6 +10,7 @@ import { enqueue } from '../queue/client.js';
 import { JobType } from '../queue/types.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { logger } from '../utils/logger.js';
+import { requireScope } from '../lib/scope.js';
 import type { CanonicalizePayload, JobContext } from '../queue/types.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 
@@ -28,14 +29,16 @@ async function handleCanonicalize(
   });
 
   const supabase = getSupabaseAdmin();
-  const scope = { tenantId: ctx.tenantId ?? 'org_default', workspaceId: ctx.workspaceId ?? 'ws_default' };
+  const scope = requireScope(ctx, 'canonicalizer');
 
   // ── 1. Load canonical event ──────────────────────────────────────────────
   const { data: event } = await supabase
     .from('canonical_events')
     .select('*')
     .eq('id', payload.canonicalEventId)
-    .single();
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId)
+    .maybeSingle();
 
   if (!event) {
     log.warn('Canonical event not found');
@@ -126,7 +129,7 @@ async function handleCanonicalize(
   });
 
   // ── 4. Enqueue INTENT_ROUTE ──────────────────────────────────────────────
-  enqueue(
+  await enqueue(
     JobType.INTENT_ROUTE,
     { canonicalEventId: payload.canonicalEventId },
     { tenantId: scope.tenantId, workspaceId: scope.workspaceId, traceId: ctx.traceId, priority: 5 }
@@ -143,10 +146,14 @@ async function handleCanonicalize(
  */
 async function fetchStripeEventObject(
   supabase: ReturnType<typeof import('../db/supabase.js').getSupabaseAdmin>,
-  normalizedPayload: string | null,
+  normalizedPayload: string | Record<string, any> | null,
 ): Promise<Record<string, any> | null> {
   try {
-    const meta = JSON.parse(normalizedPayload || '{}') as Record<string, any>;
+    const meta: Record<string, any> = !normalizedPayload
+      ? {}
+      : typeof normalizedPayload === 'object'
+        ? (normalizedPayload as Record<string, any>)
+        : (JSON.parse(normalizedPayload) as Record<string, any>);
     const rawEventId = meta.rawEventId as string | undefined;
     if (!rawEventId) return null;
 

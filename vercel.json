@@ -25,6 +25,18 @@
     { "source": "/tweaks-panel.jsx",  "destination": "/landing/tweaks-panel.jsx" },
     { "source": "/uploads/:f*",       "destination": "/landing/uploads/:f*" },
 
+    { "source": "/v2",                "destination": "/landing-v2/index.html" },
+    { "source": "/v2/",               "destination": "/landing-v2/index.html" },
+    { "source": "/v2/:f*",            "destination": "/landing-v2/:f*" },
+    { "source": "/v2/ai-agent",       "destination": "/landing-v2/index.html" },
+    { "source": "/v2/ai-agent/slack", "destination": "/landing-v2/index.html" },
+    { "source": "/v2/inbox",          "destination": "/landing-v2/index.html" },
+    { "source": "/v2/omnichannel",    "destination": "/landing-v2/index.html" },
+    { "source": "/v2/how-it-works",   "destination": "/landing-v2/index.html" },
+    { "source": "/v2/tickets",        "destination": "/landing-v2/index.html" },
+    { "source": "/v2/reporting",      "destination": "/landing-v2/index.html" },
+    { "source": "/v2/startups",       "destination": "/landing-v2/index.html" },
+
     { "source": "/reset-password",  "destination": "/landing/index.html" },
     { "source": "/signin",          "destination": "/landing/index.html" },
     { "source": "/signup",          "destination": "/landing/index.html" },
@@ -47,16 +59,13 @@
   ],
   "headers": [
     {
-      "source": "/api/(.*)",
+      "source": "/(landing|landing-v2)/(.*)\\.jsx",
       "headers": [
-        { "key": "Access-Control-Allow-Origin",      "value": "https://crm-ai-rose.vercel.app" },
-        { "key": "Access-Control-Allow-Credentials", "value": "true" },
-        { "key": "Access-Control-Allow-Methods",     "value": "GET,POST,PUT,PATCH,DELETE,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers",     "value": "Content-Type,Authorization,x-tenant-id,x-workspace-id,x-user-id" }
+        { "key": "Content-Type", "value": "text/javascript; charset=utf-8" }
       ]
     },
     {
-      "source": "/landing/(.*)\\.jsx",
+      "source": "/v2/(.*)\\.jsx",
       "headers": [
         { "key": "Content-Type", "value": "text/javascript; charset=utf-8" }
       ]
@@ -64,19 +73,11 @@
   ],
   "env": {
     "NODE_ENV":                "production",
-    "SUPABASE_URL":            "https://erzfvnpzbmwnpchhemjt.supabase.co",
-    "SUPABASE_ANON_KEY":       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVyemZ2bnB6Ym13bnBjaGhlbWp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTA5MjQsImV4cCI6MjA5MTM2NjkyNH0.vtUHINHIUIJortTkqcK6ShFrnSNbjQRnj5dE8fcFTxY",
-    "VITE_SUPABASE_URL":       "https://erzfvnpzbmwnpchhemjt.supabase.co",
-    "VITE_SUPABASE_ANON_KEY":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVyemZ2bnB6Ym13bnBjaGhlbWp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3OTA5MjQsImV4cCI6MjA5MTM2NjkyNH0.vtUHINHIUIJortTkqcK6ShFrnSNbjQRnj5dE8fcFTxY",
-    "APP_URL":                 "https://crm-ai-rose.vercel.app",
-    "GEMINI_MODEL":            "gemini-2.0-flash",
-    "SUPER_AGENT_LLM_ROUTING": "true",
-    "CORS_ORIGINS":            "https://crm-ai-rose.vercel.app,http://localhost:3005,http://localhost:5173"
+    "SUPER_AGENT_LLM_ROUTING": "true"
   },
   "crons": [
-    {
-      "path": "/api/superagent/cron/check",
-      "schedule": "0 0 * * *"
-    }
+    { "path": "/api/internal/worker/tick",     "schedule": "0 12 * * *" },
+    { "path": "/api/internal/scheduler/tick",  "schedule": "0 12 * * *" },
+    { "path": "/api/super-agent/cron/check",   "schedule": "0 0 * * *" }
   ]
 }

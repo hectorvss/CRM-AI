@@ -194,6 +194,7 @@ async function main() {
   await upsertRows('knowledge_domains', [{
     id: 'kd_repeat_exceptions',
     tenant_id: tenantId,
+    workspace_id: workspaceId,
     name: 'Repeat Exceptions',
     description: 'Policies for repeated goodwill credits and manager escalations.',
     created_at: now.current,
@@ -251,6 +252,7 @@ async function main() {
   await upsertRows('policy_rules', [{
     id: 'pr_repeat_goodwill_approval',
     tenant_id: tenantId,
+    workspace_id: workspaceId,
     knowledge_article_id: 'ka_repeat_goodwill_policy',
     name: 'Repeat goodwill exception rule',
     description: 'Customers with two or more courtesy exceptions in 120 days require manager approval.',

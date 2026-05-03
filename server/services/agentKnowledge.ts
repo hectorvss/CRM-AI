@@ -1,7 +1,4 @@
-import { getDb } from '../db/client.js';
-import { getDatabaseProvider } from '../db/provider.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
-import { parseRow } from '../db/utils.js';
 
 type AccessLevel =
   | 'No access'
@@ -334,101 +331,7 @@ function buildPromptContext(documents: KnowledgeArticleView[]): string {
     .join('\n\n');
 }
 
-export function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): AgentKnowledgeBundle {
-  const db = getDb();
-  const profile = parseKnowledgeProfile(options.knowledgeProfile);
-  const signals = buildSignals(options.caseContext);
-
-  let query = `
-    SELECT a.*, d.name as domain_name
-    FROM knowledge_articles a
-    LEFT JOIN knowledge_domains d ON a.domain_id = d.id
-    WHERE a.tenant_id = ? AND a.workspace_id = ?
-  `;
-  const params: any[] = [options.tenantId, options.workspaceId];
-
-  const docStatus = profile.document_status ?? 'Final documents only';
-  if (docStatus === 'Include drafts') {
-    query += ` AND a.status IN ('draft', 'published')`;
-  } else if (docStatus === 'Approved policies only') {
-    query += ` AND a.status = 'published' AND a.type = 'policy'`;
-  } else {
-    query += ` AND a.status = 'published'`;
-  }
-
-  query += ' ORDER BY a.updated_at DESC, a.citation_count DESC';
-
-  const rows = db.prepare(query).all(...params).map(parseRow) as any[];
-  const sourcePriority = profile.trusted_source_priority ?? [];
-  const accessibleDocuments: KnowledgeArticleView[] = [];
-  const blockedDocuments: KnowledgeArticleView[] = [];
-
-  for (const article of rows) {
-    const sourceLabel = classifySource(article);
-    const accessLevel = (profile.source_access?.[sourceLabel] ?? resolveDefaultAccess(profile)) as AccessLevel;
-    let blockedReason = evaluateBlockedReason(article, profile, sourceLabel);
-    if (!blockedReason && profile.trusted_source_flags?.draftDocsExcluded && article.status === 'draft') {
-      blockedReason = 'Draft documents are excluded by trust policy';
-    }
-    if (!blockedReason && (profile.archived_records === 'Blocked') && Number(article.outdated_flag ?? 0) === 1) {
-      blockedReason = 'Archived or outdated records are blocked';
-    }
-    const relevanceScore = computeRelevance(article, signals, sourcePriority);
-    const contentMode = mapAccessToContentMode(accessLevel);
-    const view: KnowledgeArticleView = {
-      id: article.id,
-      title: article.title,
-      type: article.type,
-      status: article.status,
-      content: article.content,
-      domain_id: article.domain_id ?? null,
-      domain_name: article.domain_name ?? null,
-      citation_count: Number(article.citation_count ?? 0),
-      outdated_flag: Number(article.outdated_flag ?? 0),
-      linked_workflow_ids: article.linked_workflow_ids ?? [],
-      linked_approval_policy_ids: article.linked_approval_policy_ids ?? [],
-      source_label: sourceLabel,
-      access_level: accessLevel,
-      content_mode: contentMode,
-      relevance_score: relevanceScore,
-      blocked_reason: blockedReason ?? undefined,
-      excerpt: summarizeContent(article.content),
-      sheet: normalizeKnowledgeSheet(article),
-    };
-
-    if (blockedReason || contentMode === 'none') {
-      blockedDocuments.push(view);
-      continue;
-    }
-
-    accessibleDocuments.push(view);
-  }
-
-  accessibleDocuments.sort((left, right) => right.relevance_score - left.relevance_score);
-  blockedDocuments.sort((left, right) => right.relevance_score - left.relevance_score);
-
-  const promptDocuments = accessibleDocuments
-    .filter((doc) => doc.content_mode !== 'metadata')
-    .slice(0, 6);
-
-  return {
-    profile,
-    accessibleDocuments,
-    blockedDocuments,
-    promptContext: buildPromptContext(promptDocuments),
-    citations: promptDocuments.map((doc) => ({
-      article_id: doc.id,
-      title: doc.title,
-      domain_name: doc.domain_name,
-    })),
-  };
-}
-
-export async function resolveAgentKnowledgeBundleAsync(options: ResolveKnowledgeOptions): Promise<AgentKnowledgeBundle> {
-  if (getDatabaseProvider() !== 'supabase') {
-    return resolveAgentKnowledgeBundle(options);
-  }
-
+export async function resolveAgentKnowledgeBundle(options: ResolveKnowledgeOptions): Promise<AgentKnowledgeBundle> {
   const profile = parseKnowledgeProfile(options.knowledgeProfile);
   const signals = buildSignals(options.caseContext);
   const supabase = getSupabaseAdmin();
@@ -507,15 +410,20 @@ export async function resolveAgentKnowledgeBundleAsync(options: ResolveKnowledge
   accessibleDocuments.sort((left, right) => right.relevance_score - left.relevance_score);
   blockedDocuments.sort((left, right) => right.relevance_score - left.relevance_score);
 
+  const promptDocuments = accessibleDocuments
+    .filter((doc) => doc.content_mode !== 'metadata')
+    .slice(0, 6);
+
   return {
     profile,
     accessibleDocuments,
     blockedDocuments,
-    citations: accessibleDocuments.slice(0, 6).map((doc) => ({
+    promptContext: buildPromptContext(promptDocuments),
+    citations: promptDocuments.map((doc) => ({
       article_id: doc.id,
       title: doc.title,
       domain_name: doc.domain_name,
     })),
-    promptContext: buildPromptContext(accessibleDocuments),
   };
 }
+

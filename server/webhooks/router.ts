@@ -22,7 +22,12 @@ import { Router, Request, Response, NextFunction } from 'express';
 import express from 'express';
 import { shopifyWebhookRouter }   from './shopify.js';
 import { stripeWebhookRouter }    from './stripe.js';
-import { whatsappWebhookRouter, emailWebhookRouter } from './channels.js';
+import {
+  whatsappWebhookRouter,
+  emailWebhookRouter,
+  smsWebhookRouter,
+  webChatWebhookRouter,
+} from './channels.js';
 import { logger } from '../utils/logger.js';
 
 export const webhookRouter = Router();
@@ -59,9 +64,11 @@ webhookRouter.use('/shopify',   shopifyWebhookRouter);
 webhookRouter.use('/stripe',    stripeWebhookRouter);
 webhookRouter.use('/whatsapp',  whatsappWebhookRouter);
 webhookRouter.use('/email',     emailWebhookRouter);
+webhookRouter.use('/sms',       smsWebhookRouter);
+webhookRouter.use('/web-chat',  webChatWebhookRouter);
 
 // ── Catch-all for unknown integrations ───────────────────────────────────────
 webhookRouter.post('/:integration', (req: Request, res: Response) => {
   logger.debug('Webhook: unknown integration', { integration: req.params.integration });
-  res.status(404).send('unknown integration');
+  res.status(404).json({ error: 'UNKNOWN_INTEGRATION', integration: req.params.integration });
 });

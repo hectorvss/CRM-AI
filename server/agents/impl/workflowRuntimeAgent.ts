@@ -6,8 +6,6 @@
  */
 
 import { randomUUID } from 'crypto';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -25,35 +23,19 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, tenantId, workspaceId, triggerEvent, runId } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
 
-    const activeWorkflows = useSupabase
-      ? await (async () => {
-          const { data, error } = await supabase!
-            .from('workflow_runs')
-            .select('id as run_id, workflow_id, status as run_status, current_step, context as run_context, workflows(name, steps, status)')
-            .eq('case_id', caseId)
-            .eq('tenant_id', tenantId)
-            .eq('workspace_id', workspaceId)
-            .in('status', ['running', 'paused', 'waiting'])
-            .order('started_at', { ascending: false });
-          if (error) throw error;
-          return data ?? [];
-        })()
-      : db!.prepare(`
-          SELECT wr.id as run_id, wr.workflow_id, wr.status as run_status,
-                 wr.current_step, wr.context as run_context,
-                 w.name, w.steps, w.status as workflow_status
-          FROM workflow_runs wr
-          JOIN workflows w ON wr.workflow_id = w.id
-          WHERE wr.case_id = ? AND wr.tenant_id = ? AND wr.workspace_id = ?
-            AND wr.status IN ('running', 'paused', 'waiting')
-          ORDER BY wr.started_at DESC
-        `).all(caseId, tenantId, workspaceId) as any[];
+    const { data: activeWorkflowsData, error: activeWorkflowsError } = await supabase
+      .from('workflow_runs')
+      .select('id as run_id, workflow_id, status as run_status, current_step, context as run_context, workflows(name, steps, status)')
+      .eq('case_id', caseId)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId)
+      .in('status', ['running', 'paused', 'waiting'])
+      .order('started_at', { ascending: false });
+    if (activeWorkflowsError) throw activeWorkflowsError;
+    const activeWorkflows: any[] = activeWorkflowsData ?? [];
 
     if (activeWorkflows.length === 0) {
       return {
@@ -66,7 +48,7 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
 
     const actions: WorkflowAction[] = [];
 
-    for (const wf of activeWorkflows as any[]) {
+    for (const wf of activeWorkflows) {
       const workflow = wf.workflows ?? wf;
       const steps = typeof workflow.steps === 'string' ? JSON.parse(workflow.steps) : (workflow.steps ?? []);
       const currentStep = wf.current_step ?? 0;
@@ -80,12 +62,8 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
 
         if (wf.run_status === 'running' && shouldPause) {
           try {
-            if (useSupabase) {
-              const { error } = await supabase!.from('workflow_runs').update({ status: 'paused', updated_at: now }).eq('id', wf.run_id);
-              if (error) throw error;
-            } else {
-              db!.prepare('UPDATE workflow_runs SET status = ?, updated_at = ? WHERE id = ?').run('paused', now, wf.run_id);
-            }
+            const { error } = await supabase.from('workflow_runs').update({ status: 'paused', updated_at: now }).eq('id', wf.run_id);
+            if (error) throw error;
             actions.push({ workflowId: wf.run_id, workflowName: workflow.name, action: 'pause', detail: `Paused due to ${maxSeverity}-severity conflict` });
           } catch { /* non-critical */ }
         } else if (wf.run_status === 'running' && !shouldPause) {
@@ -95,12 +73,8 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
 
       if (triggerEvent === 'case_resolved') {
         try {
-          if (useSupabase) {
-            const { error } = await supabase!.from('workflow_runs').update({ status: 'completed', completed_at: now, updated_at: now }).eq('id', wf.run_id);
-            if (error) throw error;
-          } else {
-            db!.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?').run('completed', now, now, wf.run_id);
-          }
+          const { error } = await supabase.from('workflow_runs').update({ status: 'completed', completed_at: now, updated_at: now }).eq('id', wf.run_id);
+          if (error) throw error;
           actions.push({ workflowId: wf.run_id, workflowName: workflow.name, action: 'complete', detail: 'Completed — case resolved' });
         } catch { /* non-critical */ }
         continue;
@@ -108,12 +82,8 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
 
       if (wf.run_status === 'paused' && contextWindow.conflicts.length === 0) {
         try {
-          if (useSupabase) {
-            const { error } = await supabase!.from('workflow_runs').update({ status: 'running', updated_at: now }).eq('id', wf.run_id);
-            if (error) throw error;
-          } else {
-            db!.prepare('UPDATE workflow_runs SET status = ?, updated_at = ? WHERE id = ?').run('running', now, wf.run_id);
-          }
+          const { error } = await supabase.from('workflow_runs').update({ status: 'running', updated_at: now }).eq('id', wf.run_id);
+          if (error) throw error;
           actions.push({ workflowId: wf.run_id, workflowName: workflow.name, action: 'resume', detail: 'Resumed — conflicts resolved' });
         } catch { /* non-critical */ }
       }
@@ -122,12 +92,8 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
         const nextStep = currentStep + 1;
         if (contextWindow.case.approvalState !== 'pending') {
           try {
-            if (useSupabase) {
-              const { error } = await supabase!.from('workflow_runs').update({ current_step: nextStep, updated_at: now }).eq('id', wf.run_id);
-              if (error) throw error;
-            } else {
-              db!.prepare('UPDATE workflow_runs SET current_step = ?, updated_at = ? WHERE id = ?').run(nextStep, now, wf.run_id);
-            }
+            const { error } = await supabase.from('workflow_runs').update({ current_step: nextStep, updated_at: now }).eq('id', wf.run_id);
+            if (error) throw error;
             actions.push({ workflowId: wf.run_id, workflowName: workflow.name, action: 'advance', detail: `Advanced to step ${nextStep + 1}/${steps.length}` });
           } catch { /* non-critical */ }
         }
@@ -135,12 +101,8 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
 
       if (wf.run_status === 'running' && currentStep >= steps.length - 1 && steps.length > 0) {
         try {
-          if (useSupabase) {
-            const { error } = await supabase!.from('workflow_runs').update({ status: 'completed', completed_at: now, updated_at: now }).eq('id', wf.run_id);
-            if (error) throw error;
-          } else {
-            db!.prepare('UPDATE workflow_runs SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?').run('completed', now, now, wf.run_id);
-          }
+          const { error } = await supabase.from('workflow_runs').update({ status: 'completed', completed_at: now, updated_at: now }).eq('id', wf.run_id);
+          if (error) throw error;
           actions.push({ workflowId: wf.run_id, workflowName: workflow.name, action: 'complete', detail: 'All steps completed' });
         } catch { /* non-critical */ }
       }
@@ -148,34 +110,19 @@ export const workflowRuntimeAgentImpl: AgentImplementation = {
 
     if (actions.length > 0) {
       try {
-        if (useSupabase) {
-          const { error } = await supabase!.from('audit_events').insert({
-            id: randomUUID(),
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-            actor_type: 'agent',
-            action: 'workflow_runtime',
-            entity_type: 'case',
-            entity_id: caseId,
-            new_value: `Workflow runtime: ${actions.length} action(s) on ${activeWorkflows.length} workflow(s)`,
-            metadata: { actions, trigger: triggerEvent, agentRunId: runId },
-            occurred_at: now,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT INTO audit_events
-              (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-            VALUES (?, ?, ?, 'agent', ?, 'case', ?, ?, ?, ?)
-          `).run(
-            randomUUID(), tenantId, workspaceId,
-            'workflow_runtime',
-            caseId,
-            `Workflow runtime: ${actions.length} action(s) on ${activeWorkflows.length} workflow(s)`,
-            JSON.stringify({ actions, trigger: triggerEvent, agentRunId: runId }),
-            now,
-          );
-        }
+        const { error } = await supabase.from('audit_events').insert({
+          id: randomUUID(),
+          tenant_id: tenantId,
+          workspace_id: workspaceId,
+          actor_type: 'agent',
+          action: 'workflow_runtime',
+          entity_type: 'case',
+          entity_id: caseId,
+          new_value: `Workflow runtime: ${actions.length} action(s) on ${activeWorkflows.length} workflow(s)`,
+          metadata: { actions, trigger: triggerEvent, agentRunId: runId },
+          occurred_at: now,
+        });
+        if (error) throw error;
       } catch (err: any) {
         logger.error('Workflow runtime audit write failed', { error: err?.message });
       }

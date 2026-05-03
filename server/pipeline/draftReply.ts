@@ -1,6 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID } from 'crypto';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
+import { pickGeminiModel } from '../ai/modelSelector.js';
+import { SAAS_PRODUCT_CONTEXT } from '../ai/systemContext.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { config } from '../config.js';
 import { registerHandler } from '../queue/handlers/index.js';
@@ -18,33 +20,39 @@ async function generateDraft(
   hasConflicts: boolean,
 ): Promise<{ draft: string; confidence: number }> {
   const ai = new GoogleGenerativeAI(config.ai.geminiApiKey);
-  const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
+  const model = ai.getGenerativeModel({ model: pickGeminiModel('draft_reply', config.ai.geminiModel) });
 
   const conflictNote = hasConflicts
     ? 'NOTE: There are active system conflicts. Do not mention final refund amounts or delivery dates until reconciled. Acknowledge the delay empathetically.'
     : '';
 
-  const prompt = `
-You are a customer support agent writing a reply on behalf of the support team.
-Write a ${tone} response to the customer based on the case context below.
+  const prompt = `${SAAS_PRODUCT_CONTEXT}
 
-CASE CONTEXT:
+# Your role this turn — Customer-facing reply draft
+
+You are drafting a message that will be sent TO THE CUSTOMER on behalf of the support team. The human agent will review and may edit before sending. Write the reply body only, in plain prose, ready to ship.
+
+Tone for this draft: ${tone}.
+
+# Context for the case
+
 ${contextStr}
 
-${policies ? `RELEVANT POLICIES:\n${policies}` : ''}
-
+${policies ? `Relevant policies you must respect (do NOT promise anything outside these):\n${policies}\n` : ''}
 ${conflictNote}
 
-INSTRUCTIONS:
-- Write ONLY the reply body. No subject line, no metadata.
-- Match the language of the customer's last message.
-- Be concise (3-5 sentences max for simple issues; up to 8 for complex ones).
-- Do not invent facts. If you are unsure, say you are looking into it.
-- End with a clear next step or ask if there's anything else.
-- Tone: ${tone}
+# Hard rules
 
-Reply:
-`.trim();
+- Write ONLY the reply body. No subject, no headers, no signature.
+- Match the customer's language (look at their last message).
+- Be concise: 3–5 short sentences for simple issues, up to 8 only when the situation truly needs it.
+- Never invent facts. If something isn't in the case context, say you're looking into it.
+- Use real IDs/amounts from the context when relevant. Never round refunds or fabricate timelines.
+- End with a clear next step ("you'll see the refund in 3–5 business days", "let me know if your address changed", etc.).
+- No corporate filler ("Thank you for your patience and understanding…").
+- Do not start with "Hi [Name]" unless the agent's tone column says formal. A lowercase opening is fine for casual tones.
+
+Reply body:`;
 
   try {
     const result = await withGeminiRetry(

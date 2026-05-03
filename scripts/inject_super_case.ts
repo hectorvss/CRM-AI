@@ -365,6 +365,7 @@ async function main() {
     {
       id: ids.knowledge.domain,
       tenant_id: tenantId,
+      workspace_id: workspaceId,
       name: 'Luxury Exceptions',
       description: 'Strict rules for expensive replacements, finance writebacks, and repeat exception handling.',
       created_at: timeline.current.approval,
@@ -424,6 +425,7 @@ async function main() {
     {
       id: ids.policy.main,
       tenant_id: tenantId,
+      workspace_id: workspaceId,
       knowledge_article_id: ids.knowledge.articles.replacement,
       name: 'Luxury replacement manager approval',
       description: 'High-value replacements or repeat exceptions require manager approval.',
@@ -443,6 +445,7 @@ async function main() {
     {
       id: ids.policy.finance,
       tenant_id: tenantId,
+      workspace_id: workspaceId,
       knowledge_article_id: ids.knowledge.articles.finance,
       name: 'Finance writeback review',
       description: 'Large refunds or any dispute-sensitive writeback require finance review.',

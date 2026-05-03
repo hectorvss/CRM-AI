@@ -4,8 +4,6 @@
 
 import { randomUUID } from 'crypto';
 import { withGeminiRetry } from '../../ai/geminiRetry.js';
-import { getDb } from '../../db/client.js';
-import { getDatabaseProvider } from '../../db/provider.js';
 import { getSupabaseAdmin } from '../../db/supabase.js';
 import { logger } from '../../utils/logger.js';
 import type { AgentImplementation, AgentRunContext, AgentResult } from '../types.js';
@@ -17,27 +15,20 @@ const SLA_DEADLINES_HOURS: Record<string, { first_response: number; resolution: 
 };
 
 async function readCurrentTags(
-  useSupabase: boolean,
-  db: ReturnType<typeof getDb> | null,
-  supabase: ReturnType<typeof getSupabaseAdmin> | null,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   caseId: string,
   tenantId: string,
   workspaceId: string,
 ): Promise<string[]> {
-  if (useSupabase) {
-    const { data, error } = await supabase!
-      .from('cases')
-      .select('tags')
-      .eq('id', caseId)
-      .eq('tenant_id', tenantId)
-      .eq('workspace_id', workspaceId)
-      .maybeSingle();
-    if (error) throw error;
-    return JSON.parse(data?.tags ?? '[]');
-  }
-
-  const currentCase = db!.prepare('SELECT tags FROM cases WHERE id = ? AND tenant_id = ? AND workspace_id = ?').get(caseId, tenantId, workspaceId) as any;
-  return JSON.parse(currentCase?.tags ?? '[]');
+  const { data, error } = await supabase
+    .from('cases')
+    .select('tags')
+    .eq('id', caseId)
+    .eq('tenant_id', tenantId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+  if (error) throw error;
+  return JSON.parse(data?.tags ?? '[]');
 }
 
 export const triageAgentImpl: AgentImplementation = {
@@ -46,10 +37,7 @@ export const triageAgentImpl: AgentImplementation = {
   async execute(ctx: AgentRunContext): Promise<AgentResult> {
     const { contextWindow, gemini, reasoning, knowledgeBundle, tenantId, workspaceId } = ctx;
     const caseId = contextWindow.case.id;
-    const provider = getDatabaseProvider();
-    const useSupabase = provider === 'supabase';
-    const db = useSupabase ? null : getDb();
-    const supabase = useSupabase ? getSupabaseAdmin() : null;
+    const supabase = getSupabaseAdmin();
 
     const prompt = `You are a CRM triage specialist. Analyze this support case and classify it.
 
@@ -105,32 +93,22 @@ Return a JSON object with exactly these fields:
     const slaDeadlines = SLA_DEADLINES_HOURS[slaTier] ?? SLA_DEADLINES_HOURS.tier2;
     const firstResponseDeadline = new Date(Date.now() + slaDeadlines.first_response * 3600000).toISOString();
     const resolutionDeadline = new Date(Date.now() + slaDeadlines.resolution * 3600000).toISOString();
-    const currentTags = await readCurrentTags(useSupabase, db, supabase, caseId, tenantId, workspaceId);
+    const currentTags = await readCurrentTags(supabase, caseId, tenantId, workspaceId);
     const mergedTags = [...new Set([...currentTags, ...suggestedTags])];
 
-    if (useSupabase) {
-      const { error } = await supabase!.from('cases')
-        .update({
-          priority,
-          severity,
-          sla_first_response_deadline: firstResponseDeadline,
-          sla_resolution_deadline: resolutionDeadline,
-          tags: JSON.stringify(mergedTags),
-          updated_at: now,
-        })
-        .eq('id', caseId)
-        .eq('tenant_id', tenantId)
-        .eq('workspace_id', workspaceId);
-      if (error) throw error;
-    } else {
-      db!.prepare(`
-        UPDATE cases SET
-          priority = ?, severity = ?,
-          sla_first_response_deadline = ?, sla_resolution_deadline = ?,
-          tags = ?, updated_at = ?
-        WHERE id = ? AND tenant_id = ? AND workspace_id = ?
-      `).run(priority, severity, firstResponseDeadline, resolutionDeadline, JSON.stringify(mergedTags), now, caseId, tenantId, workspaceId);
-    }
+    const { error: updateError } = await supabase.from('cases')
+      .update({
+        priority,
+        severity,
+        sla_first_response_deadline: firstResponseDeadline,
+        sla_resolution_deadline: resolutionDeadline,
+        tags: JSON.stringify(mergedTags),
+        updated_at: now,
+      })
+      .eq('id', caseId)
+      .eq('tenant_id', tenantId)
+      .eq('workspace_id', workspaceId);
+    if (updateError) throw updateError;
 
     if (requiresImmediateEscalation) {
       try {
@@ -141,27 +119,19 @@ Return a JSON object with exactly these fields:
           escalationReason: escalationReason ?? 'Immediate escalation required by triage agent',
         };
 
-        if (useSupabase) {
-          const { error } = await supabase!.from('audit_events').insert({
-            id: randomUUID(),
-            tenant_id: tenantId,
-            workspace_id: workspaceId,
-            actor_type: 'agent',
-            action: 'escalation_required',
-            entity_type: 'case',
-            entity_id: caseId,
-            new_value: auditPayload.escalationReason,
-            metadata: auditPayload,
-            occurred_at: now,
-          });
-          if (error) throw error;
-        } else {
-          db!.prepare(`
-            INSERT INTO audit_events
-              (id, tenant_id, workspace_id, actor_type, action, entity_type, entity_id, new_value, metadata, occurred_at)
-            VALUES (?, ?, ?, 'agent', 'escalation_required', 'case', ?, ?, ?, ?)
-          `).run(randomUUID(), tenantId, workspaceId, caseId, auditPayload.escalationReason, JSON.stringify(auditPayload), now);
-        }
+        const { error } = await supabase.from('audit_events').insert({
+          id: randomUUID(),
+          tenant_id: tenantId,
+          workspace_id: workspaceId,
+          actor_type: 'agent',
+          action: 'escalation_required',
+          entity_type: 'case',
+          entity_id: caseId,
+          new_value: auditPayload.escalationReason,
+          metadata: auditPayload,
+          occurred_at: now,
+        });
+        if (error) throw error;
       } catch {
         // non-critical
       }

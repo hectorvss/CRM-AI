@@ -263,3 +263,13 @@ export function stopAuditExportSweeper(): void {
   if (auditExportIntervalId) clearInterval(auditExportIntervalId);
   auditExportIntervalId = null;
 }
+
+/**
+ * Single-shot variant invoked by the cron-driven scheduler tick (Vercel).
+ * Performs one sweep of pending audit export / deletion requests. Errors are
+ * surfaced to the caller — `runScheduledTasksOnce` records them and continues
+ * with other tasks.
+ */
+export async function auditExportRunOnce(): Promise<void> {
+  await sweepAuditExportRequests();
+}

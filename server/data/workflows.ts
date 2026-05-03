@@ -15,8 +15,15 @@ export interface WorkflowRepository {
   updateDefinition(id: string, tenantId: string, workspaceId: string, updates: any): Promise<void>;
 
   listVersions(workflowId: string): Promise<any[]>;
-  getVersion(id: string): Promise<any>;
-  getLatestVersion(workflowId: string): Promise<any>;
+  /**
+   * Look up a workflow_version by id. The `scope` parameter enforces tenant
+   * isolation at the DB layer — even when the caller has already verified the
+   * parent definition, this prevents accidental cross-tenant reads. Note that
+   * `workflow_versions` does NOT carry workspace_id (only the parent
+   * `workflow_definitions` does), so only `tenantId` is filtered here.
+   */
+  getVersion(id: string, scope: { tenantId: string; workspaceId?: string }): Promise<any>;
+  getLatestVersion(workflowId: string, scope: { tenantId: string; workspaceId?: string }): Promise<any>;
   createVersion(data: {
     id: string;
     workflowId: string;
@@ -29,7 +36,7 @@ export interface WorkflowRepository {
   }): Promise<void>;
   updateVersion(id: string, updates: any): Promise<void>;
 
-  listRecentRuns(tenantId: string, limit?: number): Promise<any[]>;
+  listRecentRuns(tenantId: string, workspaceId?: string, limit?: number): Promise<any[]>;
   listRunsByWorkflow(workflowId: string, tenantId: string, limit?: number): Promise<any[]>;
   getMetrics(workflowId: string, tenantId: string): Promise<any>;
 }
@@ -111,18 +118,27 @@ class SupabaseWorkflowRepository implements WorkflowRepository {
     return data || [];
   }
 
-  async getVersion(id: string) {
+  async getVersion(id: string, scope: { tenantId: string; workspaceId?: string }) {
     const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from('workflow_versions').select('*').eq('id', id).single();
+    // workflow_versions has tenant_id but no workspace_id; filter on tenant
+    // only. Use maybeSingle() so cross-tenant lookups return null instead of
+    // throwing the PGRST116 "no rows" error.
+    const { data } = await supabase
+      .from('workflow_versions')
+      .select('*')
+      .eq('id', id)
+      .eq('tenant_id', scope.tenantId)
+      .maybeSingle();
     return data;
   }
 
-  async getLatestVersion(workflowId: string) {
+  async getLatestVersion(workflowId: string, scope: { tenantId: string; workspaceId?: string }) {
     const supabase = getSupabaseAdmin();
     const { data } = await supabase
       .from('workflow_versions')
       .select('*')
       .eq('workflow_id', workflowId)
+      .eq('tenant_id', scope.tenantId)
       .order('version_number', { ascending: false })
       .limit(1);
     return data?.[0] || null;
@@ -157,12 +173,18 @@ class SupabaseWorkflowRepository implements WorkflowRepository {
     if (error) throw error;
   }
 
-  async listRecentRuns(tenantId: string, limit = 50) {
+  async listRecentRuns(tenantId: string, workspaceId?: string, limit = 50) {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    // workflow_runs now carries workspace_id directly (see migration
+    // 20260503_0002). Scope by both tenant_id and workspace_id.
+    let query = supabase
       .from('workflow_runs')
-      .select('*, workflow_versions!inner(workflow_id, workflow_definitions!workflow_versions_workflow_id_fkey(name)), cases(case_number)')
-      .eq('tenant_id', tenantId)
+      .select('*, workflow_versions!inner(workflow_id, workflow_definitions!workflow_versions_workflow_id_fkey(name, workspace_id)), cases(case_number)')
+      .eq('tenant_id', tenantId);
+    if (workspaceId) {
+      query = query.eq('workspace_id', workspaceId);
+    }
+    const { data, error } = await query
       .order('started_at', { ascending: false })
       .limit(limit);
     if (error) throw error;

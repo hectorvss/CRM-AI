@@ -15,6 +15,7 @@ import { runAgent } from '../agents/runner.js';
 import { registerHandler } from '../queue/handlers/index.js';
 import { JobType } from '../queue/types.js';
 import { logger } from '../utils/logger.js';
+import { requireScope } from '../lib/scope.js';
 import type { AgentExecutePayload, JobContext } from '../queue/types.js';
 
 async function handleAgentExecute(
@@ -35,13 +36,15 @@ async function handleAgentExecute(
     return;
   }
 
+  const { tenantId, workspaceId } = requireScope(ctx, 'agentExecute');
+
   logger.info('AGENT_EXECUTE: running agent', { slug, caseId, isTest });
 
   const result = await runAgent({
     agentSlug: slug,
     caseId,
-    tenantId: ctx.tenantId,
-    workspaceId: ctx.workspaceId ?? '',
+    tenantId,
+    workspaceId,
     triggerEvent: 'agent.execute',
     traceId: ctx.traceId ?? ctx.jobId,
     extraContext: { ...input, ...extraContext, isTest },
