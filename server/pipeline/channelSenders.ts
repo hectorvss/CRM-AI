@@ -44,6 +44,27 @@ export interface ChannelSendResult {
 
 export type OutboundChannel = 'whatsapp' | 'email' | 'sms';
 
+/**
+ * Channels that route to a per-tenant integration adapter instead of the
+ * global env-credential senders above. These need a `tenantId` to resolve
+ * the connector and (usually) a thread/recipient identifier from the
+ * conversation row (`external_thread_id`).
+ */
+export type TenantOutboundChannel =
+  | 'messenger'
+  | 'instagram'
+  | 'telegram'
+  | 'discord'
+  | 'slack'
+  | 'teams'
+  | 'front'
+  | 'intercom'
+  | 'zendesk'
+  | 'aircall'
+  | 'postmark'
+  | 'gmail'
+  | 'outlook';
+
 export interface SendOnChannelParams {
   channel: OutboundChannel;
   to:      string;
@@ -52,6 +73,21 @@ export interface SendOnChannelParams {
   subject?: string;
   /** Email-only: case reference used to build the default subject. */
   caseRef?: string;
+}
+
+export interface SendOnTenantChannelParams {
+  channel:     TenantOutboundChannel;
+  tenantId:    string;
+  workspaceId: string | null;
+  /** Recipient/thread identifier (PSID, channel id, conversation id, ticket id, etc.). */
+  to:          string;
+  content:     string;
+  subject?:    string;
+  /**
+   * Channel-specific extras carried from the originating conversation
+   * (teams: { teamId, channelId, messageId }, slack: { channel }, etc.).
+   */
+  meta?: Record<string, any>;
 }
 
 // ── WhatsApp via Meta Cloud API ───────────────────────────────────────────────
@@ -197,4 +233,180 @@ export async function sendOnChannel(
       throw new Error(`Unsupported outbound channel: ${exhaustive}`);
     }
   }
+}
+
+// ── Per-tenant channel dispatcher ─────────────────────────────────────────────
+
+/**
+ * Sends an outbound message on a per-tenant channel using the tenant's
+ * connected integration. Resolves the adapter via the appropriate
+ * `*ForTenant` helper, falls back to throwing IntegrationNotConfiguredError
+ * when the connector is missing.
+ *
+ * Imported lazily with dynamic import() so this module doesn't pull in 13
+ * tenant resolvers (and their adapters) at startup.
+ */
+export async function sendOnTenantChannel(
+  params: SendOnTenantChannelParams,
+): Promise<ChannelSendResult> {
+  const { channel, tenantId, workspaceId, to, content, subject, meta } = params;
+  const log = logger.child({ channel, tenantId });
+
+  switch (channel) {
+    case 'messenger': {
+      const { messengerForTenant } = await import('../integrations/messenger-tenant.js');
+      const r = await messengerForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Messenger connector not configured for tenant');
+      const out = await r.adapter.sendText({ recipientId: to, text: content });
+      return { messageId: out.messageId, simulated: false };
+    }
+    case 'instagram': {
+      const { instagramForTenant } = await import('../integrations/instagram-tenant.js');
+      const r = await instagramForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Instagram connector not configured for tenant');
+      const out = await r.adapter.sendText({ recipientId: to, text: content });
+      return { messageId: out.messageId, simulated: false };
+    }
+    case 'telegram': {
+      const { telegramForTenant } = await import('../integrations/telegram-tenant.js');
+      const r = await telegramForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Telegram connector not configured for tenant');
+      const out = await r.adapter.sendMessage({ chatId: to, text: content });
+      return { messageId: String((out as any).messageId ?? (out as any).message_id ?? randomUUID()), simulated: false };
+    }
+    case 'discord': {
+      const { discordForTenant } = await import('../integrations/discord-tenant.js');
+      const r = await discordForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Discord connector not configured for tenant');
+      const out = await r.adapter.sendMessage(to, { content });
+      return { messageId: String((out as any).id ?? randomUUID()), simulated: false };
+    }
+    case 'slack': {
+      const { slackForTenant } = await import('../integrations/slack-tenant.js');
+      const r = await slackForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Slack connector not configured for tenant');
+      const out = await r.adapter.postMessage({ channel: to, text: content, thread_ts: meta?.threadTs });
+      return { messageId: String((out as any).ts ?? randomUUID()), simulated: false };
+    }
+    case 'teams': {
+      const { teamsForTenant } = await import('../integrations/teams-tenant.js');
+      const r = await teamsForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Teams connector not configured for tenant');
+      const teamId    = meta?.teamId    ?? to;
+      const channelId = meta?.channelId ?? meta?.teamsChannelId;
+      const messageId = meta?.messageId ?? meta?.parentMessageId;
+      if (!teamId || !channelId || !messageId) {
+        throw new Error('Teams reply requires meta.teamId, meta.channelId, meta.messageId');
+      }
+      const out = await r.adapter.replyToChannelMessage(teamId, channelId, messageId, { content, contentType: 'text' });
+      return { messageId: String((out as any).id ?? randomUUID()), simulated: false };
+    }
+    case 'front': {
+      const { frontForTenant } = await import('../integrations/front-tenant.js');
+      const r = await frontForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Front connector not configured for tenant');
+      const out = await r.adapter.sendReply(to, { body: content, body_format: 'text' } as any);
+      return { messageId: String((out as any).id ?? randomUUID()), simulated: false };
+    }
+    case 'intercom': {
+      const { intercomForTenant } = await import('../integrations/intercom-tenant.js');
+      const r = await intercomForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Intercom connector not configured for tenant');
+      const out = await r.adapter.replyToConversation(to, {
+        message_type: 'comment',
+        type: 'admin',
+        admin_id: meta?.adminId ?? meta?.intercomAdminId,
+        body: content,
+      } as any);
+      return { messageId: String((out as any).id ?? randomUUID()), simulated: false };
+    }
+    case 'zendesk': {
+      const { zendeskForTenant } = await import('../integrations/zendesk-tenant.js');
+      const r = await zendeskForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Zendesk connector not configured for tenant');
+      const ticketId = Number(to);
+      if (!Number.isFinite(ticketId)) throw new Error('Zendesk reply requires a numeric ticket id');
+      await r.adapter.addComment(ticketId, { body: content, public: true });
+      return { messageId: `zendesk_${ticketId}_${Date.now()}`, simulated: false };
+    }
+    case 'aircall': {
+      const { aircallForTenant } = await import('../integrations/aircall-tenant.js');
+      const r = await aircallForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Aircall connector not configured for tenant');
+      // Aircall is voice-first: reply lands as a call comment / note.
+      const adapter: any = r.adapter;
+      if (typeof adapter.addComment === 'function' && meta?.callId) {
+        const out = await adapter.addComment(meta.callId, { content });
+        return { messageId: String(out?.id ?? randomUUID()), simulated: false };
+      }
+      log.warn('Aircall has no message-reply API; logging as note');
+      return { messageId: `aircall_note_${randomUUID()}`, simulated: false };
+    }
+    case 'postmark': {
+      const { postmarkForTenant } = await import('../integrations/postmark-tenant.js');
+      const r = await postmarkForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Postmark connector not configured for tenant');
+      const adapter: any = r.adapter;
+      const out = await adapter.sendEmail({
+        to,
+        subject: subject ?? 'Re: Your support request',
+        textBody: content,
+      });
+      return { messageId: String(out?.MessageID ?? out?.messageId ?? randomUUID()), simulated: false };
+    }
+    case 'gmail': {
+      const { gmailForTenant } = await import('../integrations/gmail-tenant.js');
+      const r = await gmailForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Gmail connector not configured for tenant');
+      const out = await r.adapter.sendMessage({
+        to,
+        subject: subject ?? 'Re: Your support request',
+        textBody: content,
+        threadId: meta?.threadId,
+      } as any);
+      return { messageId: String((out as any).id ?? randomUUID()), simulated: false };
+    }
+    case 'outlook': {
+      const { outlookForTenant } = await import('../integrations/outlook-tenant.js');
+      const r = await outlookForTenant(tenantId, workspaceId);
+      if (!r) throw new Error('Outlook connector not configured for tenant');
+      const adapter: any = r.adapter;
+      const out = await adapter.sendMessage({
+        to,
+        subject: subject ?? 'Re: Your support request',
+        body: content,
+      });
+      return { messageId: String(out?.id ?? randomUUID()), simulated: false };
+    }
+    default: {
+      const exhaustive: never = channel;
+      throw new Error(`Unsupported tenant outbound channel: ${exhaustive}`);
+    }
+  }
+}
+
+/**
+ * Returns true if the given channel string is one we know how to send on
+ * (either via global creds or per-tenant resolver).
+ */
+export function isKnownOutboundChannel(channel: string): boolean {
+  return (
+    channel === 'whatsapp' ||
+    channel === 'email' ||
+    channel === 'sms' ||
+    channel === 'web_chat' ||
+    channel === 'messenger' ||
+    channel === 'instagram' ||
+    channel === 'telegram' ||
+    channel === 'discord' ||
+    channel === 'slack' ||
+    channel === 'teams' ||
+    channel === 'front' ||
+    channel === 'intercom' ||
+    channel === 'zendesk' ||
+    channel === 'aircall' ||
+    channel === 'postmark' ||
+    channel === 'gmail' ||
+    channel === 'outlook'
+  );
 }

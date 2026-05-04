@@ -33,7 +33,12 @@ import { JobType }            from '../queue/types.js';
 import { logger }             from '../utils/logger.js';
 import { requireScope }       from '../lib/scope.js';
 import type { SendMessagePayload, JobContext } from '../queue/types.js';
-import { sendEmail, sendWhatsApp, sendSms } from './channelSenders.js';
+import { sendEmail, sendWhatsApp, sendSms, sendOnTenantChannel, type TenantOutboundChannel } from './channelSenders.js';
+
+const TENANT_CHANNELS = new Set<string>([
+  'messenger','instagram','telegram','discord','slack','teams','front',
+  'intercom','zendesk','aircall','postmark','gmail','outlook',
+]);
 
 // ── Main handler ───────────────────────────────────────────────────────────────
 
@@ -83,14 +88,23 @@ async function handleSendMessage(
 
   switch (channel) {
     case 'email':
-      recipientAddress = customer?.email || customer?.canonical_email || caseRow.source_entity_id;
+    case 'gmail':
+    case 'outlook':
+    case 'postmark':
+      recipientAddress = customer?.email || customer?.canonical_email || (conv as any)?.external_thread_id || caseRow.source_entity_id;
       break;
     case 'whatsapp':
     case 'sms':
-      recipientAddress = customer?.phone || caseRow.source_entity_id;
+      recipientAddress = customer?.phone || (conv as any)?.external_thread_id || caseRow.source_entity_id;
       break;
     case 'web_chat':
       recipientAddress = customer?.id || caseRow.source_entity_id; // session keyed by customer_id
+      break;
+    default:
+      // Per-tenant channels (messenger, telegram, slack, teams, front, intercom,
+      // zendesk, aircall, discord, instagram). Recipient is the originating
+      // thread/page/channel id stored on the conversation row.
+      recipientAddress = (conv as any)?.external_thread_id || caseRow.source_entity_id || customer?.id || null;
       break;
   }
 
@@ -126,13 +140,32 @@ async function handleSendMessage(
         simulated         = result.simulated;
         break;
       }
-      case 'web_chat':
-      default: {
+      case 'web_chat': {
         // Web chat delivery is handled by a WebSocket/SSE push layer outside this worker.
         // We persist the message and mark it as 'simulated' for now.
         externalMessageId = `webchat_${randomUUID()}`;
         simulated         = true;
         log.debug('Web chat: persisting outbound message (delivery via WebSocket)');
+        break;
+      }
+      default: {
+        if (TENANT_CHANNELS.has(channel)) {
+          const result = await sendOnTenantChannel({
+            channel:     channel as TenantOutboundChannel,
+            tenantId,
+            workspaceId,
+            to:          recipientAddress,
+            content:     payload.content,
+            subject:     conv.subject ?? `Re: Your Support Request [${caseRow.case_number}]`,
+            meta:        (conv as any)?.metadata ?? {},
+          });
+          externalMessageId = result.messageId;
+          simulated         = false;
+        } else {
+          log.warn('Unsupported channel — persisting as simulated', { channel });
+          externalMessageId = `unknown_${randomUUID()}`;
+          simulated         = true;
+        }
         break;
       }
     }

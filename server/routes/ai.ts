@@ -442,6 +442,101 @@ Now answer, following every rule in the Voice/Rules section above. No preambles,
   }
 });
 
+// ── POST /api/ai/copilot/global ──────────────────────────────────────────────
+//
+// Global Copilot — same agent powers as the Super Agent (planAndExecute), but
+// invoked from any screen. Has full access to the SaaS state (cases,
+// integrations, customers) via the same per-tenant tool catalog. The caller
+// passes a free-text question; the engine plans and (optionally) executes
+// tools just like /super-agent does.
+//
+// Body: { message: string, sessionId?: string, mode?: 'investigate'|'operate', dryRun?: boolean }
+
+router.post('/copilot/global', requirePermission('cases.read'), async (req: MultiTenantRequest, res) => {
+  try {
+    if (!req.tenantId) return res.status(401).json({ error: 'Authentication required' });
+    const message = String(req.body?.message ?? '').trim();
+    if (!message) return res.status(400).json({ error: 'message is required' });
+
+    const sessionId = String(req.body?.sessionId || `copilot-global-${req.userId || 'anon'}-${Date.now()}`);
+    const mode: 'investigate' | 'operate' = req.body?.mode === 'operate' ? 'operate' : 'investigate';
+    const dryRun = req.body?.dryRun === true;
+
+    const hasPermission = (perm: string) => Array.isArray(req.permissions) && req.permissions.includes(perm);
+
+    // Build a lightweight global state snapshot so the LLM has cross-screen
+    // context without us shipping the entire DB on every turn. The plan
+    // engine's tool catalog is what gives the Copilot its real powers — this
+    // is just the "what's in the system right now" backdrop.
+    const supabase = (await import('../db/supabase.js')).getSupabaseAdmin();
+    const scopeFilter = (q: any) => q.eq('tenant_id', req.tenantId).eq('workspace_id', req.workspaceId);
+    const [casesAgg, connectorsAgg, customersAgg] = await Promise.all([
+      scopeFilter(supabase.from('cases').select('id, status, priority, source_channel, case_number, ai_diagnosis', { count: 'exact', head: false })).order('created_at', { ascending: false }).limit(20),
+      scopeFilter(supabase.from('connectors').select('system, status, name')).limit(60),
+      scopeFilter(supabase.from('customers').select('id', { count: 'exact', head: true })),
+    ] as any);
+
+    const globalContext = {
+      recentCases: casesAgg.data || [],
+      caseCount: casesAgg.count ?? null,
+      connectors: connectorsAgg.data || [],
+      customerCount: customersAgg.count ?? null,
+    };
+
+    const result = await planEngine.planAndExecute(
+      {
+        userMessage: message,
+        sessionId,
+        userId: req.userId || `user-${req.tenantId}`,
+        tenantId: req.tenantId,
+        workspaceId: req.workspaceId ?? null,
+        hasPermission,
+        mode,
+        domainContext: globalContext,
+      },
+      { dryRun },
+    );
+
+    res.json({ ok: true, sessionId, ...result, context: globalContext });
+  } catch (err: any) {
+    console.error('global copilot error:', err);
+    res.status(500).json({ error: 'Internal server error', detail: err?.message ?? String(err) });
+  }
+});
+
+// ── POST /api/ai/copilot/global/invoke ───────────────────────────────────────
+//
+// Generic tool invoker for the Copilot — caseId-less. Same dispatcher as
+// /api/ai/copilot/:caseId/invoke but unscoped to a specific case.
+
+router.post('/copilot/global/invoke', requirePermission('cases.write'), async (req: MultiTenantRequest, res) => {
+  if (!req.tenantId) return res.status(401).json({ error: 'Authentication required' });
+  const toolName = String(req.body?.tool || '').trim();
+  const args = req.body?.args ?? {};
+  const dryRun = req.body?.dry_run === true;
+  if (!toolName) return res.status(400).json({ error: 'tool is required' });
+  const hasPermission = (perm: string) => Array.isArray(req.permissions) && req.permissions.includes(perm);
+
+  const result = await invokeTool({
+    toolName, args,
+    tenantId: req.tenantId,
+    workspaceId: req.workspaceId ?? null,
+    userId: req.userId ?? null,
+    hasPermission, dryRun,
+    planId: `copilot-global:${req.userId ?? 'anon'}`,
+  });
+  if (!result.ok) {
+    const code = (result as any).errorCode;
+    const status = code === 'TOOL_NOT_FOUND' ? 404
+      : code === 'PERMISSION_DENIED' ? 403
+      : code === 'INVALID_ARGS' ? 400
+      : code === 'TIMEOUT' ? 504
+      : 500;
+    return res.status(status).json(result);
+  }
+  return res.json(result);
+});
+
 // ── GET /api/ai/copilot/tools ────────────────────────────────────────────────
 //
 // Returns the planEngine tool catalog visible to the caller. The Copilot UI

@@ -127,7 +127,11 @@ export interface DraftReplyPayload {
 export interface SendMessagePayload {
   caseId: string;
   conversationId: string;
-  channel: 'email' | 'web_chat' | 'whatsapp' | 'sms';
+  channel:
+    | 'email' | 'web_chat' | 'whatsapp' | 'sms'
+    | 'gmail' | 'outlook' | 'postmark'
+    | 'messenger' | 'instagram' | 'telegram' | 'discord'
+    | 'slack' | 'teams' | 'front' | 'intercom' | 'zendesk' | 'aircall';
   content: string;
   /** Message row created immediately by the API for instant inbox feedback. */
   queuedMessageId?: string;

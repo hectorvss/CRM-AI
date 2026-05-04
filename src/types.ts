@@ -32,7 +32,25 @@ export interface NavigationTarget {
 export type NavigateInput = NavigationTarget | Page;
 export type NavigateFn = (target: NavigateInput, entityId?: string | null) => void;
 
-export type Channel = 'web_chat' | 'email' | 'whatsapp';
+export type Channel =
+  | 'web_chat'
+  | 'email'
+  | 'whatsapp'
+  | 'sms'
+  | 'messenger'
+  | 'instagram'
+  | 'telegram'
+  | 'discord'
+  | 'slack'
+  | 'teams'
+  | 'front'
+  | 'intercom'
+  | 'zendesk'
+  | 'aircall'
+  | 'postmark'
+  | 'gmail'
+  | 'outlook'
+  | 'sendgrid';
 
 export type MessageType = 'customer' | 'agent' | 'system' | 'internal' | 'ai';
 

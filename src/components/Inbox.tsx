@@ -527,20 +527,59 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
     }
   };
 
-  const getChannelIcon = (channel: Channel) => {
+  const getChannelIcon = (channel: Channel | string) => {
     switch (channel) {
-      case 'whatsapp': return 'forum';
-      case 'email': return 'mail';
-      default: return 'chat_bubble';
+      case 'whatsapp':  return 'forum';
+      case 'email':
+      case 'gmail':
+      case 'outlook':
+      case 'postmark':  return 'mail';
+      case 'sms':       return 'sms';
+      case 'messenger': return 'chat';
+      case 'instagram': return 'photo_camera';
+      case 'telegram':  return 'send';
+      case 'discord':   return 'sports_esports';
+      case 'slack':     return 'tag';
+      case 'teams':     return 'groups';
+      case 'front':     return 'inbox';
+      case 'intercom':  return 'support_agent';
+      case 'zendesk':   return 'confirmation_number';
+      case 'aircall':   return 'phone_in_talk';
+      default:          return 'chat_bubble';
     }
   };
 
-  const getChannelColor = (channel: Channel) => {
+  const getChannelColor = (channel: Channel | string) => {
     switch (channel) {
-      case 'whatsapp': return 'text-whatsapp bg-whatsapp/10';
-      case 'email': return 'text-blue-600 bg-blue-100';
-      default: return 'text-gray-600 bg-gray-200';
+      case 'whatsapp':  return 'text-whatsapp bg-whatsapp/10';
+      case 'email':
+      case 'gmail':
+      case 'outlook':
+      case 'postmark':  return 'text-blue-600 bg-blue-100';
+      case 'sms':       return 'text-emerald-600 bg-emerald-100';
+      case 'messenger': return 'text-[#0084ff] bg-[#0084ff]/10';
+      case 'instagram': return 'text-pink-600 bg-pink-100';
+      case 'telegram':  return 'text-sky-600 bg-sky-100';
+      case 'discord':   return 'text-indigo-600 bg-indigo-100';
+      case 'slack':     return 'text-purple-600 bg-purple-100';
+      case 'teams':     return 'text-violet-600 bg-violet-100';
+      case 'front':     return 'text-amber-600 bg-amber-100';
+      case 'intercom':  return 'text-blue-500 bg-blue-100';
+      case 'zendesk':   return 'text-green-700 bg-green-100';
+      case 'aircall':   return 'text-orange-600 bg-orange-100';
+      default:          return 'text-gray-600 bg-gray-200';
     }
+  };
+
+  const getChannelLabel = (channel: Channel | string): string => {
+    const map: Record<string, string> = {
+      whatsapp: 'WhatsApp', email: 'Email', web_chat: 'Web Chat', sms: 'SMS',
+      messenger: 'Messenger', instagram: 'Instagram', telegram: 'Telegram',
+      discord: 'Discord', slack: 'Slack', teams: 'Teams', front: 'Front',
+      intercom: 'Intercom', zendesk: 'Zendesk', aircall: 'Aircall',
+      postmark: 'Email', gmail: 'Gmail', outlook: 'Outlook',
+    };
+    return map[channel] ?? channel;
   };
 
   return (
@@ -796,7 +835,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                   <span className="truncate min-w-0" title={`${selectedConv.caseId}: ${selectedConv.lastMessage}`}>
                     {selectedConv.caseId}: {selectedConv.lastMessage}
                   </span>
-                  <span className="text-xs font-normal text-gray-400 flex-shrink-0">via {selectedConv.channel === 'whatsapp' ? 'WhatsApp' : selectedConv.channel === 'email' ? 'Email' : 'Web Chat'}</span>
+                  <span className="text-xs font-normal text-gray-400 flex-shrink-0">via {getChannelLabel(selectedConv.channel)}</span>
                 </h2>
                 <p className="text-xs text-gray-500 truncate" title={`${selectedConv.contactName} • ${selectedConv.orderId} • ${selectedConv.brand}`}>
                   {selectedConv.contactName} • {selectedConv.orderId} • {selectedConv.brand}
@@ -1069,7 +1108,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                   <span className={`inline-block w-3 h-3 transform bg-white rounded-full shadow transition-transform ${composeMode === 'reply' ? 'translate-x-5' : 'translate-x-1'}`}></span>
                 </button>
                 <span className={`text-xs font-medium flex-shrink-0 ${composeMode === 'reply' ? 'text-secondary' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {composeMode === 'reply' ? `Reply as ${selectedConv.channel === 'email' ? 'Email' : selectedConv.channel === 'whatsapp' ? 'WhatsApp' : 'Web Chat'}` : 'Internal Note'}
+                  {composeMode === 'reply' ? `Reply via ${getChannelLabel(selectedConv.channel)}` : 'Internal Note'}
                 </span>
                 {/* Emoji picker trigger */}
                 <div className="ml-auto relative" ref={emojiPickerRef}>
@@ -1312,7 +1351,7 @@ export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) 
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">Channel</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedConv.channel === 'whatsapp' ? 'WhatsApp' : selectedConv.channel === 'email' ? 'Email' : 'Web Chat'}</span>
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{getChannelLabel(selectedConv.channel)}</span>
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] uppercase tracking-wider text-gray-500">SLA</span>
