@@ -241,6 +241,12 @@ export const casesApi = {
   state: (id: string) => request<any>(`/cases/${id}/state`),
   graph: (id: string) => request<any>(`/cases/${id}/graph`),
   resolve: (id: string) => request<any>(`/cases/${id}/resolve`),
+  checks: (id: string) => request<any>(`/cases/${id}/checks`),
+  startAiResolve: (id: string, payload?: { dry_run?: boolean; autonomy?: 'assisted' | 'full' }) =>
+    request<any>(`/cases/${id}/resolve/start`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
   resolutionPlan: (id: string) => request<any>(`/cases/${id}/resolution-plan`),
   runResolutionStep: (id: string, stepId: string, payload?: Record<string, any>) =>
     request<any>(`/cases/${id}/resolution-plan/steps/${encodeURIComponent(stepId)}/run`, {

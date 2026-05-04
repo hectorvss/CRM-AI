@@ -216,6 +216,29 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   // ── Timeline data from graph API ────────────────────────────────
   const timeline = useMemo(() => graphData?.timeline || [], [graphData]);
 
+  // ── Categorised checks (per-category checklist with semaphore) ──
+  const checksData = useMemo(() => graphData?.checks || null, [graphData]);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const toggleCategory = useCallback((key: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+  // Auto-expand categories with failures the first time data arrives
+  useEffect(() => {
+    if (!checksData?.categories) return;
+    const failingKeys = checksData.categories
+      .filter((c: any) => c.status === 'fail' || c.status === 'warn')
+      .map((c: any) => c.key);
+    setExpandedCategories(prev => {
+      if (prev.size > 0) return prev;
+      return new Set<string>(failingKeys);
+    });
+  }, [checksData]);
+
   // ── Root data from graph API ────────────────────────────────────
   const rootData = useMemo(() => {
     if (graphData?.root) {
@@ -482,21 +505,33 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
   const handleResolveWithAI = useCallback(async () => {
     if (!selectedId) return;
     setIsAiResolving(true);
-    setResolveStatusMessage(null);
-    const caseLabel = selectedCase?.orderId || selectedId;
-    const prompt = buildAiResolutionPrompt(caseResolve, {
-      caseLabel,
-      customerName: selectedCase?.customerName,
-    });
+    setResolveStatusMessage('Agent reading case state and planning…');
     try {
-      const response = await superAgentApi.command(prompt, {
-        mode: 'operate',
-        autonomyLevel: 'assisted',
-      });
-      const summary = response?.summary || response?.response?.summary || 'AI agent has started resolving the case.';
+      // Use the dedicated /resolve/start endpoint that wires the case bundle
+      // (with the full identified_problems list) directly into the Plan
+      // Engine. No prompt-building gymnastics on the client.
+      const response = await casesApi.startAiResolve(selectedId, { autonomy: 'assisted' });
+      const summary = response?.summary
+        || (response?.response?.kind === 'plan'
+          ? `Plan executed (${response?.trace?.steps?.length ?? response?.trace?.stepResults?.length ?? 0} steps).`
+          : response?.response?.kind === 'clarification'
+            ? `Agent needs clarification: ${response?.response?.question}`
+            : 'AI agent finished.');
       setResolveStatusMessage(summary);
     } catch (error: any) {
-      setResolveStatusMessage(error?.message || 'Unable to dispatch the AI resolution agent.');
+      // Fallback to legacy super_agent dispatcher if the new endpoint fails.
+      try {
+        const caseLabel = selectedCase?.orderId || selectedId;
+        const prompt = buildAiResolutionPrompt(caseResolve, {
+          caseLabel,
+          customerName: selectedCase?.customerName,
+        });
+        const response = await superAgentApi.command(prompt, { mode: 'operate', autonomyLevel: 'assisted' });
+        const summary = response?.summary || response?.response?.summary || 'AI agent dispatched via Super Agent fallback.';
+        setResolveStatusMessage(summary);
+      } catch (err: any) {
+        setResolveStatusMessage(err?.message || error?.message || 'Unable to dispatch the AI resolution agent.');
+      }
     } finally {
       setIsAiResolving(false);
     }
@@ -616,13 +651,82 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
             )}
 
             {graphView === 'tree' ? (
-              <div className="flex-1 flex items-center justify-center relative bg-white dark:bg-card-dark">
+              <div className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-card-dark p-6 pt-20">
                 {(graphLoading || resolveLoading || stateLoading) && !graphData && !resolveData && !stateData ? (
-                  <LoadingState title="Loading case graph" message="Fetching live graph, resolve and state data." compact />
+                  <LoadingState title="Loading case graph" message="Running automated checks across every category…" compact />
+                ) : checksData?.categories?.length ? (
+                  <div className="max-w-3xl mx-auto space-y-3">
+                    {/* Totals header */}
+                    <div className="flex items-center gap-4 px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-800/30 border border-gray-100 dark:border-gray-700">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Run summary</span>
+                      <span className="flex items-center gap-1.5 text-xs"><span className="w-2 h-2 rounded-full bg-emerald-500"></span><span className="font-semibold text-gray-700 dark:text-gray-200">{checksData.totals.pass}</span><span className="text-gray-500">passed</span></span>
+                      <span className="flex items-center gap-1.5 text-xs"><span className="w-2 h-2 rounded-full bg-amber-400"></span><span className="font-semibold text-gray-700 dark:text-gray-200">{checksData.totals.warn}</span><span className="text-gray-500">to review</span></span>
+                      <span className="flex items-center gap-1.5 text-xs"><span className="w-2 h-2 rounded-full bg-red-500"></span><span className="font-semibold text-gray-700 dark:text-gray-200">{checksData.totals.fail}</span><span className="text-gray-500">issues</span></span>
+                      <span className="flex items-center gap-1.5 text-xs"><span className="w-2 h-2 rounded-full bg-gray-300"></span><span className="font-semibold text-gray-500">{checksData.totals.skip}</span><span className="text-gray-500">n/a</span></span>
+                    </div>
+                    {checksData.categories.map((cat: any) => {
+                      const isExpanded = expandedCategories.has(cat.key);
+                      const dot = cat.status === 'fail' ? 'bg-red-500' : cat.status === 'warn' ? 'bg-amber-400' : cat.status === 'pass' ? 'bg-emerald-500' : 'bg-gray-300';
+                      const ring = cat.status === 'fail' ? 'border-red-200' : cat.status === 'warn' ? 'border-amber-200' : cat.status === 'pass' ? 'border-emerald-200' : 'border-gray-200';
+                      return (
+                        <div key={cat.key} className={`rounded-xl border ${ring} dark:border-gray-700 bg-white dark:bg-card-dark overflow-hidden`}>
+                          <button
+                            type="button"
+                            onClick={() => toggleCategory(cat.key)}
+                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className={`w-2.5 h-2.5 rounded-full ${dot} flex-shrink-0`}></span>
+                              <span className="text-sm font-semibold text-gray-900 dark:text-white">{cat.label}</span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {cat.checks.length} check{cat.checks.length === 1 ? '' : 's'}
+                              </span>
+                              <div className="flex items-center gap-1.5 ml-1">
+                                {cat.counts.fail > 0 && <span className="text-[10px] font-bold text-red-600">{cat.counts.fail}✗</span>}
+                                {cat.counts.warn > 0 && <span className="text-[10px] font-bold text-amber-600">{cat.counts.warn}⚠</span>}
+                                {cat.counts.pass > 0 && <span className="text-[10px] font-bold text-emerald-600">{cat.counts.pass}✓</span>}
+                              </div>
+                            </div>
+                            <span className={`material-symbols-outlined text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                          </button>
+                          {isExpanded && (
+                            <div className="border-t border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+                              {cat.checks.map((c: any) => {
+                                const cdot = c.status === 'fail' ? 'bg-red-500' : c.status === 'warn' ? 'bg-amber-400' : c.status === 'pass' ? 'bg-emerald-500' : 'bg-gray-300';
+                                return (
+                                  <div key={c.id} className="px-4 py-2.5 flex items-start gap-3 hover:bg-gray-50/60 dark:hover:bg-gray-800/20 transition-colors">
+                                    <span className={`mt-1.5 w-1.5 h-1.5 rounded-full ${cdot} flex-shrink-0`}></span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm text-gray-800 dark:text-gray-200">{c.label}</div>
+                                      {c.detail && <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{c.detail}</div>}
+                                      {c.evidence?.length ? (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {c.evidence.slice(0, 4).map((ev: string, i: number) => (
+                                            <span key={i} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{ev}</span>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    {c.at && (
+                                      <span className="text-[10px] text-gray-400 font-mono flex-shrink-0">
+                                        {new Date(c.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 ) : branches.length > 0 ? (
-                  <TreeGraph onNavigate={onPageChange} branches={branches} rootData={rootData} />
+                  <div className="flex items-center justify-center min-h-full">
+                    <TreeGraph onNavigate={onPageChange} branches={branches} rootData={rootData} />
+                  </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center text-gray-400">
+                  <div className="flex flex-col items-center justify-center text-gray-400 min-h-full">
                     <span className="material-symbols-outlined text-5xl mb-3">account_tree</span>
                     <p className="text-sm font-medium">
                       {selectedId ? (graphLoading ? 'Loading graph...' : 'No graph data available') : 'Select a case to view its graph'}
@@ -689,6 +793,32 @@ export default function CaseGraph({ onPageChange, focusCaseId }: { onPageChange:
                       <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
                         {resolveStatusMessage}
                       </div>
+                    )}
+
+                    {/* Identified Problems — derived from failing/warning checks */}
+                    {(caseResolve?.identified_problems || []).length > 0 && (
+                      <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                          <div>
+                            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Identified problems</h2>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{caseResolve.identified_problems.length} issue{caseResolve.identified_problems.length === 1 ? '' : 's'} detected by the automated checks</p>
+                          </div>
+                        </div>
+                        <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {caseResolve.identified_problems.map((p: any) => (
+                            <li key={p.id} className="px-6 py-3 flex items-start gap-3">
+                              <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${p.severity === 'critical' ? 'bg-red-500' : 'bg-amber-400'}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] uppercase font-bold tracking-wide text-gray-500 dark:text-gray-400">{p.category}</span>
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white">{p.label}</span>
+                                </div>
+                                {p.detail && <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{p.detail}</div>}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
                     )}
 
                     {/* Key Problem Card */}

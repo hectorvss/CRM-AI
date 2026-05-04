@@ -160,11 +160,95 @@ router.get('/:id/resolve', async (req: MultiTenantRequest, res: Response) => {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
     const bundle = await caseRepository.getBundle(scope, req.params.id);
     if (!bundle) return res.status(404).json({ error: 'Case not found' });
-    
+
     res.json(buildResolveView(bundle));
   } catch (error) {
     console.error('Error fetching case resolve view:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/cases/:id/checks ───────────────────────────────────────────────
+//
+// The semaphore-graded list of automated verifications the SaaS has run on
+// this case. Drives the Tree View categories and the Timeline interleave.
+router.get('/:id/checks', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+    const { buildCaseChecks } = await import('../data/caseChecks.js');
+    res.json(buildCaseChecks(bundle));
+  } catch (error) {
+    console.error('Error fetching case checks:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/cases/:id/resolve/start ───────────────────────────────────────
+//
+// Kicks off an autonomous resolution run via the Plan Engine. The same agent
+// powers as the Super Agent — it reads the case bundle, plans a sequence of
+// tools, and executes them with permission checks + dry-run guards.
+router.post('/:id/resolve/start', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    if (!req.tenantId) return res.status(401).json({ error: 'Authentication required' });
+    const caseId = req.params.id;
+    const dryRun = req.body?.dry_run === true;
+    const autonomy = req.body?.autonomy === 'full' ? 'full' : 'assisted';
+
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const bundle = await caseRepository.getBundle(scope, caseId);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+
+    const { buildCaseChecks } = await import('../data/caseChecks.js');
+    const checks = buildCaseChecks(bundle);
+    const failing = checks.flat.filter((c: any) => c.status === 'fail');
+    const warning = checks.flat.filter((c: any) => c.status === 'warn');
+
+    const userMessage = [
+      `Resolve case ${bundle.case.case_number} for customer ${bundle.customer?.canonical_name || 'unknown'}.`,
+      bundle.case.ai_diagnosis ? `Diagnosis: ${bundle.case.ai_diagnosis}` : '',
+      failing.length ? `\nIdentified problems (${failing.length} critical):\n${failing.map((c: any) => `  - [${c.category}] ${c.label}${c.detail ? ` — ${c.detail}` : ''}`).join('\n')}` : '',
+      warning.length ? `\nWarnings (${warning.length}):\n${warning.slice(0, 8).map((c: any) => `  - [${c.category}] ${c.label}`).join('\n')}` : '',
+      `\nUse the available tools to resolve every problem. Request approval for any sensitive operation. After execution, summarise what changed.`,
+    ].filter(Boolean).join('\n');
+
+    const { planEngine } = await import('../agents/planEngine/index.js');
+    const hasPermission = (perm: string) => Array.isArray(req.permissions) && (req.permissions.includes(perm) || req.permissions.includes('*'));
+    const sessionId = `case-resolve-${caseId}-${Date.now()}`;
+
+    const result = await planEngine.planAndExecute(
+      {
+        userMessage,
+        sessionId,
+        userId: req.userId || `user-${req.tenantId}`,
+        tenantId: req.tenantId!,
+        workspaceId: req.workspaceId ?? null,
+        hasPermission,
+        mode: 'operate',
+        domainContext: {
+          caseId,
+          caseNumber: bundle.case.case_number,
+          customerName: bundle.customer?.canonical_name,
+          checks: checks.flat,
+          autonomy,
+        },
+      },
+      { dryRun },
+    );
+
+    res.json({
+      ok: true,
+      sessionId,
+      identified_problems: failing.length + warning.length,
+      summary: result.trace?.summary || (result.response.kind === 'plan' ? `Plan with ${(result.response as any).plan?.steps?.length || 0} step(s) generated.` : (result.response as any).message || (result.response as any).question || 'No plan generated.'),
+      response: result.response,
+      trace: result.trace,
+    });
+  } catch (err: any) {
+    console.error('case resolve/start error:', err);
+    res.status(500).json({ error: 'Internal server error', detail: err?.message ?? String(err) });
   }
 });
 

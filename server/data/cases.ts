@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { buildSlaView, canonicalHealth, compactStrings, asArray } from './shared.js';
+import { buildCaseChecks as buildCaseChecksImpl } from './caseChecks.js';
 
 export interface CaseScope {
   tenantId: string;
@@ -1202,6 +1203,29 @@ function buildInboxView(bundle: any) {
 
 function buildGraphView(bundle: any) {
   const state = buildCaseState(bundle);
+  const checks = buildCaseChecksImpl(bundle);
+  // Merge checks into the timeline so the chronological view shows every
+  // automated verification the SaaS has run, side-by-side with messages,
+  // status changes and webhook events.
+  const checkTimelineEntries = checks.flat
+    .filter((c: any) => c.at)
+    .map((c: any) => ({
+      id: `check:${c.id}`,
+      entry_type: 'check',
+      type: 'check',
+      category: c.category,
+      content: c.detail ? `${c.label} — ${c.detail}` : c.label,
+      severity: c.status === 'fail' ? 'critical' : c.status === 'warn' ? 'warning' : c.status === 'pass' ? 'healthy' : 'info',
+      occurred_at: c.at,
+      icon: 'fact_check',
+      source: c.category,
+      domain: c.category,
+    }));
+  const mergedTimeline = [...state.timeline, ...checkTimelineEntries].sort((a: any, b: any) => {
+    const ta = new Date(a.occurred_at || 0).getTime();
+    const tb = new Date(b.occurred_at || 0).getTime();
+    return tb - ta;
+  });
   return {
     root: {
       case_id: bundle.case.id,
@@ -1212,12 +1236,14 @@ function buildGraphView(bundle: any) {
       status: bundle.case.status,
     },
     branches: Object.values(state.systems),
-    timeline: state.timeline,
+    checks,
+    timeline: mergedTimeline,
   };
 }
 
 function buildResolveView(bundle: any) {
   const state = buildCaseState(bundle);
+  const checks = buildCaseChecksImpl(bundle);
   const conflict = state.conflict;
   const policyEvaluations = bundle.policy_evaluations ?? [];
   const policyRules = bundle.policy_rules ?? [];
@@ -1307,6 +1333,20 @@ function buildResolveView(bundle: any) {
     },
     linked_cases: bundle.linked_cases ?? [],
     notes: bundle.internal_notes ?? [],
+    // Identified problems — checks that came back fail/warn, surfaced as
+    // first-class cards in the Resolve panel.
+    identified_problems: checks.flat
+      .filter((c: any) => c.status === 'fail' || c.status === 'warn')
+      .map((c: any) => ({
+        id: c.id,
+        category: c.category,
+        label: c.label,
+        severity: c.status === 'fail' ? 'critical' : 'warning',
+        detail: c.detail || '',
+        evidence: c.evidence || [],
+        at: c.at,
+      })),
+    checks,
   };
 }
 
