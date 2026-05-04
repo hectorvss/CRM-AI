@@ -4,6 +4,11 @@
   "outputDirectory": "dist",
   "cleanUrls": false,
   "trailingSlash": false,
+  "functions": {
+    "api/index.ts": {
+      "excludeFiles": "{dist/**,public-landing/**,public-landing-v2/**,landing-v2/**,landing/**,src/**,tmp-figma/**,.figma-extract/**,tests/**,scripts/**,docs/**,*.md,*.png,*.jpg,*.jpeg,*.gif,*.webp,*.svg,*.ico,**/*.test.ts,**/*.spec.ts}"
+    }
+  },
   "rewrites": [
     { "source": "/api/:path*",      "destination": "/api/index" },
     { "source": "/webhooks/:path*", "destination": "/api/index" },

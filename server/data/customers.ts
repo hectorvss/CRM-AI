@@ -331,7 +331,7 @@ export function createCustomerRepository(): CustomerRepository {
       // (URL-encodes as space etc.), and `phone` very often does. Issue
       // separate `.eq()` queries — first hit wins, ordered by recency.
       const supabase = getSupabaseAdmin();
-      const lookups: Promise<any>[] = [];
+      const lookups: PromiseLike<any>[] = [];
       if (email) {
         const e = email.toLowerCase();
         lookups.push(
