@@ -102,6 +102,198 @@ function extractStripe(eventType: string, body: Record<string, any>): EntityExtr
   return { entityType: 'unknown', entityId: null, eventCategory: 'unknown' };
 }
 
+// ── Channel inbound (customer-facing messaging) ─────────────────────────────
+
+function extractWhatsApp(topic: string, body: Record<string, any>): EntityExtraction {
+  const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0] ?? body?.message ?? body;
+  return { entityType: 'message', entityId: msg?.id ?? body?.message_id ?? null, eventCategory: 'inbox' };
+}
+function extractMessenger(topic: string, body: Record<string, any>): EntityExtraction {
+  const msg = body?.entry?.[0]?.messaging?.[0] ?? body;
+  return { entityType: 'message', entityId: msg?.message?.mid ?? msg?.timestamp ?? null, eventCategory: 'inbox' };
+}
+function extractInstagram(topic: string, body: Record<string, any>): EntityExtraction {
+  const ev = body?.entry?.[0]?.messaging?.[0] ?? body?.entry?.[0]?.changes?.[0] ?? body;
+  return { entityType: 'message', entityId: ev?.message?.mid ?? ev?.value?.id ?? null, eventCategory: 'inbox' };
+}
+function extractTelegram(topic: string, body: Record<string, any>): EntityExtraction {
+  const m = body?.message ?? body?.callback_query?.message ?? body;
+  return { entityType: 'message', entityId: m?.message_id != null ? String(m.message_id) : null, eventCategory: 'inbox' };
+}
+function extractTwilio(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'message', entityId: body?.MessageSid ?? body?.SmsSid ?? null, eventCategory: 'inbox' };
+}
+function extractGmail(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'message', entityId: body?.message?.data ?? body?.historyId ?? null, eventCategory: 'inbox' };
+}
+function extractOutlook(topic: string, body: Record<string, any>): EntityExtraction {
+  const r = body?.value?.[0]?.resourceData ?? {};
+  return { entityType: 'message', entityId: r?.id ?? null, eventCategory: 'inbox' };
+}
+function extractPostmark(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: body?.RecordType === 'Inbound' ? 'message' : 'email_event', entityId: body?.MessageID ?? null, eventCategory: body?.RecordType === 'Inbound' ? 'inbox' : 'email' };
+}
+function extractDiscord(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'interaction', entityId: body?.id ?? null, eventCategory: 'inbox' };
+}
+function extractSlack(topic: string, body: Record<string, any>): EntityExtraction {
+  const ev = body?.event ?? body;
+  return { entityType: 'message', entityId: ev?.ts ?? ev?.event_ts ?? null, eventCategory: 'team_chat' };
+}
+function extractTeams(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'message', entityId: body?.value?.[0]?.resourceData?.id ?? null, eventCategory: 'team_chat' };
+}
+function extractAircall(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'call', entityId: body?.data?.id != null ? String(body.data.id) : null, eventCategory: 'voice' };
+}
+function extractZoom(topic: string, body: Record<string, any>): EntityExtraction {
+  const m = body?.payload?.object ?? {};
+  if (topic.startsWith('recording.')) return { entityType: 'recording', entityId: m?.uuid ?? m?.id ?? null, eventCategory: 'voice' };
+  return { entityType: 'meeting', entityId: m?.uuid ?? m?.id ?? null, eventCategory: 'voice' };
+}
+
+// ── Support inboxes ───────────────────────────────────────────────────────────
+
+function extractIntercom(topic: string, body: Record<string, any>): EntityExtraction {
+  if (topic.startsWith('intercom.conversation.') || topic.includes('conversation')) {
+    return { entityType: 'conversation', entityId: body?.data?.item?.id ?? null, eventCategory: 'support' };
+  }
+  if (topic.includes('contact')) return { entityType: 'contact', entityId: body?.data?.item?.id ?? null, eventCategory: 'customer' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'support' };
+}
+function extractZendesk(topic: string, body: Record<string, any>): EntityExtraction {
+  if (topic.includes('ticket')) return { entityType: 'ticket', entityId: body?.ticket?.id != null ? String(body.ticket.id) : null, eventCategory: 'support' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'support' };
+}
+function extractFront(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'conversation', entityId: body?.conversation?.id ?? body?.target?.data?.id ?? null, eventCategory: 'support' };
+}
+
+// ── Engineering / project mgmt ────────────────────────────────────────────────
+
+function extractLinear(topic: string, body: Record<string, any>): EntityExtraction {
+  const t = String(body?.type ?? '').toLowerCase();
+  if (t === 'comment') return { entityType: 'issue_comment', entityId: body?.data?.id ?? null, eventCategory: 'engineering' };
+  return { entityType: 'issue', entityId: body?.data?.id ?? null, eventCategory: 'engineering' };
+}
+function extractJira(topic: string, body: Record<string, any>): EntityExtraction {
+  if (topic.startsWith('jira.comment_') || topic.includes('comment')) return { entityType: 'issue_comment', entityId: body?.comment?.id ?? null, eventCategory: 'engineering' };
+  return { entityType: 'issue', entityId: body?.issue?.id ?? null, eventCategory: 'engineering' };
+}
+function extractGithub(topic: string, body: Record<string, any>): EntityExtraction {
+  if (topic.startsWith('github.issues') || topic.startsWith('github.issue_comment')) {
+    return { entityType: topic.includes('comment') ? 'issue_comment' : 'issue', entityId: body?.issue?.number != null ? String(body.issue.number) : null, eventCategory: 'engineering' };
+  }
+  if (topic.startsWith('github.pull_request')) return { entityType: 'pull_request', entityId: body?.pull_request?.number != null ? String(body.pull_request.number) : null, eventCategory: 'engineering' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'engineering' };
+}
+function extractGitlab(topic: string, body: Record<string, any>): EntityExtraction {
+  const kind = String(body?.object_kind ?? '').toLowerCase();
+  if (kind === 'issue') return { entityType: 'issue', entityId: body?.object_attributes?.iid != null ? String(body.object_attributes.iid) : null, eventCategory: 'engineering' };
+  if (kind === 'merge_request') return { entityType: 'merge_request', entityId: body?.object_attributes?.iid != null ? String(body.object_attributes.iid) : null, eventCategory: 'engineering' };
+  if (kind === 'note') return { entityType: 'issue_comment', entityId: body?.object_attributes?.id != null ? String(body.object_attributes.id) : null, eventCategory: 'engineering' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'engineering' };
+}
+function extractSentry(topic: string, body: Record<string, any>): EntityExtraction {
+  const issue = body?.data?.issue ?? body?.issue;
+  if (issue) return { entityType: 'sentry_issue', entityId: issue?.id != null ? String(issue.id) : null, eventCategory: 'errors' };
+  if (body?.data?.event) return { entityType: 'error_event', entityId: body?.data?.event?.event_id ?? null, eventCategory: 'errors' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'errors' };
+}
+function extractAsana(topic: string, body: Record<string, any>): EntityExtraction {
+  const ev = body?.events?.[0];
+  if (ev?.resource?.resource_type === 'task') return { entityType: 'task', entityId: ev.resource.gid ?? null, eventCategory: 'productivity' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'productivity' };
+}
+
+// ── CRM / Commerce / Payments ─────────────────────────────────────────────────
+
+function extractWoocommerce(topic: string, body: Record<string, any>): EntityExtraction {
+  if (topic.includes('order')) return { entityType: 'order', entityId: body?.id != null ? String(body.id) : null, eventCategory: 'commerce' };
+  if (topic.includes('customer')) return { entityType: 'customer', entityId: body?.id != null ? String(body.id) : null, eventCategory: 'customer' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'commerce' };
+}
+function extractPaypal(topic: string, body: Record<string, any>): EntityExtraction {
+  const t = String(body?.event_type ?? topic ?? '');
+  if (t.includes('PAYMENT')) return { entityType: 'payment', entityId: body?.resource?.id ?? null, eventCategory: 'payment' };
+  if (t.includes('REFUND')) return { entityType: 'refund', entityId: body?.resource?.id ?? null, eventCategory: 'payment' };
+  if (t.includes('DISPUTE')) return { entityType: 'dispute', entityId: body?.resource?.dispute_id ?? body?.resource?.id ?? null, eventCategory: 'payment' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'payment' };
+}
+function extractHubspot(topic: string, body: Record<string, any>): EntityExtraction {
+  const ev = Array.isArray(body) ? body[0] : body?.events?.[0] ?? body;
+  const sub = String(ev?.subscriptionType ?? topic ?? '');
+  if (sub.includes('contact')) return { entityType: 'contact', entityId: ev?.objectId != null ? String(ev.objectId) : null, eventCategory: 'crm' };
+  if (sub.includes('deal')) return { entityType: 'deal', entityId: ev?.objectId != null ? String(ev.objectId) : null, eventCategory: 'crm' };
+  if (sub.includes('ticket')) return { entityType: 'ticket', entityId: ev?.objectId != null ? String(ev.objectId) : null, eventCategory: 'support' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'crm' };
+}
+function extractSalesforce(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: body?.sobject?.attributes?.type?.toLowerCase?.() ?? 'sf_record', entityId: body?.sobject?.Id ?? null, eventCategory: 'crm' };
+}
+function extractPipedrive(topic: string, body: Record<string, any>): EntityExtraction {
+  const m = body?.meta ?? {};
+  const obj = String(m?.object ?? topic ?? '');
+  if (obj === 'deal') return { entityType: 'deal', entityId: m?.id != null ? String(m.id) : null, eventCategory: 'crm' };
+  if (obj === 'person') return { entityType: 'contact', entityId: m?.id != null ? String(m.id) : null, eventCategory: 'crm' };
+  if (obj === 'organization') return { entityType: 'organization', entityId: m?.id != null ? String(m.id) : null, eventCategory: 'crm' };
+  return { entityType: 'unknown', entityId: null, eventCategory: 'crm' };
+}
+function extractDocusign(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'envelope', entityId: body?.data?.envelopeId ?? null, eventCategory: 'sales' };
+}
+function extractQuickbooks(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: String(body?.entity_type ?? 'qb_record').toLowerCase(), entityId: body?.entity_id ?? null, eventCategory: 'accounting' };
+}
+function extractPlaid(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'plaid_item', entityId: body?.item_id ?? null, eventCategory: 'finance' };
+}
+
+// ── Knowledge / Marketing / Data ──────────────────────────────────────────────
+
+function extractMailchimp(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'subscriber', entityId: body?.email ?? null, eventCategory: 'marketing' };
+}
+function extractKlaviyo(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'profile', entityId: body?.profile_id ?? body?.email ?? null, eventCategory: 'marketing' };
+}
+function extractSegment(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'segment_event', entityId: body?.message_id ?? null, eventCategory: 'data' };
+}
+function extractGcalendar(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'calendar_change', entityId: body?.calendar_id ?? null, eventCategory: 'productivity' };
+}
+function extractGdrive(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'drive_change', entityId: body?.resource_id ?? null, eventCategory: 'knowledge' };
+}
+function extractCalendly(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'scheduled_event', entityId: body?.payload?.uri ?? null, eventCategory: 'scheduling' };
+}
+function extractUps(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'shipment', entityId: body?.trackingNumber ?? body?.tracking_number ?? null, eventCategory: 'shipping' };
+}
+function extractDhl(topic: string, body: Record<string, any>): EntityExtraction {
+  return { entityType: 'shipment', entityId: body?.shipment?.id ?? body?.trackingNumber ?? null, eventCategory: 'shipping' };
+}
+
+// ── Source dispatcher ────────────────────────────────────────────────────────
+
+const EXTRACTORS: Record<string, (topic: string, body: Record<string, any>) => EntityExtraction> = {
+  shopify: extractShopify, stripe: extractStripe,
+  whatsapp: extractWhatsApp, messenger: extractMessenger, instagram: extractInstagram, telegram: extractTelegram,
+  twilio: extractTwilio, gmail: extractGmail, outlook: extractOutlook, postmark: extractPostmark,
+  discord: extractDiscord, slack: extractSlack, teams: extractTeams, aircall: extractAircall, zoom: extractZoom,
+  intercom: extractIntercom, zendesk: extractZendesk, front: extractFront,
+  linear: extractLinear, jira: extractJira, github: extractGithub, gitlab: extractGitlab,
+  sentry: extractSentry, asana: extractAsana,
+  woocommerce: extractWoocommerce, paypal: extractPaypal,
+  hubspot: extractHubspot, salesforce: extractSalesforce, pipedrive: extractPipedrive, docusign: extractDocusign,
+  quickbooks: extractQuickbooks, plaid: extractPlaid,
+  mailchimp: extractMailchimp, klaviyo: extractKlaviyo, segment: extractSegment,
+  gcalendar: extractGcalendar, gdrive: extractGdrive, calendly: extractCalendly,
+  ups: extractUps, dhl: extractDhl,
+};
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 async function handleWebhookProcess(
@@ -153,13 +345,8 @@ async function handleWebhookProcess(
   const topic = webhookRow.event_type as string;
   let extraction: EntityExtraction;
 
-  if (payload.source === 'shopify') {
-    extraction = extractShopify(topic, parsedBody);
-  } else if (payload.source === 'stripe') {
-    extraction = extractStripe(topic, parsedBody);
-  } else {
-    extraction = { entityType: 'unknown', entityId: null, eventCategory: 'unknown' };
-  }
+  const ex = EXTRACTORS[payload.source];
+  extraction = ex ? ex(topic, parsedBody) : { entityType: 'unknown', entityId: null, eventCategory: 'unknown' };
 
   // ── 4. Determine occurred_at ─────────────────────────────────────────────
   let occurredAt: string;
@@ -243,40 +430,184 @@ async function handleWebhookProcess(
 
 // ── Topics that should automatically create a CRM case ───────────────────────
 
-const CASE_AUTO_CREATE_TOPICS = new Set([
+/**
+ * Topics that should automatically open a CRM case.
+ * Format: `<source>:<topic>` so we can disambiguate cross-source.
+ * For convenience the legacy bare topics (Shopify/Stripe) are also accepted.
+ */
+const CASE_AUTO_CREATE_TOPICS = new Set<string>([
   // Shopify
-  'orders/cancelled',
-  'refunds/create',
-  'orders/fulfilled',
+  'orders/cancelled', 'refunds/create', 'orders/fulfilled',
+  'shopify:orders/cancelled', 'shopify:refunds/create', 'shopify:orders/fulfilled',
   // Stripe
-  'charge.dispute.created',
-  'charge.dispute.funds_withdrawn',
-  'payment_intent.payment_failed',
-  'charge.failed',
-  'charge.refunded',
+  'charge.dispute.created', 'charge.dispute.funds_withdrawn',
+  'payment_intent.payment_failed', 'charge.failed', 'charge.refunded',
+  'stripe:charge.dispute.created', 'stripe:charge.dispute.funds_withdrawn',
+  'stripe:payment_intent.payment_failed', 'stripe:charge.failed', 'stripe:charge.refunded',
+  // PayPal
+  'paypal:PAYMENT.CAPTURE.DENIED', 'paypal:CUSTOMER.DISPUTE.CREATED', 'paypal:PAYMENT.REFUNDED',
+  // WooCommerce
+  'woocommerce:order.refunded', 'woocommerce:order.cancelled',
+  // Inbound customer messaging — every channel auto-opens a support case
+  'whatsapp:messages.received', 'whatsapp:whatsapp.message.received',
+  'messenger:messenger.message.received',
+  'instagram:instagram.message.received',
+  'telegram:telegram.message.received',
+  'twilio:sms.received',
+  'gmail:gmail.message.received',
+  'outlook:outlook.message.received',
+  'postmark:Inbound',
+  // Voice channels
+  'aircall:call.voicemail_left', 'aircall:call.unanswered', 'aircall:call.transcription_available',
+  'zoom:recording.completed', 'zoom:recording.transcript_completed',
+  // Engineering escalation (errors → cases)
+  'sentry:issue.created', 'sentry:issue.assigned', 'sentry:event.alert',
+  // Scheduling
+  'calendly:invitee.created',
+  // Signature lifecycle (signed contract triggers a celebrate-or-onboarding case)
+  'docusign:envelope-completed', 'docusign:envelope-declined', 'docusign:envelope-voided',
+  // Bank linking failure
+  'plaid:ITEM.ITEM_LOGIN_REQUIRED', 'plaid:ITEM.ERROR',
 ]);
 
-// Mapping from webhook topic → workflow event type
+/**
+ * Map (source, topic) → canonical workflow event type so automations and
+ * AI-agent triggers can subscribe to a single normalized vocabulary across
+ * every connected integration. Falls back to `<source>.<topic>` when no
+ * canonical mapping is known.
+ */
 function topicToWorkflowEvent(source: string, topic: string): string {
-  const map: Record<string, string> = {
-    // Shopify
-    'orders/paid':        'order.updated',
-    'orders/updated':     'order.updated',
-    'orders/cancelled':   'order.updated',
-    'orders/fulfilled':   'order.updated',
-    'refunds/create':     'payment.refunded',
-    'customers/update':   'customer.updated',
-    'customers/create':   'customer.created',
-    // Stripe
-    'charge.dispute.created':          'payment.dispute.created',
-    'charge.dispute.funds_withdrawn':   'payment.dispute.created',
-    'charge.dispute.closed':            'payment.dispute.updated',
-    'payment_intent.succeeded':         'payment.updated',
-    'payment_intent.payment_failed':    'payment.failed',
-    'charge.failed':                    'payment.failed',
-    'charge.refunded':                  'payment.refunded',
-  };
-  return map[topic] ?? `${source}.${topic.replace('/', '.')}`;
+  // Source-specific overrides (more specific than the global map)
+  if (source === 'shopify') {
+    if (topic.startsWith('orders/'))    return 'order.updated';
+    if (topic.startsWith('refunds/'))   return 'payment.refunded';
+    if (topic === 'customers/create')   return 'customer.created';
+    if (topic === 'customers/update')   return 'customer.updated';
+  }
+  if (source === 'stripe') {
+    if (topic.startsWith('charge.dispute.')) return topic.endsWith('.closed') ? 'payment.dispute.updated' : 'payment.dispute.created';
+    if (topic === 'payment_intent.succeeded') return 'payment.updated';
+    if (topic === 'payment_intent.payment_failed' || topic === 'charge.failed') return 'payment.failed';
+    if (topic === 'charge.refunded' || topic.startsWith('refund.')) return 'payment.refunded';
+    if (topic.startsWith('customer.')) return topic.endsWith('.created') ? 'customer.created' : 'customer.updated';
+    if (topic.startsWith('invoice.')) return 'invoice.updated';
+  }
+  if (source === 'woocommerce') {
+    if (topic.includes('order.refunded')) return 'payment.refunded';
+    if (topic.includes('order')) return 'order.updated';
+    if (topic.includes('customer')) return 'customer.updated';
+  }
+  if (source === 'paypal') {
+    if (topic.includes('REFUND'))  return 'payment.refunded';
+    if (topic.includes('DISPUTE')) return 'payment.dispute.created';
+    if (topic.includes('PAYMENT')) return 'payment.updated';
+  }
+
+  // Channels (inbound customer messaging) → unified inbox.message.received
+  const channelInboxSources = new Set(['whatsapp', 'messenger', 'instagram', 'telegram', 'twilio', 'gmail', 'outlook', 'postmark', 'discord']);
+  if (channelInboxSources.has(source)) {
+    if (topic.includes('received') || topic.includes('message') || (source === 'postmark' && topic === 'Inbound')) {
+      return 'inbox.message.received';
+    }
+  }
+
+  // Voice
+  if (source === 'aircall') {
+    if (topic.includes('transcription')) return 'voice.transcript.available';
+    if (topic.includes('recording'))     return 'voice.recording.available';
+    if (topic.includes('hungup') || topic.includes('unanswered') || topic.includes('voicemail')) return 'voice.call.completed';
+  }
+  if (source === 'zoom') {
+    if (topic.startsWith('recording.transcript')) return 'voice.transcript.available';
+    if (topic.startsWith('recording.'))           return 'voice.recording.available';
+    if (topic.startsWith('meeting.'))             return 'meeting.updated';
+  }
+
+  // Support inboxes
+  if (source === 'intercom') {
+    if (topic.includes('conversation')) return 'support.conversation.updated';
+    if (topic.includes('contact'))      return 'customer.updated';
+  }
+  if (source === 'zendesk') {
+    if (topic.includes('ticket')) return 'support.ticket.updated';
+  }
+  if (source === 'front') {
+    if (topic.includes('inbound') || topic.includes('message')) return 'inbox.message.received';
+    if (topic.includes('conversation')) return 'support.conversation.updated';
+  }
+
+  // Engineering / PM
+  if (['linear', 'jira', 'github', 'gitlab'].includes(source)) {
+    if (topic.includes('comment')) return 'engineering.issue.commented';
+    if (topic.includes('issue') || topic.includes('Issue')) return 'engineering.issue.updated';
+    if (topic.includes('pull') || topic.includes('merge_request')) return 'engineering.pr.updated';
+  }
+  if (source === 'sentry') {
+    if (topic.includes('issue')) return 'engineering.error.alert';
+    if (topic.includes('event')) return 'engineering.error.alert';
+  }
+  if (source === 'asana') return 'engineering.task.updated';
+
+  // CRM
+  if (source === 'hubspot') {
+    if (topic.includes('contact')) return 'crm.contact.updated';
+    if (topic.includes('deal'))    return 'crm.deal.updated';
+    if (topic.includes('ticket'))  return 'support.ticket.updated';
+  }
+  if (source === 'salesforce') return 'crm.record.updated';
+  if (source === 'pipedrive') {
+    if (topic.includes('deal')) return 'crm.deal.updated';
+    if (topic.includes('person')) return 'crm.contact.updated';
+    if (topic.includes('organization')) return 'crm.organization.updated';
+  }
+
+  // Marketing
+  if (source === 'mailchimp') {
+    if (topic === 'subscribe' || topic.includes('subscribed')) return 'marketing.subscribed';
+    if (topic === 'unsubscribe' || topic.includes('unsubscribed')) return 'marketing.unsubscribed';
+  }
+  if (source === 'klaviyo') {
+    if (topic.includes('subscribed')) return 'marketing.subscribed';
+    if (topic.includes('unsubscribed')) return 'marketing.unsubscribed';
+    if (topic.includes('profile')) return 'customer.updated';
+  }
+  if (source === 'segment') return 'data.event.tracked';
+
+  // Sales / contracts
+  if (source === 'docusign') {
+    if (topic.includes('completed')) return 'contract.signed';
+    if (topic.includes('declined') || topic.includes('voided')) return 'contract.cancelled';
+    return 'contract.updated';
+  }
+
+  // Accounting
+  if (source === 'quickbooks') return 'accounting.record.updated';
+
+  // Banking
+  if (source === 'plaid') {
+    if (topic.includes('LOGIN_REQUIRED') || topic.includes('ERROR')) return 'banking.connection.broken';
+    if (topic.includes('TRANSACTIONS')) return 'banking.transactions.updated';
+  }
+
+  // Scheduling
+  if (source === 'calendly') {
+    if (topic.includes('invitee.created')) return 'meeting.scheduled';
+    if (topic.includes('invitee.canceled')) return 'meeting.cancelled';
+  }
+  if (source === 'gcalendar') return 'calendar.changed';
+
+  // Knowledge
+  if (source === 'gdrive') return 'knowledge.changed';
+
+  // Shipping
+  if (['ups', 'dhl'].includes(source)) return 'shipping.updated';
+
+  // Team chat
+  if (['slack', 'teams'].includes(source)) {
+    if (topic.includes('message')) return 'team_chat.message';
+  }
+
+  return `${source}.${topic.replace(/\//g, '.')}`;
 }
 
 async function autoCreateCaseAndFireEvent(
@@ -292,7 +623,9 @@ async function autoCreateCaseAndFireEvent(
   const customerRepo = createCustomerRepository();
 
   // ── Auto-create case for high-value events ──────────────────────────────
-  if (CASE_AUTO_CREATE_TOPICS.has(topic)) {
+  // Match either bare topic or `<source>:<topic>` so we can disambiguate.
+  const autoCreateMatch = CASE_AUTO_CREATE_TOPICS.has(topic) || CASE_AUTO_CREATE_TOPICS.has(`${source}:${topic}`);
+  if (autoCreateMatch) {
     try {
       // Determine case type + summary from the event
       const { caseType, summary, priority, caseSubType } = classifyWebhookForCase(source, topic, body);
@@ -390,6 +723,55 @@ function classifyWebhookForCase(
   topic: string,
   body: Record<string, any>,
 ): { caseType: string; caseSubType?: string; summary: string; priority: string } {
+  // ── Inbound channels → support_request ───────────────────────────────────
+  const inbox = new Set(['whatsapp', 'messenger', 'instagram', 'telegram', 'twilio', 'gmail', 'outlook', 'postmark', 'discord']);
+  if (inbox.has(source)) {
+    return { caseType: 'support_request', caseSubType: `${source}_inbound`, summary: `Inbound ${source} message`, priority: 'medium' };
+  }
+  if (source === 'aircall') {
+    if (topic.includes('voicemail')) return { caseType: 'support_request', caseSubType: 'voicemail', summary: 'Aircall voicemail received', priority: 'high' };
+    if (topic.includes('unanswered')) return { caseType: 'support_request', caseSubType: 'missed_call', summary: 'Missed Aircall call', priority: 'high' };
+    if (topic.includes('transcription')) return { caseType: 'support_request', caseSubType: 'call_transcript', summary: 'Aircall call transcript available', priority: 'medium' };
+  }
+  if (source === 'zoom' && topic.startsWith('recording.')) {
+    return { caseType: 'meeting_followup', caseSubType: 'zoom_recording', summary: 'Zoom recording ready for review', priority: 'low' };
+  }
+
+  // ── Engineering errors → bug case ────────────────────────────────────────
+  if (source === 'sentry') {
+    return { caseType: 'bug', caseSubType: 'sentry_alert', summary: `Sentry: ${body?.data?.issue?.title ?? body?.data?.event?.title ?? 'error alert'}`, priority: 'high' };
+  }
+
+  // ── Scheduling ──────────────────────────────────────────────────────────
+  if (source === 'calendly' && topic.includes('invitee.created')) {
+    const name = body?.payload?.name ?? body?.payload?.invitee?.name ?? '';
+    return { caseType: 'sales_followup', caseSubType: 'calendly_booked', summary: `Demo booked${name ? ` with ${name}` : ''}`, priority: 'medium' };
+  }
+
+  // ── Contracts ───────────────────────────────────────────────────────────
+  if (source === 'docusign') {
+    if (topic.includes('completed')) return { caseType: 'sales_followup', caseSubType: 'contract_signed', summary: 'DocuSign envelope completed — onboard customer', priority: 'high' };
+    if (topic.includes('declined') || topic.includes('voided')) return { caseType: 'sales_followup', caseSubType: 'contract_cancelled', summary: 'DocuSign envelope declined/voided — follow up', priority: 'high' };
+  }
+
+  // ── Bank ─────────────────────────────────────────────────────────────────
+  if (source === 'plaid') {
+    return { caseType: 'finance', caseSubType: 'plaid_connection_broken', summary: `Plaid item issue: ${topic}`, priority: 'high' };
+  }
+
+  // ── PayPal ──────────────────────────────────────────────────────────────
+  if (source === 'paypal') {
+    if (topic.includes('DISPUTE')) return { caseType: 'dispute', caseSubType: 'paypal_dispute', summary: `PayPal dispute: ${body?.resource?.dispute_id ?? body?.id ?? ''}`, priority: 'critical' };
+    if (topic.includes('REFUND')) return { caseType: 'refund', caseSubType: 'paypal_refund', summary: `PayPal refund: ${body?.resource?.id ?? ''}`, priority: 'medium' };
+    if (topic.includes('DENIED')) return { caseType: 'payment_issue', caseSubType: 'paypal_denied', summary: 'PayPal capture denied', priority: 'high' };
+  }
+
+  // ── WooCommerce ─────────────────────────────────────────────────────────
+  if (source === 'woocommerce') {
+    if (topic.includes('refunded')) return { caseType: 'refund', caseSubType: 'woo_refund', summary: `WooCommerce order refunded`, priority: 'medium' };
+    if (topic.includes('cancelled')) return { caseType: 'order_issue', caseSubType: 'woo_cancellation', summary: `WooCommerce order cancelled`, priority: 'medium' };
+  }
+
   if (source === 'shopify') {
     if (topic === 'orders/cancelled') {
       return {
