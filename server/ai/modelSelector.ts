@@ -40,10 +40,12 @@ export type AiTaskType =
   | 'embedding';
 
 const MODEL_BY_TASK: Record<AiTaskType, string> = {
-  // Pro: capable reasoning
-  super_agent_plan:           'gemini-2.5-pro',
-  policy_synthesis:           'gemini-2.5-pro',
-  reconciliation_root_cause:  'gemini-2.5-pro',
+  // Reasoning tasks — default to gemini-2.5-flash for free-tier-friendly
+  // operation. Override individually via GEMINI_MODEL_PLAN / _POLICY /
+  // _RECONCILE env vars when a tenant pays for gemini-2.5-pro.
+  super_agent_plan:           process.env.GEMINI_MODEL_PLAN ?? 'gemini-2.5-flash',
+  policy_synthesis:           process.env.GEMINI_MODEL_POLICY ?? 'gemini-2.5-flash',
+  reconciliation_root_cause:  process.env.GEMINI_MODEL_RECONCILE ?? 'gemini-2.5-flash',
 
   // Flash: balanced quality/cost
   draft_reply:                'gemini-2.5-flash',

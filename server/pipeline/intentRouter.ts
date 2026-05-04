@@ -8,6 +8,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { withGeminiRetry } from '../ai/geminiRetry.js';
+import { pickGeminiModel } from '../ai/modelSelector.js';
 import { createCommerceRepository, createCustomerRepository, createCaseRepository, createCanonicalRepository } from '../data/index.js';
 import { config } from '../config.js';
 import { enqueue } from '../queue/client.js';
@@ -68,7 +69,10 @@ async function classifyIntent(
   entityContext: string
 ): Promise<IntentResult> {
   const ai    = new GoogleGenerativeAI(config.ai.geminiApiKey);
-  const model = ai.getGenerativeModel({ model: config.ai.geminiModel });
+  // Use the cheap fast classifier (gemini-2.5-flash-lite) — far higher
+  // free-tier quota than gemini-2.5-pro, which was the production
+  // bottleneck (every webhook hit the per-day limit on the free plan).
+  const model = ai.getGenerativeModel({ model: pickGeminiModel('intent_classification') });
 
   const prompt = `
 You are an intent classifier for a customer support CRM.
