@@ -120,13 +120,20 @@ export function usePlanIntentRedirect(enabled: boolean): PlanIntentRedirectState
         const workspaceId = setupBody.workspaceId ?? setupBody.workspace_id ?? '';
 
         // 2. Create the checkout session for the right product.
+        // The landing v2 pricing page lets the visitor pick monthly or
+        // annual; we stash the choice in `user_metadata.plan_interval` at
+        // signup time. Default to 'month' for backward compatibility.
+        const planIntervalRaw = (session.user.user_metadata as Record<string, unknown> | null)?.plan_interval;
+        const planInterval: 'month' | 'year' =
+          planIntervalRaw === 'year' ? 'year' : 'month';
+
         const isTopup = planIntent === 'topup';
         const endpoint = isTopup
           ? `/api/billing/${orgId}/topup-checkout`
           : `/api/billing/${orgId}/checkout-session`;
         const body = isTopup
           ? { pack: DEFAULT_TOPUP_PACK }
-          : { plan: planIntent, interval: 'month' as const };
+          : { plan: planIntent, interval: planInterval };
 
         const checkoutRes = await fetch(endpoint, {
           method: 'POST',

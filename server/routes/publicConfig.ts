@@ -120,4 +120,133 @@ router.post('/leads', validate({ body: LeadSchema }), async (req, res) => {
   res.status(201).json({ ok: true, id: row.id });
 });
 
+// ── GET /api/public/pricing ──────────────────────────────────────────────────
+// Public, unauthenticated. Returns the plan catalogue (codes, monthly + annual
+// prices, AI credit allotments, seat caps, feature highlights) so the static
+// landing page can render its pricing grid without leaking server creds.
+//
+// The Stripe Price IDs themselves are NEVER returned — we only flag whether
+// each (plan, interval) is configured server-side, so the landing knows
+// which buttons to enable. Actual checkout creation happens through the
+// authenticated /api/billing/:orgId/checkout-session endpoint after signup.
+
+router.get('/pricing', (_req, res) => {
+  // Plan structure mirrors server/integrations/stripe/plans.ts. Prices are
+  // sourced from env vars when set (so an admin can tune without redeploy);
+  // otherwise the conservative defaults from PRICING_ANALYSIS.md ship.
+  const num = (envVar: string, fallback: number): number => {
+    const v = Number(process.env[envVar]);
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
+
+  const PLAN_CONFIGURED = (plan: string, interval: 'month' | 'year'): boolean => {
+    const key = `STRIPE_PRICE_ID_${plan.toUpperCase()}_${interval === 'year' ? 'ANNUAL' : 'MONTHLY'}`;
+    return Boolean(process.env[key]);
+  };
+
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({
+    currency: process.env.PRICING_CURRENCY?.toUpperCase() || 'EUR',
+    annualDiscountPct: 20,
+    plans: [
+      {
+        code: 'starter',
+        name: 'Starter',
+        tagline: 'For small teams shipping their first AI agent.',
+        priceMonthly: num('PRICING_STARTER_MONTHLY', 52),
+        priceAnnualPerMonth: num('PRICING_STARTER_ANNUAL_MONTHLY', 42),
+        credits: 5_000,
+        seats: 3,
+        cta: 'Start free trial',
+        ctaPath: '/signup',
+        configured: { month: PLAN_CONFIGURED('starter', 'month'), year: PLAN_CONFIGURED('starter', 'year') },
+        features: [
+          'Inbox with shared views',
+          'Clain AI Agent (autonomous)',
+          'Knowledge Hub (1 source of truth)',
+          '5,000 AI credits / month',
+          'Up to 3 seats',
+          'Email support',
+          'Native Slack, Gmail, Outlook integrations',
+        ],
+      },
+      {
+        code: 'growth',
+        name: 'Growth',
+        tagline: 'For teams scaling AI-first customer service.',
+        priceMonthly: num('PRICING_GROWTH_MONTHLY', 135),
+        priceAnnualPerMonth: num('PRICING_GROWTH_ANNUAL_MONTHLY', 109),
+        credits: 20_000,
+        seats: 10,
+        cta: 'Start free trial',
+        ctaPath: '/signup',
+        configured: { month: PLAN_CONFIGURED('growth', 'month'), year: PLAN_CONFIGURED('growth', 'year') },
+        recommended: true,
+        features: [
+          'Everything in Starter',
+          'Tickets, pipelines and SLA monitoring',
+          'Reporting + AI-powered Insights',
+          'Copilot for human agents',
+          '20,000 AI credits / month',
+          'Up to 10 seats',
+          'Priority support (next business day)',
+          '30+ integrations (HubSpot, Salesforce, Stripe, Shopify…)',
+        ],
+      },
+      {
+        code: 'scale',
+        name: 'Scale',
+        tagline: 'For teams running customer service across every channel.',
+        priceMonthly: num('PRICING_SCALE_MONTHLY', 315),
+        priceAnnualPerMonth: num('PRICING_SCALE_ANNUAL_MONTHLY', 254),
+        credits: 60_000,
+        seats: 25,
+        cta: 'Start free trial',
+        ctaPath: '/signup',
+        configured: { month: PLAN_CONFIGURED('scale', 'month'), year: PLAN_CONFIGURED('scale', 'year') },
+        features: [
+          'Everything in Growth',
+          'Omnichannel (voice, WhatsApp, Messenger, Instagram, Telegram)',
+          'Custom workflows + plan engine',
+          '60,000 AI credits / month',
+          'Up to 25 seats',
+          'Dedicated CSM',
+          'SSO / SAML, audit logs',
+          'Custom integrations + sandbox',
+        ],
+      },
+      {
+        code: 'business',
+        name: 'Business',
+        tagline: 'For enterprises with custom volume, security and SLA requirements.',
+        priceMonthly: null,
+        priceAnnualPerMonth: null,
+        credits: null,
+        seats: null,
+        cta: 'Talk to sales',
+        ctaPath: '/demo',
+        configured: { month: false, year: false },
+        features: [
+          'Everything in Scale',
+          'Unlimited AI credits (custom contract)',
+          'Unlimited seats',
+          'Dedicated infrastructure + custom region',
+          '99.9% uptime SLA, financially backed',
+          'Custom DPA, SOC2 / ISO 27001 evidence',
+          'Quarterly business reviews',
+          'Custom-trained agent on your tone of voice',
+        ],
+      },
+    ],
+    topupPacks: [
+      { code: '5k',  credits: 5_000,  price: num('PRICING_TOPUP_5K_PRICE',  29) },
+      { code: '20k', credits: 20_000, price: num('PRICING_TOPUP_20K_PRICE', 99) },
+      { code: '50k', credits: 50_000, price: num('PRICING_TOPUP_50K_PRICE', 219) },
+    ],
+    flexibleUsage: {
+      pricePerCredit: Number(process.env.PRICING_FLEXIBLE_USAGE_RATE) || 0.012,
+    },
+  });
+});
+
 export default router;

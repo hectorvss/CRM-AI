@@ -98,6 +98,8 @@ import {
 } from './scheduledActions.js';
 // ── Feedback / decision capture
 import { feedbackRecordDecisionTool, feedbackListTool } from './feedback.js';
+// ── Per-integration action tools (Linear, Jira, GitHub, Asana, Confluence, GDrive, Front, Aircall, GCal, Zoom, Pipedrive, Mailchimp)
+import { ALL_INTEGRATION_ACTION_TOOLS } from './integrationActions.js';
 
 export function registerAllTools(): void {
   // Orders
@@ -216,4 +218,13 @@ export function registerAllTools(): void {
   // Feedback / decision capture
   toolRegistry.register(feedbackRecordDecisionTool);
   toolRegistry.register(feedbackListTool);
+
+  // Per-integration action tools (one ToolSpec per high-impact action across
+  // Linear/Jira/GitHub/Asana/Confluence/GDrive/Front/Aircall/GCalendar/Zoom/
+  // Pipedrive/Mailchimp). Each resolves the per-tenant adapter at runtime
+  // and short-circuits to INTEGRATION_NOT_CONNECTED if the connector is
+  // missing — the planner can branch on that.
+  for (const tool of ALL_INTEGRATION_ACTION_TOOLS) {
+    toolRegistry.register(tool);
+  }
 }

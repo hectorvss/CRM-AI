@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../api/supabase';
+import { IntegrationLogo } from './logos';
 
 /**
  * Two-track Shopify connect UX.
@@ -207,7 +208,7 @@ const ShopifyConnectModal: React.FC<Props> = ({ open, onClose, onChanged, existi
         <div className="flex items-start justify-between gap-4 border-b border-black/5 px-6 py-5 dark:border-white/10">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#95BF47] text-white shadow-sm">
-              <span className="material-symbols-outlined text-[22px]">shopping_bag</span>
+              <IntegrationLogo id="shopify" size={22} />
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">

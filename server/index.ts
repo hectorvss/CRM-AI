@@ -40,6 +40,47 @@ import publicConfigRouter from './routes/publicConfig.js';
 import { oauthConnectorsRouter } from './routes/oauthConnectors.js';
 import { shopifyOAuthRouter } from './routes/shopifyOAuth.js';
 import { stripeOAuthRouter } from './routes/stripeOAuth.js';
+import { gmailOAuthRouter } from './routes/gmailOAuth.js';
+import { twilioIntegrationRouter } from './routes/twilioIntegration.js';
+import { whatsappIntegrationRouter } from './routes/whatsappIntegration.js';
+import { outlookOAuthRouter } from './routes/outlookOAuth.js';
+import { paypalIntegrationRouter } from './routes/paypalIntegration.js';
+import { messengerIntegrationRouter } from './routes/messengerIntegration.js';
+import { instagramIntegrationRouter } from './routes/instagramIntegration.js';
+import { telegramIntegrationRouter } from './routes/telegramIntegration.js';
+import { postmarkIntegrationRouter } from './routes/postmarkIntegration.js';
+import { upsIntegrationRouter } from './routes/upsIntegration.js';
+import { dhlIntegrationRouter } from './routes/dhlIntegration.js';
+import { salesforceOAuthRouter } from './routes/salesforceOAuth.js';
+import { hubspotOAuthRouter } from './routes/hubspotOAuth.js';
+import { slackOAuthRouter } from './routes/slackOAuth.js';
+import { zendeskOAuthRouter } from './routes/zendeskOAuth.js';
+import { intercomOAuthRouter } from './routes/intercomOAuth.js';
+import { notionOAuthRouter } from './routes/notionOAuth.js';
+import { woocommerceIntegrationRouter } from './routes/woocommerceIntegration.js';
+import { calendlyOAuthRouter } from './routes/calendlyOAuth.js';
+import { teamsOAuthRouter } from './routes/teamsOAuth.js';
+import { linearOAuthRouter } from './routes/linearOAuth.js';
+import { jiraOAuthRouter } from './routes/jiraOAuth.js';
+import { confluenceOAuthRouter } from './routes/confluenceOAuth.js';
+import { githubOAuthRouter } from './routes/githubOAuth.js';
+import { frontOAuthRouter } from './routes/frontOAuth.js';
+import { aircallOAuthRouter } from './routes/aircallOAuth.js';
+import { gcalendarOAuthRouter } from './routes/gcalendarOAuth.js';
+import { gdriveOAuthRouter } from './routes/gdriveOAuth.js';
+import { zoomOAuthRouter } from './routes/zoomOAuth.js';
+import { asanaOAuthRouter } from './routes/asanaOAuth.js';
+import { pipedriveOAuthRouter } from './routes/pipedriveOAuth.js';
+import { mailchimpOAuthRouter } from './routes/mailchimpOAuth.js';
+import { klaviyoOAuthRouter } from './routes/klaviyoOAuth.js';
+import { segmentIntegrationRouter } from './routes/segmentIntegration.js';
+import { quickbooksOAuthRouter } from './routes/quickbooksOAuth.js';
+import { docusignOAuthRouter } from './routes/docusignOAuth.js';
+import { sentryOAuthRouter } from './routes/sentryOAuth.js';
+import { plaidIntegrationRouter } from './routes/plaidIntegration.js';
+import { gitlabOAuthRouter } from './routes/gitlabOAuth.js';
+import { discordOAuthRouter } from './routes/discordOAuth.js';
+import { toolsRouter } from './routes/tools.js';
 import internalRouter from './routes/internal.js';
 import { extractMultiTenant } from './middleware/multiTenant.js';
 import { superAgentLimiter, aiLimiter, onboardingLimiter } from './middleware/rateLimit.js';
@@ -155,6 +196,98 @@ app.use('/api/integrations/shopify', shopifyOAuthRouter);
 // Stripe Connect OAuth + manual key fallback. /callback is public; the rest
 // require auth via extractMultiTenant inside the router.
 app.use('/api/integrations/stripe', stripeOAuthRouter);
+// Gmail OAuth + Pub/Sub watch + manual sync. /callback is public; the
+// rest require auth via extractMultiTenant inside the router. /watch/renew
+// is internal-only (gated by INTERNAL_CRON_SECRET).
+app.use('/api/integrations/gmail', gmailOAuthRouter);
+// Twilio: API-key based (no OAuth); merchant pastes Account SID + Auth Token
+// (or API Key/Secret), we validate by hitting /Accounts and persist per-tenant.
+app.use('/api/integrations/twilio', twilioIntegrationRouter);
+// Direct Meta WhatsApp Cloud API (independent from Twilio's WhatsApp).
+app.use('/api/integrations/whatsapp', whatsappIntegrationRouter);
+// Outlook / Microsoft 365: OAuth via Microsoft Identity v2 + Graph
+// subscriptions for real-time inbox notifications.
+app.use('/api/integrations/outlook', outlookOAuthRouter);
+// PayPal: API-key based (Client Credentials). Manual connect with sandbox/live toggle.
+app.use('/api/integrations/paypal', paypalIntegrationRouter);
+app.use('/api/integrations/messenger', messengerIntegrationRouter);
+app.use('/api/integrations/instagram', instagramIntegrationRouter);
+app.use('/api/integrations/telegram', telegramIntegrationRouter);
+app.use('/api/integrations/postmark', postmarkIntegrationRouter);
+// Shipping carriers — UPS uses OAuth Client Credentials; DHL uses API key.
+// Both auto-generate per-tenant URL secrets for unsigned webhook auth.
+app.use('/api/integrations/ups', upsIntegrationRouter);
+app.use('/api/integrations/dhl', dhlIntegrationRouter);
+// CRMs — OAuth Authorization Code with refresh tokens. /callback is public
+// (provider redirect lacks the tenant header); the rest enforce auth via the
+// router-level extractMultiTenant.
+app.use('/api/integrations/salesforce', salesforceOAuthRouter);
+app.use('/api/integrations/hubspot', hubspotOAuthRouter);
+// Slack: bot-first OAuth + Events API + interactivity + slash commands.
+// /callback is public (Slack is the caller); the rest enforce auth via the
+// router-level extractMultiTenant.
+app.use('/api/integrations/slack', slackOAuthRouter);
+// Zendesk: subdomain-scoped OAuth + auto webhook registration with HMAC
+// SHA-256 signing. /callback is public (Zendesk redirects); rest auth.
+app.use('/api/integrations/zendesk', zendeskOAuthRouter);
+// Intercom: OAuth + region probe (US/EU/AU) + signed webhooks via X-Hub-Signature.
+app.use('/api/integrations/intercom', intercomOAuthRouter);
+// Notion: OAuth + long-lived bearer token. No webhooks (poll-based).
+// Knowledge source for the AI agent — pages/databases/blocks read access.
+app.use('/api/integrations/notion', notionOAuthRouter);
+// WooCommerce: API-key based (consumer_key/secret) over HTTPS. Auto-registers
+// 9 webhook topics with HMAC SHA256 signing on connect.
+app.use('/api/integrations/woocommerce', woocommerceIntegrationRouter);
+// Calendly: OAuth + auto-registered v2 webhook with HMAC SHA256 signing.
+// Lets the AI agent surface real time slots in conversations.
+app.use('/api/integrations/calendly', calendlyOAuthRouter);
+// Microsoft Teams: Identity Platform v2 OAuth + Graph API + Graph
+// subscriptions for chat/channel-message events. /subscription/renew is
+// internal-only (cron-driven, gated by INTERNAL_CRON_SECRET).
+app.use('/api/integrations/teams', teamsOAuthRouter);
+// Linear: OAuth + GraphQL + signed webhooks (HMAC SHA256 hex).
+app.use('/api/integrations/linear', linearOAuthRouter);
+// Jira: OAuth 3LO + REST API v3 + dynamic webhooks (per-tenant URL token).
+app.use('/api/integrations/jira', jiraOAuthRouter);
+// Confluence: OAuth 3LO + REST v2 + CQL search (no webhooks via OAuth).
+app.use('/api/integrations/confluence', confluenceOAuthRouter);
+// GitHub: OAuth + REST v3 + per-repo signed webhooks (HMAC SHA256 hex).
+app.use('/api/integrations/github', githubOAuthRouter);
+// Front: OAuth + REST v2 + app-level signed webhooks (HMAC SHA256 b64).
+app.use('/api/integrations/front', frontOAuthRouter);
+// Aircall: OAuth + Public API v1 + signed webhooks (HMAC SHA256 hex with per-webhook token).
+app.use('/api/integrations/aircall', aircallOAuthRouter);
+// Google Calendar: OAuth + REST v3 + push channels.
+app.use('/api/integrations/gcalendar', gcalendarOAuthRouter);
+// Google Drive: OAuth + REST v3 (read-only) + changes feed push channels.
+app.use('/api/integrations/gdrive', gdriveOAuthRouter);
+// Zoom: OAuth + REST v2 + signed v0 webhooks (configured in Zoom App, not API).
+app.use('/api/integrations/zoom', zoomOAuthRouter);
+// Asana: OAuth + REST v1 + per-resource webhooks (X-Hook-Secret handshake).
+app.use('/api/integrations/asana', asanaOAuthRouter);
+// Pipedrive: OAuth + REST v1 + per-company api_domain + webhooks Basic auth.
+app.use('/api/integrations/pipedrive', pipedriveOAuthRouter);
+// Mailchimp: OAuth + Marketing v3 + per-DC api_endpoint + webhooks per-list (URL token).
+app.use('/api/integrations/mailchimp', mailchimpOAuthRouter);
+// Klaviyo: OAuth + PKCE + REST 2024-10-15 + signed webhooks (HMAC b64).
+app.use('/api/integrations/klaviyo', klaviyoOAuthRouter);
+// Segment: Source Write Key (HTTP Basic) + inbound Destination Function token.
+app.use('/api/integrations/segment', segmentIntegrationRouter);
+// QuickBooks Online: OAuth + REST v3 + signed webhooks (Verifier Token).
+app.use('/api/integrations/quickbooks', quickbooksOAuthRouter);
+// DocuSign: OAuth + eSignature v2.1 + Connect webhooks (HMAC b64).
+app.use('/api/integrations/docusign', docusignOAuthRouter);
+// Sentry: Integration Platform OAuth + REST + signed webhooks (HMAC hex).
+app.use('/api/integrations/sentry', sentryOAuthRouter);
+// Plaid: API key auth (client_id + secret) + URL-token webhooks.
+app.use('/api/integrations/plaid', plaidIntegrationRouter);
+// GitLab: OAuth + PKCE + REST v4 + per-project webhooks (X-Gitlab-Token).
+app.use('/api/integrations/gitlab', gitlabOAuthRouter);
+// Discord: OAuth bot install + REST v10 + interactions endpoint Ed25519.
+app.use('/api/integrations/discord', discordOAuthRouter);
+// Unified tool dispatcher — any frontend surface (Copilot, automations,
+// scheduled actions) can invoke any registered planEngine tool by name.
+app.use('/api/tools', toolsRouter);
 // Internal cron-driven endpoints (worker tick, scheduler tick). Auth via INTERNAL_CRON_SECRET.
 // Mounted BEFORE multi-tenant middleware skip list since they have their own auth.
 app.use('/api/internal', internalRouter);

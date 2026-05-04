@@ -119,28 +119,47 @@ export const whatsappWebhookRouter = Router();
  * GET /webhooks/whatsapp — Meta's webhook verification handshake.
  * Responds with hub.challenge if hub.verify_token matches the configured token.
  */
-whatsappWebhookRouter.get('/', (req: Request, res: Response) => {
-  const mode      = req.query['hub.mode'];
-  const token     = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+whatsappWebhookRouter.get('/', async (req: Request, res: Response) => {
+  const mode      = String(req.query['hub.mode'] ?? '');
+  const token     = String(req.query['hub.verify_token'] ?? '');
+  const challenge = String(req.query['hub.challenge'] ?? '');
 
+  if (mode !== 'subscribe' || !token) {
+    return res.status(403).send('Forbidden');
+  }
+
+  // Multi-tenant: every connector stores its own verify_token. We match the
+  // incoming token against any active connector. If exactly one matches we
+  // accept; otherwise fall back to env-var single-tenant mode.
+  try {
+    const supabase = (await import('../db/supabase.js')).getSupabaseAdmin();
+    const { data } = await supabase
+      .from('connectors')
+      .select('auth_config')
+      .eq('system', 'whatsapp')
+      .eq('status', 'connected');
+    if (data && data.length > 0) {
+      const ok = (data as Array<{ auth_config: any }>).some(
+        (row) => (row.auth_config?.verify_token ?? '') === token,
+      );
+      if (ok) {
+        logger.info('WhatsApp webhook verified (multi-tenant)');
+        return res.status(200).send(challenge);
+      }
+    }
+  } catch (err) {
+    logger.warn('WhatsApp verify lookup failed (falling through to env)', { error: String(err) });
+  }
+
+  // Legacy env-var fallback
   const adapter = integrationRegistry.get<WhatsAppAdapter>('whatsapp');
   const expectedToken =
     adapter?.getVerifyToken() ||
     config.channels?.whatsappVerifyToken ||
     process.env.WHATSAPP_VERIFY_TOKEN ||
     '';
-
-  if (!expectedToken) {
-    logger.warn('WhatsApp webhook GET: WHATSAPP_VERIFY_TOKEN not configured');
-    notConfigured(res, 'WHATSAPP_NOT_CONFIGURED', ['WHATSAPP_VERIFY_TOKEN']);
-    return;
-  }
-
-  if (mode === 'subscribe' && token === expectedToken) {
-    logger.info('WhatsApp webhook verified');
-    res.status(200).send(String(challenge ?? ''));
-    return;
+  if (expectedToken && token === expectedToken) {
+    return res.status(200).send(challenge);
   }
 
   logger.warn('WhatsApp webhook verification failed', { mode });
@@ -162,24 +181,6 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const adapter = integrationRegistry.get<WhatsAppAdapter>('whatsapp');
-
-  // ── 503 when the webhook secret is not configured ─────────────────────────
-  if (!adapter || !adapter.hasWebhookSecret()) {
-    if (headers['x-hub-signature-256']) {
-      logger.warn('WhatsApp webhook arrived but WHATSAPP_WEBHOOK_SECRET is not set');
-    }
-    notConfigured(res, 'WHATSAPP_NOT_CONFIGURED', ['WHATSAPP_WEBHOOK_SECRET']);
-    return;
-  }
-
-  // ── 401 when signature is missing or invalid ─────────────────────────────
-  if (!adapter.verifyWebhook(rawBody, headers)) {
-    logger.warn('WhatsApp webhook: invalid HMAC signature');
-    unauthorized(res, 'Invalid x-hub-signature-256');
-    return;
-  }
-
   let body: any;
   try {
     body = JSON.parse(rawBody);
@@ -188,12 +189,62 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  // Resolve tenant — channel webhooks usually arrive without our headers,
-  // so we fall back to the first workspace via resolveTenantWorkspaceContext.
-  const context = await resolveTenantWorkspaceContext(
-    headers['x-tenant-id']    as string | undefined,
-    headers['x-workspace-id'] as string | undefined,
-  );
+  // ── Multi-tenant resolution ─────────────────────────────────────────────
+  // Meta puts the WABA id at `entry[].id` and the phone_number_id at
+  // `entry[].changes[].value.metadata.phone_number_id`. We use those to
+  // resolve the tenant BEFORE signature verification (since each tenant
+  // signs with their own app_secret).
+  const entries: any[] = body?.entry ?? [];
+  const firstEntry = entries[0];
+  const firstChange = firstEntry?.changes?.[0];
+  const phoneNumberId = firstChange?.value?.metadata?.phone_number_id as string | undefined;
+  const wabaId = firstEntry?.id as string | undefined;
+
+  const { findTenantByPhoneNumberId, findTenantByWabaId } = await import('../integrations/whatsapp-tenant.js');
+  const { WhatsAppAdapter: WA } = await import('../integrations/whatsapp.js');
+
+  let tenantInfo = phoneNumberId ? await findTenantByPhoneNumberId(phoneNumberId) : null;
+  if (!tenantInfo && wabaId) tenantInfo = await findTenantByWabaId(wabaId);
+
+  // Choose the verification adapter: per-tenant if resolved, else env-var legacy.
+  let verifyOk = false;
+  if (tenantInfo?.webhookSecret) {
+    const adapter = new WA({
+      accessToken: tenantInfo.accessToken,
+      phoneNumberId: phoneNumberId ?? '',
+      verifyToken: tenantInfo.verifyToken,
+      webhookSecret: tenantInfo.webhookSecret,
+    });
+    verifyOk = adapter.verifyWebhook(rawBody, headers);
+  } else {
+    const legacyAdapter = integrationRegistry.get<WhatsAppAdapter>('whatsapp');
+    if (!legacyAdapter || !legacyAdapter.hasWebhookSecret()) {
+      if (headers['x-hub-signature-256']) {
+        logger.warn('WhatsApp webhook arrived but no per-tenant nor env-var secret matched', {
+          phoneNumberId,
+          wabaId,
+        });
+      }
+      notConfigured(res, 'WHATSAPP_NOT_CONFIGURED', ['WHATSAPP_WEBHOOK_SECRET']);
+      return;
+    }
+    verifyOk = legacyAdapter.verifyWebhook(rawBody, headers);
+  }
+
+  if (!verifyOk) {
+    logger.warn('WhatsApp webhook: invalid HMAC signature', { phoneNumberId, wabaId });
+    unauthorized(res, 'Invalid x-hub-signature-256');
+    return;
+  }
+
+  // Resolve tenant context: prefer the per-tenant connector, fall back to
+  // header-based resolution for legacy single-tenant setups.
+  const context = tenantInfo
+    ? { tenantId: tenantInfo.tenantId, workspaceId: tenantInfo.tenantId }
+    : await resolveTenantWorkspaceContext(
+        headers['x-tenant-id']    as string | undefined,
+        headers['x-workspace-id'] as string | undefined,
+      );
 
   // Ack 200 first only AFTER the loop succeeds for at least the persistence
   // step; we wrap each message in try/catch so a single bad message doesn't
@@ -202,8 +253,7 @@ whatsappWebhookRouter.post('/', async (req: Request, res: Response) => {
   const skipped:   string[] = [];
 
   try {
-    const entries: any[] = body?.entry ?? [];
-
+    // entries already extracted above for tenant resolution; reuse it.
     for (const entry of entries) {
       const changes: any[] = entry?.changes ?? [];
 
@@ -431,22 +481,6 @@ function verifyTwilioSignature(req: Request, params: Record<string, string>): bo
  */
 smsWebhookRouter.post('/', async (req: Request, res: Response) => {
   const rawBody = (req as any).rawBody as string | undefined;
-
-  // 503 if Twilio creds missing.
-  const twilioConfigured = Boolean(
-    config.channels?.twilio?.accountSid &&
-    config.channels?.twilio?.authToken &&
-    config.channels?.twilio?.fromNumber,
-  );
-  if (!twilioConfigured) {
-    notConfigured(res, 'TWILIO_NOT_CONFIGURED', [
-      'TWILIO_ACCOUNT_SID',
-      'TWILIO_AUTH_TOKEN',
-      'TWILIO_FROM_NUMBER',
-    ]);
-    return;
-  }
-
   if (!rawBody) {
     res.status(400).json({ error: 'BAD_REQUEST' });
     return;
@@ -458,8 +492,46 @@ smsWebhookRouter.post('/', async (req: Request, res: Response) => {
     params[k] = v;
   }
 
-  if (!verifyTwilioSignature(req, params)) {
-    logger.warn('Twilio webhook: invalid X-Twilio-Signature');
+  // ── Multi-tenant Twilio resolution ──────────────────────────────────────
+  // Twilio puts the destination number in `To`. We reverse-look it up
+  // against connectors.auth_config to find which tenant owns it, THEN use
+  // that tenant's auth_token to verify the signature. The legacy env-var
+  // fallback (config.channels.twilio.authToken) still works for single-
+  // tenant dev deployments.
+  const toNumber = params.To || '';
+  const { findTenantByTwilioNumber } = await import('../integrations/twilio-tenant.js');
+  const { TwilioAdapter } = await import('../integrations/twilio.js');
+  const tenantInfo = toNumber ? await findTenantByTwilioNumber(toNumber) : null;
+
+  const authTokenForVerify = tenantInfo?.authToken
+    ?? config.channels?.twilio?.authToken
+    ?? '';
+
+  if (!authTokenForVerify) {
+    notConfigured(res, 'TWILIO_NOT_CONFIGURED', [
+      'TWILIO_ACCOUNT_SID',
+      'TWILIO_AUTH_TOKEN',
+      'TWILIO_FROM_NUMBER',
+    ]);
+    return;
+  }
+
+  // Reconstruct the absolute URL Twilio POSTed to.
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined) || req.protocol;
+  const host = req.headers['host'] as string;
+  const fullUrl = `${proto}://${host}${req.originalUrl}`;
+  const providedSig = req.headers['x-twilio-signature'] as string | undefined;
+
+  if (!providedSig || !TwilioAdapter.verifyWebhookSignature({
+    authToken: authTokenForVerify,
+    fullUrl,
+    params,
+    providedSignature: providedSig ?? '',
+  })) {
+    logger.warn('Twilio webhook: invalid X-Twilio-Signature', {
+      hasTenant: Boolean(tenantInfo),
+      to: toNumber,
+    });
     unauthorized(res, 'Invalid X-Twilio-Signature');
     return;
   }
@@ -473,34 +545,41 @@ smsWebhookRouter.post('/', async (req: Request, res: Response) => {
     return;
   }
 
+  // WhatsApp via Twilio also lands here — From: "whatsapp:+34..." gives it away.
+  const channel: 'sms' | 'whatsapp' = from.startsWith('whatsapp:') ? 'whatsapp' : 'sms';
+
   const message: NormalizedChannelMessage = {
     messageContent:    content,
-    senderId:          from,
+    senderId:          from.replace(/^whatsapp:/, ''),
     senderName:        null,
-    channel:           'sms',
+    channel,
     externalMessageId,
     sentAt:            new Date().toISOString(),
   };
 
-  const context = await resolveTenantWorkspaceContext(
-    req.headers['x-tenant-id']    as string | undefined,
-    req.headers['x-workspace-id'] as string | undefined,
-  );
+  // Prefer the tenant resolved by phone number; fall back to header-based
+  // resolution for the legacy env-var path.
+  const context = tenantInfo
+    ? { tenantId: tenantInfo.tenantId, workspaceId: tenantInfo.tenantId }
+    : await resolveTenantWorkspaceContext(
+        req.headers['x-tenant-id']    as string | undefined,
+        req.headers['x-workspace-id'] as string | undefined,
+      );
 
   try {
     const result = await persistAndEnqueue({
       tenantId:    context.tenantId,
       workspaceId: context.workspaceId,
-      channel:     'sms',
+      channel,
       message,
-      dedupeKey:   `sms:message:${externalMessageId}`,
+      dedupeKey:   `${channel}:message:${externalMessageId}`,
       sourceSystem: 'twilio',
     });
     // Twilio expects an empty TwiML response or 204; 200 OK works too.
     res.status(200).type('text/xml').send('<Response/>');
-    logger.info('SMS message persisted', { from, sid: externalMessageId, eventId: result.eventId });
+    logger.info('Twilio inbound persisted', { channel, from, sid: externalMessageId, eventId: result.eventId });
   } catch (err) {
-    logger.error('SMS webhook persistence failed', err);
+    logger.error('Twilio webhook persistence failed', err);
     res.status(500).json({ error: 'INTERNAL_ERROR' });
   }
 });

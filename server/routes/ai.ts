@@ -28,6 +28,7 @@ import {
   createKnowledgeRepository,
 } from '../data/index.js';
 import { planEngine } from '../agents/planEngine/index.js';
+import { invokeTool, listAvailableTools } from '../agents/planEngine/invokeTool.js';
 import { assertCanUseAI, chargeCredits } from '../services/aiUsageMeter.js';
 
 const router = Router();
@@ -439,6 +440,52 @@ Now answer, following every rule in the Voice/Rules section above. No preambles,
     }
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// ── GET /api/ai/copilot/tools ────────────────────────────────────────────────
+//
+// Returns the planEngine tool catalog visible to the caller. The Copilot UI
+// uses this both to show "Run action" suggestions in chat and to feed the
+// LLM the list of available tools so it can recommend the correct one.
+
+router.get('/copilot/tools', requirePermission('cases.read'), (req: MultiTenantRequest, res) => {
+  const hasPermission = (perm: string) => Array.isArray(req.permissions) && req.permissions.includes(perm);
+  const tools = listAvailableTools(hasPermission);
+  res.json({ ok: true, count: tools.length, tools });
+});
+
+// ── POST /api/ai/copilot/:caseId/invoke ──────────────────────────────────────
+//
+// Execute a tool call from the Copilot UI. The user confirms; the UI calls
+// this endpoint with { tool, args, dry_run? }. Result is normalised so the
+// chat surface can render success / failure inline.
+
+router.post('/copilot/:caseId/invoke', requirePermission('cases.write'), async (req: MultiTenantRequest, res) => {
+  if (!req.tenantId) return res.status(401).json({ error: 'Authentication required' });
+  const toolName = String(req.body?.tool || '').trim();
+  const args = req.body?.args ?? {};
+  const dryRun = req.body?.dry_run === true;
+  if (!toolName) return res.status(400).json({ error: 'tool is required' });
+  const hasPermission = (perm: string) => Array.isArray(req.permissions) && req.permissions.includes(perm);
+
+  const result = await invokeTool({
+    toolName, args,
+    tenantId: req.tenantId,
+    workspaceId: req.workspaceId ?? null,
+    userId: req.userId ?? null,
+    hasPermission, dryRun,
+    planId: `copilot:${req.params.caseId}`,
+  });
+  if (!result.ok) {
+    const code = (result as any).errorCode;
+    const status = code === 'TOOL_NOT_FOUND' ? 404
+      : code === 'PERMISSION_DENIED' ? 403
+      : code === 'INVALID_ARGS' ? 400
+      : code === 'TIMEOUT' ? 504
+      : 500;
+    return res.status(status).json(result);
+  }
+  return res.json(result);
 });
 
 export default router;
