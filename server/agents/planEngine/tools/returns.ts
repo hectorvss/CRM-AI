@@ -79,7 +79,7 @@ export const returnApproveTool: ToolSpec<{ returnId: string; reason?: string }, 
     if (!ret) return { ok: false, error: 'Return not found', errorCode: 'NOT_FOUND' };
     await commerceRepo.updateReturn(scope, args.returnId, {
       status: 'approved',
-      resolution_notes: args.reason ?? 'Approved via Super Agent',
+      last_update: args.reason ?? 'Approved via Super Agent',
       updated_at: new Date().toISOString(),
     });
     await context.audit({
@@ -117,7 +117,7 @@ export const returnRejectTool: ToolSpec<{ returnId: string; reason: string }, un
     if (!ret) return { ok: false, error: 'Return not found', errorCode: 'NOT_FOUND' };
     await commerceRepo.updateReturn(scope, args.returnId, {
       status: 'rejected',
-      resolution_notes: args.reason,
+      last_update: args.reason,
       updated_at: new Date().toISOString(),
     });
     await context.audit({
@@ -174,7 +174,7 @@ export const returnUpdateStatusTool: ToolSpec<ReturnUpdateStatusArgs, unknown> =
 
     await commerceRepo.updateReturn(scope, args.returnId, {
       status: args.status,
-      resolution_notes: args.note ?? null,
+      last_update: args.note ?? null,
       updated_at: new Date().toISOString(),
     });
 

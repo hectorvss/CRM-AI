@@ -17,6 +17,36 @@ import { toolRegistry } from './registry.js';
 import { isToolBlocked } from './safety.js';
 import type { ToolExecutionContext, ToolResult, AuditEntry } from './types.js';
 import { logger } from '../../utils/logger.js';
+import { createAuditRepository } from '../../data/audit.js';
+
+const auditRepo = createAuditRepository();
+
+/**
+ * Default audit sink that persists agent tool invocations to the
+ * `audit_events` table. Used whenever an explicit sink isn't passed
+ * (most callers — Super Agent /command, Copilot /invoke, Workflow
+ * runtime, scheduled actions). Without this, tools wired via
+ * invokeTool would only log to stdout, never to the DB audit trail.
+ */
+function buildDefaultAuditSink(tenantId: string, workspaceId: string | null, userId: string | null) {
+  return async (entry: AuditEntry) => {
+    try {
+      await auditRepo.log({
+        tenantId,
+        workspaceId: workspaceId ?? undefined,
+        actorId: userId ?? 'system',
+        action: entry.action,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        oldValue: entry.oldValue,
+        newValue: entry.newValue,
+        metadata: entry.metadata,
+      });
+    } catch (err) {
+      logger.warn('invokeTool: default audit sink failed', { error: String(err) });
+    }
+  };
+}
 
 export interface InvokeToolInput {
   /** Fully qualified tool name (e.g. `linear.issue.create`). */
@@ -57,7 +87,7 @@ export type InvokeToolResult =
  */
 export async function invokeTool(input: InvokeToolInput): Promise<InvokeToolResult> {
   const start = Date.now();
-  const audit = input.audit ?? (async (e: AuditEntry) => logger.info('tool.invoke.audit', e as any));
+  const audit = input.audit ?? buildDefaultAuditSink(input.tenantId, input.workspaceId, input.userId);
   const dryRun = input.dryRun === true;
   const timeoutMs = input.timeoutMs ?? 15_000;
 
