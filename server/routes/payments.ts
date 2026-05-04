@@ -547,14 +547,23 @@ returnsRouter.patch('/:id/status', requirePermission('returns.write'), async (re
       return res.status(400).json({ error: invalidStatusMessage('status', RETURN_STATUSES) });
     }
 
-    const inspectionStatus = req.body?.inspection_status ?? ret.inspection_status;
-    if (inspectionStatus && !isValidStatus(String(inspectionStatus), RETURN_INSPECTION_STATUSES)) {
+    // Only validate inspection_status / refund_status when the caller is
+    // explicitly setting them. The fallback to ret.* would catch enriched
+    // synthetic values like 'N/A' that getReturn injects via enrichReturn.
+    const inspectionStatusFromBody = req.body?.inspection_status as string | undefined;
+    if (inspectionStatusFromBody && !isValidStatus(String(inspectionStatusFromBody), RETURN_INSPECTION_STATUSES)) {
       return res.status(400).json({ error: invalidStatusMessage('inspection_status', RETURN_INSPECTION_STATUSES) });
     }
-    const refundStatus = req.body?.refund_status ?? ret.refund_status;
-    if (refundStatus && !isValidStatus(String(refundStatus), RETURN_REFUND_STATUSES)) {
+    const refundStatusFromBody = req.body?.refund_status as string | undefined;
+    if (refundStatusFromBody && !isValidStatus(String(refundStatusFromBody), RETURN_REFUND_STATUSES)) {
       return res.status(400).json({ error: invalidStatusMessage('refund_status', RETURN_REFUND_STATUSES) });
     }
+    // For the eventual write we still need a value (fall back to current
+    // raw column, NOT to the enriched 'N/A' synthetic). Strip 'N/A' fallback
+    // so we don't ever persist that synthetic value.
+    const stripNA = (v: any) => (typeof v === 'string' && v === 'N/A' ? null : v);
+    const inspectionStatus = inspectionStatusFromBody ?? stripNA(ret.inspection_status);
+    const refundStatus = refundStatusFromBody ?? stripNA(ret.refund_status);
 
     await commerceRepo.updateReturn(scope, req.params.id, {
       status,
