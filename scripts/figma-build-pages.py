@@ -35,6 +35,14 @@ PAGES = {
     "tickets":        ("TicketsPage",       "/tickets"),
     "reporting":      ("ReportingPage",     "/reporting"),
     "startups":       ("StartupsPage",      "/startups"),
+    # New pages from the recent extraction
+    "page_32_16407":  ("KnowledgePage",       "/knowledge"),
+    "page_32_17633":  ("PricingPage",         "/pricing"),
+    "page_32_13982":  ("AgentCustomerPage",   "/agent-customer"),
+    "page_32_14697":  ("CopilotPage",         "/copilot"),
+    "page_32_13227":  ("AgentTrustPage",      "/agent-trust"),
+    "page_32_15409":  ("HowAgentWorksPage",   "/how-agent-works"),
+    "page_2_18817":   ("TechnologyPage",      "/technology"),
 }
 
 LOCALHOST_ASSETS = re.compile(r'http://localhost:3845/assets/')

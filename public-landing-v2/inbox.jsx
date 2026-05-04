@@ -1,8 +1,10 @@
 /* global React, ClainV2 */
-/* AUTO-GENERATED from Figma extraction. See scripts/figma-build-pages.py */
+/* AUTO-GENERATED from Figma extraction with placeholder copy.
+   See scripts/figma-build-placeholders.py
+   Long-form marketing text has been replaced by `__COPY_PAGE_NNN__`
+   tokens. Source-of-truth mapping in public-landing-v2/_copy_manifest.json */
 (function () {
   const { PageShell } = ClainV2;
-  // Stub for unresolved Figma component instances
   const Component = ({ className, variant, ...rest }) => (
     <div className={className} data-figma-component={variant ?? 'default'} {...rest} />
   );
@@ -86,7 +88,7 @@
             <div className="content-stretch flex flex-col items-start pb-[16px] relative shrink-0 w-full" data-node-id="2:5325" data-name="h1.text-heading-2:margin">
               <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-node-id="2:5326" data-name="h1.text-heading-2">
                 <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[74.1px] text-[color:var(--color\/grey\/7,#111)] text-center tracking-[var(--letter-spacing\/-2_4,-2.4px)] whitespace-nowrap" data-node-id="2:5327">
-                  <p className="leading-[var(--line-height\/80,80px)] mb-0">Maximize productivity with an</p>
+                  <p className="leading-[var(--line-height\/80,80px)] mb-0">Built for AI-first teams</p>
                   <p className="leading-[var(--line-height\/80,80px)]">AI-enhanced Inbox</p>
                 </div>
               </div>
@@ -94,7 +96,7 @@
             <div className="h-[60.78px] relative shrink-0 w-[1024.004px]" data-node-id="2:5329" data-name="p.text-body-lg:margin">
               <div className="absolute content-stretch flex flex-col items-center left-[16.67%] pb-[0.585px] right-[16.67%] top-[-0.81px]" data-node-id="2:5330" data-name="p.text-body-lg">
                 <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] text-center tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5331">
-                  <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Work smarter and collaborate faster with Intercom’s configurable, shared Inbox designed for speed</p>
+                  <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Clain is the customer service platform built around an autonomous AI agent that resolves real.</p>
                   <p className="leading-[var(--line-height\/22_4,22.4px)]">and efficiency.</p>
                 </div>
               </div>
@@ -102,13 +104,13 @@
             <div className="content-stretch flex flex-col items-start pb-[48px] relative shrink-0 w-full" data-node-id="2:5332" data-name="div.mb-6:margin">
               <div className="content-stretch flex gap-[var(--item-spacing\/8,8px)] items-start justify-center relative shrink-0 w-full" data-node-id="2:5333" data-name="div.mb-6">
                 <div className="bg-[#111] content-stretch flex h-[40px] items-center justify-center pb-[8.5px] pt-[7.5px] px-[14px] relative rounded-[4px] shrink-0" data-node-id="2:5334" data-name="Component 1">
-                  <a className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/white\/solid,white)] text-center whitespace-nowrap" href="https://app.intercom.com/admins/sign_up" data-node-id="I2:5334;2:5028" target="_blank">
+                  <a className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/white\/solid,white)] text-center whitespace-nowrap" href="/signup" data-node-id="I2:5334;2:5028" target="_blank">
                     <p className="cursor-pointer leading-[var(--line-height\/24,24px)]">Start free trial</p>
                   </a>
                 </div>
                 <div className="border-[#111] border-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex h-[40px] items-center justify-center pb-[8.5px] pt-[7.5px] px-[15px] relative rounded-[4px] shrink-0" data-node-id="2:5336" data-name="Component 1">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[0px] text-[color:var(--color\/grey\/7,#111)] text-center whitespace-nowrap" data-node-id="I2:5336;2:5032">
-                    <a className="block cursor-pointer font-['Inter:Regular',sans-serif] font-normal leading-[24px] text-[15.1px]" href="https://www.intercom.com/view-demos" target="_blank">
+                    <a className="block cursor-pointer font-['Inter:Regular',sans-serif] font-normal leading-[24px] text-[15.1px]" href="/demo" target="_blank">
                       View demo
                     </a>
                   </div>
@@ -135,7 +137,7 @@
           <div className="content-stretch flex flex-col items-start pb-[32px] relative shrink-0 w-full" data-node-id="2:5345" data-name="span.text-label-lg:margin">
             <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-node-id="2:5346" data-name="span.text-label-lg">
               <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[color:var(--color\/grey\/7,#111)] text-[length:var(--font-size\/12,12px)] text-center tracking-[var(--letter-spacing\/0_6,0.6px)] uppercase whitespace-nowrap" data-node-id="2:5347">
-                <p className="leading-[var(--font-size\/12,12px)]">Trusted by more than 25,000 leading brands</p>
+                <p className="leading-[var(--font-size\/12,12px)]">Clain combines an autonomous AI agent.</p>
               </div>
             </div>
           </div>
@@ -234,7 +236,7 @@
               <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start pt-[24px] relative size-full">
                 <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:5453" data-name="h3.text-heading-5">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[21.9px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_48,-0.48px)] w-full" data-node-id="2:5454">
-                    <p className="leading-[var(--line-height\/24,24px)]">An AI assistant for every agent</p>
+                    <p className="leading-[var(--line-height\/24,24px)]">Resolve customer questions.</p>
                   </div>
                 </div>
               </div>
@@ -243,8 +245,8 @@
               <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start pt-[7.195px] relative size-full">
                 <div className="content-stretch flex flex-col items-start pb-[0.585px] relative shrink-0 w-full" data-node-id="2:5456" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_16,-0.16px)] w-full" data-node-id="2:5457">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Copilot provides instant answers, so your team</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)]">can focus on customer relationships.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Trained on your knowledge, your tickets, your.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)]">Agents see context, take action,.</p>
                   </div>
                 </div>
               </div>
@@ -265,8 +267,8 @@
               <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start pt-[7.195px] relative size-full">
                 <div className="content-stretch flex flex-col items-start pb-[0.585px] relative shrink-0 w-full" data-node-id="2:5463" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.5px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_16,-0.16px)] w-full" data-node-id="2:5464">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Optimize how you work with a flexible, easy-to-</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)]">use interface designed for speed.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Plug Clain into your stack with 30+ native.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)]">Reporting that shows what AI.</p>
                   </div>
                 </div>
               </div>
@@ -287,8 +289,8 @@
               <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start pt-[7.195px] relative size-full">
                 <div className="content-stretch flex flex-col items-start pb-[0.585px] relative shrink-0 w-full" data-node-id="2:5471" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_16,-0.16px)] w-full" data-node-id="2:5472">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Team Inboxes connect your teams, channels,</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)]">tickets, and data into one single workspace.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Built so support, success and sales work.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)]">Set guardrails. Let the agent run. Audit.</p>
                   </div>
                 </div>
               </div>
@@ -313,15 +315,15 @@
           </div>
           <div className="content-stretch flex flex-col items-start pt-[1.1px] relative shrink-0 w-full" data-node-id="2:5484" data-name="h2.text-heading-3">
             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[50.1px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-1_6,-1.6px)] w-full" data-node-id="2:5485">
-              <p className="leading-[var(--line-height\/54,54px)] mb-0">Increase agent efficiency</p>
+              <p className="leading-[var(--line-height\/54,54px)] mb-0">One platform, every channel</p>
               <p className="leading-[var(--line-height\/54,54px)]">by 31% with Copilot</p>
             </div>
           </div>
           <div className="content-stretch flex flex-col items-start max-w-[557.9199829101562px] relative shrink-0 w-[557.91px]" data-node-id="2:5486" data-name="p.text-body-lg">
             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5487">
-              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Intercom’s Copilot gives every support agent a personal AI assistant. It</p>
-              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">provides instant answers, so your team can stop wasting time and focus</p>
-              <p className="leading-[var(--line-height\/22_4,22.4px)]">on what really matters: forging deeper relationships with customers.</p>
+              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Every conversation in Clain trains the next one — your knowledge, your.</p>
+              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Built for teams who measure success in resolution rate, not response.</p>
+              <p className="leading-[var(--line-height\/22_4,22.4px)]">Connect every channel — email, live chat, voice, WhatsApp,.</p>
             </div>
           </div>
         </div>
@@ -336,14 +338,14 @@
                   <div className="content-stretch flex flex-col gap-[var(--item-spacing\/-0_7,0px)] h-full items-start min-w-[388.2699890136719px] pb-[0.705px] relative shrink-0 w-[388.27px]" data-node-id="2:5495" data-name="div.flex">
                     <div className="content-stretch flex items-start mb-[-0.705px] pb-[8px] relative shrink-0 w-full" data-node-id="2:5496" data-name="h4.text-heading-6">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_2,-0.2px)] whitespace-nowrap" data-node-id="2:5497">
-                        <p className="leading-[var(--line-height\/19,19px)] mb-0">Expert training, troubleshooting and</p>
+                        <p className="leading-[var(--line-height\/19,19px)] mb-0">Cuts time-to-first-response from.</p>
                         <p className="leading-[var(--line-height\/19,19px)]">guidance</p>
                       </div>
                     </div>
                     <div className="content-stretch flex flex-col items-start mb-[-0.705px] relative shrink-0 w-full" data-node-id="2:5498" data-name="p">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5499">
-                        <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Copilot can help agents troubleshoot issues, or with</p>
-                        <p className="leading-[var(--line-height\/19_6,19.6px)]">onboarding and internal training materials.</p>
+                        <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Resolves repeat questions instantly so humans.</p>
+                        <p className="leading-[var(--line-height\/19_6,19.6px)]">Speaks 40+ languages out of the box, with.</p>
                       </div>
                     </div>
                   </div>
@@ -356,13 +358,13 @@
                 <div className="content-stretch flex flex-col gap-[var(--item-spacing\/-0_7,0px)] h-full items-start pb-[0.705px] relative shrink-0 w-[379px]" data-node-id="2:5503" data-name="div.flex">
                   <div className="content-stretch flex items-start mb-[-0.705px] pb-[8px] relative shrink-0 w-full" data-node-id="2:5504" data-name="h4.text-heading-6">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[18.4px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_2,-0.2px)] whitespace-nowrap" data-node-id="2:5505">
-                      <p className="leading-[var(--line-height\/19,19px)]">The best answers from conversation history</p>
+                      <p className="leading-[var(--line-height\/19,19px)]">Drops into existing tools — Zendesk,.</p>
                     </div>
                   </div>
                   <div className="content-stretch flex flex-col items-start mb-[-0.705px] relative shrink-0 w-full" data-node-id="2:5506" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5507">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Copilot uses your conversation history to generate answers—</p>
-                      <p className="leading-[var(--line-height\/19_6,19.6px)]">and you choose exactly which conversation data is used.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Live SLA, queue health and agent quality in one dashboard.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)]">Built for teams shipping faster customer service every quarter.</p>
                     </div>
                   </div>
                 </div>
@@ -374,13 +376,13 @@
                 <div className="content-stretch flex flex-col gap-[var(--item-spacing\/-0_7,0px)] h-full items-start pb-[0.705px] relative shrink-0 w-[386px]" data-node-id="2:5511" data-name="div.flex">
                   <div className="content-stretch flex items-start mb-[-0.705px] pb-[8px] relative shrink-0 w-full" data-node-id="2:5512" data-name="h4.text-heading-6">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_2,-0.2px)] whitespace-nowrap" data-node-id="2:5513">
-                      <p className="leading-[var(--line-height\/19,19px)]">Trusted information from any content source</p>
+                      <p className="leading-[var(--line-height\/19,19px)]">Tracks every action, every tool call,.</p>
                     </div>
                   </div>
                   <div className="content-stretch flex flex-col items-start mb-[-0.705px] relative shrink-0 w-full" data-node-id="2:5514" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5515">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Copilot uses the most relevant information from across internal</p>
-                      <p className="leading-[var(--line-height\/19_6,19.6px)]">and external content to create the best answer every time.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Clain's AI agent has tools. It looks up orders, processes.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)]">Pairs Clain AI with humans for end-to-end resolution.</p>
                     </div>
                   </div>
                 </div>
@@ -392,13 +394,13 @@
                 <div className="content-stretch flex flex-col h-full items-start relative shrink-0 w-[387px]" data-node-id="2:5519" data-name="div.flex">
                   <div className="content-stretch flex items-start pb-[8px] relative shrink-0 w-full" data-node-id="2:5520" data-name="h4.text-heading-6">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_2,-0.2px)] whitespace-nowrap" data-node-id="2:5521">
-                      <p className="leading-[var(--line-height\/19,19px)]">Deep insights, complete oversight</p>
+                      <p className="leading-[var(--line-height\/19,19px)]">Trained on your help center,.</p>
                     </div>
                   </div>
                   <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:5522" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5523">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Keep an eye on how support teammates are using Copilot, and</p>
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">set permissions for which content and conversations it can pull</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Lets the AI agent reason, look up, and act on your data.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Reporting in Clain shows you exactly what the AI resolved,.</p>
                       <p className="leading-[var(--line-height\/19_6,19.6px)]">from.</p>
                     </div>
                   </div>
@@ -472,9 +474,9 @@
           </div>
           <div className="content-stretch flex flex-col items-start max-w-[557.9199829101562px] relative shrink-0 w-[467.77px]" data-node-id="2:5551" data-name="p.text-body-lg">
             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5552">
-              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">AI instantly translates messages in the Inbox across every channel</p>
-              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">—so agents can speak to customers in +45 languages, and you can</p>
-              <p className="leading-[var(--line-height\/22_4,22.4px)]">scale your support to any region.</p>
+              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more so.</p>
+              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Set policy. Set guardrails. Set escalation thresholds. Then.</p>
+              <p className="leading-[var(--line-height\/22_4,22.4px)]">From product question to refund.</p>
             </div>
           </div>
         </div>
@@ -521,8 +523,8 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] pb-[0.585px] relative row-2 self-start shrink-0" data-node-id="2:5578" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5579">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Customize your Inbox with dark mode, layout</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)]">options, and multilingual preferences.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Backed by audit trails so compliance and.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)]">Clain pulls customer context from.</p>
                   </div>
                 </div>
               </div>
@@ -551,8 +553,8 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] pb-[0.585px] relative row-2 self-start shrink-0" data-node-id="2:5593" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5594">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">With command+K, you can access your whole</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)]">Inbox with one, simple shortcut.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Designed so a junior agent and an.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)]">The first helpdesk where AI.</p>
                   </div>
                 </div>
               </div>
@@ -583,8 +585,8 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] pb-[0.585px] relative row-2 self-start shrink-0" data-node-id="2:5608" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5609">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Create saved replies and actions—like assign or</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)]">close a conversation—and apply with one click.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Less queueing, less swivel-chair, more.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)]">Clain combines an autonomous AI agent with a.</p>
                   </div>
                 </div>
               </div>
@@ -614,7 +616,7 @@
             </div>
           </div>
           <div className="bg-[#111] content-stretch flex items-center justify-center pb-[8.5px] pt-[7.5px] px-[14px] relative rounded-[4px] shrink-0" data-node-id="2:5622" data-name="Component 1">
-            <a className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[0px] text-[color:var(--color\/white\/solid,white)] text-center whitespace-nowrap" href="https://app.intercom.com/admins/sign_up" data-node-id="I2:5622;2:5028" target="_blank">
+            <a className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[0px] text-[color:var(--color\/white\/solid,white)] text-center whitespace-nowrap" href="/signup" data-node-id="I2:5622;2:5028" target="_blank">
               <p className="cursor-pointer font-['Inter:Regular',sans-serif] font-normal leading-[24px] text-[14.6px]" role="link" tabIndex="0">
                 Learn more
               </p>
@@ -637,8 +639,8 @@
                     </div>
                     <div className="content-stretch flex flex-col items-start mb-[-0.705px] relative shrink-0 w-full" data-node-id="2:5634" data-name="p">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5635">
-                        <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Move seamlessly between conversations and tickets and share</p>
-                        <p className="leading-[var(--line-height\/19_6,19.6px)]">real-time customer updates.</p>
+                        <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Resolve customer questions across email, chat, voice and social.</p>
+                        <p className="leading-[var(--line-height\/19_6,19.6px)]">Resolve before you route</p>
                       </div>
                     </div>
                   </div>
@@ -656,8 +658,8 @@
                   </div>
                   <div className="content-stretch flex flex-col items-start mb-[-0.705px] relative shrink-0 w-full" data-node-id="2:5643" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5644">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Assign tickets to back-office teams and ensure everyone has</p>
-                      <p className="leading-[var(--line-height\/19_6,19.6px)]">the context they need to collaborate more efficiently.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Trained on your knowledge, your tickets, your tone of voice.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)]">Agents see context, take action, escalate when it matters.</p>
                     </div>
                   </div>
                 </div>
@@ -674,8 +676,8 @@
                   </div>
                   <div className="content-stretch flex flex-col items-start mb-[-0.705px] relative shrink-0 w-full" data-node-id="2:5651" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5652">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Easily share updates and resolve issues impacting multiple</p>
-                      <p className="leading-[var(--line-height\/19_6,19.6px)]">customers with a single ticket.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Plug Clain into your stack with 30+ native integrations.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)]">Reporting that shows what AI.</p>
                     </div>
                   </div>
                 </div>
@@ -723,13 +725,13 @@
           </div>
           <div className="content-stretch flex flex-col items-start pt-[0.8px] relative shrink-0 w-full" data-node-id="2:5672" data-name="h2.text-heading-3">
             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[50px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-1_6,-1.6px)] w-full" data-node-id="2:5673">
-              <p className="leading-[var(--line-height\/54,54px)]">All of your channels together</p>
+              <p className="leading-[var(--line-height\/54,54px)]">Fewer tickets, happier teams</p>
             </div>
           </div>
           <div className="content-stretch flex flex-col items-start max-w-[557.9199829101562px] pb-[0.585px] relative shrink-0 w-[557.91px]" data-node-id="2:5674" data-name="p.text-body-lg">
             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5675">
-              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Conversations from every channel route directly to your Inbox for easier</p>
-              <p className="leading-[var(--line-height\/22_4,22.4px)]">prioritization, faster resolutions, and high-quality customer experiences.</p>
+              <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Born after the LLM transition: Clain isn't a helpdesk with an AI bolted.</p>
+              <p className="leading-[var(--line-height\/22_4,22.4px)]">From SMB to enterprise, Clain runs the same agent — what changes is the.</p>
             </div>
           </div>
         </div>
@@ -754,12 +756,12 @@
                   <div className="content-stretch flex flex-col gap-[var(--item-spacing\/-0_7,0px)] h-full items-start min-w-[388.2699890136719px] pb-[0.705px] relative shrink-0 w-[388.27px]" data-node-id="2:5686" data-name="div.flex">
                     <div className="content-stretch flex items-start mb-[-0.705px] pb-[8px] relative shrink-0 w-full" data-node-id="2:5687" data-name="h4.text-heading-6">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[18.4px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_2,-0.2px)] whitespace-nowrap" data-node-id="2:5688">
-                        <p className="leading-[var(--line-height\/19,19px)]">Support your customers where they are</p>
+                        <p className="leading-[var(--line-height\/19,19px)]">Built so support, success and sales.</p>
                       </div>
                     </div>
                     <div className="content-stretch flex flex-col items-start mb-[-0.705px] relative shrink-0 w-full" data-node-id="2:5689" data-name="p">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5690">
-                        <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Customers can use live chat, email, SMS, WhatsApp,</p>
+                        <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Set guardrails. Let the agent run. Audit every.</p>
                         <p className="leading-[var(--line-height\/19_6,19.6px)]">Facebook, and more.</p>
                       </div>
                     </div>
@@ -773,13 +775,13 @@
                 <div className="content-stretch flex flex-col h-full items-start min-w-[388.2699890136719px] relative shrink-0 w-[388.27px]" data-node-id="2:5694" data-name="div.flex">
                   <div className="content-stretch flex items-start pb-[8px] relative shrink-0 w-full" data-node-id="2:5695" data-name="h4.text-heading-6">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_2,-0.2px)] whitespace-nowrap" data-node-id="2:5696">
-                      <p className="leading-[var(--line-height\/19,19px)]">Calls and conversations in one place</p>
+                      <p className="leading-[var(--line-height\/19,19px)]">Cuts time-to-first-response from.</p>
                     </div>
                   </div>
                   <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:5697" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5698">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Use phone calls, video calls, and screen sharing to</p>
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">troubleshoot customer issues faster with modern, native</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Resolves repeat questions instantly so humans.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Speaks 40+ languages out of the box, with the same.</p>
                       <p className="leading-[var(--line-height\/19_6,19.6px)]">phone support.</p>
                     </div>
                   </div>
@@ -792,13 +794,13 @@
                 <div className="content-stretch flex flex-col gap-[var(--item-spacing\/-0_7,0px)] h-full items-start pb-[0.705px] relative shrink-0 w-[381px]" data-node-id="2:5702" data-name="div.flex">
                   <div className="content-stretch flex items-start mb-[-0.705px] pb-[8px] relative shrink-0 w-full" data-node-id="2:5703" data-name="h4.text-heading-6">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_2,-0.2px)] whitespace-nowrap" data-node-id="2:5704">
-                      <p className="leading-[var(--line-height\/19,19px)]">Any channel in any language</p>
+                      <p className="leading-[var(--line-height\/19,19px)]">AI that handles the boring</p>
                     </div>
                   </div>
                   <div className="content-stretch flex flex-col items-start mb-[-0.705px] relative shrink-0 w-full" data-node-id="2:5705" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13.1px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5706">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Provide personalized, conversational customer experiences—</p>
-                      <p className="leading-[var(--line-height\/19_6,19.6px)]">no matter what the channel or language.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Drops into existing tools — Zendesk, HubSpot, Salesforce, more.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)]">Live SLA, queue health and agent.</p>
                     </div>
                   </div>
                 </div>
@@ -824,7 +826,7 @@
           </div>
           <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:5717" data-name="h2.text-heading-3">
             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[50.1px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-1_6,-1.6px)] w-full" data-node-id="2:5718">
-              <p className="leading-[var(--line-height\/54,54px)]">Fully integrated customer context</p>
+              <p className="leading-[var(--line-height\/54,54px)]">Built for teams shipping faster.</p>
             </div>
           </div>
         </div>
@@ -847,12 +849,12 @@
               <div className="gap-x-[8px] gap-y-[8px] grid grid-cols-[_577.33px] grid-rows-[___24px_44.78px_0px] h-[84.78px] relative shrink-0 w-full z-[1]" data-node-id="2:5730" data-name="div.grid">
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[512px] relative row-1 self-start shrink-0" data-node-id="2:5731" data-name="h3.text-heading-5">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[22.1px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-0_48,-0.48px)] whitespace-nowrap" data-node-id="2:5732">
-                    <p className="leading-[var(--line-height\/24,24px)]">Easily accessible customer data</p>
+                    <p className="leading-[var(--line-height\/24,24px)]">Tracks every action, every.</p>
                   </div>
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] pb-[0.585px] relative row-2 self-start shrink-0" data-node-id="2:5733" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5734">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Expand the right hand side bar for rich customer data and context that’s</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Tickets in Clain are not just queues. They're conversations the agent.</p>
                     <p className="leading-[var(--line-height\/22_4,22.4px)]">easily customizable.</p>
                   </div>
                 </div>
@@ -884,8 +886,8 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] pb-[0.585px] relative row-2 self-start shrink-0" data-node-id="2:5748" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5749">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Connect pre-built integrations—like Slack, Jira, and Salesforce—to access</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)]">vital info without leaving Intercom.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Compliance and trust are built in: SOC2, GDPR, audit logs of every model.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)]">Pairs Clain AI with humans for.</p>
                   </div>
                 </div>
               </div>
@@ -931,8 +933,8 @@
                     </div>
                     <div className="content-stretch flex flex-col items-start mb-[-0.7px] relative shrink-0 w-full" data-node-id="2:5773" data-name="p">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5774">
-                        <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">View all the conversations your teammates are having with an</p>
-                        <p className="leading-[var(--line-height\/19_6,19.6px)]">Inbox view tailored to your team goals.</p>
+                        <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Clain resolves the long tail — the 60% of tickets your team.</p>
+                        <p className="leading-[var(--line-height\/19_6,19.6px)]">Trained on your help center, ticket.</p>
                       </div>
                     </div>
                   </div>
@@ -950,8 +952,8 @@
                   </div>
                   <div className="content-stretch flex flex-col items-start mb-[-0.7px] relative shrink-0 w-full" data-node-id="2:5781" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5782">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Monitor current support volume, team capacity, and KPIs so</p>
-                      <p className="leading-[var(--line-height\/19_6,19.6px)]">you can allocate resources fast, and effectively.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Lets the AI agent reason, look up, and act on your data.</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)]">From product question to refund flow, the agent.</p>
                     </div>
                   </div>
                 </div>
@@ -968,7 +970,7 @@
                   </div>
                   <div className="content-stretch flex flex-col items-start mb-[-0.7px] relative shrink-0 w-full" data-node-id="2:5790" data-name="p">
                     <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:5791">
-                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Track, manage, and improve your team’s performance with our</p>
+                      <p className="leading-[var(--line-height\/19_6,19.6px)] mb-0">Backed by audit trails so compliance and trust are non-negotiable.</p>
                       <p className="leading-[var(--line-height\/19_6,19.6px)]">easy-to-use reports.</p>
                     </div>
                   </div>
@@ -1042,9 +1044,9 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] relative row-2 self-start shrink-0" data-node-id="2:5827" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5828">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Create team assignment methods and</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">prioritization rules to ensure conversations are</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)]">assigned to the most relevant teammate.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Clain pulls customer context from.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Designed so a junior agent and an autonomous.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)]">The first helpdesk where AI resolution.</p>
                   </div>
                 </div>
               </div>
@@ -1073,8 +1075,8 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] relative row-2 self-start shrink-0" data-node-id="2:5842" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5843">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Set SLA targets to prioritize urgent conversations,</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">provide VIP support, and track your</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Less queueing, less swivel-chair, more.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Clain combines an autonomous AI.</p>
                     <p className="leading-[var(--line-height\/22_4,22.4px)]">team’s performance.</p>
                   </div>
                 </div>
@@ -1106,8 +1108,8 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] relative row-2 self-start shrink-0" data-node-id="2:5857" data-name="p.text-body-lg">
                   <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] whitespace-nowrap" data-node-id="2:5858">
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Use our visual builder to automate your team’s</p>
-                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">workload with assignment rules, SLAs, time-saving</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Resolve customer questions across email,.</p>
+                    <p className="leading-[var(--line-height\/22_4,22.4px)] mb-0">Trained on your knowledge, your tickets, your.</p>
                     <p className="leading-[var(--line-height\/22_4,22.4px)]">bots, and more.</p>
                   </div>
                 </div>
@@ -1134,14 +1136,14 @@
             </div>
             <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:5870" data-name="h2.text-balance">
               <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[50.7px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-1_6,-1.6px)] whitespace-nowrap" data-node-id="2:5871">
-                <p className="leading-[var(--line-height\/54,54px)] mb-0">Over 60 improvements to the</p>
-                <p className="leading-[var(--line-height\/54,54px)]">helpdesk you use everyday</p>
+                <p className="leading-[var(--line-height\/54,54px)] mb-0">Modern helpdesk, rebuilt</p>
+                <p className="leading-[var(--line-height\/54,54px)]">Agents that actually work</p>
               </div>
             </div>
             <div className="content-stretch flex flex-col items-start max-w-[672px] pt-[7px] relative shrink-0 w-[672px]" data-node-id="2:5872" data-name="p.text-body-lg:margin">
               <div className="content-stretch flex flex-col items-start max-w-[672px] relative shrink-0 w-full" data-node-id="2:5873" data-name="p.text-body-lg">
                 <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] w-full" data-node-id="2:5874">
-                  <p className="leading-[var(--line-height\/22_4,22.4px)]">{`The features you've been asking for and improvements you'll notice every day.`}</p>
+                  <p className="leading-[var(--line-height\/22_4,22.4px)]">{`Use Clain Copilot to give every human agent the AI's context, suggested.`}</p>
                 </div>
               </div>
             </div>
@@ -1178,12 +1180,12 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5889" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5890">
-                        <p className="leading-[var(--line-height\/24,24px)]">Translation quality feedback</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Automate the repetitive</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5891" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5892">
-                        <p className="leading-[var(--line-height\/24,24px)]">Side conversation notifications</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Agents see context, take.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5893" data-name="li.text-body-sm">
@@ -1204,28 +1206,28 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5899" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5900">
-                        <p className="leading-[var(--line-height\/24,24px)]">SLA sorting (FRT, NRT, TTC, TTR)</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Plug Clain into your stack with.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5901" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5902">
-                        <p className="leading-[var(--line-height\/24,24px)]">Skip away mode in Round Robin</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Inbox, tickets, knowledge</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5903" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5904">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Company pop-over with ID, copy,</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Reporting that shows what AI.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">and open</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5905" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5906">
-                        <p className="leading-[var(--line-height\/24,24px)]">Side conversations export</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Built around the agent</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5907" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5908">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Bulk edit admin statuses in</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Smarter every conversation</p>
                         <p className="leading-[var(--line-height\/24,24px)]">Realtime Dashboard</p>
                       </div>
                     </div>
@@ -1257,7 +1259,7 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5919" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5920">
-                        <p className="leading-[var(--line-height\/24,24px)]">Conversation events UI updates</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Built so support, success and.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5921" data-name="li.text-body-sm">
@@ -1267,7 +1269,7 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5923" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5924">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Invite configuration for team</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">From reactive to proactive</p>
                         <p className="leading-[var(--line-height\/24,24px)]">inboxes</p>
                       </div>
                     </div>
@@ -1304,7 +1306,7 @@
                   <div className="absolute content-stretch flex flex-col gap-[var(--item-spacing\/8,8px)] inset-[0_0_-224px_0] items-start mask-alpha mask-intersect mask-no-clip mask-no-repeat mask-position-[0%_0%] mask-size-[100%_55.73%] pb-[48px]" data-node-id="2:5936" style={{ maskImage: `url('${imgUlNoScrollbar1}')` }} data-name="ul.no-scrollbar">
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5937" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5938">
-                        <p className="leading-[var(--line-height\/24,24px)]">Call transfer to workflows</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">End-to-end resolution</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5939" data-name="li.text-body-sm">
@@ -1329,12 +1331,12 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5947" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15.1px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5948">
-                        <p className="leading-[var(--line-height\/24,24px)]">Default outbound phone number</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Native AI, end to end</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5949" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15.1px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5950">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Default outbound numbers for</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Customer service, evolved</p>
                         <p className="leading-[var(--line-height\/24,24px)]">callbacks</p>
                       </div>
                     </div>
@@ -1346,12 +1348,12 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5953" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5954">
-                        <p className="leading-[var(--line-height\/24,24px)]">Country-specific dial tones</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Built for AI-first teams</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5955" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5956">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Enhanced call lifecycle and</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">One platform, every channel</p>
                         <p className="leading-[var(--line-height\/24,24px)]">assignment visibility</p>
                       </div>
                     </div>
@@ -1388,29 +1390,29 @@
                   <div className="absolute content-stretch flex flex-col gap-[var(--item-spacing\/8,8px)] inset-[0_0_-255px_0] items-start mask-alpha mask-intersect mask-no-clip mask-no-repeat mask-position-[0%_0%] mask-size-[100%_52.51%] pb-[48px]" data-node-id="2:5968" style={{ maskImage: `url('${imgUlNoScrollbar1}')` }} data-name="ul.no-scrollbar">
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5969" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5970">
-                        <p className="leading-[var(--line-height\/24,24px)]">Data Connectors: pre-signed URLs</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Set guardrails. Let the agent.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5971" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5972">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Data Connectors: pre-configured</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Cuts time-to-first-response.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">OAuth providers</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5973" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5974">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Data Connectors: Execution</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Resolve before you route</p>
                         <p className="leading-[var(--line-height\/24,24px)]">Results API</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5975" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5976">
-                        <p className="leading-[var(--line-height\/24,24px)]">Data Connectors: health metrics</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Resolves repeat questions.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5977" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5978">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Data Connectors: authentication</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Speaks 40+ languages out of.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">improvements</p>
                       </div>
                     </div>
@@ -1422,7 +1424,7 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5981" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.5px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5982">
-                        <p className="leading-[var(--line-height\/24,24px)]">Activity Log Event Types API</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Fewer tickets, happier teams</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5983" data-name="li.text-body-sm">
@@ -1433,7 +1435,7 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5985" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:5986">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Shopify onboarding for new</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">AI that handles the boring</p>
                         <p className="leading-[var(--line-height\/24,24px)]">signups</p>
                       </div>
                     </div>
@@ -1470,38 +1472,38 @@
                   <div className="absolute content-stretch flex flex-col gap-[var(--item-spacing\/8,8px)] inset-[0_0_-932px_0] items-start mask-alpha mask-intersect mask-no-clip mask-no-repeat mask-position-[0%_0%] mask-size-[100%_23.23%] pb-[48px]" data-node-id="2:5998" style={{ maskImage: `url('${imgUlNoScrollbar1}')` }} data-name="ul.no-scrollbar">
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:5999" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6000">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Split delete permissions (replies vs</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Drops into existing tools —.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">notes)</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6001" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6002">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Macros permissions (create, edit,</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Live SLA, queue health and agent.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">delete)</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6003" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6004">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Inbox permissions (trigger data</p>
-                        <p className="leading-[var(--line-height\/24,24px)]">connectors, reassign when away)</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Built for teams shipping.</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Tracks every action, every.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6005" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6006">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Teammate profile permissions (edit</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Pairs Clain AI with humans for.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">own, edit others)</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6007" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6008">
                         <p className="leading-[var(--line-height\/24,24px)] mb-0">Conversation permissions</p>
-                        <p className="leading-[var(--line-height\/24,24px)]">(participants, merge, creation)</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Trained on your help center,.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6009" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15.1px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6010">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">BPO permission restrictions</p>
-                        <p className="leading-[var(--line-height\/24,24px)]">(GDPR visibility control)</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Modern helpdesk, rebuilt</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Agents that actually work</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6011" data-name="li.text-body-sm">
@@ -1512,27 +1514,27 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6013" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6014">
-                        <p className="leading-[var(--line-height\/24,24px)]">Change ticket type after creation</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Lets the AI agent reason, look.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6015" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.9px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6016">
-                        <p className="leading-[var(--line-height\/24,24px)]">Require ticket attribute on close</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">From product question to refund.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6017" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6018">
-                        <p className="leading-[var(--line-height\/24,24px)]">Track ticket state transitions in API</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Backed by audit trails so compliance.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6019" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.5px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6020">
-                        <p className="leading-[var(--line-height\/24,24px)]">Tickets Portal: restrict user visibility</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Clain pulls customer context from every.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6021" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15.1px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6022">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Push notification management per</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Designed so a junior agent and.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">device</p>
                       </div>
                     </div>
@@ -1543,7 +1545,7 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6025" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15.1px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6026">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Attachments improvements (bulk</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">The first helpdesk where AI.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">upload, carousel, grid)</p>
                       </div>
                     </div>
@@ -1559,17 +1561,17 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6031" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6032">
-                        <p className="leading-[var(--line-height\/24,24px)]">Native Discord integration with Fin</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Less queueing, less swivel-chair,.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6033" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6034">
-                        <p className="leading-[var(--line-height\/24,24px)]">Scheduled external reports (GA)</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Clain combines an autonomous.</p>
                       </div>
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6035" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6036">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Ticket time to resolve in office</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Resolve customer questions.</p>
                         <p className="leading-[var(--line-height\/24,24px)]">hours</p>
                       </div>
                     </div>
@@ -1586,13 +1588,13 @@
                     </div>
                     <div className="border-[var(--color\/grey\/7-5\%,rgba(17,17,17,0.05))] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex flex-col items-start pb-[9px] relative shrink-0 w-full" data-node-id="2:6041" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] whitespace-nowrap" data-node-id="2:6042">
-                        <p className="leading-[var(--line-height\/24,24px)] mb-0">New macro actions: re-open</p>
-                        <p className="leading-[var(--line-height\/24,24px)]">{`conversation & set ticket state`}</p>
+                        <p className="leading-[var(--line-height\/24,24px)] mb-0">Automate the repetitive</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">{`Trained on your knowledge,.`}</p>
                       </div>
                     </div>
                     <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:6043" data-name="li.text-body-sm">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15px] text-[color:var(--color\/grey\/7,#111)] w-full" data-node-id="2:6044">
-                        <p className="leading-[var(--line-height\/24,24px)]">Conversation auto deletion</p>
+                        <p className="leading-[var(--line-height\/24,24px)]">Inbox, tickets, knowledge</p>
                       </div>
                     </div>
                   </div>
@@ -1608,8 +1610,8 @@
         <div className="content-stretch flex flex-col h-[108px] items-start pl-[249.32px] pr-[249.35px] relative shrink-0 w-full" data-node-id="2:6047" data-name="div.col-span-full">
           <div className="content-stretch flex flex-col items-center max-w-[672px] relative shrink-0 w-full" data-node-id="2:6048" data-name="h2.text-heading-3">
             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[49.9px] text-[color:var(--color\/grey\/7,#111)] text-center tracking-[var(--letter-spacing\/-1_6,-1.6px)] whitespace-nowrap" data-node-id="2:6049">
-              <p className="leading-[var(--line-height\/54,54px)] mb-0">The Inbox for more efficient</p>
-              <p className="leading-[var(--line-height\/54,54px)]">agents and better service</p>
+              <p className="leading-[var(--line-height\/54,54px)] mb-0">Built around the agent</p>
+              <p className="leading-[var(--line-height\/54,54px)]">Smarter every conversation</p>
             </div>
           </div>
         </div>
@@ -1635,14 +1637,7 @@
                   <div className="content-stretch flex flex-col items-start py-[96px] relative shrink-0 w-full" data-node-id="2:6062" data-name="blockquote.py-32">
                     <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:6063" data-name="p.text-heading-4">
                       <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[36.3px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-1_2,-1.2px)] w-full" data-node-id="2:6064">
-                        <p className="leading-[var(--line-height\/40,40px)] mb-0">{`"A huge thing that I really wanted was a`}</p>
-                        <p className="leading-[var(--line-height\/40,40px)] mb-0">tool that looked good and felt good to</p>
-                        <p className="leading-[var(--line-height\/40,40px)] mb-0">use. It’s very obvious that it’s been cared</p>
-                        <p className="leading-[var(--line-height\/40,40px)] mb-0">for like that. And I spend more than</p>
-                        <p className="leading-[var(--line-height\/40,40px)] mb-0">eight hours a day in this tool, so if it feels</p>
-                        <p className="leading-[var(--line-height\/40,40px)] mb-0">bad to use and looks clunky, then I’m</p>
-                        <p className="leading-[var(--line-height\/40,40px)] mb-0">going to have a bad time and I won’t</p>
-                        <p className="leading-[var(--line-height\/40,40px)]">{`enjoy it."`}</p>
+                        <p className="leading-[var(--line-height\/40,40px)]">{`"Clain replaced three tools with a single inbox where the AI agent and our humans share the same context. Resolution times dropped, our team finally enjoys their day, and our customers notice the difference."`}</p>
                       </div>
                     </div>
                   </div>
@@ -1668,26 +1663,19 @@
                         <div className="content-stretch flex flex-col items-start py-[96px] relative shrink-0 w-full" data-node-id="2:6075" data-name="blockquote.py-32">
                           <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:6076" data-name="p.text-heading-4">
                             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[36.3px] text-[color:var(--color\/grey\/7,#111)] tracking-[var(--letter-spacing\/-1_2,-1.2px)] w-full" data-node-id="2:6077">
-                              <p className="leading-[var(--line-height\/40,40px)] mb-0">{`"A huge thing that I really wanted was a`}</p>
-                              <p className="leading-[var(--line-height\/40,40px)] mb-0">tool that looked good and felt good to</p>
-                              <p className="leading-[var(--line-height\/40,40px)] mb-0">use. It’s very obvious that it’s been cared</p>
-                              <p className="leading-[var(--line-height\/40,40px)] mb-0">for like that. And I spend more than</p>
-                              <p className="leading-[var(--line-height\/40,40px)] mb-0">eight hours a day in this tool, so if it feels</p>
-                              <p className="leading-[var(--line-height\/40,40px)] mb-0">bad to use and looks clunky, then I’m</p>
-                              <p className="leading-[var(--line-height\/40,40px)] mb-0">going to have a bad time and I won’t</p>
-                              <p className="leading-[var(--line-height\/40,40px)]">{`enjoy it."`}</p>
+                              <p className="leading-[var(--line-height\/40,40px)]">{`"What surprised us most is how Clain handled the long tail. The AI now resolves the bulk of repeat questions on its own, and the rest reach our agents already triaged, summarised and pre-drafted."`}</p>
                             </div>
                           </div>
                         </div>
                         <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:6078" data-name="figcaption">
                           <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:6079" data-name="span.text-body">
                             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7,#111)] w-full" data-node-id="2:6080">
-                              <p className="leading-[var(--line-height\/19_6,19.6px)]">Pat Barlow</p>
+                              <p className="leading-[var(--line-height\/19_6,19.6px)]">Sara Kim</p>
                             </div>
                           </div>
                           <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:6081" data-name="span.text-body">
                             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-50\%,rgba(17,17,17,0.5))] w-full" data-node-id="2:6082">
-                              <p className="leading-[var(--line-height\/19_6,19.6px)]">Support Lead at Dovetail</p>
+                              <p className="leading-[var(--line-height\/19_6,19.6px)]">Head of CX at Gifted</p>
                             </div>
                           </div>
                         </div>
@@ -1740,13 +1728,13 @@
         </div>
         <div className="content-stretch flex gap-[var(--item-spacing\/8,8px)] items-start justify-center relative shrink-0 w-full" data-node-id="2:6105" data-name="div.flex">
           <div className="bg-[#111] content-stretch flex h-[40px] items-center justify-center pb-[8.5px] pt-[7.5px] px-[14px] relative rounded-[4px] shrink-0" data-node-id="2:6106" data-name="Component 1">
-            <a className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/white\/solid,white)] text-center whitespace-nowrap" href="https://app.intercom.com/admins/sign_up" data-node-id="I2:6106;2:5028" target="_blank">
+            <a className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/white\/solid,white)] text-center whitespace-nowrap" href="/signup" data-node-id="I2:6106;2:5028" target="_blank">
               <p className="cursor-pointer leading-[var(--line-height\/24,24px)]">Start free trial</p>
             </a>
           </div>
           <div className="border-[#111] border-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex h-[40px] items-center justify-center pb-[8.5px] pt-[7.5px] px-[15px] relative rounded-[4px] shrink-0" data-node-id="2:6108" data-name="Component 1">
             <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[0px] text-[color:var(--color\/grey\/7,#111)] text-center whitespace-nowrap" data-node-id="I2:6108;2:5032">
-              <a className="block cursor-pointer font-['Inter:Regular',sans-serif] font-normal leading-[24px] text-[15.1px]" href="https://www.intercom.com/view-demos" target="_blank">
+              <a className="block cursor-pointer font-['Inter:Regular',sans-serif] font-normal leading-[24px] text-[15.1px]" href="/demo" target="_blank">
                 View demo
               </a>
             </div>

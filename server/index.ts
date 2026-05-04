@@ -325,8 +325,9 @@ app.get('/api/health', async (_req, res) => {
 // Mounted AFTER /webhooks and /api so those continue to take precedence.
 // In Vercel, vercel.json rewrites handle equivalent routing; this block is
 // primarily for local `npm start` and self-hosted deployments.
-const LANDING_DIR = path.resolve(__dirname, '../public-landing');
-const SPA_DIR     = path.resolve(__dirname, '../dist');
+const LANDING_DIR   = path.resolve(__dirname, '../public-landing');
+const LANDING_V2_DIR = path.resolve(__dirname, '../public-landing-v2');
+const SPA_DIR        = path.resolve(__dirname, '../dist');
 
 app.use('/app', express.static(SPA_DIR, { index: false, fallthrough: true }));
 app.get(/^\/app(\/.*)?$/, (_req, res, next) => {
@@ -338,13 +339,38 @@ app.get(/^\/app(\/.*)?$/, (_req, res, next) => {
   });
 });
 
-app.use('/', express.static(LANDING_DIR, { index: 'index.html', fallthrough: true }));
-// Hash-based SPA in the landing — every unmatched GET serves the landing shell.
-app.get(/^\/(?!api|webhooks|app).*/, (_req, res, next) => {
-  res.sendFile(path.join(LANDING_DIR, 'index.html'), (err) => {
+// Landing v2 — primary landing site, matches vercel.json production routing.
+//   /v2/*       → static assets + SPA fallback (e.g. /v2/styles.css, /v2/assets/*)
+//   /           → v2 landing root
+//   /<route>    → v2 SPA routes (how-it-works, pricing, inbox, ai-agent, etc.)
+// Static assets referenced from index.html via /v2/ paths.
+app.use('/v2', express.static(LANDING_V2_DIR, { index: 'index.html', fallthrough: true }));
+// Also expose top-level v2 assets so /styles.css, /shared.jsx, /home.jsx, etc. resolve.
+// (vercel.json rewrites these individually — locally a single static mount is simpler.)
+app.use('/', express.static(LANDING_V2_DIR, { index: false, fallthrough: true }));
+
+const V2_SPA_ROUTES = [
+  '/', '/v2', '/v2/',
+  '/ai-agent', '/ai-agent/slack', '/inbox', '/omnichannel', '/how-it-works',
+  '/tickets', '/reporting', '/startups', '/knowledge', '/pricing', '/copilot',
+  '/agent-customer', '/agent-trust', '/how-agent-works', '/technology', '/upgrade',
+  '/signin', '/signup', '/reset-password', '/demo', '/super-agent', '/integrations',
+];
+for (const route of V2_SPA_ROUTES) {
+  app.get(route, (_req, res, next) => {
+    res.sendFile(path.join(LANDING_V2_DIR, 'index.html'), (err) => {
+      if (err) next();
+    });
+  });
+}
+app.get('/v2/*', (_req, res, next) => {
+  res.sendFile(path.join(LANDING_V2_DIR, 'index.html'), (err) => {
     if (err) next();
   });
 });
+
+// Legacy v1 landing (kept under /landing-v1 for reference/archive)
+app.use('/landing-v1', express.static(LANDING_DIR, { index: 'index.html', fallthrough: true }));
 
 // ── Start ─────────────────────────────────────────────────
 const server = app.listen(config.server.port, () => {

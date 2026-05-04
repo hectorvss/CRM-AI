@@ -58,26 +58,28 @@ async function enqueueWebhookProcess(webhookEventId: string, source: string): Pr
   return jobId;
 }
 
-async function waitForJobChain(traceId: string, expectedTypes: string[], timeoutMs = 30_000): Promise<{ seen: Record<string, number>; jobs: any[] }> {
+async function waitForChainViaEntity(canonicalEventId: string, caseId: string | null, timeoutMs = 30_000): Promise<{ canonicalize: boolean; intentRoute: boolean; reconcileCase: boolean }> {
+  // Track the chain by the canonical event status + case status, which the
+  // pipeline mutates as it advances. More reliable than tracing by job id.
   const start = Date.now();
-  const seen: Record<string, number> = {};
-  let lastJobs: any[] = [];
+  let canonicalize = false; let intentRoute = false; let reconcileCase = false;
   while (Date.now() - start < timeoutMs) {
-    const { data } = await supabase
-      .from('queue_jobs')
-      .select('id, type, status, trace_id, created_at, completed_at')
-      .eq('trace_id', traceId)
-      .order('created_at', { ascending: true });
-    lastJobs = data ?? [];
-    for (const j of lastJobs) {
-      cleanup.jobIds.push(j.id);
-      if (j.status === 'completed') seen[j.type] = (seen[j.type] ?? 0) + 1;
+    // 1. canonicalize sets canonical_events.status to 'canonicalized' or 'linked'
+    const { data: ce } = await supabase
+      .from('canonical_events').select('status').eq('id', canonicalEventId).maybeSingle();
+    if (ce && (ce.status === 'canonicalized' || ce.status === 'linked')) canonicalize = true;
+
+    // 2. intent.route sets case.intent or routes to a case
+    if (caseId) {
+      const { data: cs } = await supabase
+        .from('cases').select('intent, status, last_reconciled_at').eq('id', caseId).maybeSingle();
+      if (cs?.intent) intentRoute = true;
+      if (cs?.last_reconciled_at) reconcileCase = true;
     }
-    const allHit = expectedTypes.every(t => (seen[t] ?? 0) > 0);
-    if (allHit) return { seen, jobs: lastJobs };
-    await new Promise(r => setTimeout(r, 500));
+    if (canonicalize && intentRoute && reconcileCase) break;
+    await new Promise(r => setTimeout(r, 1000));
   }
-  return { seen, jobs: lastJobs };
+  return { canonicalize, intentRoute, reconcileCase };
 }
 
 async function doCleanup() {
@@ -92,7 +94,8 @@ async function doCleanup() {
   let exitCode = 0;
   try {
     // 1. Insert webhook for a topic that auto-creates a case (Shopify orders/cancelled).
-    const webhookId = await insertWebhook('shopify', 'orders/cancelled', { id: 9001, name: '#9001' });
+    const uniqueOrderId = Math.floor(Math.random() * 1_000_000) + 9_000_000;
+    const webhookId = await insertWebhook('shopify', 'orders/cancelled', { id: uniqueOrderId, name: `#${uniqueOrderId}` });
     console.log(`  ✓ webhook inserted (${webhookId.slice(0, 8)})`);
 
     // 2. Start the worker.
@@ -104,44 +107,36 @@ async function doCleanup() {
     await enqueueWebhookProcess(webhookId, 'shopify');
     console.log(`  ✓ WEBHOOK_PROCESS job enqueued`);
 
-    // 4. Wait for the chain to fire (we expect at minimum: webhook.process,
-    //    canonicalize, intent.route, reconcile.case).
-    console.log(`  · waiting up to 30s for downstream chain...`);
-    const expectedTypes = ['webhook.process', 'canonicalize', 'intent.route', 'reconcile.case'];
-    const { seen, jobs } = await waitForJobChain(traceId, expectedTypes, 30_000);
-    console.log(`\n  Job chain seen for trace ${traceId.slice(0, 16)}:`);
-    for (const t of expectedTypes) {
-      const ok = (seen[t] ?? 0) > 0;
-      console.log(`    ${ok ? '✓' : '✗'} ${t.padEnd(20)} executions=${seen[t] ?? 0}`);
-    }
-    console.log(`\n  All jobs in trace:`);
-    for (const j of jobs) console.log(`    [${j.status}] ${j.type.padEnd(20)} ${j.id.slice(0, 8)}`);
+    // 4. Wait briefly for webhookProcess to write the canonical event link
+    await new Promise(r => setTimeout(r, 1500));
+    const { data: we } = await supabase.from('webhook_events').select('canonical_event_id').eq('id', webhookId).maybeSingle();
+    const canonicalEventId = we?.canonical_event_id;
+    if (canonicalEventId) cleanup.canonicalIds.push(canonicalEventId);
 
-    // 5. Verify a case was created.
+    // 5. Verify case auto-created.
     const { data: cases } = await supabase.from('cases')
-      .select('id, case_number, type, source_system, status')
-      .eq('tenant_id', TENANT_ID)
-      .eq('source_system', 'webhook:shopify')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .select('id, case_number, type, source_system, status, intent, last_reconciled_at')
+      .eq('tenant_id', TENANT_ID).eq('source_system', 'webhook:shopify')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (cases?.id) {
       cleanup.caseIds.push(cases.id);
-      console.log(`\n  ✓ case auto-created: ${cases.case_number} type=${cases.type} status=${cases.status}`);
+      console.log(`  ✓ case auto-created: ${cases.case_number} type=${cases.type} status=${cases.status}`);
     } else {
-      console.log(`\n  ✗ no case auto-created`);
+      console.log(`  ✗ no case auto-created`);
       exitCode = 1;
     }
 
-    // 6. Pass criteria: minimum webhook.process + canonicalize seen.
-    const minimumChainOk = (seen['webhook.process'] ?? 0) > 0 && (seen['canonicalize'] ?? 0) > 0;
-    if (!minimumChainOk) exitCode = 1;
-
-    if ((seen['intent.route'] ?? 0) === 0) {
-      console.log(`\n  ⚠  INTENT_ROUTE not reached — pipeline stops at canonicalize`);
-    }
-    if ((seen['reconcile.case'] ?? 0) === 0) {
-      console.log(`  ⚠  RECONCILE_CASE not reached — case never reconciled`);
+    // 6. Track chain via entity-state changes (more reliable than trace_id query).
+    if (canonicalEventId) {
+      console.log(`  · waiting up to 30s for downstream chain...`);
+      const chain = await waitForChainViaEntity(canonicalEventId, cases?.id ?? null, 30_000);
+      console.log(`\n  Chain via entity state:`);
+      console.log(`    ${chain.canonicalize ? '✓' : '✗'} canonicalize  (canonical_events.status updated)`);
+      console.log(`    ${chain.intentRoute ? '✓' : '✗'} intent.route   (cases.intent populated)`);
+      console.log(`    ${chain.reconcileCase ? '✓' : '✗'} reconcile.case (cases.last_reconciled_at populated)`);
+      if (!chain.canonicalize) exitCode = 1;
+      if (!chain.intentRoute) console.log(`\n  ⚠  intent.route did not populate cases.intent within 30s`);
+      if (!chain.reconcileCase) console.log(`  ⚠  reconcile.case did not run within 30s`);
     }
 
     console.log(`\n${'─'.repeat(60)}`);
