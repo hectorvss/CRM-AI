@@ -27,6 +27,7 @@ import { requireScope } from '../../lib/scope.js';
 import { fireWorkflowEvent } from '../../lib/workflowEventBus.js';
 import { broadcastSSE } from '../../routes/sse.js';
 import type { WebhookProcessPayload, JobContext } from '../types.js';
+import { normalizeInbound, isChannelSource, sourceToChannel } from '../../pipeline/channelNormalizers.js';
 
 // ── Topic → canonical entity type mapping ─────────────────────────────────────
 
@@ -365,6 +366,13 @@ async function handleWebhookProcess(
   const canonicalDedupeKey =
     `${payload.source}:${topic}:${extraction.entityId ?? randomUUID()}`;
 
+  // If this is an inbound customer message on a known channel, normalise it
+  // up front so we can both stash it on the canonical event AND hand it to
+  // the channel ingest job verbatim.
+  const inboundMessage = isChannelSource(payload.source)
+    ? normalizeInbound(payload.source, parsedBody)
+    : null;
+
   let canonicalEventId: string;
   const existing = await canonicalRepo.getEventByDedupeKey(scope, canonicalDedupeKey);
 
@@ -383,7 +391,7 @@ async function handleWebhookProcess(
       eventType: topic,
       eventCategory: extraction.eventCategory,
       occurredAt,
-      normalizedPayload: JSON.stringify({
+      normalizedPayload: JSON.stringify(inboundMessage ?? {
         rawEventId:  payload.webhookEventId,
         source:      payload.source,
         topic,
@@ -419,6 +427,33 @@ async function handleWebhookProcess(
   );
 
   log.debug('CANONICALIZE job enqueued', { canonicalEventId });
+
+  // ── 7b. Cross-channel inbox ingest ──────────────────────────────────────
+  // If this webhook represented an inbound customer message on a known
+  // messaging channel, drop it into the unified inbox pipeline so the
+  // conversation/message rows get created and the agent (or human) can
+  // reply. Skipped silently for non-message events (status updates, etc.)
+  // because normalizeInbound returns null for those.
+  if (inboundMessage) {
+    const channel = sourceToChannel(payload.source);
+    if (channel) {
+      enqueue(
+        JobType.CHANNEL_INGEST,
+        {
+          canonicalEventId,
+          channel,
+          rawMessageId: inboundMessage.externalMessageId,
+        },
+        {
+          tenantId:    scope.tenantId,
+          workspaceId: scope.workspaceId,
+          traceId:     ctx.traceId,
+          priority:    4,
+        },
+      );
+      log.info('CHANNEL_INGEST enqueued', { canonicalEventId, channel, externalMessageId: inboundMessage.externalMessageId });
+    }
+  }
 
   // ── 8. Auto-create case + fire workflow event for high-value topics ────────
   // Run asynchronously — never block the job completion

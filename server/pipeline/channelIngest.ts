@@ -38,25 +38,46 @@ import type { ChannelIngestPayload, JobContext } from '../queue/types.js';
 // All channel adapters (WhatsApp, email, etc.) must store the message in this
 // format inside canonical_events.normalized_payload before emitting CHANNEL_INGEST.
 
-interface NormalizedChannelMessage {
-  /** The raw message content (plain text, HTML stripped for email) */
+/**
+ * Every messaging channel — WhatsApp, email, Messenger, Telegram, Slack,
+ * Teams, Front, Intercom, Zendesk, Aircall, Discord, Instagram, SMS, web
+ * chat, plus the email-as-API channels (Gmail, Outlook, Postmark) — must
+ * normalise its inbound webhook into this shape inside
+ * `canonical_events.normalized_payload` before emitting CHANNEL_INGEST.
+ *
+ * The `metadata` bag carries the channel-specific reply context that the
+ * outbound dispatcher (`channelSenders.sendOnTenantChannel`) needs to
+ * thread the response correctly:
+ *   - slack:    { thread_ts }
+ *   - teams:    { teamId, channelId, messageId }   (parent message id)
+ *   - intercom: { adminId }
+ *   - gmail:    { threadId, inReplyTo, references[] }
+ *   - outlook:  { messageId }                       (parent message id)
+ *   - aircall:  { callId }
+ */
+export type SupportedChannel =
+  | 'email' | 'web_chat' | 'whatsapp' | 'sms'
+  | 'gmail' | 'outlook' | 'postmark'
+  | 'messenger' | 'instagram' | 'telegram' | 'discord'
+  | 'slack' | 'teams' | 'front' | 'intercom' | 'zendesk' | 'aircall';
+
+export interface NormalizedChannelMessage {
   messageContent: string;
-  /** Sender identifier: phone number, email address, or session ID */
   senderId: string;
-  /** Human-readable sender name if available */
   senderName?: string;
-  /** Channel the message arrived on */
-  channel: 'email' | 'web_chat' | 'whatsapp' | 'sms';
+  channel: SupportedChannel;
   /** Platform-native message ID (for dedup) */
   externalMessageId: string;
   /** ISO timestamp the message was sent */
   sentAt: string;
-  /** Optional: a prior conversation/thread ID from the channel */
+  /** Channel thread/recipient ID — the reply target. */
   externalThreadId?: string;
-  /** Optional: subject line (email only) */
+  /** Optional: subject line (email-style channels only) */
   subject?: string;
   /** Optional: attachments list (filenames only for now) */
   attachments?: string[];
+  /** Channel-specific reply metadata. See type comment above. */
+  metadata?: Record<string, any>;
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -126,12 +147,15 @@ async function handleChannelIngest(
     customerId = randomUUID();
     const canonicalName = msg.senderName ?? deriveDisplayName(msg.senderId, msg.channel);
     
+    const isEmailLike = msg.channel === 'email' || msg.channel === 'gmail' || msg.channel === 'outlook' || msg.channel === 'postmark';
+    const isPhoneLike = msg.channel === 'whatsapp' || msg.channel === 'sms' || msg.channel === 'aircall';
+
     await customerRepo.createStub(scope, {
       id: customerId,
       canonicalName,
-      canonicalEmail: msg.channel === 'email' ? msg.senderId : null,
-      email: msg.channel === 'email' ? msg.senderId : null,
-      phone: ['whatsapp', 'sms'].includes(msg.channel) ? msg.senderId : null,
+      canonicalEmail: isEmailLike ? msg.senderId : null,
+      email: isEmailLike ? msg.senderId : null,
+      phone: isPhoneLike ? msg.senderId : null,
       identitySystem,
       identityExternalId: msg.senderId,
     });
@@ -150,9 +174,14 @@ async function handleChannelIngest(
 
   if (existingConv) {
     conversationId = existingConv.id;
+    // Merge new metadata (e.g., updated thread_ts on later messages) into the
+    // existing row so the reply path always sees the freshest reply context.
+    const mergedMeta = { ...(parseMetadata(existingConv.metadata) || {}), ...(msg.metadata || {}) };
     await caseRepo.updateConversation(scope, conversationId, {
       last_message_at: msg.sentAt,
-    });
+      ...(Object.keys(mergedMeta).length ? { metadata: mergedMeta } : {}),
+      ...(msg.externalThreadId && !existingConv.external_thread_id ? { external_thread_id: msg.externalThreadId } : {}),
+    } as any);
     log.debug('Reusing existing open conversation', { conversationId });
   } else {
     conversationId = randomUUID();
@@ -163,13 +192,14 @@ async function handleChannelIngest(
       status: 'open',
       subject: msg.subject ?? null,
       external_thread_id: msg.externalThreadId ?? null,
+      metadata: msg.metadata ?? {},
       tenant_id: tenantId,
       workspace_id: workspaceId,
       first_message_at: msg.sentAt,
       last_message_at: msg.sentAt,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    } as any);
 
     log.info('Created new conversation', { conversationId, channel: msg.channel });
   }
@@ -234,27 +264,33 @@ async function handleChannelIngest(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function channelToSystem(channel: string): string {
-  const map: Record<string, string> = {
-    whatsapp: 'whatsapp',
-    email:    'email',
-    sms:      'sms',
-    web_chat: 'web_chat',
-  };
-  return map[channel] ?? channel;
+  // Identity system aligned with the channel slug — keeps linked_identities
+  // consistent so a Messenger user and a Telegram user with overlapping
+  // numeric IDs aren't accidentally collapsed into one customer.
+  return channel;
 }
 
 function deriveDisplayName(senderId: string, channel: string): string {
-  if (channel === 'email') {
+  if (channel === 'email' || channel === 'gmail' || channel === 'outlook' || channel === 'postmark') {
     // 'john.doe@example.com' → 'John Doe'
     const local = senderId.split('@')[0] ?? senderId;
     return local
       .replace(/[._-]/g, ' ')
       .replace(/\b\w/g, c => c.toUpperCase());
   }
-  if (channel === 'whatsapp' || channel === 'sms') {
+  if (channel === 'whatsapp' || channel === 'sms' || channel === 'aircall') {
     return `Customer ${senderId.slice(-4)}`;
   }
   return `Customer ${senderId.slice(0, 8)}`;
+}
+
+function parseMetadata(raw: unknown): Record<string, any> | null {
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw as Record<string, any>;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  return null;
 }
 
 // ── Register ──────────────────────────────────────────────────────────────────

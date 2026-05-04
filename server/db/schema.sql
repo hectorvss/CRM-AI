@@ -217,6 +217,10 @@ CREATE TABLE IF NOT EXISTS conversations (
   status TEXT NOT NULL DEFAULT 'open',
   subject TEXT,                              -- email subject / thread title
   external_thread_id TEXT,
+  -- Channel-specific reply context: thread_ts (slack), teamId/channelId/messageId (teams),
+  -- adminId (intercom), inReplyTo + Message-ID headers (gmail), parent message id (outlook).
+  -- Stored as JSON text (SQLite) / jsonb (Postgres).
+  metadata TEXT NOT NULL DEFAULT '{}',
   first_message_at TEXT,
   last_message_at TEXT,
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),

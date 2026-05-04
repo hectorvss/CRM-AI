@@ -150,6 +150,15 @@ async function handleSendMessage(
       }
       default: {
         if (TENANT_CHANNELS.has(channel)) {
+          // Conversation.metadata may be a JSON string (legacy SQLite) or an
+          // object (Supabase jsonb). Normalise so the per-tenant senders
+          // always see an object.
+          let convMeta: Record<string, any> = {};
+          const raw = (conv as any)?.metadata;
+          if (raw && typeof raw === 'object') convMeta = raw;
+          else if (typeof raw === 'string') {
+            try { convMeta = JSON.parse(raw); } catch { /* keep empty */ }
+          }
           const result = await sendOnTenantChannel({
             channel:     channel as TenantOutboundChannel,
             tenantId,
@@ -157,7 +166,7 @@ async function handleSendMessage(
             to:          recipientAddress,
             content:     payload.content,
             subject:     conv.subject ?? `Re: Your Support Request [${caseRow.case_number}]`,
-            meta:        (conv as any)?.metadata ?? {},
+            meta:        convMeta,
           });
           externalMessageId = result.messageId;
           simulated         = false;

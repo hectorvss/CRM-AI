@@ -985,6 +985,13 @@ const migrations: Array<{ version: string; up: (db: Database.Database) => void }
       }
     },
   },
+  // ── 2026-05-04-001: conversations.metadata for cross-channel reply context ─
+  {
+    version: '2026-05-04-001',
+    up(db) {
+      addColumn(db, 'conversations', 'metadata', `TEXT NOT NULL DEFAULT '{}'`);
+    },
+  },
   // ── 2026-04-30-001: super_agent_feedback + super_agent_scheduled_actions ───
   {
     version: '2026-04-30-001',

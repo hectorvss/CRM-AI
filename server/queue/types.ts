@@ -78,7 +78,11 @@ export interface WebhookProcessPayload {
 export interface ChannelIngestPayload {
   /** ID of the canonical_event produced by WebhookProcess */
   canonicalEventId: string;
-  channel: 'email' | 'web_chat' | 'whatsapp' | 'sms';
+  channel:
+    | 'email' | 'web_chat' | 'whatsapp' | 'sms'
+    | 'gmail' | 'outlook' | 'postmark'
+    | 'messenger' | 'instagram' | 'telegram' | 'discord'
+    | 'slack' | 'teams' | 'front' | 'intercom' | 'zendesk' | 'aircall';
   rawMessageId: string;
 }
 
