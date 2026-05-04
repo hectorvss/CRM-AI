@@ -1909,9 +1909,32 @@ class SupabaseCaseRepository implements CaseRepository {
   }
   async createCase(scope: CaseScope, data: any) {
     const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('cases').insert(data);
-    if (error) throw error;
-    return data.id;
+    // Retry on unique-violation of case_number, which races when multiple
+    // webhooks concurrently compute the same "next CS-0042". On 23505 we
+    // recompute the next number by polling the max and increment by one + a
+    // small random offset to spread retries.
+    let attempt = 0;
+    while (attempt < 5) {
+      const { error } = await supabase.from('cases').insert(data);
+      if (!error) return data.id;
+      const code = (error as any)?.code;
+      const isCaseNumberCollision = code === '23505' && /case_number/.test((error as any)?.details ?? '');
+      if (!isCaseNumberCollision) throw error;
+      // Recompute case_number atomically against the latest max for this tenant.
+      const { data: maxRow } = await supabase
+        .from('cases')
+        .select('case_number')
+        .eq('tenant_id', scope.tenantId)
+        .order('case_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const m = maxRow?.case_number ? /^CS-(\d+)$/.exec(maxRow.case_number) : null;
+      const baseN = m ? parseInt(m[1], 10) : 0;
+      const next  = baseN + 1 + attempt; // spread retries to break the race
+      data.case_number = `CS-${String(next).padStart(4, '0')}`;
+      attempt++;
+    }
+    throw new Error('createCase: failed after 5 retries on case_number collision');
   }
   async getOpenReconciliationIssues(scope: CaseScope, caseId: string) {
     const supabase = getSupabaseAdmin();

@@ -699,8 +699,13 @@ async function autoCreateCaseAndFireEvent(
       log.info('webhookProcess: auto-created case from webhook', {
         caseId, source, topic, entityType: extraction.entityType,
       });
-    } catch (caseErr) {
-      log.warn('webhookProcess: case auto-creation failed', { source, topic, error: String(caseErr) });
+    } catch (caseErr: any) {
+      log.warn('webhookProcess: case auto-creation failed', {
+        source, topic,
+        error:   caseErr?.message ?? String(caseErr),
+        details: caseErr?.details ?? caseErr?.hint ?? null,
+        code:    caseErr?.code ?? null,
+      });
     }
   }
 

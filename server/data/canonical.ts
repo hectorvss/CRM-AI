@@ -318,15 +318,27 @@ async function getEventByDedupeKeySupabase(scope: CanonicalScope, dedupeKey: str
 
 async function createEventSupabase(scope: CanonicalScope, data: any) {
   const supabase = getSupabaseAdmin();
-  const payload = {
-    id: data.id ?? crypto.randomUUID(),
-    ...data,
-    tenant_id: scope.tenantId,
-    workspace_id: data.workspace_id ?? scope.workspaceId,
-    occurred_at: data.occurred_at ?? new Date().toISOString(),
-    ingested_at: data.ingested_at ?? new Date().toISOString(),
-    status: data.status ?? 'received',
+  // Translate camelCase callers (e.g. webhookProcess) → snake_case columns
+  // so we don't have to rewrite every call site.
+  const payload: Record<string, any> = {
+    id:                 data.id ?? crypto.randomUUID(),
+    tenant_id:          scope.tenantId,
+    workspace_id:       data.workspace_id ?? data.workspaceId ?? scope.workspaceId,
+    dedupe_key:         data.dedupe_key ?? data.dedupeKey,
+    source_system:      data.source_system ?? data.sourceSystem,
+    source_entity_type: data.source_entity_type ?? data.sourceEntityType,
+    source_entity_id:   data.source_entity_id ?? data.sourceEntityId,
+    event_type:         data.event_type ?? data.eventType,
+    event_category:     data.event_category ?? data.eventCategory,
+    occurred_at:        data.occurred_at ?? data.occurredAt ?? new Date().toISOString(),
+    ingested_at:        data.ingested_at ?? data.ingestedAt ?? new Date().toISOString(),
+    normalized_payload: data.normalized_payload ?? data.normalizedPayload ?? null,
+    status:             data.status ?? 'received',
   };
+  // Carry forward any extra snake_case fields the caller already supplied.
+  for (const k of Object.keys(data)) {
+    if (k.includes('_') && payload[k] === undefined) payload[k] = data[k];
+  }
   const { error } = await supabase.from('canonical_events').insert(payload);
   if (error) throw error;
   return payload;
