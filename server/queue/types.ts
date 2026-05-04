@@ -70,9 +70,10 @@ export interface WebhookProcessPayload {
   webhookEventId: string;
   /** e.g. 'shopify' | 'stripe' | 'whatsapp' | 'email' */
   source: string;
-  /** Raw body as stored in webhook_events.raw_body */
-  rawBody: string;
-  headers: Record<string, string>;
+  /** Raw body as stored in webhook_events.raw_body — optional; handler falls back to DB row when omitted. */
+  rawBody?: string;
+  /** Optional original request headers — handler falls back to DB row when omitted. */
+  headers?: Record<string, string>;
 }
 
 export interface ChannelIngestPayload {
