@@ -6,6 +6,7 @@ import CaseCopilotPanel from './CaseCopilotPanel';
 import MinimalTimeline from './MinimalTimeline';
 import { MinimalButton, MinimalCard, MinimalPill } from './MinimalCategoryShell';
 import { ActionModal } from './ActionModal';
+import RefundFlowModal, { type RefundFlowOrderContext } from './RefundFlowModal';
 import { casesApi, ordersApi, paymentsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import LoadingState from './LoadingState';
@@ -54,6 +55,8 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
   const [activeModal, setActiveModal] = useState<OrderAction>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [refundFlowOpen, setRefundFlowOpen] = useState(false);
+  const [refundFlowContext, setRefundFlowContext] = useState<RefundFlowOrderContext | null>(null);
 
   const showCaseMsg = (msg: string) => {
     setCaseActionMsg(msg);
@@ -536,7 +539,41 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
                         <span className="material-symbols-outlined text-[14px] ml-auto opacity-60">chevron_right</span>
                       </button>
                       <button
-                        onClick={() => setActiveModal('refund')}
+                        onClick={async () => {
+                          if (!selectedOrder) return;
+                          // Resolve the canonical payment id BEFORE opening
+                          // the modal so the user doesn't see a flash where
+                          // the modal can't act. Same lookup logic as the
+                          // legacy handler.
+                          let paymentId = selectedOrderPaymentId;
+                          if (!paymentId) {
+                            try {
+                              const candidates = await paymentsApi.list({ q: selectedOrder.orderId });
+                              paymentId = candidates[0]?.id || null;
+                            } catch { /* ignore — modal will show error */ }
+                          }
+                          if (!paymentId) {
+                            setActionMessage('No refundable payment found for this order.');
+                            return;
+                          }
+                          // Pre-compute already-refunded amount so partial
+                          // refunds enforce the remaining cap.
+                          let refundedSoFar = 0;
+                          try {
+                            const p = await paymentsApi.get(paymentId);
+                            refundedSoFar = Number(p?.refund_amount ?? p?.refundAmount ?? 0);
+                          } catch { /* ignore */ }
+                          setRefundFlowContext({
+                            paymentId,
+                            orderId: selectedOrder.orderId,
+                            customerName: selectedOrder.customerName,
+                            total: Number(String(selectedOrder.total).replace(/[^0-9.]/g, '')) || 0,
+                            currency: selectedOrder.currency || 'USD',
+                            riskLevel: selectedOrder.riskLevel,
+                            refundedSoFar,
+                          });
+                          setRefundFlowOpen(true);
+                        }}
                         className="w-full flex items-center gap-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#171717] text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-[#1f1f1f] px-4 py-2.5 text-[13px] font-semibold transition-colors"
                       >
                         <span className="material-symbols-outlined text-[16px] text-gray-500 dark:text-gray-400">currency_exchange</span>
@@ -807,7 +844,24 @@ export default function Orders({ onNavigate, focusEntityId, focusSection }: Orde
         }}
       />
 
-      {/* Start refund flow */}
+      {/* New advanced refund flow (full / partial / exchange / goodwill) */}
+      <RefundFlowModal
+        open={refundFlowOpen}
+        onClose={() => setRefundFlowOpen(false)}
+        context={refundFlowContext}
+        onCompleted={(result) => {
+          if (result?.requiresApproval) {
+            setActionMessage(`Refund queued for approval (payment ${result.paymentId}, amount ${result.amount}).`);
+          } else if (result?.draft) {
+            setActionMessage(`Refund issued and replacement draft order ${result.draft.id ?? ''} created.`);
+          } else {
+            setActionMessage(`Refund processed (${result?.refundId ?? 'OK'}).`);
+          }
+        }}
+      />
+
+      {/* Legacy quick refund — preserved for compatibility but unused once
+          all entry points migrate to the new modal. */}
       <ActionModal
         open={activeModal === 'refund'}
         onClose={() => setActiveModal(null)}

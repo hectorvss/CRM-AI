@@ -417,7 +417,16 @@ async function updateOrderSupabase(scope: CommerceScope, orderId: string, update
 }
 
 async function getOrderContextSupabase(scope: CommerceScope, orderId: string): Promise<any | null> {
-  return await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId) ?? null;
+  // Canonical context lookup involves a JSONB query that occasionally
+  // fails when source ids aren't stored as canonical JSON (legacy data).
+  // Match the payment-context handler: degrade to null instead of 500ing
+  // the route — the UI just falls back to the un-enriched detail view.
+  try {
+    return (await getOrderCanonicalContext(orderId, scope.tenantId, scope.workspaceId)) ?? null;
+  } catch (error) {
+    console.warn('[commerce] order context fallback', { orderId, error });
+    return null;
+  }
 }
 
 async function listPaymentsSupabase(scope: CommerceScope, filters: PaymentFilters): Promise<any[]> {

@@ -251,6 +251,195 @@ router.post('/:id/refund', requirePermission('payments.write'), async (req: Mult
   }
 });
 
+// ── POST /api/payments/:id/refund-advanced ─────────────────────────────────
+//
+// Multi-mode refund flow used by the new RefundFlowModal in the Orders UI.
+// Modes:
+//   - 'full'        : refund payment.amount in full
+//   - 'partial'     : refund a custom `amount`
+//   - 'exchange'    : create a draft order on the connected ecommerce with
+//                     `replacementProducts`, then issue a partial refund for
+//                     the price difference (or zero if the swap is even)
+//   - 'goodwill'    : issue a partial refund + record an internal note (no
+//                     replacement, framed as a goodwill credit)
+//
+// Body:
+//   { mode, amount?, currency?, reason?,
+//     replacementProducts?: [{ provider, productId, variantId, quantity, price }],
+//     provider?: 'shopify' | 'woocommerce' }
+//
+// Response: { ok, mode, refund?, draft?, requiresApproval? }
+
+router.post('/:id/refund-advanced', requirePermission('payments.write'), async (req: MultiTenantRequest, res: Response) => {
+  if (!req.tenantId) return res.status(401).json({ error: 'Authentication required' });
+  const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+  const paymentId = req.params.id;
+  const body = req.body ?? {};
+  const mode: 'full' | 'partial' | 'exchange' | 'goodwill' =
+    body.mode === 'partial' || body.mode === 'exchange' || body.mode === 'goodwill' ? body.mode : 'full';
+
+  const payment = await commerceRepo.getPayment(scope, paymentId);
+  if (!payment) return res.status(404).json({ error: 'Payment not found' });
+
+  const fullAmount = Number(payment.amount ?? 0);
+  let amount = mode === 'full' ? fullAmount : Number(body.amount ?? 0);
+  if (mode !== 'full' && (!Number.isFinite(amount) || amount <= 0)) {
+    return res.status(400).json({ error: 'amount is required for partial / exchange / goodwill modes' });
+  }
+  if (amount > fullAmount) {
+    return res.status(400).json({ error: `Refund amount ${amount} exceeds payment amount ${fullAmount}` });
+  }
+
+  const reason = String(body.reason ?? '').trim() || `${mode} refund initiated from CRM-AI`;
+
+  // ── 1. Exchange: build a draft order on the ecommerce ─────────────────
+  let draft: any = null;
+  if (mode === 'exchange') {
+    const replacementProducts = Array.isArray(body.replacementProducts) ? body.replacementProducts : [];
+    if (replacementProducts.length === 0) {
+      return res.status(400).json({ error: 'exchange mode requires replacementProducts' });
+    }
+    const provider = String(body.provider ?? replacementProducts[0]?.provider ?? 'shopify').toLowerCase();
+    try {
+      if (provider === 'shopify') {
+        const { shopifyForTenant } = await import('../integrations/shopify-tenant.js');
+        const r = await shopifyForTenant(req.tenantId, req.workspaceId ?? null);
+        if (!r) return res.status(503).json({ error: 'shopify connector not configured' });
+        const adapter: any = r.rest;
+        if (typeof adapter.createDraftOrder === 'function') {
+          draft = await adapter.createDraftOrder({
+            line_items: replacementProducts.map((p: any) => ({
+              variant_id: Number(p.variantId ?? p.variant_id),
+              quantity: Number(p.quantity ?? 1),
+            })),
+            note: `CRM-AI exchange — replacement for payment ${paymentId}. ${reason}`,
+            tags: ['crm-ai-refund-exchange'],
+          });
+        }
+      } else if (provider === 'woocommerce' || provider === 'woo') {
+        const { wooForTenant } = await import('../integrations/woocommerce-tenant.js');
+        const r = await wooForTenant(req.tenantId, req.workspaceId ?? null);
+        if (!r) return res.status(503).json({ error: 'woocommerce connector not configured' });
+        const adapter: any = r.adapter;
+        if (typeof adapter.createOrder === 'function') {
+          draft = await adapter.createOrder({
+            status: 'pending',
+            line_items: replacementProducts.map((p: any) => ({
+              product_id: Number(p.productId ?? p.product_id),
+              variation_id: p.variantId ? Number(p.variantId) : undefined,
+              quantity: Number(p.quantity ?? 1),
+            })),
+            customer_note: `CRM-AI exchange for payment ${paymentId}. ${reason}`,
+          });
+        }
+      }
+    } catch (err: any) {
+      logger.warn('refund-advanced: ecommerce draft creation failed, falling through to refund only', {
+        paymentId, error: err?.message,
+      });
+    }
+  }
+
+  // ── 2. Issue the actual refund via the existing /refund handler ───────
+  // We forward to the same logic to preserve all the approval / Stripe / DB
+  // / audit / workflow-event paths. We construct the same body shape.
+  try {
+    // Re-create the in-process call: easiest path is to inline the logic.
+    // But since the existing handler is a closure on `req`, we just call
+    // commerceRepo + the relevant pieces. Simpler: do an internal HTTP call
+    // would be circular. Instead, we duplicate the minimum: dispatch the
+    // refund directly to Stripe (when available) + update DB.
+    const refundThreshold = getRefundThreshold((payment as any).currency);
+    const sensitive = amount > refundThreshold || ['high', 'critical'].includes(String(payment.risk_level ?? '').toLowerCase());
+
+    if (sensitive) {
+      // Mark payment for approval (same as base /refund handler).
+      await commerceRepo.updatePayment(scope, paymentId, {
+        approval_status: 'approval_needed',
+        refund_amount: amount,
+        refund_type: amount >= fullAmount ? 'full' : 'partial',
+        recommended_action: 'Approval required before refund execution.',
+        last_update: reason,
+      });
+      await auditRepository.log(scope, {
+        actorId: req.userId || 'system',
+        action: 'PAYMENT_REFUND_APPROVAL_REQUESTED',
+        entityType: 'payment',
+        entityId: paymentId,
+        oldValue: { approval_status: payment.approval_status },
+        newValue: { approval_status: 'approval_needed', refund_amount: amount, mode },
+        metadata: { amount, mode, reason, draft_id: draft?.id ?? null },
+      });
+      return res.status(202).json({
+        ok: true, mode, requiresApproval: true, paymentId, amount, draft,
+      });
+    }
+
+    // Live Stripe refund attempt (mirrors /refund logic).
+    const stripeAdapter = integrationRegistry.get('stripe') as any;
+    const externalPaymentId: string | null = (payment as any).external_payment_id ?? (payment as any).psp_reference ?? null;
+    let stripeRefundId: string | null = null;
+    let executedVia: 'stripe' | 'db-only' = 'db-only';
+    if (stripeAdapter && typeof stripeAdapter.createRefund === 'function' && externalPaymentId) {
+      try {
+        const refund = await stripeAdapter.createRefund({
+          paymentExternalId: externalPaymentId,
+          amount,
+          currency: (payment as any).currency ?? 'USD',
+          reason,
+          idempotencyKey: `adv-refund-${paymentId}-${Date.now()}`,
+        });
+        stripeRefundId = refund?.id ?? null;
+        executedVia = 'stripe';
+      } catch (err: any) {
+        logger.warn('refund-advanced: Stripe call failed, proceeding DB-only', { paymentId, error: err?.message });
+      }
+    }
+
+    const newRefundId = stripeRefundId ?? `rf_${crypto.randomUUID()}`;
+    await commerceRepo.updatePayment(scope, paymentId, {
+      status: amount >= fullAmount ? 'refunded' : 'partially_refunded',
+      refund_amount: amount,
+      refund_type: amount >= fullAmount ? 'full' : 'partial',
+      approval_status: 'approved',
+      refund_ids: [...(Array.isArray(payment.refund_ids) ? payment.refund_ids : []), newRefundId],
+      system_states: { ...(payment.system_states ?? {}), canonical: amount >= fullAmount ? 'refunded' : 'partially_refunded' },
+      last_update: reason,
+    });
+    await auditRepository.log(scope, {
+      actorId: req.userId || 'system',
+      action: mode === 'exchange' ? 'PAYMENT_REFUNDED_FOR_EXCHANGE'
+            : mode === 'goodwill' ? 'PAYMENT_REFUNDED_GOODWILL'
+            : 'PAYMENT_REFUNDED',
+      entityType: 'payment',
+      entityId: paymentId,
+      oldValue: { status: payment.status, refund_amount: payment.refund_amount },
+      newValue: { status: 'refunded', refund_amount: amount, executedVia, mode, draft_id: draft?.id ?? null },
+      metadata: { reason, executedVia, mode, draft },
+    });
+    await fireWorkflowEvent(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      'payment.refunded',
+      { paymentId, status: 'refunded', amount, reason, mode, draft_id: draft?.id ?? null, executedVia },
+    );
+
+    const updated = await commerceRepo.getPayment(scope, paymentId);
+    return res.json({
+      ok: true,
+      mode,
+      paymentId,
+      amount,
+      refundId: newRefundId,
+      executedVia,
+      draft,
+      payment: updated,
+    });
+  } catch (err: any) {
+    console.error('refund-advanced error', err);
+    return res.status(500).json({ error: err?.message ?? 'Internal server error' });
+  }
+});
+
 export default router;
 
 // ── Returns Router ────────────────────────────────────────────

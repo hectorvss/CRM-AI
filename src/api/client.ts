@@ -384,6 +384,46 @@ export const paymentsApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  refundAdvanced: (id: string, payload: {
+    mode: 'full' | 'partial' | 'exchange' | 'goodwill';
+    amount?: number;
+    currency?: string;
+    reason?: string;
+    provider?: 'shopify' | 'woocommerce';
+    replacementProducts?: Array<{
+      provider?: 'shopify' | 'woocommerce';
+      productId?: string | number;
+      variantId?: string | number;
+      quantity?: number;
+      title?: string;
+      price?: number;
+    }>;
+  }) =>
+    request<any>(`/payments/${id}/refund-advanced`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+};
+
+// ── Commerce (multi-provider product search + draft orders) ─────────────
+export const commerceApi = {
+  searchProducts: (params: { q?: string; provider?: 'shopify' | 'woocommerce'; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set('q', params.q);
+    if (params.provider) qs.set('provider', params.provider);
+    if (params.limit) qs.set('limit', String(params.limit));
+    return request<{ provider: string; count: number; items: any[] }>(`/commerce/products?${qs.toString()}`);
+  },
+  createDraftOrder: (payload: {
+    provider?: 'shopify' | 'woocommerce';
+    customerExternalId?: string;
+    note?: string;
+    lineItems: Array<{ productId?: string | number; variantId?: string | number; quantity?: number }>;
+  }) =>
+    request<any>('/commerce/draft-orders', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
 
 // ── Returns ──────────────────────────────────────────────
