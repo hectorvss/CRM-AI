@@ -91,7 +91,7 @@ zoomWebhookRouter.post('/', async (req: Request, res: Response) => {
     });
     if (error && error.code !== '23505') { logger.warn('zoom persist failed', { tenantId: t.tenantId, error: error.message }); continue; }
     if (error?.code !== '23505') {
-      try { await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'zoom' }, { tenantId: t.tenantId }); }
+      try { await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'zoom', rawBody: '', headers: {} }, { tenantId: t.tenantId }); }
       catch (err) { logger.warn('zoom enqueue failed', { error: String(err) }); }
     }
   }

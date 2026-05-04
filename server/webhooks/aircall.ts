@@ -91,10 +91,7 @@ aircallWebhookRouter.post('/', async (req: Request, res: Response) => {
 
   if (error?.code !== '23505') {
     try {
-      await enqueue(JobType.WEBHOOK_PROCESS, {
-        webhookEventId: persistedId,
-        source: 'aircall',
-      }, { tenantId: matched.tenantId });
+      await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'aircall', rawBody: '', headers: {} }, { tenantId: matched.tenantId });
     } catch (err) {
       logger.warn('aircall enqueue failed', { error: String(err) });
     }

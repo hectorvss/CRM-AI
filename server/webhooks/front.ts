@@ -104,10 +104,7 @@ frontWebhookRouter.post('/', async (req: Request, res: Response) => {
 
     if (error?.code !== '23505') {
       try {
-        await enqueue(JobType.WEBHOOK_PROCESS, {
-          webhookEventId: persistedId,
-          source: 'front',
-        }, { tenantId: t.tenantId });
+        await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'front', rawBody: '', headers: {} }, { tenantId: t.tenantId });
       } catch (err) {
         logger.warn('front enqueue failed', { tenantId: t.tenantId, error: String(err) });
       }

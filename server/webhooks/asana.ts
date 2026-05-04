@@ -100,7 +100,7 @@ asanaWebhookRouter.post('/', async (req: Request, res: Response) => {
 
     if (error && error.code !== '23505') { logger.warn('asana persist failed', { error: error.message }); continue; }
     if (error?.code !== '23505') {
-      try { await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'asana' }, { tenantId: matched.tenantId }); }
+      try { await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'asana', rawBody: '', headers: {} }, { tenantId: matched.tenantId }); }
       catch (err) { logger.warn('asana enqueue failed', { error: String(err) }); }
     }
   }

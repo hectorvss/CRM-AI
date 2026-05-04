@@ -75,7 +75,7 @@ gcalendarWebhookRouter.post('/', async (req: Request, res: Response) => {
 
   if (error?.code !== '23505') {
     try {
-      await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'gcalendar' }, { tenantId: matched.tenantId });
+      await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'gcalendar', rawBody: '', headers: {} }, { tenantId: matched.tenantId });
     } catch (err) { logger.warn('gcalendar enqueue failed', { error: String(err) }); }
   }
 

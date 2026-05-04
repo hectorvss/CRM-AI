@@ -50,7 +50,7 @@ gdriveWebhookRouter.post('/', async (req: Request, res: Response) => {
   if (error && error.code !== '23505') { logger.warn('gdrive persist failed', { error: error.message }); return res.status(500).end(); }
 
   if (error?.code !== '23505') {
-    try { await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'gdrive' }, { tenantId: matched.tenantId }); }
+    try { await enqueue(JobType.WEBHOOK_PROCESS, { webhookEventId: persistedId, source: 'gdrive', rawBody: '', headers: {} }, { tenantId: matched.tenantId }); }
     catch (err) { logger.warn('gdrive enqueue failed', { error: String(err) }); }
   }
   return res.status(200).end();
