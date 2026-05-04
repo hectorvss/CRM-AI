@@ -135,7 +135,15 @@ async function handleChannelIngest(
   });
 
   // ── 3. Resolve customer ───────────────────────────────────────────────────
+  // Three-tier resolution to avoid duplicate canonical rows for the same
+  // human across different messaging channels:
+  //   (a) exact (system, external_id) hit on linked_identities
+  //   (b) cross-channel match by email/phone on customers
+  //   (c) create a new stub
   const identitySystem = channelToSystem(msg.channel);
+  const isEmailLike = msg.channel === 'email' || msg.channel === 'gmail' || msg.channel === 'outlook' || msg.channel === 'postmark';
+  const isPhoneLike = msg.channel === 'whatsapp' || msg.channel === 'sms' || msg.channel === 'aircall';
+
   const existingIdentity = await customerRepo.getIdentity(scope, identitySystem, msg.senderId);
 
   let customerId: string;
@@ -144,27 +152,55 @@ async function handleChannelIngest(
     customerId = existingIdentity.customer_id;
     log.debug('Found existing customer via linked identity', { customerId });
   } else {
-    customerId = randomUUID();
-    const canonicalName = msg.senderName ?? deriveDisplayName(msg.senderId, msg.channel);
-    
-    const isEmailLike = msg.channel === 'email' || msg.channel === 'gmail' || msg.channel === 'outlook' || msg.channel === 'postmark';
-    const isPhoneLike = msg.channel === 'whatsapp' || msg.channel === 'sms' || msg.channel === 'aircall';
+    // (b) Try cross-channel match by email/phone before creating a new
+    // canonical row. If an existing customer has the same email or phone,
+    // we attach a NEW linked_identity to them instead of duplicating.
+    const candidateEmail = isEmailLike ? msg.senderId : null;
+    const candidatePhone = isPhoneLike ? msg.senderId : null;
+    const candidate = (candidateEmail || candidatePhone)
+      ? await customerRepo.findByEmailOrPhone(scope, candidateEmail, candidatePhone)
+      : null;
 
-    await customerRepo.createStub(scope, {
-      id: customerId,
-      canonicalName,
-      canonicalEmail: isEmailLike ? msg.senderId : null,
-      email: isEmailLike ? msg.senderId : null,
-      phone: isPhoneLike ? msg.senderId : null,
-      identitySystem,
-      identityExternalId: msg.senderId,
-    });
-
-    log.info('Created stub customer for new channel sender', {
-      customerId,
-      channel: msg.channel,
-      senderId: msg.senderId,
-    });
+    if (candidate?.id) {
+      customerId = candidate.id;
+      // Attach the new identity so the next inbound on this channel hits (a).
+      const supabase = (await import('../db/supabase.js')).getSupabaseAdmin();
+      const { error: liErr } = await supabase.from('linked_identities').insert({
+        id: randomUUID(),
+        customer_id: customerId,
+        tenant_id: tenantId,
+        workspace_id: workspaceId,
+        system: identitySystem,
+        external_id: msg.senderId,
+        confidence: 0.9,
+        verified: false,
+      });
+      if (liErr && liErr.code !== '23505') {
+        log.warn('Failed to attach new linked_identity to matched customer', { error: liErr.message });
+      }
+      log.info('Cross-channel dedup: matched existing customer by email/phone', {
+        customerId,
+        channel: msg.channel,
+        senderId: msg.senderId,
+      });
+    } else {
+      customerId = randomUUID();
+      const canonicalName = msg.senderName ?? deriveDisplayName(msg.senderId, msg.channel);
+      await customerRepo.createStub(scope, {
+        id: customerId,
+        canonicalName,
+        canonicalEmail: candidateEmail,
+        email: candidateEmail,
+        phone: candidatePhone,
+        identitySystem,
+        identityExternalId: msg.senderId,
+      });
+      log.info('Created stub customer for new channel sender', {
+        customerId,
+        channel: msg.channel,
+        senderId: msg.senderId,
+      });
+    }
   }
 
   // ── 4. Find or create conversation thread ─────────────────────────────────

@@ -36,20 +36,35 @@ function buildCustomerState(detail: any = {}) {
       recommended_action:  c.ai_recommended_action ?? null,
     }));
 
+  // ── Problems split (new) ───────────────────────────────────────
+  // Distinguish between "resolved" (case marked resolved/closed) and
+  // "unresolved" (still open or escalated). The Customers page uses this
+  // so each row shows at-a-glance how many of the customer's issues are
+  // still pending vs. already handled by the SaaS.
+  const problemsResolved = cases.filter((c: any) =>
+    ['resolved', 'closed'].includes((c.status || '').toLowerCase())
+  ).length;
+  const problemsUnresolved = cases.filter((c: any) =>
+    !['resolved', 'closed', 'cancelled'].includes((c.status || '').toLowerCase())
+  ).length;
+
   return {
     snapshot_at: new Date().toISOString(),
     customer,
     linked_identities: linkedIds,
     activity,
     metrics: {
-      open_cases:       cases.filter((c: any) => !['resolved', 'closed'].includes((c.status || '').toLowerCase())).length,
-      total_cases:      cases.length,
-      active_conflicts: unresolvedConflicts.length,
-      total_orders:     orders.length,
-      total_payments:   payments.length,
-      total_returns:    returns_.length,
-      lifetime_value:   Number.isFinite(lifetimeValue) ? lifetimeValue : 0,
-      total_spent:      Number.isFinite(totalSpent) ? totalSpent : 0,
+      open_cases:         cases.filter((c: any) => !['resolved', 'closed'].includes((c.status || '').toLowerCase())).length,
+      total_cases:        cases.length,
+      active_conflicts:   unresolvedConflicts.length,
+      problems_total:     cases.length,
+      problems_resolved:  problemsResolved,
+      problems_unresolved: problemsUnresolved,
+      total_orders:       orders.length,
+      total_payments:     payments.length,
+      total_returns:      returns_.length,
+      lifetime_value:     Number.isFinite(lifetimeValue) ? lifetimeValue : 0,
+      total_spent:        Number.isFinite(totalSpent) ? totalSpent : 0,
     },
     systems: {
       orders: {
@@ -127,11 +142,14 @@ function enrichCustomerRows(rows: any[], detailByCustomerId: Map<string, any>) {
     const state  = detail ? buildCustomerState(detail) : null;
     return {
       ...row,
-      open_cases:        state?.metrics.open_cases         ?? 0,
-      total_cases:       state?.metrics.total_cases        ?? 0,
-      active_conflicts:  state?.metrics.active_conflicts   ?? 0,
-      linked_identities: state?.linked_identities          ?? [],
-      canonical_systems: state?.systems                    ?? {},
+      open_cases:          state?.metrics.open_cases          ?? 0,
+      total_cases:         state?.metrics.total_cases         ?? 0,
+      active_conflicts:    state?.metrics.active_conflicts    ?? 0,
+      problems_total:      state?.metrics.problems_total      ?? 0,
+      problems_resolved:   state?.metrics.problems_resolved   ?? 0,
+      problems_unresolved: state?.metrics.problems_unresolved ?? 0,
+      linked_identities:   state?.linked_identities           ?? [],
+      canonical_systems:   state?.systems                     ?? {},
     };
   });
 }
@@ -283,6 +301,8 @@ export interface CustomerRepository {
   getState(scope: CustomerScope, customerId: string): Promise<any | null>;
   getActivity(scope: CustomerScope, customerId: string): Promise<any[]>;
   getIdentity(scope: CustomerScope, system: string, externalId: string): Promise<any | null>;
+  /** Cross-channel dedup: locate an existing canonical customer by email or phone (case-insensitive). */
+  findByEmailOrPhone(scope: CustomerScope, email: string | null, phone: string | null): Promise<any | null>;
   createStub(scope: CustomerScope, input: any): Promise<string>;
   upsertCustomer(scope: CustomerScope, customer: any): Promise<string>;
   update(scope: CustomerScope, customerId: string, updates: Record<string, any>): Promise<void>;
@@ -305,6 +325,42 @@ export function createCustomerRepository(): CustomerRepository {
         .maybeSingle();
       if (error) throw error;
       return data;
+    },
+    findByEmailOrPhone: async (scope, email, phone) => {
+      // PostgREST `.or()` is fragile with values containing `+`, `,` or `:`
+      // (URL-encodes as space etc.), and `phone` very often does. Issue
+      // separate `.eq()` queries — first hit wins, ordered by recency.
+      const supabase = getSupabaseAdmin();
+      const lookups: Promise<any>[] = [];
+      if (email) {
+        const e = email.toLowerCase();
+        lookups.push(
+          supabase.from('customers').select('*')
+            .eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+            .eq('canonical_email', e).order('updated_at', { ascending: false }).limit(1)
+            .then((r: any) => r.data?.[0] ?? null),
+          supabase.from('customers').select('*')
+            .eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+            .eq('email', e).order('updated_at', { ascending: false }).limit(1)
+            .then((r: any) => r.data?.[0] ?? null),
+        );
+      }
+      if (phone) {
+        const digits = String(phone).replace(/[^0-9+]/g, '');
+        if (digits) {
+          lookups.push(
+            supabase.from('customers').select('*')
+              .eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+              .eq('phone', digits).order('updated_at', { ascending: false }).limit(1)
+              .then((r: any) => r.data?.[0] ?? null),
+          );
+        }
+      }
+      if (!lookups.length) return null;
+      const candidates = (await Promise.all(lookups)).filter(Boolean);
+      // Most recently updated wins.
+      candidates.sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+      return candidates[0] ?? null;
     },
     createStub: async (scope, input) => {
       const supabase = getSupabaseAdmin();

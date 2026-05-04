@@ -34,6 +34,8 @@ interface Customer {
   since: string;
   segment: 'VIP Enterprise' | 'Standard';
   openTickets: number;
+  problemsResolved: number;
+  problemsUnresolved: number;
   aiImpact: { resolved: number; approvals?: number; escalated?: number };
   topIssue: string;
   risk?: 'Churn Risk' | 'Healthy' | 'Watchlist' | 'Refund Abuse';
@@ -221,6 +223,8 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
       ltv:      `$${Number(ltv).toLocaleString()}`,
       orders:   [],
       openTickets: Number(c.openCases || 0),
+      problemsResolved:   Number(c.problemsResolved   ?? c.problems_resolved   ?? 0),
+      problemsUnresolved: Number(c.problemsUnresolved ?? c.problems_unresolved ?? c.openCases ?? 0),
       aiImpact: {
         resolved:  Number(c.aiImpactResolved  ?? 0),
         approvals: Number(c.aiImpactApprovals ?? 0) || undefined,
@@ -667,6 +671,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   <th className="px-4 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">AI Impact (30d)</th>
                   <th className="px-4 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">Top Issues</th>
                   <th className="px-4 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">Risk</th>
+                  <th className="px-4 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700">Problems</th>
                   <th className="px-4 py-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700"></th>
                 </tr>
               </thead>
@@ -727,6 +732,32 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                         </span>
                       )}
                     </td>
+                    <td className="px-4 py-5 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                            customer.problemsUnresolved > 0
+                              ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/15 dark:text-red-300 dark:border-red-800/30'
+                              : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-white/[0.04] dark:text-gray-400 dark:border-white/10'
+                          }`}
+                          title={`${customer.problemsUnresolved} unresolved problem${customer.problemsUnresolved === 1 ? '' : 's'}`}
+                        >
+                          <span className={`mr-1 h-1.5 w-1.5 rounded-full ${customer.problemsUnresolved > 0 ? 'bg-red-500' : 'bg-gray-400'}`}></span>
+                          {customer.problemsUnresolved} open
+                        </span>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                            customer.problemsResolved > 0
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/15 dark:text-emerald-300 dark:border-emerald-800/30'
+                              : 'bg-gray-50 text-gray-500 border-gray-200 dark:bg-white/[0.04] dark:text-gray-400 dark:border-white/10'
+                          }`}
+                          title={`${customer.problemsResolved} resolved problem${customer.problemsResolved === 1 ? '' : 's'}`}
+                        >
+                          <span className={`mr-1 h-1.5 w-1.5 rounded-full ${customer.problemsResolved > 0 ? 'bg-emerald-500' : 'bg-gray-400'}`}></span>
+                          {customer.problemsResolved} solved
+                        </span>
+                      </div>
+                    </td>
                     <td className="px-4 py-5 whitespace-nowrap text-right text-sm font-medium">
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-end space-x-1">
                         <button
@@ -756,7 +787,7 @@ export default function Customers({ onNavigate, focusCustomerId }: CustomersProp
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
+                    <td colSpan={9} className="px-6 py-12 text-center text-sm text-gray-500">
                       No customers match your search.
                     </td>
                   </tr>
