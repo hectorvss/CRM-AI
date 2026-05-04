@@ -305,8 +305,8 @@ export async function sendOnTenantChannel(
       const { frontForTenant } = await import('../integrations/front-tenant.js');
       const r = await frontForTenant(tenantId, workspaceId);
       if (!r) throw new Error('Front connector not configured for tenant');
-      const out = await r.adapter.sendReply(to, { body: content, body_format: 'text' } as any);
-      return { messageId: String((out as any).id ?? randomUUID()), simulated: false };
+      const out = await r.adapter.sendReply(to, { body: content, type: 'reply' });
+      return { messageId: String((out as any).message_uid ?? randomUUID()), simulated: false };
     }
     case 'intercom': {
       const { intercomForTenant } = await import('../integrations/intercom-tenant.js');
@@ -346,37 +346,56 @@ export async function sendOnTenantChannel(
       const { postmarkForTenant } = await import('../integrations/postmark-tenant.js');
       const r = await postmarkForTenant(tenantId, workspaceId);
       if (!r) throw new Error('Postmark connector not configured for tenant');
-      const adapter: any = r.adapter;
-      const out = await adapter.sendEmail({
+      const c: any = r.connector;
+      const fromAddr = c.defaultFromAddress
+        ?? (process.env.POSTMARK_FROM_EMAIL as string | undefined)
+        ?? null;
+      if (!fromAddr) throw new Error('Postmark requires a default_from_address on the connector or POSTMARK_FROM_EMAIL env');
+      const fromHeader = c.defaultFromName ? `${c.defaultFromName} <${fromAddr}>` : fromAddr;
+      const out = await r.adapter.send({
+        from: fromHeader,
         to,
         subject: subject ?? 'Re: Your support request',
         textBody: content,
       });
-      return { messageId: String(out?.MessageID ?? out?.messageId ?? randomUUID()), simulated: false };
+      return { messageId: String(out?.MessageID ?? randomUUID()), simulated: false };
     }
     case 'gmail': {
       const { gmailForTenant } = await import('../integrations/gmail-tenant.js');
+      const { buildRfc5322Message } = await import('../integrations/gmail.js');
       const r = await gmailForTenant(tenantId, workspaceId);
       if (!r) throw new Error('Gmail connector not configured for tenant');
-      const out = await r.adapter.sendMessage({
+      const raw = buildRfc5322Message({
         to,
         subject: subject ?? 'Re: Your support request',
-        textBody: content,
+        body: content,
+        mimeType: 'text/plain',
+        inReplyTo: meta?.inReplyTo,
+        references: meta?.references,
+      });
+      const out = await r.adapter.sendMessage({
+        raw,
         threadId: meta?.threadId,
-      } as any);
-      return { messageId: String((out as any).id ?? randomUUID()), simulated: false };
+      });
+      return { messageId: String(out.id ?? randomUUID()), simulated: false };
     }
     case 'outlook': {
       const { outlookForTenant } = await import('../integrations/outlook-tenant.js');
       const r = await outlookForTenant(tenantId, workspaceId);
       if (!r) throw new Error('Outlook connector not configured for tenant');
-      const adapter: any = r.adapter;
-      const out = await adapter.sendMessage({
-        to,
+      // Outlook's sendMail returns void; if we have an inbound messageId on
+      // meta, prefer replyToMessage so the thread stays linked.
+      if (meta?.messageId) {
+        await r.adapter.replyToMessage(meta.messageId, { comment: content });
+        return { messageId: `outlook_reply_${meta.messageId}_${Date.now()}`, simulated: false };
+      }
+      await r.adapter.sendMail({
         subject: subject ?? 'Re: Your support request',
         body: content,
+        bodyType: 'text',
+        to: [to],
       });
-      return { messageId: String(out?.id ?? randomUUID()), simulated: false };
+      return { messageId: `outlook_send_${Date.now()}`, simulated: false };
     }
     default: {
       const exhaustive: never = channel;
