@@ -76,15 +76,17 @@
     { "source": "/signup",          "destination": "/landing-v2/index.html" },
     { "source": "/demo",            "destination": "/landing-v2/index.html" },
     { "source": "/reset-password",  "destination": "/landing-v2/index.html" },
-    { "source": "/customers",       "destination": "/landing/index.html" },
-    { "source": "/super-agent",     "destination": "/landing/index.html" },
-    { "source": "/early-stage",     "destination": "/landing/index.html" },
-    { "source": "/unified-inbox",   "destination": "/landing/index.html" },
-    { "source": "/cases",           "destination": "/landing/index.html" },
-    { "source": "/help-center",     "destination": "/landing/index.html" },
-    { "source": "/policy-engine",   "destination": "/landing/index.html" },
-    { "source": "/audit-log",       "destination": "/landing/index.html" },
-    { "source": "/changelog",       "destination": "/landing/index.html" }
+    { "source": "/customers",       "destination": "/landing-v2/index.html" },
+    { "source": "/super-agent",     "destination": "/landing-v2/index.html" },
+    { "source": "/early-stage",     "destination": "/landing-v2/index.html" },
+    { "source": "/unified-inbox",   "destination": "/landing-v2/index.html" },
+    { "source": "/cases",           "destination": "/landing-v2/index.html" },
+    { "source": "/help-center",     "destination": "/landing-v2/index.html" },
+    { "source": "/policy-engine",   "destination": "/landing-v2/index.html" },
+    { "source": "/audit-log",       "destination": "/landing-v2/index.html" },
+    { "source": "/changelog",       "destination": "/landing-v2/index.html" },
+    { "source": "/integrations",    "destination": "/landing-v2/index.html" },
+    { "source": "/cx-models",       "destination": "/landing-v2/index.html" }
   ],
   "headers": [
     {

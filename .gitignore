@@ -12,3 +12,6 @@ tmp-*.err
 
 # Local-only working folders (kept out of build & Tailwind content scan)
 .figma-extract/
+tmp-figma/
+public-landing-v2/_copy_clain_filled.json
+public-landing-v2/_copy_manifest.json
