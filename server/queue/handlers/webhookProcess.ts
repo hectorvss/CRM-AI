@@ -460,8 +460,11 @@ const CASE_AUTO_CREATE_TOPICS = new Set<string>([
   // Voice channels
   'aircall:call.voicemail_left', 'aircall:call.unanswered', 'aircall:call.transcription_available',
   'zoom:recording.completed', 'zoom:recording.transcript_completed',
-  // Engineering escalation (errors → cases)
+  // Engineering escalation (errors → cases). Sentry's webhook handler stores
+  // event_type as `sentry.<resource>.<action>`, so we accept both shapes.
   'sentry:issue.created', 'sentry:issue.assigned', 'sentry:event.alert',
+  'sentry:sentry.issue.created', 'sentry:sentry.issue.assigned',
+  'sentry:sentry.event.alert', 'sentry:sentry.event_alert.unknown',
   // Scheduling
   'calendly:invitee.created',
   // Signature lifecycle (signed contract triggers a celebrate-or-onboarding case)
@@ -602,9 +605,9 @@ function topicToWorkflowEvent(source: string, topic: string): string {
   // Shipping
   if (['ups', 'dhl'].includes(source)) return 'shipping.updated';
 
-  // Team chat
+  // Team chat (case-insensitive — Slack uses 'message', Teams uses 'chatMessage')
   if (['slack', 'teams'].includes(source)) {
-    if (topic.includes('message')) return 'team_chat.message';
+    if (topic.toLowerCase().includes('message')) return 'team_chat.message';
   }
 
   return `${source}.${topic.replace(/\//g, '.')}`;
@@ -838,4 +841,14 @@ function classifyWebhookForCase(
 
 registerHandler(JobType.WEBHOOK_PROCESS, handleWebhookProcess);
 
-export { handleWebhookProcess };
+export {
+  handleWebhookProcess,
+  // Test surface: all extractors, the classification helper, and the
+  // canonical workflow event mapper are exported so unit-tests can verify
+  // every source's behaviour without standing up a DB.
+  EXTRACTORS,
+  CASE_AUTO_CREATE_TOPICS,
+  classifyWebhookForCase,
+  topicToWorkflowEvent,
+};
+export type { EntityExtraction };
