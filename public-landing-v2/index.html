@@ -77,27 +77,11 @@
   })();
 </script>
 
-<!-- Pre-transpiled landing pages (esbuild). Source-of-truth is the matching .jsx file. -->
-<!-- Run `node scripts/build-landing-jsx.cjs` to regenerate. -->
+<!-- Pre-transpiled landing core (esbuild). Source-of-truth is the matching .jsx file.
+     Run `node scripts/build-landing-jsx.cjs` to regenerate.
+     Page-specific bundles (home.js, auth.js, etc.) are lazy-loaded by app.js
+     based on the current route — see PAGE_BUNDLES in app.jsx. -->
 <script src="/v2/shared.js" defer></script>
-<script src="/v2/home.js" defer></script>
-<script src="/v2/ai-agent.js" defer></script>
-<script src="/v2/ai-agent-slack.js" defer></script>
-<script src="/v2/inbox.js" defer></script>
-<script src="/v2/omnichannel.js" defer></script>
-<script src="/v2/how-it-works.js" defer></script>
-<script src="/v2/tickets.js" defer></script>
-<script src="/v2/reporting.js" defer></script>
-<script src="/v2/startups.js" defer></script>
-<script src="/v2/knowledge.js" defer></script>
-<script src="/v2/pricing.js" defer></script>
-<script src="/v2/agent-customer.js" defer></script>
-<script src="/v2/copilot.js" defer></script>
-<script src="/v2/agent-trust.js" defer></script>
-<script src="/v2/technology.js" defer></script>
-<script src="/v2/how-agent-works.js" defer></script>
-<script src="/v2/paywall.js" defer></script>
-<script src="/v2/auth.js" defer></script>
 <script src="/v2/app.js" defer></script>
 </body>
 </html>

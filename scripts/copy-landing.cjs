@@ -4,8 +4,7 @@
  * Copies the static landing-page assets into the Vite build output (dist/) so a
  * single `dist/` directory can be deployed to Vercel:
  *   - SPA at dist/_spa.html (served on /app routes)
- *   - Landing v2 (new) at dist/landing-v2/  → served at /
- *   - Landing v1 (old) at dist/landing/    → served at /v1
+ *   - Landing v2 at dist/landing-v2/  → served at /
  *
  * vercel.json rewrites map URLs to either side.
  */
@@ -16,7 +15,6 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const COPIES = [
-  { src: path.join(ROOT, 'public-landing'),    dest: path.join(ROOT, 'dist', 'landing'),    label: 'landing-v1' },
   { src: path.join(ROOT, 'public-landing-v2'), dest: path.join(ROOT, 'dist', 'landing-v2'), label: 'landing-v2' },
 ];
 

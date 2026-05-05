@@ -6,7 +6,7 @@
   "trailingSlash": false,
   "functions": {
     "api/index.ts": {
-      "excludeFiles": "{dist/**,public-landing/**,public-landing-v2/**,landing-v2/**,landing/**,src/**,tmp-figma/**,.figma-extract/**,tests/**,scripts/**,docs/**,*.md,*.png,*.jpg,*.jpeg,*.gif,*.webp,*.svg,*.ico,**/*.test.ts,**/*.spec.ts}"
+      "excludeFiles": "{dist/**,public-landing-v2/**,landing-v2/**,src/**,tmp-figma/**,.figma-extract/**,tests/**,scripts/**,docs/**,*.md,*.png,*.jpg,*.jpeg,*.gif,*.webp,*.svg,*.ico,**/*.test.ts,**/*.spec.ts}"
     }
   },
   "rewrites": [
@@ -17,10 +17,6 @@
     { "source": "/app/:path*",      "destination": "/_spa.html" },
 
     { "source": "/",                "destination": "/landing-v2/index.html" },
-
-    { "source": "/v1",                "destination": "/landing/index.html" },
-    { "source": "/v1/",               "destination": "/landing/index.html" },
-    { "source": "/v1/:f*",            "destination": "/landing/:f*" },
 
     { "source": "/v2",                "destination": "/landing-v2/index.html" },
     { "source": "/v2/",               "destination": "/landing-v2/index.html" },
@@ -64,18 +60,6 @@
     { "source": "/paywall.jsx",       "destination": "/landing-v2/paywall.jsx" },
     { "source": "/technology.jsx",    "destination": "/landing-v2/technology.jsx" },
     { "source": "/assets/:f*",        "destination": "/landing-v2/assets/:f*" },
-
-    { "source": "/v1/styles.css",          "destination": "/landing/styles.css" },
-    { "source": "/v1/app.jsx",             "destination": "/landing/app.jsx" },
-    { "source": "/v1/auth.jsx",            "destination": "/landing/auth.jsx" },
-    { "source": "/v1/pages.jsx",           "destination": "/landing/pages.jsx" },
-    { "source": "/v1/customers.jsx",       "destination": "/landing/customers.jsx" },
-    { "source": "/v1/solutions.jsx",       "destination": "/landing/solutions.jsx" },
-    { "source": "/v1/capabilities.jsx",    "destination": "/landing/capabilities.jsx" },
-    { "source": "/v1/capabilities-extra.jsx","destination": "/landing/capabilities-extra.jsx" },
-    { "source": "/v1/deep-pages.jsx",      "destination": "/landing/deep-pages.jsx" },
-    { "source": "/v1/tweaks-panel.jsx",    "destination": "/landing/tweaks-panel.jsx" },
-    { "source": "/uploads/:f*",            "destination": "/landing/uploads/:f*" },
 
     { "source": "/signin",          "destination": "/landing-v2/index.html" },
     { "source": "/signup",          "destination": "/landing-v2/index.html" },

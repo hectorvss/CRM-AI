@@ -319,13 +319,12 @@ app.get('/api/health', async (_req, res) => {
 });
 
 // ── Static hosting ────────────────────────────────────────
-//   /            → static landing page (public-landing/)
+//   /            → landing-v2 (public-landing-v2/)
 //   /app, /app/* → Vite-built SPA (dist/)
 //
 // Mounted AFTER /webhooks and /api so those continue to take precedence.
 // In Vercel, vercel.json rewrites handle equivalent routing; this block is
 // primarily for local `npm start` and self-hosted deployments.
-const LANDING_DIR   = path.resolve(__dirname, '../public-landing');
 const LANDING_V2_DIR = path.resolve(__dirname, '../public-landing-v2');
 const SPA_DIR        = path.resolve(__dirname, '../dist');
 
@@ -382,9 +381,6 @@ app.get('/v2/*', (_req, res, next) => {
     if (err) next();
   });
 });
-
-// Legacy v1 landing (kept under /landing-v1 for reference/archive)
-app.use('/landing-v1', express.static(LANDING_DIR, { index: 'index.html', fallthrough: true }));
 
 // ── Start ─────────────────────────────────────────────────
 const server = app.listen(config.server.port, () => {
