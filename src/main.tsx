@@ -139,12 +139,22 @@ function PrototypeShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-// LOCAL-ONLY: render the in-progress Inbox/Settings prototype.
-// IMPORTANT: do NOT commit or push this change — the production SaaS
-// (`<Root />`) must remain the default in the repo. This file is being
-// kept dirty in the working tree on purpose during prototype design.
+// Render the production SaaS by default. Standalone prototypes are still
+// reachable locally via `?prototype=1` (Prototype) or `?prototype=2`
+// (InboxPrototype2) for design work — they never become the default for
+// the deployed app.
+function renderApp() {
+  if (protoParam === '1') {
+    return <PrototypeShell><Prototype /></PrototypeShell>;
+  }
+  if (protoParam === '2') {
+    return <PrototypeShell><InboxPrototype2 /></PrototypeShell>;
+  }
+  return <Root />;
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <PrototypeShell><Prototype /></PrototypeShell>
+    {renderApp()}
   </StrictMode>,
 );
