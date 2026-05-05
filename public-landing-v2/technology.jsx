@@ -78,7 +78,7 @@
             <div className="bg-[var(--color\/azure\/5,#020917)] content-stretch flex flex-[1_0_0] flex-col items-start min-h-px relative w-[1814.4px]" data-node-id="2:18932" data-name="div.bg-dark-blue">
               <div className="h-[1099.98px] relative shrink-0 w-[1795.5px]" data-node-id="2:18934" data-name="image">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
                 </div>
               </div>
             </div>
@@ -227,7 +227,7 @@
                       <div className="content-stretch flex flex-[1_0_0] flex-col items-start min-h-px relative w-full" data-node-id="2:19058" data-name="div.h-full">
                         <div className="h-[447px] relative shrink-0 w-[1057px]" data-node-id="2:19059" data-name="image">
                           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
+                            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
                           </div>
                         </div>
                       </div>
@@ -533,7 +533,7 @@
                     <div className="content-stretch flex items-start justify-center overflow-clip relative shrink-0" data-node-id="2:19477" data-name="div.overflow-hidden">
                       <div className="max-w-[85px] relative shrink-0 size-[85px]" data-node-id="2:19478" data-name="A headshot of Angelo Livanos, Senior Director at Lightspeed">
                         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                          <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgAHeadshotOfAngeloLivanosSeniorDirectorAtLightspeed} />
+                          <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgAHeadshotOfAngeloLivanosSeniorDirectorAtLightspeed} />
                         </div>
                       </div>
                     </div>
@@ -543,22 +543,22 @@
                   <div className="bg-clip-padding border-0 border-[transparent] border-solid overflow-clip relative rounded-[inherit] size-full">
                     <div className="absolute inset-[85.53%_0_0.35%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19480;2:8189" data-name="Vector">
                       <div className="absolute inset-[-0.93%_0]">
-                        <img alt="" className="block max-w-none size-full" src={imgVector17} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={imgVector17} />
                       </div>
                     </div>
                     <div className="absolute inset-[56.51%_0_29.37%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19480;2:8190" data-name="Vector">
                       <div className="absolute inset-[-0.93%_0]">
-                        <img alt="" className="block max-w-none size-full" src={imgVector18} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={imgVector18} />
                       </div>
                     </div>
                     <div className="absolute inset-[28.01%_0_57.87%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19480;2:8191" data-name="Vector">
                       <div className="absolute inset-[-0.93%_0]">
-                        <img alt="" className="block max-w-none size-full" src={imgVector17} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={imgVector17} />
                       </div>
                     </div>
                     <div className="absolute inset-[0.29%_0_86.37%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19480;2:8192" data-name="Vector">
                       <div className="absolute inset-[-0.98%_0]">
-                        <img alt="" className="block max-w-none size-full" src={imgVector19} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={imgVector19} />
                       </div>
                     </div>
                   </div>
@@ -631,7 +631,7 @@
                     <div className="content-stretch flex items-start justify-center overflow-clip relative rounded-[3px] shrink-0 w-full" data-node-id="2:19517" data-name="hls-video">
                       <div className="h-[595.48px] relative shrink-0 w-[1058.66px]" data-node-id="2:19518" data-name="image">
                         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                          <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
+                          <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
                         </div>
                       </div>
                     </div>
@@ -644,7 +644,7 @@
                       <div className="absolute content-stretch flex h-[595.48px] items-center justify-center left-0 overflow-clip rounded-[3px] top-0 w-[1058.66px]" data-node-id="2:19524" data-name="div.absolute">
                         <div className="flex-[1_0_0] h-[595.48px] min-w-px relative" data-node-id="2:19525" data-name="Video thumbnail">
                           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <img alt="" className="absolute h-[121.91%] left-0 max-w-none top-[-10.95%] w-full" src={imgVideoThumbnail} />
+                            <img loading="lazy" decoding="async" alt="" className="absolute h-[121.91%] left-0 max-w-none top-[-10.95%] w-full" src={imgVideoThumbnail} />
                           </div>
                         </div>
                       </div>
@@ -707,7 +707,7 @@
                         <div className="content-stretch flex flex-[1_0_0] flex-col h-full items-start min-w-px overflow-clip relative" data-node-id="2:19583" data-name="div.overflow-hidden">
                           <div className="flex-[1_0_0] min-h-px relative w-[107px]" data-node-id="2:19584" data-name="Build vs. buy: Why Anthropic chose Fin">
                             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                              <img alt="" className="absolute h-full left-[-4.69%] max-w-none top-0 w-[109.37%]" src={imgVideoThumbnail} />
+                              <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-4.69%] max-w-none top-0 w-[109.37%]" src={imgVideoThumbnail} />
                             </div>
                           </div>
                         </div>
@@ -742,7 +742,7 @@
                         <div className="content-stretch flex flex-[1_0_0] flex-col h-full items-start min-w-px overflow-clip relative" data-node-id="2:19597" data-name="div.overflow-hidden">
                           <div className="flex-[1_0_0] min-h-px relative w-[107px]" data-node-id="2:19598" data-name="AI at enterprise scale: Why Lightspeed chose Fin">
                             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                              <img alt="" className="absolute h-full left-[-4.7%] max-w-none top-0 w-[109.4%]" src={imgAiAtEnterpriseScaleWhyLightspeedChoseFin} />
+                              <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-4.7%] max-w-none top-0 w-[109.4%]" src={imgAiAtEnterpriseScaleWhyLightspeedChoseFin} />
                             </div>
                           </div>
                         </div>
@@ -777,7 +777,7 @@
                         <div className="content-stretch flex flex-[1_0_0] flex-col h-full items-start min-w-px overflow-clip relative" data-node-id="2:19611" data-name="div.overflow-hidden">
                           <div className="flex-[1_0_0] min-h-px relative w-[107px]" data-node-id="2:19612" data-name="How Rocket Money operationalized AI">
                             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                              <img alt="" className="absolute h-full left-[-4.7%] max-w-none top-0 w-[109.4%]" src={imgHowRocketMoneyOperationalizedAi} />
+                              <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-4.7%] max-w-none top-0 w-[109.4%]" src={imgHowRocketMoneyOperationalizedAi} />
                             </div>
                           </div>
                         </div>
@@ -920,14 +920,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19685" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19685;2:8247" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19687" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19687;2:8252" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -942,14 +942,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19696" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19696;2:8258" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19698" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19698;2:8261" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -964,14 +964,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19707" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19707;2:8267" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19709" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19709;2:8270" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -986,14 +986,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19718" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19718;2:8276" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19720" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19720;2:8279" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1008,14 +1008,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19729" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19729;2:8282" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19731" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19731;2:8285" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1038,14 +1038,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19748" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19748;2:8300" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19750" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19750;2:8303" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1064,14 +1064,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19765" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19765;2:8317" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19767" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19767;2:8320" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1094,14 +1094,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19786" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19786;2:8339" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19788" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19788;2:8342" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1111,14 +1111,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19794" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19794;2:8345" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19796" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19796;2:8348" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1128,14 +1128,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19802" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19802;2:8351" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19804" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19804;2:8354" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1158,14 +1158,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19815" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19815;2:8364" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19817" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19817;2:8367" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1188,14 +1188,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19834" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19834;2:8385" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19836" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19836;2:8388" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1205,14 +1205,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19842" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19842;2:8391" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19844" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19844;2:8394" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1222,14 +1222,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19850" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19850;2:8397" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19852" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19852;2:8400" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1252,14 +1252,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19867" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19867;2:8414" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19869" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19869;2:8417" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1282,14 +1282,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19885" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19885;2:8432" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19887" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19887;2:8435" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1299,14 +1299,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19893" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19893;2:8438" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19895" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19895;2:8441" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1316,14 +1316,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19901" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19901;2:8444" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19903" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19903;2:8447" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1347,7 +1347,7 @@
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19919;2:8462" data-name="Vector">
                         <div className="absolute inset-[-0.58%_-0.37%]">
-                          <img alt="" className="block max-w-none size-full" src={imgVector37} />
+                          <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={imgVector37} />
                         </div>
                       </div>
                     </div>
@@ -1355,7 +1355,7 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19921" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19921;2:8465" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1378,14 +1378,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19937" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19937;2:8480" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19939" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19939;2:8483" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1408,14 +1408,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19956" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19956;2:8499" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19958" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19958;2:8502" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1425,14 +1425,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19964" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19964;2:8505" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19966" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19966;2:8508" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1451,14 +1451,14 @@
                   <div className="absolute h-[188.037px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19978" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-[0_25.6%_46.82%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19978;2:8519" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector38} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector38} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[188.037px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19980" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-[0_25.6%_46.82%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19980;2:8522" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector39} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector39} />
                       </div>
                     </div>
                   </div>
@@ -1475,14 +1475,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19990" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19990;2:8528" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19992" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19992;2:8531" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1492,14 +1492,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19998" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19998;2:8534" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:20000" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20000;2:8537" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>
@@ -1514,14 +1514,14 @@
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:20009" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20009;2:8543" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector33} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:20011" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20011;2:8546" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector34} />
                       </div>
                     </div>
                   </div>
@@ -1531,14 +1531,14 @@
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:20017" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20017;2:8549" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector35} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:20019" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20019;2:8552" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector36} />
                       </div>
                     </div>
                   </div>

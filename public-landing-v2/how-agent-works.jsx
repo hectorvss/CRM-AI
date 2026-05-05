@@ -28,10 +28,10 @@
     return (
       <div className="h-[96px] overflow-clip relative w-[77px]">
         <div className="absolute inset-[0_-0.05%_0_0] opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={haHeroV} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={haHeroV} />
         </div>
         <div className="absolute inset-[6.25%_7.74%_6.25%_7.79%] opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={haHeroV1} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={haHeroV1} />
         </div>
         <div className="absolute" style={{ inset: '15.99% 21.3% 38.01% 21.35%' }}>
           {[
@@ -44,12 +44,12 @@
             { inset: '49.95% 29.18% 43.47% 62.52%', src: haHeroV9 },
           ].map((f, i) => (
             <div key={i} className="absolute opacity-100" style={{ inset: f.inset, maskImage: `url('${haHeroV2}')`, WebkitMaskImage: `url('${haHeroV2}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-              <img alt="" className="block max-w-none size-full" src={f.src} />
+              <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={f.src} />
             </div>
           ))}
         </div>
         <div className="absolute opacity-100" style={{ inset: '68.07% 14.53% 17.66% 14.76%' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={haHeroV10} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={haHeroV10} />
         </div>
       </div>
     );
@@ -102,7 +102,7 @@
                   <div className="content-stretch flex flex-1 flex-col items-start justify-center min-h-px overflow-clip relative w-[1276px]">
                     <div className="h-[673px] relative shrink-0 w-[1262px]">
                       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <img alt="" className="absolute left-0 max-w-none size-full top-0" src={haHeroImg} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={haHeroImg} />
                       </div>
                     </div>
                   </div>
@@ -215,7 +215,7 @@
                 </div>
               </div>
               <div className="content-stretch flex flex-col h-[453.36px] items-start overflow-clip relative shrink-0 w-full">
-                <img alt="" className="absolute inset-0 size-full object-cover object-left-top" src={haTrainImg} />
+                <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover object-left-top" src={haTrainImg} />
               </div>
             </div>
             <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-[466.55px] max-w-full">
@@ -238,7 +238,7 @@
               <div key={card.title} className="content-stretch flex flex-col gap-[15px] items-start relative shrink-0">
                 <div className="bg-[#151b29] border border-solid border-[#393f4b] content-stretch flex flex-col items-start justify-center p-px relative shrink-0 w-full">
                   <div className="aspect-square relative shrink-0 w-full overflow-clip">
-                    <img alt="" className="absolute inset-0 size-full object-cover" src={card.img} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover" src={card.img} />
                   </div>
                 </div>
                 <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full">
@@ -331,7 +331,7 @@
                   <div className="content-stretch flex flex-col items-start justify-center w-full">
                     <div className="content-stretch flex flex-col h-[453.36px] items-start overflow-clip relative shrink-0 w-full">
                       <div className="h-[448px] relative shrink-0 w-full">
-                        <img alt="" className="absolute inset-0 size-full object-cover object-left-top" src={haTestImg} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover object-left-top" src={haTestImg} />
                       </div>
                     </div>
                   </div>
@@ -357,7 +357,7 @@
                 <div key={card.title} className="content-stretch flex flex-col gap-[15px] items-start relative shrink-0">
                   <div className="bg-[#151b29] border border-solid border-[#393f4b] content-stretch flex flex-col items-start justify-center p-px relative shrink-0 w-full">
                     <div className="aspect-square relative shrink-0 w-full overflow-clip">
-                      <img alt="" className="absolute inset-0 size-full object-cover" src={card.img} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover" src={card.img} />
                     </div>
                   </div>
                   <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full">
@@ -452,8 +452,8 @@
                 </div>
               </div>
               <div className="relative w-full h-[484px] flex items-center justify-center overflow-hidden">
-                <img alt="" className="absolute inset-0 size-full object-cover" src={haDepHeroBg} />
-                <img alt="" className="relative z-1 max-w-[384px] w-[384px] aspect-[384/300]" src={haDepPhone} />
+                <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover" src={haDepHeroBg} />
+                <img loading="lazy" decoding="async" alt="" className="relative z-1 max-w-[384px] w-[384px] aspect-[384/300]" src={haDepPhone} />
               </div>
             </div>
             <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-[466.55px] max-w-full">
@@ -480,7 +480,7 @@
                     </div>
                   )}
                   <div className="aspect-square relative shrink-0 w-full overflow-clip">
-                    <img alt="" className="absolute inset-0 size-full object-cover" src={card.img} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover" src={card.img} />
                   </div>
                 </div>
                 <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full">
@@ -556,7 +556,7 @@
           <div className="content-stretch flex flex-col gap-[24px] items-start relative shrink-0 w-full">
             <div className="bg-[#151b29] border border-solid border-[#393f4b] content-stretch flex flex-col items-start justify-center p-px relative shrink-0 w-full">
               <div className="content-stretch flex flex-col h-[453.36px] items-start overflow-clip relative shrink-0 w-full">
-                <img alt="" className="absolute inset-0 size-full object-cover object-left-top" src={haAnaTopics} />
+                <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover object-left-top" src={haAnaTopics} />
               </div>
             </div>
             <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-[466.55px] max-w-full">
@@ -579,7 +579,7 @@
               <div key={card.title} className="content-stretch flex flex-col gap-[15px] items-start relative shrink-0">
                 <div className="bg-[#151b29] border border-solid border-[#393f4b] content-stretch flex flex-col items-start justify-center p-px relative shrink-0 w-full">
                   <div className="aspect-square relative shrink-0 w-full overflow-clip">
-                    <img alt="" className="absolute inset-0 size-full object-cover" src={card.img} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover" src={card.img} />
                   </div>
                 </div>
                 <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full">
@@ -634,7 +634,7 @@
                   >
                     <p className="m-0 text-[16.7px] text-[#cecfd2] leading-[23.94px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>{faq.q}</p>
                     <div className="size-[17px] flex items-center justify-center shrink-0">
-                      <img alt="" src={haFaqChevron} className={`size-full transition-transform ${open === i ? 'rotate-180' : 'rotate-90'}`} />
+                      <img loading="lazy" decoding="async" alt="" src={haFaqChevron} className={`size-full transition-transform ${open === i ? 'rotate-180' : 'rotate-90'}`} />
                     </div>
                   </button>
                   {open === i && (
@@ -665,7 +665,7 @@
       <div className="content-stretch flex flex-col items-start relative w-full bg-[#080f1e]" data-node-id="32:15907">
         <div className="absolute inset-[-120px_0_0_0] pointer-events-none">
           <div className="absolute inset-0" style={{ maskImage: `url('${haCtaMask}')`, WebkitMaskImage: `url('${haCtaMask}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskSize: '100% 100%', WebkitMaskSize: '100% 100%' }}>
-            <img alt="" className="absolute inset-0 w-full h-full object-cover" src={haCtaBgFlare} />
+            <img loading="lazy" decoding="async" alt="" className="absolute inset-0 w-full h-full object-cover" src={haCtaBgFlare} />
           </div>
         </div>
         <div className="grid grid-cols-12 gap-x-[48px] gap-y-[48px] h-[538px] max-w-[1600px] mx-auto overflow-clip px-[24px] py-[160px] relative shrink-0 w-full">

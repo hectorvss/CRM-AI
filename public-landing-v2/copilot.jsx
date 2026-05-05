@@ -50,7 +50,7 @@
                 <div className="content-stretch flex flex-col h-[774px] items-start justify-center relative shrink-0 w-[1152px]">
                   <div className="h-[766px] relative shrink-0 w-[1140px]">
                     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                      <img alt="" className="absolute left-0 max-w-none size-full top-0" src={heroImgImage} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={heroImgImage} />
                     </div>
                   </div>
                 </div>
@@ -78,7 +78,7 @@
           <div className="absolute content-stretch flex flex-col inset-0 items-start justify-center z-[1]">
             <div className="flex-1 min-h-[1500.25px] min-w-[1440px] relative w-full">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <img alt="" className="absolute h-[158.39%] left-0 max-w-none top-[-20.44%] w-full" src={heroImgBackground} />
+                <img loading="lazy" decoding="async" alt="" className="absolute h-[158.39%] left-0 max-w-none top-[-20.44%] w-full" src={heroImgBackground} />
               </div>
             </div>
           </div>
@@ -121,7 +121,7 @@
           <div className="content-stretch flex flex-col items-start justify-center overflow-clip relative shrink-0 w-full">
             <div className="h-[597.33px] min-w-[672px] relative shrink-0 w-full">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <img alt="" className="absolute left-0 max-w-none size-full top-0" src={image} />
+                <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={image} />
               </div>
             </div>
           </div>
@@ -129,7 +129,7 @@
             <div className="content-stretch flex flex-1 flex-col items-start justify-center min-h-px relative w-[672px]">
               <div className="h-[597px] relative shrink-0 w-[672px]">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imageInner} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imageInner} />
                 </div>
               </div>
             </div>
@@ -228,7 +228,7 @@
                       {/* Dotted border */}
                       <div className="absolute inset-[2.5px_2.5px_34.5px_2.5px]">
                         <div className="absolute inset-[-0.4%_0]">
-                          <img alt="" className="block max-w-none size-full" src={believeImgDottedBorder} />
+                          <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={believeImgDottedBorder} />
                         </div>
                       </div>
                     </div>
@@ -239,7 +239,7 @@
                       <div className="absolute content-stretch flex flex-col inset-0 items-start justify-center overflow-clip">
                         <div className="flex-1 min-h-[282px] min-w-[502px] relative w-full">
                           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <img alt="" className="absolute h-[100.06%] left-0 max-w-none top-[-0.03%] w-full" src={believeImgExplainerVideoThumb} />
+                            <img loading="lazy" decoding="async" alt="" className="absolute h-[100.06%] left-0 max-w-none top-[-0.03%] w-full" src={believeImgExplainerVideoThumb} />
                           </div>
                         </div>
                       </div>
@@ -248,7 +248,7 @@
                         <div className="h-[19.5px] relative shrink-0 w-[31px]">
                           <div className="overflow-clip relative size-[15.5px] absolute h-[15.5px] left-1/4 right-1/4 top-0">
                             <div className="absolute bottom-[12.5%] left-1/4 right-[16.67%] top-[12.5%] opacity-100">
-                              <img alt="" className="absolute block inset-0 max-w-none size-full" src={believeImgVector} />
+                              <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={believeImgVector} />
                             </div>
                           </div>
                         </div>
@@ -372,7 +372,7 @@
               <div className="content-stretch flex flex-col items-start overflow-clip relative shrink-0 w-full">
                 <div className="aspect-square relative shrink-0 w-full">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute left-0 max-w-none size-full top-0" src={believeImgCopilotBelieve} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={believeImgCopilotBelieve} />
                   </div>
                 </div>
               </div>
@@ -394,7 +394,7 @@
       <div className={className || "h-[56px] overflow-clip relative w-[248px]"}>
         <div className="absolute inset-[2.52%_1.28%_1.79%_0.97%] opacity-100" style={{ maskImage: `url('${testimonialImgGroup}')`, WebkitMaskImage: `url('${testimonialImgGroup}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskPosition: '-0.715px -0.715px', WebkitMaskPosition: '-0.715px -0.715px', maskSize: '243.852px 55.018px', WebkitMaskSize: '243.852px 55.018px' }}>
           <div className="absolute inset-[-0.22%_0]">
-            <img alt="" className="block max-w-none size-full" src={testimonialImgGroup1} />
+            <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={testimonialImgGroup1} />
           </div>
         </div>
       </div>
@@ -463,7 +463,7 @@
               <div className="content-stretch flex flex-col h-[369.59px] items-start justify-center overflow-clip relative shrink-0 w-full">
                 <div className="flex-1 min-h-[369.59px] min-w-[369.59px] relative w-full">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-[-0.53%] max-w-none top-0 w-[101.05%]" src={smaImgMultilingual} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.53%] max-w-none top-0 w-[101.05%]" src={smaImgMultilingual} />
                   </div>
                 </div>
               </div>
@@ -542,14 +542,14 @@
               <div className="absolute content-stretch flex flex-col h-[542.09px] items-start justify-center left-0 overflow-clip top-0 w-[1112px]">
                 <div className="flex-1 min-h-[542.09px] min-w-[1112px] relative w-full">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-[101.75%] left-0 max-w-none top-[-0.88%] w-full" src={platformImg1} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-[101.75%] left-0 max-w-none top-[-0.88%] w-full" src={platformImg1} />
                   </div>
                 </div>
               </div>
               <div className="flex-1 h-full min-w-px overflow-clip relative">
                 <div className="absolute aspect-[1112/551.58] left-0 right-0 top-0">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute left-0 max-w-none size-full top-0" src={platformImg2} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={platformImg2} />
                   </div>
                 </div>
               </div>
@@ -596,7 +596,7 @@
             <div className="content-stretch flex flex-col items-start justify-center overflow-clip relative shrink-0 w-full">
               <div className="h-[864px] min-w-[1440px] relative shrink-0 w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-[166.67%] left-0 max-w-none top-[-33.33%] w-full" src={bannerCtaImgBg} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-[166.67%] left-0 max-w-none top-[-33.33%] w-full" src={bannerCtaImgBg} />
                 </div>
               </div>
               <div className="absolute bg-[#17100e] inset-0" style={{ opacity: 0.2 }} />

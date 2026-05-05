@@ -15,10 +15,10 @@
     return (
       <div className="opacity-100 overflow-clip relative size-[12px]">
         <div className="absolute inset-0 opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={featHeroImgVector} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={featHeroImgVector} />
         </div>
         <div className="absolute inset-[37.5%] opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={featHeroImgVector1} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={featHeroImgVector1} />
         </div>
       </div>
     );
@@ -77,7 +77,7 @@
             <div className="absolute content-stretch flex flex-col inset-0 items-start justify-center overflow-clip">
               <div className="flex-1 min-h-[668px] min-w-[668px] relative w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={featHeroImgBgTrees} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={featHeroImgBgTrees} />
                 </div>
               </div>
             </div>
@@ -85,7 +85,7 @@
             <div className="absolute content-stretch flex flex-col inset-0 items-start overflow-clip">
               <div className="aspect-square relative shrink-0 w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={featHeroImgFg} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={featHeroImgFg} />
                 </div>
               </div>
             </div>
@@ -292,14 +292,14 @@
                 <div className="absolute content-stretch flex flex-col h-[719.19px] items-start justify-center left-0 overflow-clip top-0 w-[575.36px]">
                   <div className="flex-1 min-h-[719.19px] min-w-[575.36px] relative w-full">
                     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                      <img alt="" className="absolute left-0 max-w-none size-full top-0" src={featHighestImgBg} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={featHighestImgBg} />
                     </div>
                   </div>
                 </div>
                 <div className="content-stretch flex flex-1 flex-col h-full items-start min-w-px overflow-clip relative">
                   <div className="aspect-[575.36/719.19] relative shrink-0 w-full">
                     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                      <img alt="" className="absolute left-0 max-w-none size-full top-0" src={featHighestImgFg} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={featHighestImgFg} />
                     </div>
                   </div>
                 </div>
@@ -465,7 +465,7 @@
                           <div className="absolute content-stretch flex flex-col inset-0 items-start justify-center overflow-clip">
                             <div className="flex-1 min-h-[56px] relative w-full">
                               <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                                <img alt="" className="absolute h-[122.42%] left-0 max-w-none top-[-11.21%] w-full" src={bar.img} />
+                                <img loading="lazy" decoding="async" alt="" className="absolute h-[122.42%] left-0 max-w-none top-[-11.21%] w-full" src={bar.img} />
                               </div>
                             </div>
                           </div>
@@ -477,7 +477,7 @@
                         <div className="content-stretch flex flex-1 h-[56px] items-start justify-between min-w-px relative">
                           <div className="flex-1 h-full min-w-px relative">
                             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                              <img alt="" className="absolute left-0 max-w-none size-full top-0" src={bar.img} />
+                              <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={bar.img} />
                             </div>
                           </div>
                           <div className="content-stretch flex h-full items-center pr-[24px] relative shrink-0">
@@ -626,10 +626,10 @@
     return (
       <div className="opacity-100 overflow-clip relative size-[12px]">
         <div className="absolute inset-0 opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={featResImgVector} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={featResImgVector} />
         </div>
         <div className="absolute inset-[37.5%] opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={featResImgVector1} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={featResImgVector1} />
         </div>
       </div>
     );
@@ -707,7 +707,7 @@
             <div className="content-stretch flex flex-col items-start justify-center overflow-clip relative shrink-0 w-full">
               <div className="h-[844.8px] min-w-[1408px] relative shrink-0 w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.07%] max-w-none top-0 w-[100.13%]" src={featBannerImgBg} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.07%] max-w-none top-0 w-[100.13%]" src={featBannerImgBg} />
                 </div>
               </div>
             </div>

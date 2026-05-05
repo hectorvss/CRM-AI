@@ -344,10 +344,24 @@ app.get(/^\/app(\/.*)?$/, (_req, res, next) => {
 //   /           → v2 landing root
 //   /<route>    → v2 SPA routes (how-it-works, pricing, inbox, ai-agent, etc.)
 // Static assets referenced from index.html via /v2/ paths.
-app.use('/v2', express.static(LANDING_V2_DIR, { index: 'index.html', fallthrough: true }));
+//
+// Cache strategy:
+//   /v2/assets/*  → UUID-named Figma exports (content-addressable). Year-long immutable.
+//   /v2/*.js      → built artifacts; serve fresh but allow short revalidation.
+//   /v2/*.html    → no cache (route entry).
+function landingCacheHeaders(res: import('express').Response, filePath: string) {
+  if (/[/\\]assets[/\\]/.test(filePath)) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  } else if (/\.(js|css|svg)$/.test(filePath)) {
+    res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+  } else if (/\.html?$/.test(filePath)) {
+    res.setHeader('Cache-Control', 'no-cache');
+  }
+}
+app.use('/v2', express.static(LANDING_V2_DIR, { index: 'index.html', fallthrough: true, setHeaders: landingCacheHeaders }));
 // Also expose top-level v2 assets so /styles.css, /shared.jsx, /home.jsx, etc. resolve.
 // (vercel.json rewrites these individually — locally a single static mount is simpler.)
-app.use('/', express.static(LANDING_V2_DIR, { index: false, fallthrough: true }));
+app.use('/', express.static(LANDING_V2_DIR, { index: false, fallthrough: true, setHeaders: landingCacheHeaders }));
 
 const V2_SPA_ROUTES = [
   '/', '/v2', '/v2/',

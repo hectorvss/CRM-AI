@@ -7,46 +7,73 @@
 <meta name="description" content="Clain is the AI-first customer service platform. Modern Inbox, autonomous AI Agent, omnichannel support and reporting — all in one place." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Inter+Tight:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" />
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Inter+Tight:wght@500;600;700&family=Instrument+Serif:ital@0;1&display=swap" />
 <link rel="stylesheet" href="/v2/tokens.css" />
 <link rel="stylesheet" href="/v2/styles.css" />
+<!-- Preload critical first-paint scripts so they download in parallel with the parser. -->
+<link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous">
+<link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous">
+<link rel="preload" as="script" href="/v2/shared.js">
+<link rel="preload" as="script" href="/v2/app.js">
 <!-- Tailwind v4 browser bundle — required for arbitrary value classes from Figma extraction -->
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" defer></script>
 </head>
 <body>
 <div id="root"></div>
 
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous" defer></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
-
-<!-- Bootstrap Supabase client from /api/public/config (same as landing v1) -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" defer></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" defer></script>
+<!-- Supabase client + config: loaded lazily only on auth routes (/signin, /signup, /reset-password, /demo).
+     For 95% of marketing-page traffic, neither the UMD bundle nor the /api/public/config fetch
+     run before first paint. See ClainV2.ensureSupabase() in shared.jsx. -->
 <script>
-  (function bootstrapSupabase() {
-    window.__supabaseReady = false;
-    fetch('/api/public/config', { credentials: 'omit' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (cfg) {
-        if (!cfg || !cfg.supabaseUrl || !cfg.supabaseAnonKey) {
-          window.__SUPABASE_CONFIG__ = null;
-          window.__supabase = null;
-        } else {
-          window.__SUPABASE_CONFIG__ = cfg;
-          try {
-            window.__supabase = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-              auth: { persistSession: true, autoRefreshToken: true }
-            });
-          } catch (e) {
-            console.error('[Clain] Supabase init failed', e);
-            window.__supabase = null;
-          }
-        }
-      })
-      .catch(function () { window.__supabase = null; })
-      .finally(function () {
+  (function lazySupabaseBootstrap() {
+    var AUTH_PATHS = ['/signin', '/signup', '/reset-password', '/demo'];
+    function shouldEagerLoad() {
+      var p = (window.location.pathname || '/').replace(/^\/v2(\/|$)/, '/').replace(/\/+$/, '') || '/';
+      return AUTH_PATHS.indexOf(p) !== -1;
+    }
+    window.__loadSupabase = function () {
+      if (window.__supabaseReady !== undefined) return;       // already started
+      window.__supabaseReady = false;
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+      s.async = true;
+      s.onload = function () {
+        fetch('/api/public/config', { credentials: 'omit' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (cfg) {
+            if (!cfg || !cfg.supabaseUrl || !cfg.supabaseAnonKey) {
+              window.__SUPABASE_CONFIG__ = null;
+              window.__supabase = null;
+            } else {
+              window.__SUPABASE_CONFIG__ = cfg;
+              try {
+                window.__supabase = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
+                  auth: { persistSession: true, autoRefreshToken: true }
+                });
+              } catch (e) {
+                console.error('[Clain] Supabase init failed', e);
+                window.__supabase = null;
+              }
+            }
+          })
+          .catch(function () { window.__supabase = null; })
+          .finally(function () {
+            window.__supabaseReady = true;
+            window.dispatchEvent(new Event('supabase-ready'));
+          });
+      };
+      s.onerror = function () {
+        window.__supabase = null;
         window.__supabaseReady = true;
         window.dispatchEvent(new Event('supabase-ready'));
-      });
+      };
+      document.head.appendChild(s);
+    };
+    if (shouldEagerLoad()) window.__loadSupabase();
   })();
 </script>
 

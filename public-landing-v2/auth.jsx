@@ -7,6 +7,11 @@
   function useSupabase() {
     const [client, setClient] = useState(window.__supabase || null);
     useEffect(() => {
+      // Lazy bootstrap if the user landed on an auth page via SPA navigation
+      // and the eager load in index.html didn't run for this path.
+      if (window.__supabaseReady === undefined && typeof window.__loadSupabase === 'function') {
+        window.__loadSupabase();
+      }
       if (window.__supabaseReady) { setClient(window.__supabase || null); return; }
       const h = () => setClient(window.__supabase || null);
       window.addEventListener('supabase-ready', h, { once: true });

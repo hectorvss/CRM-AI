@@ -21,19 +21,19 @@
         {/* 5-icon grid (12-col, asymmetric: 2|2|4|2|2) */}
         <div className="grid grid-cols-12 gap-[16px] max-w-[1450px] relative shrink-0 w-full" style={{ height: 227.75 }}>
           <div className="col-span-2 relative">
-            <img src={acHeroEcommerce} alt="Ecommerce Agent" className="absolute" style={{ top: 20.68, left: '7.5%', width: '35%', height: 96.51 }} />
+            <img loading="lazy" decoding="async" src={acHeroEcommerce} alt="Ecommerce Agent" className="absolute" style={{ top: 20.68, left: '7.5%', width: '35%', height: 96.51 }} />
           </div>
           <div className="col-span-2 flex flex-col items-center py-[32.1px]">
-            <img src={acHeroSuccess} alt="Success Agent" className="block" style={{ width: 119.7, height: 149.8 }} />
+            <img loading="lazy" decoding="async" src={acHeroSuccess} alt="Success Agent" className="block" style={{ width: 119.7, height: 149.8 }} />
           </div>
           <div className="col-span-4 flex flex-col items-center">
-            <img src={acHeroFin} alt="Clain Agent" className="block" style={{ width: 229.33, height: 227.75 }} />
+            <img loading="lazy" decoding="async" src={acHeroFin} alt="Clain Agent" className="block" style={{ width: 229.33, height: 227.75 }} />
           </div>
           <div className="col-span-2 flex flex-col items-center py-[32.1px]">
-            <img src={acHeroSales} alt="Sales Agent" className="block" style={{ width: 119.7, height: 149.8 }} />
+            <img loading="lazy" decoding="async" src={acHeroSales} alt="Sales Agent" className="block" style={{ width: 119.7, height: 149.8 }} />
           </div>
           <div className="col-span-2 relative">
-            <img src={acHeroService} alt="Service Agent" className="absolute" style={{ top: 20.68, right: '7.5%', width: '35%', height: 96.51 }} />
+            <img loading="lazy" decoding="async" src={acHeroService} alt="Service Agent" className="absolute" style={{ top: 20.68, right: '7.5%', width: '35%', height: 96.51 }} />
           </div>
         </div>
 
@@ -84,13 +84,13 @@
             <p className="m-0 text-[12px] uppercase tracking-[1.2px] w-full" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '12px', color: 'rgba(0,0,0,0.6)' }}>[ Clain CEO Eoghan introduces Customer Agent ]</p>
             <div className="content-stretch flex flex-col items-start justify-center relative shrink-0 w-full">
               <div className="relative w-full overflow-clip" style={{ height: 396 }}>
-                <img src={acAnnVideoPoster} alt="" className="absolute inset-0 size-full object-cover" />
+                <img loading="lazy" decoding="async" src={acAnnVideoPoster} alt="" className="absolute inset-0 size-full object-cover" />
                 <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.2)' }} />
                 <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.1)' }} />
                 {/* Play button */}
                 <button className="absolute bg-[#111] border border-solid border-white cursor-pointer flex h-[40px] items-center justify-center pl-[11px] pr-[15px] py-[10px] rounded-[4px]" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
                   <span className="flex gap-[4px] items-center">
-                    <img src={acAnnPlayIcon} alt="" className="size-[20px]" />
+                    <img loading="lazy" decoding="async" src={acAnnPlayIcon} alt="" className="size-[20px]" />
                     <span className="text-[13.1px] text-white text-center" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, lineHeight: '20px' }}>Play</span>
                   </span>
                 </button>
@@ -159,7 +159,7 @@
                     {q.quote.map((line, j) => <span key={j} style={{ display: 'block' }}>{line}</span>)}
                   </blockquote>
                   <div className="flex gap-[10px] items-start w-full">
-                    <img src={q.avatar} alt={q.name} className="size-[60px] object-cover" />
+                    <img loading="lazy" decoding="async" src={q.avatar} alt={q.name} className="size-[60px] object-cover" />
                     <div className="flex flex-col" style={{ paddingTop: 8 }}>
                       <p className="m-0 text-[12px] uppercase tracking-[0.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '16.8px', color: 'rgba(0,0,0,0.8)' }}>{q.name}</p>
                       <p className="m-0 text-[12px] uppercase tracking-[0.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '16.8px', color: 'rgba(0,0,0,0.8)' }}>{q.role}</p>
@@ -244,8 +244,8 @@
             {/* Row 1: Perfect customer service (image LEFT, large) */}
             <div className="grid pt-[33px] w-full" style={{ gridTemplateColumns: '5fr 3fr', gap: 32, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
               <div className="relative overflow-clip rounded-[inherit]">
-                <img src={acRolesBg1} alt="" className="absolute inset-0 size-full object-cover" />
-                <img src={acRolesService} alt="" className="relative w-full" style={{ aspectRatio: '765 / 741.88' }} />
+                <img loading="lazy" decoding="async" src={acRolesBg1} alt="" className="absolute inset-0 size-full object-cover" />
+                <img loading="lazy" decoding="async" src={acRolesService} alt="" className="relative w-full" style={{ aspectRatio: '765 / 741.88' }} />
               </div>
               <div className="flex flex-col gap-[95.085px] items-start pb-[412.32px]">
                 <p className="m-0 text-[36.7px] text-black tracking-[-1.2px] w-full" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '40px' }}>
@@ -269,9 +269,9 @@
             {/* Row 2: Inbound sales (image LEFT) */}
             <div className="grid pt-[33px] w-full" style={{ gridTemplateColumns: '5fr 3fr', gap: 32, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
               <div className="relative overflow-clip rounded-[inherit]">
-                <img src={acRolesSalesBg} alt="" className="block w-full" style={{ height: 741.44 }} />
+                <img loading="lazy" decoding="async" src={acRolesSalesBg} alt="" className="block w-full" style={{ height: 741.44 }} />
                 <div className="absolute flex flex-col items-start" style={{ inset: '8.73% 10%' }}>
-                  <img src={acRolesSales} alt="" className="block size-[612px] max-w-full" />
+                  <img loading="lazy" decoding="async" src={acRolesSales} alt="" className="block size-[612px] max-w-full" />
                 </div>
               </div>
               <div className="flex flex-col gap-[94.89px] items-start pb-[398.27px]">
@@ -316,7 +316,7 @@
                 </div>
               </div>
               <div className="relative" style={{ aspectRatio: '734.41 / 450.11' }}>
-                <img src={acRolesNew1} alt="" className="absolute inset-0 size-full object-cover" />
+                <img loading="lazy" decoding="async" src={acRolesNew1} alt="" className="absolute inset-0 size-full object-cover" />
               </div>
             </div>
 
@@ -330,7 +330,7 @@
                 <p className="m-0 text-[13.4px] tracking-[-0.16px] max-w-[613.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '22.4px', color: 'rgba(0,0,0,0.7)' }}>Clain is taking on more roles across the customer journey. We’ll share more soon.</p>
               </div>
               <div className="relative" style={{ aspectRatio: '734.41 / 450.11' }}>
-                <img src={acRolesNew2} alt="" className="absolute inset-0 size-full object-cover" />
+                <img loading="lazy" decoding="async" src={acRolesNew2} alt="" className="absolute inset-0 size-full object-cover" />
               </div>
             </div>
           </div>
@@ -361,19 +361,19 @@
           {/* 5-icon grid (slightly smaller than hero) */}
           <div className="grid grid-cols-12 gap-[16px] max-w-[1450px] relative shrink-0 w-full" style={{ height: 214 }}>
             <div className="col-span-2 relative">
-              <img src={acFinalEcommerce} alt="Ecommerce Agent" className="absolute" style={{ top: 18.32, left: '7.5%', width: '35%', aspectRatio: '68.6 / 85.48' }} />
+              <img loading="lazy" decoding="async" src={acFinalEcommerce} alt="Ecommerce Agent" className="absolute" style={{ top: 18.32, left: '7.5%', width: '35%', aspectRatio: '68.6 / 85.48' }} />
             </div>
             <div className="col-span-2 flex flex-col items-center py-[32.1px]">
-              <img src={acFinalSuccess} alt="Success Agent" className="block" style={{ width: 119.7, height: 149.8 }} />
+              <img loading="lazy" decoding="async" src={acFinalSuccess} alt="Success Agent" className="block" style={{ width: 119.7, height: 149.8 }} />
             </div>
             <div className="col-span-4 flex flex-col items-center">
-              <img src={acFinalFin} alt="Clain Agent" className="block" style={{ width: 204, height: 202.59 }} />
+              <img loading="lazy" decoding="async" src={acFinalFin} alt="Clain Agent" className="block" style={{ width: 204, height: 202.59 }} />
             </div>
             <div className="col-span-2 flex flex-col items-center py-[32.1px]">
-              <img src={acFinalSales} alt="Sales Agent" className="block" style={{ width: 119.7, height: 149.8 }} />
+              <img loading="lazy" decoding="async" src={acFinalSales} alt="Sales Agent" className="block" style={{ width: 119.7, height: 149.8 }} />
             </div>
             <div className="col-span-2 relative">
-              <img src={acFinalService} alt="Service Agent" className="absolute" style={{ top: 18.32, right: '7.5%', width: '35%', aspectRatio: '68.6 / 85.48' }} />
+              <img loading="lazy" decoding="async" src={acFinalService} alt="Service Agent" className="absolute" style={{ top: 18.32, right: '7.5%', width: '35%', aspectRatio: '68.6 / 85.48' }} />
             </div>
           </div>
 

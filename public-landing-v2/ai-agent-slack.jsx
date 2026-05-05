@@ -47,11 +47,11 @@
       <div className="overflow-clip relative size-[12px]">
         {cfg.wrap === 'simple' ? (
           <div className="absolute opacity-100" style={{ inset: cfg.inset }}>
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={cfg.src} />
+            <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={cfg.src} />
           </div>
         ) : (
           <div className="absolute opacity-100" style={{ inset: cfg.inset, maskImage: `url('${cfg.mask}')`, WebkitMaskImage: `url('${cfg.mask}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={cfg.src} />
+            <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={cfg.src} />
           </div>
         )}
       </div>
@@ -63,7 +63,7 @@
     return (
       <div className="overflow-clip relative size-[72px]">
         <div className="absolute" style={{ inset: '4.55% 6.06% 4.55% 3.03%', maskImage: `url('${heroImgGroup2}')`, WebkitMaskImage: `url('${heroImgGroup2}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={heroImgGroup3} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={heroImgGroup3} />
         </div>
       </div>
     );
@@ -73,7 +73,7 @@
     return (
       <div className="overflow-clip relative" style={{ width: 71.69, height: 72.003 }}>
         <div className="absolute opacity-100" style={{ inset: '4.74% 3.03% 4.74% 6.06%', maskImage: `url('${heroImgGroup4}')`, WebkitMaskImage: `url('${heroImgGroup4}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={heroImgGroup5} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={heroImgGroup5} />
         </div>
       </div>
     );
@@ -87,7 +87,7 @@
           <div className="flex-1 max-w-[1536px] min-h-px overflow-clip relative w-[1440px]">
             <div className="absolute h-[772.5px] left-0 overflow-clip top-0 w-[1440px]">
               <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ inset: '-3.4% -2.67% -3.09% -3.74%', maskImage: `url('${heroImgGroup}')`, WebkitMaskImage: `url('${heroImgGroup}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={heroImgGroup1} />
+                <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={heroImgGroup1} />
               </div>
             </div>
             <div className="absolute h-[722px] left-0 right-0 top-0" style={{ background: '#020917', opacity: 0.1 }} />
@@ -101,14 +101,14 @@
             <div className="absolute bottom-0 h-[500px] opacity-0 overflow-clip right-0 w-[580px]">
               <div className="absolute aspect-[580/533.06] left-0 right-0 top-0">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={heroImgChannelsBg} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={heroImgChannelsBg} />
                 </div>
               </div>
             </div>
             <div className="absolute content-stretch flex flex-col inset-[0_0_-147px_0] items-start">
               <div className="h-[647px] relative shrink-0 w-[574px]">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={heroImgImage} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={heroImgImage} />
                 </div>
               </div>
             </div>
@@ -265,7 +265,7 @@
     return (
       <div className={className || `overflow-clip relative ${is12 ? "h-[12.234px] w-[16px]" : "size-[28px]"}`}>
         <div className={`absolute opacity-100 ${is12 ? "inset-[7.41%_2.94%_4.01%_2.94%]" : "inset-[0.17%_0.19%_0.18%_0.18%]"}`}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={is12 ? imgVector1 : imgVector} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={is12 ? imgVector1 : imgVector} />
         </div>
       </div>
     );
@@ -344,7 +344,7 @@
                           <div className="absolute content-stretch flex flex-col inset-[0_0.01px_0_0] items-start overflow-clip">
                             <div className="h-[484px] relative shrink-0 w-[1042.16px]">
                               <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                                <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
+                                <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
                               </div>
                             </div>
                           </div>
@@ -352,7 +352,7 @@
                             <div className="absolute inset-[120px_335.34px_-120px_335.33px]">
                               <div className="absolute aspect-[384/300] left-0 right-0 top-0">
                                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgPhone} />
+                                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgPhone} />
                                 </div>
                               </div>
                               <div className="absolute bg-black content-stretch flex gap-[12px] h-[80px] items-center left-[24px] p-[16px] right-[24px] rounded-[9999px] top-[24px]">
@@ -477,10 +477,10 @@
     return (
       <div className={className || "h-[32.532px] overflow-clip relative w-[166.66px]"}>
         <div className="absolute inset-[0.51%_0_49.62%_0.01%] opacity-100" style={{ maskImage: `url('${emailImgVector}')`, WebkitMaskImage: `url('${emailImgVector}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskPosition: '-0.003px 0.002px', WebkitMaskPosition: '-0.003px 0.002px', maskSize: '166.644px 32.2px', WebkitMaskSize: '166.644px 32.2px' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={emailImgVector1} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={emailImgVector1} />
         </div>
         <div className="absolute inset-[19.81%_5.61%_0.48%_20.43%] opacity-100" style={{ maskImage: `url('${emailImgVector}')`, WebkitMaskImage: `url('${emailImgVector}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskPosition: '-34.044px -6.277px', WebkitMaskPosition: '-34.044px -6.277px', maskSize: '166.644px 32.2px', WebkitMaskSize: '166.644px 32.2px' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={emailImgVector2} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={emailImgVector2} />
         </div>
       </div>
     );
@@ -565,7 +565,7 @@
                   <div className="content-stretch flex flex-col h-[452.13px] items-start overflow-clip relative shrink-0 w-full">
                     <div className="aspect-[604.41/452.41] relative shrink-0 w-full">
                       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <img alt="" className="absolute left-0 max-w-none size-full top-0" src={emailImgEmailUi} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={emailImgEmailUi} />
                       </div>
                     </div>
                   </div>
@@ -688,7 +688,7 @@
                   <div className="content-stretch flex flex-col h-[462.88px] items-start overflow-clip relative shrink-0 w-full">
                     <div className="aspect-[618.78/463.17] relative shrink-0 w-full">
                       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <img alt="" className="absolute left-0 max-w-none size-full top-0" src={liveChatImgMessengerUi} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={liveChatImgMessengerUi} />
                       </div>
                     </div>
                   </div>
@@ -775,7 +775,7 @@
                   <div className="content-stretch flex flex-col h-[555.03px] items-start overflow-clip relative shrink-0 w-full">
                     <div className="aspect-[1056.66/555.2] relative shrink-0 w-full">
                       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <img alt="" className="absolute left-0 max-w-none size-full top-0" src={socialImgUi} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={socialImgUi} />
                       </div>
                     </div>
                   </div>
@@ -829,13 +829,13 @@
     return (
       <div className={className || "h-[58.875px] overflow-clip relative w-[125px]"}>
         <div className="absolute inset-[15.33%_0.01%_15.45%_0.04%] opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={slackImgVector} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={slackImgVector} />
         </div>
         <div className="absolute inset-[32.84%_16.48%_23.16%_15.12%] opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={slackImgVector1} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={slackImgVector1} />
         </div>
         <div className="absolute inset-[43.91%_70.69%_24.85%_18.98%] opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={slackImgVector2} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={slackImgVector2} />
         </div>
       </div>
     );
@@ -890,7 +890,7 @@
                   <div className="content-stretch flex flex-col h-[555.03px] items-start overflow-clip relative shrink-0 w-full">
                     <div className="aspect-[1056.66/555.2] relative shrink-0 w-full">
                       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <img alt="" className="absolute left-0 max-w-none size-full top-0" src={slackImgUi} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={slackImgUi} />
                       </div>
                     </div>
                   </div>
@@ -1030,7 +1030,7 @@
                   <div className="h-[555.03px] overflow-clip relative shrink-0 w-full">
                     <div className="absolute aspect-[1056.66/556.13] left-0 right-0 top-0">
                       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <img alt="" className="absolute left-0 max-w-none size-full top-0" src={apiImgUi} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={apiImgUi} />
                       </div>
                     </div>
                   </div>
@@ -1079,7 +1079,7 @@
     return (
       <div className={className || "overflow-clip relative size-[17px]"}>
         <div className="absolute inset-[22.23%_32.52%_26.59%_36.89%] opacity-100">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={faqsImgChevron} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={faqsImgChevron} />
         </div>
       </div>
     );
@@ -1162,7 +1162,7 @@
             <div className="content-stretch flex flex-1 flex-col items-start min-h-px relative w-full">
               <div className="h-[538px] relative shrink-0 w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={finalCtaImg} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={finalCtaImg} />
                 </div>
               </div>
             </div>

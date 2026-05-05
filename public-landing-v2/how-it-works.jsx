@@ -57,8 +57,8 @@
   function FeatureArrow({ active }) {
     return (
       <div className={`relative shrink-0 size-[36px] transition-opacity${active ? '' : ' opacity-0'}`}>
-        <img alt="" className="absolute inset-0 max-w-none size-full" src={imgFeatVector} />
-        <img alt="" className="absolute inset-0 max-w-none size-full" src={imgFeatVector1} />
+        <img loading="lazy" decoding="async" alt="" className="absolute inset-0 max-w-none size-full" src={imgFeatVector} />
+        <img loading="lazy" decoding="async" alt="" className="absolute inset-0 max-w-none size-full" src={imgFeatVector1} />
       </div>
     );
   }
@@ -74,7 +74,7 @@
         <div className="relative w-full overflow-hidden" style={{ background: '#17100e' }}>
           {/* Background illustration */}
           <div className="absolute inset-0" style={{ opacity: 0.75, background: 'linear-gradient(to bottom, #3462bd, #83a1ad)' }}>
-            <img alt="" className="absolute inset-0 w-full h-full object-cover" src={imgHeroIllustration} />
+            <img loading="lazy" decoding="async" alt="" className="absolute inset-0 w-full h-full object-cover" src={imgHeroIllustration} />
           </div>
           {/* Fade overlay top half */}
           <div className="absolute top-0 left-0 right-0 bottom-1/2" style={{ background: 'linear-gradient(to bottom, #17100e 0%, transparent 100%)' }} />
@@ -97,7 +97,7 @@
 
             {/* Product visual */}
             <div className="mt-12 relative rounded-lg overflow-hidden" style={{ aspectRatio: '1230/792' }}>
-              <img alt="" className="absolute inset-0 w-full h-full object-cover" src={imgHeroImage} />
+              <img loading="lazy" decoding="async" alt="" className="absolute inset-0 w-full h-full object-cover" src={imgHeroImage} />
             </div>
 
             {/* Feature icon row */}
@@ -149,12 +149,12 @@
 
             {/* Bees illustration */}
             <div className="rounded-[6px] overflow-hidden mb-12" style={{ aspectRatio: '1160/396' }}>
-              <img alt="" className="w-full h-full object-cover" src={imgProdBees} />
+              <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgProdBees} />
             </div>
 
             {/* Product UI screenshot */}
             <div className="bg-[#e7e6df] rounded-[10px] overflow-hidden mb-6" style={{ aspectRatio: '1160/490' }}>
-              <img alt="" className="w-full h-full object-cover" src={imgProdUi} />
+              <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgProdUi} />
             </div>
 
             {/* 3-column features */}
@@ -179,13 +179,13 @@
               <div className="grid grid-cols-[1fr_2fr] gap-8">
                 {/* Photo */}
                 <div className="row-span-2 rounded-[6px] overflow-hidden" style={{ aspectRatio: '1/1' }}>
-                  <img alt="Angelo Livanos" className="w-full h-full object-cover" src={imgProdAngelo} />
+                  <img loading="lazy" decoding="async" alt="Angelo Livanos" className="w-full h-full object-cover" src={imgProdAngelo} />
                 </div>
                 {/* Quote area */}
                 <div className="flex flex-col gap-4">
                   {/* Company logo */}
                   <div className="h-[25px] w-[102px]" style={{ maskImage: `url('${imgProdGroup}'), url('${imgProdGroup1}')`, maskSize: '100%', maskRepeat: 'no-repeat', WebkitMaskImage: `url('${imgProdGroup}'), url('${imgProdGroup1}')`, WebkitMaskSize: '100%', WebkitMaskRepeat: 'no-repeat' }}>
-                    <img alt="" className="w-full h-full" src={imgProdGroup2} />
+                    <img loading="lazy" decoding="async" alt="" className="w-full h-full" src={imgProdGroup2} />
                   </div>
                   {/* Quote text */}
                   <div className="tracking-[-1.8px]" style={{ fontFamily: "'Inter', sans-serif", color: 'black' }}>
@@ -223,12 +223,12 @@
 
             {/* People illustration */}
             <div className="rounded-[6px] overflow-hidden mb-12" style={{ aspectRatio: '1160/396' }}>
-              <img alt="" className="w-full h-full object-cover" src={imgUsabPeople} />
+              <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgUsabPeople} />
             </div>
 
             {/* Product UI — Reporting */}
             <div className="bg-[#e7e6df] rounded-[10px] overflow-hidden mb-6" style={{ aspectRatio: '1160/490' }}>
-              <img alt="" className="w-full h-full object-cover" src={imgUsabInsight} />
+              <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgUsabInsight} />
             </div>
 
             {/* Single feature text */}
@@ -243,7 +243,7 @@
               {/* Ticketing */}
               <div className="flex-1 flex flex-col gap-4">
                 <div className="bg-[#e7e6df] rounded-[10px] overflow-hidden" style={{ aspectRatio: '564/388' }}>
-                  <img alt="" className="w-full h-full object-cover" src={imgUsabTickets} />
+                  <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgUsabTickets} />
                 </div>
                 <div className="max-w-[390px]">
                   <p className="font-semibold text-[16.5px] text-[#17100e] tracking-[-0.18px] leading-[22px] mb-2" style={{ fontFamily: "'Inter', sans-serif" }}>Ticketing designed for teamwork</p>
@@ -254,7 +254,7 @@
               {/* Integrations */}
               <div className="flex-1 flex flex-col gap-4">
                 <div className="bg-[#e7e6df] rounded-[10px] overflow-hidden" style={{ aspectRatio: '564/388' }}>
-                  <img alt="" className="w-full h-full object-cover" src={imgUsabIntegration} />
+                  <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgUsabIntegration} />
                 </div>
                 <div className="max-w-[390px]">
                   <p className="font-semibold text-[16.5px] text-[#17100e] tracking-[-0.18px] leading-[22px] mb-2" style={{ fontFamily: "'Inter', sans-serif" }}>Integrate with your existing tools</p>
@@ -283,12 +283,12 @@
 
             {/* Satellite illustration */}
             <div className="rounded-[6px] overflow-hidden mb-12" style={{ aspectRatio: '1160/396' }}>
-              <img alt="" className="w-full h-full object-cover" src={imgOutbSatellite} />
+              <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgOutbSatellite} />
             </div>
 
             {/* Product UI */}
             <div className="bg-[#e7e6df] rounded-[10px] overflow-hidden mb-6" style={{ aspectRatio: '1160/490' }}>
-              <img alt="" className="w-full h-full object-cover" src={imgOutbProduct} />
+              <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgOutbProduct} />
             </div>
 
             {/* 3-column features */}
@@ -315,7 +315,7 @@
                     <p className="text-[14.5px] leading-[22px] m-0 mb-4" style={{ fontFamily: "'Inter', sans-serif", color: 'black' }}>{`Clain is rated highest on G2's most recent User Satisfaction Ratings for CS.`}</p>
                     <a className="flex items-center gap-1.5 font-semibold text-[15px] text-black no-underline border-b border-black pb-1 self-start" href="#" style={{ fontFamily: "'Inter', sans-serif" }}>
                       Read the report
-                      <img alt="" className="w-2 h-2" src={imgOutbVector} />
+                      <img loading="lazy" decoding="async" alt="" className="w-2 h-2" src={imgOutbVector} />
                     </a>
                   </div>
                 </div>
@@ -349,7 +349,7 @@
                 <div className="relative w-full rounded-lg overflow-hidden" style={{ aspectRatio: '1/1' }}>
                   {FEATURES.map((feat, i) => (
                     <div key={feat.name} className={`absolute inset-0 overflow-hidden transition-opacity${i === activeFeature ? '' : ' opacity-0'}`}>
-                      <img alt="" className="w-full h-full object-cover" src={feat.img} />
+                      <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={feat.img} />
                     </div>
                   ))}
                 </div>
@@ -378,7 +378,7 @@
         {/* ═══════ Section 6 — CTA ═══════ */}
         <div className="relative w-full overflow-hidden" style={{ minHeight: '800px' }}>
           <div className="absolute inset-0">
-            <img alt="" className="w-full h-full object-cover" src={imgCtaBanner} />
+            <img loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" src={imgCtaBanner} />
           </div>
           <div className="relative flex flex-col items-center justify-center gap-6 py-[108px]" style={{ minHeight: '800px' }}>
             <div className="text-center">

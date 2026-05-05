@@ -50,8 +50,8 @@ async function build() {
       target: 'es2019',           // safe baseline for modern browsers
       format: 'iife',             // each file already wraps itself in an IIFE,
                                   // but esbuild ensures top-level scope safety
-      legalComments: 'inline',
-      minify: false,              // keep readable; gzip handles the rest
+      legalComments: 'none',
+      minify: true,               // ~50% reduction; source-of-truth is the .jsx
       sourcemap: false,
     });
 

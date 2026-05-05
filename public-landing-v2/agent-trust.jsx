@@ -16,7 +16,7 @@
         <div className="absolute inset-0 flex flex-col items-start justify-center pointer-events-none" style={{ maskImage: `url('${atHeroMask}')`, WebkitMaskImage: `url('${atHeroMask}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskSize: '100% 100%', WebkitMaskSize: '100% 100%' }}>
           <div className="relative flex-1 w-full">
             <div className="absolute inset-0 overflow-hidden">
-              <img alt="" className="absolute h-[113.07%] left-0 max-w-none top-[-6.53%] w-full" src={atHeroBg} />
+              <img loading="lazy" decoding="async" alt="" className="absolute h-[113.07%] left-0 max-w-none top-[-6.53%] w-full" src={atHeroBg} />
             </div>
           </div>
           {/* Top fade */}
@@ -68,7 +68,7 @@
     return (
       <div className="h-[6px] w-[8px] relative shrink-0 overflow-clip">
         <div className="absolute inset-[0_10.94%_11.25%_0]">
-          <img alt="" className="block size-full" src={atBulletV} />
+          <img loading="lazy" decoding="async" alt="" className="block size-full" src={atBulletV} />
         </div>
       </div>
     );
@@ -307,7 +307,7 @@
             {/* Rocket Money featured card */}
             <div className="border border-solid border-[#c5c5c1] rounded-[4px] p-[24px] flex flex-col gap-[24px] bg-white relative" style={{ minHeight: 540 }}>
               <div className="flex items-center justify-between">
-                <img src={atTrustRMLogo} alt="Rocket Money" className="h-[20px]" />
+                <img loading="lazy" decoding="async" src={atTrustRMLogo} alt="Rocket Money" className="h-[20px]" />
               </div>
               <p className="m-0 text-[24px] text-black tracking-[-0.4px] leading-[28px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>
                 <span style={{ display: 'block' }}>Why Rocket Money</span>
@@ -323,7 +323,7 @@
                 <span style={{ display: 'block' }}>trusted.</span>
               </p>
               <div className="mt-auto">
-                <img src={atTrustChartRM} alt="" className="w-full h-auto" />
+                <img loading="lazy" decoding="async" src={atTrustChartRM} alt="" className="w-full h-auto" />
                 <p className="m-0 pt-[8px] text-[11px] text-[#626260] uppercase tracking-[1.504px] leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>Rocket Money resolution rate</p>
                 <p className="m-0 pt-[12px] text-[11px] text-[#626260] uppercase tracking-[1.504px] leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>With Michelle McGowan From Rocket Money</p>
               </div>
@@ -331,7 +331,7 @@
 
             {/* Clay quote card */}
             <div className="border border-solid border-[#c5c5c1] rounded-[4px] p-[24px] flex flex-col gap-[20px] bg-white" style={{ minHeight: 540 }}>
-              <img src={atTrustClayLogo} alt="Clay" className="h-[20px] self-start" />
+              <img loading="lazy" decoding="async" src={atTrustClayLogo} alt="Clay" className="h-[20px] self-start" />
               <p className="m-0 text-[16.5px] text-[#313130] leading-[23.94px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>“There’s a lot of transparency baked into how you configure Clain and build the workflows, which gives us control over the end-to-end experience. That was the light bulb moment for us; we were going to be letting this thing loose on our support queue, so we needed to have that level of transparency and control over the experience.”</p>
               <div className="mt-auto">
                 <p className="m-0 text-[14px] text-black leading-[20px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500 }}>George Dilthey</p>
@@ -343,7 +343,7 @@
 
             {/* ConsenSys quote card */}
             <div className="border border-solid border-[#c5c5c1] rounded-[4px] p-[24px] flex flex-col gap-[20px] bg-white" style={{ minHeight: 380 }}>
-              <img src={atTrustConsLogo} alt="ConsenSys" className="h-[20px] self-start" />
+              <img loading="lazy" decoding="async" src={atTrustConsLogo} alt="ConsenSys" className="h-[20px] self-start" />
               <p className="m-0 text-[16.5px] text-[#313130] leading-[23.94px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>“We saw quick success with Clain — reaching around a 50% resolution rate early on, and scaling that to over 70% over time, all while keeping customer satisfaction high.”</p>
               <div className="mt-auto">
                 <p className="m-0 text-[14px] text-black leading-[20px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500 }}>Yair Gal</p>
@@ -354,7 +354,7 @@
 
             {/* Swyftx card */}
             <div className="border border-solid border-[#c5c5c1] rounded-[4px] p-[24px] flex flex-col gap-[20px] bg-white" style={{ minHeight: 380 }}>
-              <img src={atTrustSwyftLogo} alt="Swyftx" className="h-[20px] self-start" />
+              <img loading="lazy" decoding="async" src={atTrustSwyftLogo} alt="Swyftx" className="h-[20px] self-start" />
               <p className="m-0 text-[16.3px] text-[#313130] leading-[23.94px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>
                 <span style={{ display: 'block' }}>Learn how Swyftx reached a 91%</span>
                 <span style={{ display: 'block' }}>answer rate and earned customer trust</span>
@@ -362,7 +362,7 @@
                 <span style={{ display: 'block' }}>support.</span>
               </p>
               <div className="mt-auto">
-                <img src={atTrustChartSwy} alt="" className="w-full h-auto" />
+                <img loading="lazy" decoding="async" src={atTrustChartSwy} alt="" className="w-full h-auto" />
                 <p className="m-0 pt-[8px] text-[11px] text-[#626260] uppercase tracking-[1.504px] leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>Clain Answer rate</p>
               </div>
             </div>
@@ -383,7 +383,7 @@
     return (
       <div className="h-[6px] w-[8px] relative shrink-0 overflow-clip">
         <div className="absolute inset-[0_10.94%_11.25%_0]">
-          <img alt="" className="block size-full" src={atSecBulletV} />
+          <img loading="lazy" decoding="async" alt="" className="block size-full" src={atSecBulletV} />
         </div>
       </div>
     );
@@ -496,7 +496,7 @@
             <div className="flex flex-col items-stretch pb-[61.28px]">
               <div className="bg-[#f4f3ec] border border-solid border-[#c5c5c1] relative shrink-0 w-full overflow-hidden" style={{ aspectRatio: '604.41 / 604.41' }}>
                 <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle 427px at center, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0) 1%)' }} />
-                <img alt="" className="absolute inset-0 size-full object-cover" src={atSecImage} />
+                <img loading="lazy" decoding="async" alt="" className="absolute inset-0 size-full object-cover" src={atSecImage} />
                 <div className="absolute left-[-1px] top-[-1px] bg-[#f4f3ec] border border-solid border-[#c5c5c1] flex items-start px-[11px] py-[9px]">
                   <p className="m-0 text-[11px] text-[#626260] uppercase tracking-[1.504px] leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>Fig 4.A</p>
                 </div>
@@ -622,13 +622,13 @@
               <ul className="list-none m-0 p-0 flex flex-col gap-[16px]">
                 <li className="flex gap-[16px] items-start py-[2px]">
                   <div className="h-[16px] w-[14px] shrink-0 relative">
-                    <img src={atGuarBadge1} alt="" className="absolute h-[14.574px] left-0 top-[2px] w-[13.98px]" />
+                    <img loading="lazy" decoding="async" src={atGuarBadge1} alt="" className="absolute h-[14.574px] left-0 top-[2px] w-[13.98px]" />
                   </div>
                   <p className="m-0 text-[13.6px] text-white tracking-[1.504px] uppercase leading-[16px] whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>#1 AGENT ON G2</p>
                 </li>
                 <li className="flex gap-[16px] items-start py-[2px]">
                   <div className="h-[16px] w-[14px] shrink-0 pt-[2px] relative">
-                    <img src={atGuarBadge2} alt="" className="h-[12.715px] w-[13.98px]" />
+                    <img loading="lazy" decoding="async" src={atGuarBadge2} alt="" className="h-[12.715px] w-[13.98px]" />
                   </div>
                   <p className="m-0 text-[13.1px] text-white tracking-[1.504px] uppercase leading-[16px] whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>2M+ conversations resolved monthly</p>
                 </li>
@@ -685,7 +685,7 @@
       <div className="content-stretch flex flex-col items-start relative w-full bg-[#080f1e]" data-node-id="32:13616">
         <div className="absolute inset-0 max-w-[1920px] pointer-events-none" style={{ maskImage: `url('${atCtaMask1}')`, WebkitMaskImage: `url('${atCtaMask1}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskSize: '100% 100%', WebkitMaskSize: '100% 100%' }}>
           <div className="absolute inset-0 overflow-hidden" style={{ maskImage: `url('${atCtaMask2}')`, WebkitMaskImage: `url('${atCtaMask2}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskSize: '100% 100%', WebkitMaskSize: '100% 100%' }}>
-            <img alt="" className="absolute inset-0 w-full h-full object-cover" src={atCtaBg} />
+            <img loading="lazy" decoding="async" alt="" className="absolute inset-0 w-full h-full object-cover" src={atCtaBg} />
           </div>
         </div>
         <div className="grid grid-cols-12 gap-x-[48px] gap-y-[48px] h-[538px] max-w-[1600px] mx-auto overflow-clip px-[24px] py-[160px] relative shrink-0 w-full">

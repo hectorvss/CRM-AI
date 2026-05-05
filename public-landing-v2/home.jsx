@@ -112,32 +112,32 @@
         <div className="content-stretch flex gap-[var(--item-spacing\/119_5,119.5px)] items-center justify-center overflow-clip relative shrink-0 w-[1440px]" data-node-id="2:32804" data-name="div.flex">
           <div className="h-[122.2px] max-w-[1440px] min-w-[91px] relative shrink-0 w-[97.77px]" data-node-id="2:32806" data-name="Kite flying over the ocean with a boat on the water">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <img alt="" className="absolute h-[100.01%] left-0 max-w-none top-[-0.01%] w-full" src={imgKiteFlyingOverTheOceanWithABoatOnTheWater} />
+              <img loading="lazy" decoding="async" alt="" className="absolute h-[100.01%] left-0 max-w-none top-[-0.01%] w-full" src={imgKiteFlyingOverTheOceanWithABoatOnTheWater} />
             </div>
           </div>
           <div className="h-[184.84px] max-w-[1440px] min-w-[127px] relative shrink-0 w-[134.44px]" data-node-id="2:32809" data-name="Silhouettes of two people cast in shadow on a gridded surface">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <img alt="" className="absolute h-[100.01%] left-0 max-w-none top-0 w-full" src={imgSilhouettesOfTwoPeopleCastInShadowOnAGriddedSurface} />
+              <img loading="lazy" decoding="async" alt="" className="absolute h-[100.01%] left-0 max-w-none top-0 w-full" src={imgSilhouettesOfTwoPeopleCastInShadowOnAGriddedSurface} />
             </div>
           </div>
           <div className="h-[122.31px] max-w-[1440px] min-w-[166px] relative shrink-0 w-[184.2px]" data-node-id="2:32811" data-name="Sunset sky with birds in flight">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <img alt="" className="absolute h-[100.01%] left-0 max-w-none top-0 w-full" src={imgSunsetSkyWithBirdsInFlight} />
+              <img loading="lazy" decoding="async" alt="" className="absolute h-[100.01%] left-0 max-w-none top-0 w-full" src={imgSunsetSkyWithBirdsInFlight} />
             </div>
           </div>
           <div className="h-[186.78px] max-w-[1440px] min-w-[127px] relative shrink-0 w-[143.17px]" data-node-id="2:32813" data-name="Close-up portrait of a person's eye and face">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <img alt="" className="absolute h-[100.01%] left-0 max-w-none top-0 w-full" src={imgCloseUpPortraitOfAPersonsEyeAndFace} />
+              <img loading="lazy" decoding="async" alt="" className="absolute h-[100.01%] left-0 max-w-none top-0 w-full" src={imgCloseUpPortraitOfAPersonsEyeAndFace} />
             </div>
           </div>
           <div className="h-[258.81px] max-w-[1440px] min-w-[127px] relative shrink-0 w-[185.08px]" data-node-id="2:32814" data-name="Black ink illustration of a flower">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgBlackInkIllustrationOfAFlower} />
+              <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgBlackInkIllustrationOfAFlower} />
             </div>
           </div>
           <div className="h-[122.2px] max-w-[1440px] min-w-[91px] relative shrink-0 w-[97.77px]" data-node-id="2:32815" data-name="Colorful balloons bunched together">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <img alt="" className="absolute h-[100.01%] left-0 max-w-none top-[-0.01%] w-full" src={imgColorfulBalloonsBunchedTogether} />
+              <img loading="lazy" decoding="async" alt="" className="absolute h-[100.01%] left-0 max-w-none top-[-0.01%] w-full" src={imgColorfulBalloonsBunchedTogether} />
             </div>
           </div>
         </div>
@@ -192,13 +192,13 @@
             <div className="absolute content-stretch flex flex-col inset-[0_-1163px_0_1163px] items-start opacity-0" data-node-id="2:32835" data-name="div.min-w-0">
               <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:32836" data-name="div.relative">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.04%] max-w-none top-0 w-[100.08%]" src={imgDivRelative} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.04%] max-w-none top-0 w-[100.08%]" src={imgDivRelative} />
                 </div>
                 <div className="content-stretch flex flex-col items-start justify-center relative shrink-0 w-full" data-node-id="2:32838" data-name="div.relative">
                   <div className="content-stretch flex flex-col items-start pb-[6.61px] relative shrink-0 w-full" data-node-id="2:32839" data-name="div.size-full">
                     <div className="h-[604px] relative shrink-0 w-[1161px]" data-node-id="2:32840" data-name="image">
                       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage} />
                       </div>
                     </div>
                   </div>
@@ -208,13 +208,13 @@
             <div className="absolute content-stretch flex flex-col inset-[0_-12.33px_0_12.33px] items-start" data-node-id="2:32841" data-name="div.min-w-0">
               <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:32842" data-name="div.relative">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.04%] max-w-none top-0 w-[100.08%]" src={imgDivRelative1} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.04%] max-w-none top-0 w-[100.08%]" src={imgDivRelative1} />
                 </div>
                 <div className="content-stretch flex flex-col items-start justify-center relative shrink-0 w-full" data-node-id="2:32844" data-name="div.relative">
                   <div className="content-stretch flex flex-col items-start pb-[6.61px] relative shrink-0 w-full" data-node-id="2:32845" data-name="div.size-full">
                     <div className="h-[604px] relative shrink-0 w-[1161px]" data-node-id="2:32846" data-name="image">
                       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage1} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgImage1} />
                       </div>
                     </div>
                   </div>
@@ -263,7 +263,7 @@
         </div>
         <div className="absolute aspect-[221.3300018310547/214.97999572753906] bottom-[3795.83px] right-[118.66px] top-0" data-node-id="2:32959" data-name="Copilot product UI">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgCopilotProductUi} />
+            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgCopilotProductUi} />
           </div>
         </div>
         <div className="absolute content-stretch flex flex-col inset-[393.68px_0_2871.69px_0] items-start justify-center pt-[40px]" data-node-id="2:32960" data-name="div.col-span-full:margin">
@@ -287,7 +287,7 @@
               <div className="content-stretch flex flex-col items-start relative shrink-0 size-[221.34px]" data-node-id="2:32970" data-name="div.col-span-4">
                 <div className="aspect-[221.33999633789062/221.33999633789062] relative shrink-0 w-full" data-node-id="2:32971" data-name="Clouds">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgClouds} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgClouds} />
                   </div>
                 </div>
               </div>
@@ -295,10 +295,10 @@
             <div className="content-stretch flex flex-col h-full items-start relative shrink-0 w-[696px]" data-node-id="2:32972" data-name="div.order-1">
               <div className="aspect-[696/705.4400024414062] bg-[var(--color\/grey\/93,#f1eee9)] relative shrink-0 w-full" data-node-id="2:32973" data-name="div.bg-chalk">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-[100.03%] left-0 max-w-none top-[-0.02%] w-full" src={imgDivBgChalk} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-[100.03%] left-0 max-w-none top-[-0.02%] w-full" src={imgDivBgChalk} />
                 </div>
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-[100.03%] left-0 max-w-none top-[-0.02%] w-full" src={imgDivBgChalk1} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-[100.03%] left-0 max-w-none top-[-0.02%] w-full" src={imgDivBgChalk1} />
                 </div>
                 <div className="absolute inset-[16px]" data-node-id="2:32976" data-name="div.pointer-events-none">
                   <div className="absolute bg-[var(--color\/white\/solid,white)] left-0 size-[8px] top-0" data-node-id="2:32977" data-name="span.absolute" />
@@ -316,10 +316,10 @@
               <div className="content-stretch flex flex-col items-start pb-[24px] relative shrink-0 w-full" data-node-id="2:32984" data-name="div.bg-chalk:margin">
                 <div className="aspect-[577.3300170898438/543.5800170898438] bg-[var(--color\/grey\/93,#f1eee9)] relative shrink-0 w-full" data-node-id="2:32985" data-name="div.bg-chalk">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-[-0.01%] max-w-none top-0 w-[100.02%]" src={imgDivBgChalk2} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.01%] max-w-none top-0 w-[100.02%]" src={imgDivBgChalk2} />
                   </div>
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-[100.07%] left-0 max-w-none top-[-0.03%] w-full" src={imgDivBgChalk3} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-[100.07%] left-0 max-w-none top-[-0.03%] w-full" src={imgDivBgChalk3} />
                   </div>
                   <div className="absolute inset-[16px]" data-node-id="2:32988" data-name="div.pointer-events-none">
                     <div className="absolute bg-[var(--color\/orange\/80,#d3cec6)] left-0 size-[8px] top-0" data-node-id="2:32989" data-name="span.absolute" />
@@ -362,7 +362,7 @@
               <div className="content-stretch flex flex-col items-start pb-[24px] relative shrink-0 w-full" data-node-id="2:33005" data-name="div.bg-chalk:margin">
                 <div className="aspect-[577.3400268554688/543.5900268554688] bg-[var(--color\/grey\/93,#f1eee9)] relative shrink-0 w-full" data-node-id="2:33006" data-name="div.bg-chalk">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-[100.07%] left-0 max-w-none top-[-0.03%] w-full" src={imgDivBgChalk4} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-[100.07%] left-0 max-w-none top-[-0.03%] w-full" src={imgDivBgChalk4} />
                   </div>
                   <div className="absolute inset-[16px]" data-node-id="2:33008" data-name="div.pointer-events-none">
                     <div className="absolute bg-[var(--color\/orange\/80,#d3cec6)] left-0 size-[8px] top-0" data-node-id="2:33009" data-name="span.absolute" />
@@ -411,7 +411,7 @@
               <div className="content-stretch flex flex-col items-start pb-[24px] relative shrink-0 w-full" data-node-id="2:33028" data-name="div.bg-chalk:margin">
                 <div className="aspect-[1170.6700439453125/544.5599975585938] bg-[var(--color\/grey\/93,#f1eee9)] relative shrink-0 w-full" data-node-id="2:33029" data-name="div.bg-chalk">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-[-0.02%] max-w-none top-0 w-[100.04%]" src={imgDivBgChalk5} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.02%] max-w-none top-0 w-[100.04%]" src={imgDivBgChalk5} />
                   </div>
                   <div className="absolute inset-[16px]" data-node-id="2:33031" data-name="div.pointer-events-none">
                     <div className="absolute bg-[var(--color\/orange\/80,#d3cec6)] left-0 size-[8px] top-0" data-node-id="2:33032" data-name="span.absolute" />
@@ -470,7 +470,7 @@
               <div className="content-stretch flex flex-col items-start pb-[24px] relative shrink-0 w-[202px]" data-node-id="2:33057" data-name="Fin AI Agent noodle illustration:margin">
                 <div className="h-[198.05px] relative shrink-0 w-[202px]" data-node-id="2:33058" data-name="Fin AI Agent noodle illustration">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgFinAiAgentNoodleIllustration} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgFinAiAgentNoodleIllustration} />
                   </div>
                 </div>
               </div>
@@ -491,12 +491,12 @@
           <div className="bg-[var(--color\/orange\/88,#e7e3db)] col-[6/span_5] justify-self-stretch relative row-1 self-stretch shrink-0" data-node-id="2:33083" data-name="div.text-body">
             <div className="absolute inset-[0_-0.01px_-0.01px_0]" data-node-id="2:33086" data-name="Fin AI Agent decorative background">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgFinAiAgentDecorativeBackground} />
+                <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgFinAiAgentDecorativeBackground} />
               </div>
             </div>
             <div className="absolute inset-[0_-0.01px_-0.01px_0]" data-node-id="2:33087" data-name="Fin AI Agent messenger UI">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <img alt="" className="absolute h-[94.47%] left-0 max-w-none top-[2.77%] w-full" src={imgFinAiAgentMessengerUi} />
+                <img loading="lazy" decoding="async" alt="" className="absolute h-[94.47%] left-0 max-w-none top-[2.77%] w-full" src={imgFinAiAgentMessengerUi} />
               </div>
             </div>
           </div>
@@ -541,7 +541,7 @@
             <div className="col-[9/span_2] content-stretch flex flex-col items-start justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:33107" data-name="div.col-span-2">
               <div className="aspect-[208.5500030517578/259.2200012207031] relative shrink-0 w-full" data-node-id="2:33108" data-name="Headshot of Isabel Larrow">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgHeadshotOfIsabelLarrow} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgHeadshotOfIsabelLarrow} />
                 </div>
               </div>
             </div>
@@ -600,7 +600,7 @@
         </div>
         <div className="absolute aspect-[221.33999633789062/215] bottom-[4946.94px] right-[0.01px] top-0" data-node-id="2:33135" data-name="Copilot product UI">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgCopilotProductUi} />
+            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgCopilotProductUi} />
           </div>
         </div>
         <div className="absolute content-stretch flex flex-col inset-[425.69px_0_3982.12px_0] items-start" data-node-id="2:33136" data-name="div.col-span-full">
@@ -613,12 +613,12 @@
             <div className="content-stretch flex gap-[var(--item-spacing\/-0_01,0px)] h-[682.13px] items-start pr-[0.01px] relative shrink-0 w-full" data-node-id="2:33140" data-name="div.relative">
               <div className="content-stretch flex flex-col items-start justify-center mr-[-0.01px] relative self-stretch shrink-0 w-[702.41px]" data-node-id="2:33141" data-name="div.w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.09%] max-w-none top-0 w-[100.17%]" src={imgDivWFull} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.09%] max-w-none top-0 w-[100.17%]" src={imgDivWFull} />
                 </div>
                 <div className="border-[length:var(--stroke-weight\/1,1px)] border-[var(--color\/orange\/85,#dedbd6)] border-solid content-stretch flex flex-col h-[682.13px] items-start justify-center overflow-clip p-px relative shrink-0 w-[702.41px]" data-node-id="2:33143" data-name="div.min-w-0">
                   <div className="flex-[1_0_0] min-h-px relative w-full" data-node-id="2:33144" data-name="Copilot product UI">
                     <div className="absolute bg-clip-padding border-0 border-[transparent] border-solid inset-0 overflow-hidden pointer-events-none">
-                      <img alt="" className="absolute h-full left-0 max-w-none top-0 w-[99.97%]" src={imgCopilotProductUi1} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute h-full left-0 max-w-none top-0 w-[99.97%]" src={imgCopilotProductUi1} />
                     </div>
                   </div>
                 </div>
@@ -842,7 +842,7 @@
             <div className="content-stretch flex flex-col items-start px-[10px] relative shrink-0 w-[340px]" data-node-id="2:33358" data-name="div.order-1">
               <div className="aspect-[320/287.5199890136719] max-w-[320px] relative shrink-0 w-full" data-node-id="2:33359" data-name="Decorative illustration showing a stream">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[3.75%] max-w-none top-0 w-[92.5%]" src={imgDecorativeIllustrationShowingAStream} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[3.75%] max-w-none top-0 w-[92.5%]" src={imgDecorativeIllustrationShowingAStream} />
                 </div>
               </div>
             </div>
@@ -858,14 +858,14 @@
               <div className="col-[1/span_5] content-stretch flex flex-col items-start justify-center justify-self-stretch overflow-clip relative row-1 self-start shrink-0" data-node-id="2:33368" data-name="div.relative">
                 <div className="h-[585.33px] relative shrink-0 w-full" data-node-id="2:33369" data-name="Customer intelligence UI">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-[2.29%] max-w-none top-0 w-[95.42%]" src={imgCustomerIntelligenceUi} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[2.29%] max-w-none top-0 w-[95.42%]" src={imgCustomerIntelligenceUi} />
                   </div>
                 </div>
               </div>
               <div className="bg-[var(--color\/black\/-1\%,rgba(0,0,0,0.01))] col-[6/span_5] content-stretch flex flex-col items-start justify-center justify-self-stretch overflow-clip p-[146.328px] relative row-1 self-start shrink-0" data-node-id="2:33370" data-name="div.relative">
                 <div className="absolute inset-[0_-0.01px_0_0] opacity-[var(--item-spacing\/20,0.2)]" data-node-id="2:33373" data-name="Decorative background image">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-[-3.1%] max-w-none top-0 w-[106.21%]" src={imgDecorativeBackgroundImage} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-3.1%] max-w-none top-0 w-[106.21%]" src={imgDecorativeBackgroundImage} />
                   </div>
                 </div>
                 <div className="content-stretch flex flex-col gap-[16.001px] items-center justify-center relative shrink-0 w-full" data-node-id="2:33374" data-name="div.z-1">
@@ -938,7 +938,7 @@
             <div className="content-stretch flex flex-col items-start px-[10px] relative shrink-0 w-[340px]" data-node-id="2:33402" data-name="div.order-1">
               <div className="aspect-[320/169.8300018310547] max-w-[320px] relative shrink-0 w-full" data-node-id="2:33403" data-name="Logo wall showing Intercom, Hubspot, Zoho Desk and more">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[7.5%] max-w-none top-0 w-[85%]" src={imgLogoWallShowingIntercomHubspotZohoDeskAndMore} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[7.5%] max-w-none top-0 w-[85%]" src={imgLogoWallShowingIntercomHubspotZohoDeskAndMore} />
                 </div>
               </div>
             </div>
@@ -965,12 +965,12 @@
             <div className="content-stretch flex gap-[var(--item-spacing\/-0_01,0px)] h-[681.23px] items-start pr-[0.01px] relative shrink-0 w-full" data-node-id="2:33416" data-name="div.relative">
               <div className="content-stretch flex flex-col items-start justify-center mr-[-0.01px] relative self-stretch shrink-0 w-[702.41px]" data-node-id="2:33417" data-name="div.w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.02%] max-w-none top-0 w-[100.04%]" src={imgDivWFull1} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.02%] max-w-none top-0 w-[100.04%]" src={imgDivWFull1} />
                 </div>
                 <div className="border-[length:var(--stroke-weight\/1,1px)] border-[var(--color\/orange\/85,#dedbd6)] border-solid content-stretch flex flex-col h-[681.23px] items-start justify-center overflow-clip p-px relative shrink-0 w-[702.41px]" data-node-id="2:33419" data-name="div.min-w-0">
                   <div className="flex-[1_0_0] min-h-px relative w-full" data-node-id="2:33420" data-name="Onbording wizard UI">
                     <div className="absolute bg-clip-padding border-0 border-[transparent] border-solid inset-0 overflow-hidden pointer-events-none">
-                      <img alt="" className="absolute h-[99.97%] left-0 max-w-none top-[0.03%] w-full" src={imgOnbordingWizardUi} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute h-[99.97%] left-0 max-w-none top-[0.03%] w-full" src={imgOnbordingWizardUi} />
                     </div>
                   </div>
                 </div>
@@ -1079,14 +1079,14 @@
             <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33464" data-name="div.relative">
               <div className="content-stretch flex flex-col items-start justify-center relative shrink-0 w-full" data-node-id="2:33465" data-name="div.relative">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.09%] max-w-none top-0 w-[100.18%]" src={imgDivRelative} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.09%] max-w-none top-0 w-[100.18%]" src={imgDivRelative} />
                 </div>
                 <div className="content-stretch flex flex-col items-start overflow-clip relative shrink-0 w-full" data-node-id="2:33467" data-name="div.overflow-hidden">
                   <div className="content-stretch flex items-start relative shrink-0 w-[4672.01px]" data-node-id="2:33468" data-name="div.flex">
                     <div className="border-[length:var(--stroke-weight\/1,1px)] border-[var(--color\/orange\/85,#dedbd6)] border-solid content-stretch flex flex-[1_0_0] flex-col items-start justify-center min-w-px p-px relative self-stretch" data-node-id="2:33469" data-name="div.min-w-0">
                       <div className="flex-[1_0_0] min-h-px relative w-full" data-node-id="2:33470" data-name="Insights product UI">
                         <div className="absolute bg-clip-padding border-0 border-[transparent] border-solid inset-0 overflow-hidden pointer-events-none">
-                          <img alt="" className="absolute h-[99.92%] left-0 max-w-none top-[0.04%] w-full" src={imgInsightsProductUi} />
+                          <img loading="lazy" decoding="async" alt="" className="absolute h-[99.92%] left-0 max-w-none top-[0.04%] w-full" src={imgInsightsProductUi} />
                         </div>
                       </div>
                     </div>
@@ -1226,7 +1226,7 @@
             <div className="col-[9/span_2] content-stretch flex flex-col items-start justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:33526" data-name="div.col-span-2">
               <div className="aspect-[208.5500030517578/259.2200012207031] relative shrink-0 w-full" data-node-id="2:33527" data-name="Headshot of Angelo Livanos">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgHeadshotOfAngeloLivanos} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgHeadshotOfAngeloLivanos} />
                 </div>
               </div>
             </div>
@@ -1285,7 +1285,7 @@
         </div>
         <div className="absolute aspect-[221.33999633789062/215] bottom-[4946.94px] right-[0.01px] top-0" data-node-id="2:33135" data-name="Copilot product UI">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgCopilotProductUi} />
+            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgCopilotProductUi} />
           </div>
         </div>
         <div className="absolute content-stretch flex flex-col inset-[425.69px_0_3982.12px_0] items-start" data-node-id="2:33136" data-name="div.col-span-full">
@@ -1298,12 +1298,12 @@
             <div className="content-stretch flex gap-[var(--item-spacing\/-0_01,0px)] h-[682.13px] items-start pr-[0.01px] relative shrink-0 w-full" data-node-id="2:33140" data-name="div.relative">
               <div className="content-stretch flex flex-col items-start justify-center mr-[-0.01px] relative self-stretch shrink-0 w-[702.41px]" data-node-id="2:33141" data-name="div.w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.09%] max-w-none top-0 w-[100.17%]" src={imgDivWFull} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.09%] max-w-none top-0 w-[100.17%]" src={imgDivWFull} />
                 </div>
                 <div className="border-[length:var(--stroke-weight\/1,1px)] border-[var(--color\/orange\/85,#dedbd6)] border-solid content-stretch flex flex-col h-[682.13px] items-start justify-center overflow-clip p-px relative shrink-0 w-[702.41px]" data-node-id="2:33143" data-name="div.min-w-0">
                   <div className="flex-[1_0_0] min-h-px relative w-full" data-node-id="2:33144" data-name="Copilot product UI">
                     <div className="absolute bg-clip-padding border-0 border-[transparent] border-solid inset-0 overflow-hidden pointer-events-none">
-                      <img alt="" className="absolute h-full left-0 max-w-none top-0 w-[99.97%]" src={imgCopilotProductUi1} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute h-full left-0 max-w-none top-0 w-[99.97%]" src={imgCopilotProductUi1} />
                     </div>
                   </div>
                 </div>
@@ -1554,7 +1554,7 @@
             <div className="content-stretch flex flex-col items-start px-[10px] relative shrink-0 w-[340px]" data-node-id="2:33358" data-name="div.order-1">
               <div className="aspect-[320/287.5199890136719] max-w-[320px] relative shrink-0 w-full" data-node-id="2:33359" data-name="Decorative illustration showing a stream">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[3.75%] max-w-none top-0 w-[92.5%]" src={imgDecorativeIllustrationShowingAStream} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[3.75%] max-w-none top-0 w-[92.5%]" src={imgDecorativeIllustrationShowingAStream} />
                 </div>
               </div>
             </div>
@@ -1570,14 +1570,14 @@
               <div className="col-[1/span_5] content-stretch flex flex-col items-start justify-center justify-self-stretch overflow-clip relative row-1 self-start shrink-0" data-node-id="2:33368" data-name="div.relative">
                 <div className="h-[585.33px] relative shrink-0 w-full" data-node-id="2:33369" data-name="Customer intelligence UI">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-[2.29%] max-w-none top-0 w-[95.42%]" src={imgCustomerIntelligenceUi} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[2.29%] max-w-none top-0 w-[95.42%]" src={imgCustomerIntelligenceUi} />
                   </div>
                 </div>
               </div>
               <div className="bg-[var(--color\/black\/-1\%,rgba(0,0,0,0.01))] col-[6/span_5] content-stretch flex flex-col items-start justify-center justify-self-stretch overflow-clip p-[146.328px] relative row-1 self-start shrink-0" data-node-id="2:33370" data-name="div.relative">
                 <div className="absolute inset-[0_-0.01px_0_0] opacity-[var(--item-spacing\/20,0.2)]" data-node-id="2:33373" data-name="Decorative background image">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-[-3.1%] max-w-none top-0 w-[106.21%]" src={imgDecorativeBackgroundImage} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-3.1%] max-w-none top-0 w-[106.21%]" src={imgDecorativeBackgroundImage} />
                   </div>
                 </div>
                 <div className="content-stretch flex flex-col gap-[16.001px] items-center justify-center relative shrink-0 w-full" data-node-id="2:33374" data-name="div.z-1">
@@ -1650,7 +1650,7 @@
             <div className="content-stretch flex flex-col items-start px-[10px] relative shrink-0 w-[340px]" data-node-id="2:33402" data-name="div.order-1">
               <div className="aspect-[320/169.8300018310547] max-w-[320px] relative shrink-0 w-full" data-node-id="2:33403" data-name="Logo wall showing Intercom, Hubspot, Zoho Desk and more">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[7.5%] max-w-none top-0 w-[85%]" src={imgLogoWallShowingIntercomHubspotZohoDeskAndMore} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[7.5%] max-w-none top-0 w-[85%]" src={imgLogoWallShowingIntercomHubspotZohoDeskAndMore} />
                 </div>
               </div>
             </div>
@@ -1677,12 +1677,12 @@
             <div className="content-stretch flex gap-[var(--item-spacing\/-0_01,0px)] h-[681.23px] items-start pr-[0.01px] relative shrink-0 w-full" data-node-id="2:33416" data-name="div.relative">
               <div className="content-stretch flex flex-col items-start justify-center mr-[-0.01px] relative self-stretch shrink-0 w-[702.41px]" data-node-id="2:33417" data-name="div.w-full">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.02%] max-w-none top-0 w-[100.04%]" src={imgDivWFull1} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.02%] max-w-none top-0 w-[100.04%]" src={imgDivWFull1} />
                 </div>
                 <div className="border-[length:var(--stroke-weight\/1,1px)] border-[var(--color\/orange\/85,#dedbd6)] border-solid content-stretch flex flex-col h-[681.23px] items-start justify-center overflow-clip p-px relative shrink-0 w-[702.41px]" data-node-id="2:33419" data-name="div.min-w-0">
                   <div className="flex-[1_0_0] min-h-px relative w-full" data-node-id="2:33420" data-name="Onbording wizard UI">
                     <div className="absolute bg-clip-padding border-0 border-[transparent] border-solid inset-0 overflow-hidden pointer-events-none">
-                      <img alt="" className="absolute h-[99.97%] left-0 max-w-none top-[0.03%] w-full" src={imgOnbordingWizardUi} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute h-[99.97%] left-0 max-w-none top-[0.03%] w-full" src={imgOnbordingWizardUi} />
                     </div>
                   </div>
                 </div>
@@ -1791,14 +1791,14 @@
             <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33464" data-name="div.relative">
               <div className="content-stretch flex flex-col items-start justify-center relative shrink-0 w-full" data-node-id="2:33465" data-name="div.relative">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-0.09%] max-w-none top-0 w-[100.18%]" src={imgDivRelative} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-0.09%] max-w-none top-0 w-[100.18%]" src={imgDivRelative} />
                 </div>
                 <div className="content-stretch flex flex-col items-start overflow-clip relative shrink-0 w-full" data-node-id="2:33467" data-name="div.overflow-hidden">
                   <div className="content-stretch flex items-start relative shrink-0 w-[4672.01px]" data-node-id="2:33468" data-name="div.flex">
                     <div className="border-[length:var(--stroke-weight\/1,1px)] border-[var(--color\/orange\/85,#dedbd6)] border-solid content-stretch flex flex-[1_0_0] flex-col items-start justify-center min-w-px p-px relative self-stretch" data-node-id="2:33469" data-name="div.min-w-0">
                       <div className="flex-[1_0_0] min-h-px relative w-full" data-node-id="2:33470" data-name="Insights product UI">
                         <div className="absolute bg-clip-padding border-0 border-[transparent] border-solid inset-0 overflow-hidden pointer-events-none">
-                          <img alt="" className="absolute h-[99.92%] left-0 max-w-none top-[0.04%] w-full" src={imgInsightsProductUi} />
+                          <img loading="lazy" decoding="async" alt="" className="absolute h-[99.92%] left-0 max-w-none top-[0.04%] w-full" src={imgInsightsProductUi} />
                         </div>
                       </div>
                     </div>
@@ -1938,7 +1938,7 @@
             <div className="col-[9/span_2] content-stretch flex flex-col items-start justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:33526" data-name="div.col-span-2">
               <div className="aspect-[208.5500030517578/259.2200012207031] relative shrink-0 w-full" data-node-id="2:33527" data-name="Headshot of Angelo Livanos">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgHeadshotOfAngeloLivanos} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgHeadshotOfAngeloLivanos} />
                 </div>
               </div>
             </div>
@@ -1995,7 +1995,7 @@
               <div className="aspect-[379.54998779296875/475.4700012207031] bg-[var(--color\/grey\/93,#f1eee9)] relative shrink-0 w-full" data-node-id="2:33553" data-name="div.bg-chalk">
                 <div className="absolute inset-[0_0.01px_0.01px_0]" data-node-id="2:33554" data-name="Security, reliability and transparency badges">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-0 max-w-none top-0 w-[100.01%]" src={imgSecurityReliabilityAndTransparencyBadges} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-0 max-w-none top-0 w-[100.01%]" src={imgSecurityReliabilityAndTransparencyBadges} />
                   </div>
                 </div>
                 <div className="absolute inset-[16px_16.01px_16.01px_16px]" data-node-id="2:33555" data-name="div.pointer-events-none">
@@ -2032,7 +2032,7 @@
             <div className="content-stretch flex flex-col items-start pb-[24px] relative shrink-0 w-full z-[2]" data-node-id="2:33569" data-name="div.text-clay:margin">
               <div className="aspect-[379.55999755859375/475.4800109863281] relative shrink-0 w-full" data-node-id="2:33570" data-name="div.text-clay">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute h-full left-[-4.66%] max-w-none top-0 w-[109.33%]" src={imgDivTextClay} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-4.66%] max-w-none top-0 w-[109.33%]" src={imgDivTextClay} />
                 </div>
                 <div className="absolute inset-[16px]" data-node-id="2:33572" data-name="div.pointer-events-none">
                   <div className="absolute bg-[var(--color\/orange\/80,#d3cec6)] left-0 size-[8px] top-0" data-node-id="2:33573" data-name="span.absolute" />
@@ -2069,7 +2069,7 @@
               <div className="aspect-[379.54998779296875/475.4700012207031] bg-[var(--color\/grey\/93,#f1eee9)] relative shrink-0 w-full" data-node-id="2:33587" data-name="div.bg-chalk">
                 <div className="absolute inset-[0_0.01px_0.01px_0]" data-node-id="2:33588" data-name="Placeholder">
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute h-full left-0 max-w-none top-0 w-[100.01%]" src={imgPlaceholder} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute h-full left-0 max-w-none top-0 w-[100.01%]" src={imgPlaceholder} />
                   </div>
                 </div>
                 <div className="absolute inset-[16px_16.01px_16.01px_16px]" data-node-id="2:33589" data-name="div.pointer-events-none">
@@ -2146,7 +2146,7 @@
             <div className="col-[9/span_2] content-stretch flex flex-col items-start justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:33626" data-name="div.col-span-2">
               <div className="aspect-[208.5500030517578/259.2200012207031] relative shrink-0 w-full" data-node-id="2:33627" data-name="Portrait of George Dilthey">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgPortraitOfGeorgeDilthey} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgPortraitOfGeorgeDilthey} />
                 </div>
               </div>
             </div>
@@ -2169,7 +2169,7 @@
         <div className="bg-[var(--color\/grey\/97,#faf9f6)] content-stretch flex flex-col items-start px-[16px] py-[80px] relative size-full" data-node-id="2:33638" data-name="section.bg-off-white">
       <div className="absolute inset-0 mix-blend-darken" data-node-id="2:33639" data-name="Decorative background image">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <img alt="" className="absolute h-[164.55%] left-0 max-w-none top-0 w-full" src={imgDecorativeBackgroundImage} />
+          <img loading="lazy" decoding="async" alt="" className="absolute h-[164.55%] left-0 max-w-none top-0 w-full" src={imgDecorativeBackgroundImage} />
         </div>
       </div>
       <div className="absolute inset-[16px]" data-node-id="2:33640" data-name="div.text-clay">
@@ -2267,7 +2267,7 @@
         <div className="bg-[var(--color\/white\/solid,white)] content-stretch flex flex-col items-start pl-[187.44px] pr-[187.45px] py-[216px] relative size-full" data-node-id="2:33689" data-name="section.container">
       <div className="absolute inset-0 overflow-clip" data-node-id="2:33690" data-name="Component 3">
         <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:33690;2:32526" data-name="Vector">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector} />
         </div>
       </div>
       <div className="bg-[var(--color\/white\/solid,white)] content-stretch flex flex-col gap-[var(--item-spacing\/40,40px)] items-start max-w-[1065.1199951171875px] relative shrink-0 w-[1065.11px]" data-node-id="2:33692" data-name="div.relative">
@@ -2293,42 +2293,42 @@
       <div className="absolute content-stretch flex flex-col items-start left-[28.8px] size-[144px] top-[67.19px]" data-node-id="2:33701" data-name="div.absolute">
         <div className="aspect-[144/144] relative shrink-0 w-full" data-node-id="2:33702" data-name="Illustration of a couple walking under palm trees on a beach">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgIllustrationOfACoupleWalkingUnderPalmTreesOnABeach} />
+            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgIllustrationOfACoupleWalkingUnderPalmTreesOnABeach} />
           </div>
         </div>
       </div>
       <div className="absolute content-stretch flex flex-col items-start left-[460.8px] top-0 w-[115.19px]" data-node-id="2:33703" data-name="div.absolute">
         <div className="aspect-[115.19000244140625/125.9800033569336] relative shrink-0 w-full" data-node-id="2:33704" data-name="Silhouettes of two people cast in shadow on a gridded surface">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute h-[100.01%] left-0 max-w-none top-0 w-full" src={imgSilhouettesOfTwoPeopleCastInShadowOnAGriddedSurface} />
+            <img loading="lazy" decoding="async" alt="" className="absolute h-[100.01%] left-0 max-w-none top-0 w-full" src={imgSilhouettesOfTwoPeopleCastInShadowOnAGriddedSurface} />
           </div>
         </div>
       </div>
       <div className="absolute content-stretch flex flex-col items-start right-[201.59px] size-[115.19px] top-[13.44px]" data-node-id="2:33705" data-name="div.absolute">
         <div className="aspect-[115.19000244140625/115.19000244140625] relative shrink-0 w-full" data-node-id="2:33706" data-name="Black ink illustration of a flower">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgBlackInkIllustrationOfAFlower} />
+            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgBlackInkIllustrationOfAFlower} />
           </div>
         </div>
       </div>
       <div className="absolute content-stretch flex flex-col h-[144.09px] items-start right-0 top-[201.59px] w-[100.8px]" data-node-id="2:33707" data-name="div.absolute">
         <div className="aspect-[100.80000305175781/144.08999633789062] relative shrink-0 w-full" data-node-id="2:33708" data-name="Close-up of iridescent soap bubbles">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute h-[100.02%] left-0 max-w-none top-[-0.01%] w-full" src={imgCloseUpOfIridescentSoapBubbles} />
+            <img loading="lazy" decoding="async" alt="" className="absolute h-[100.02%] left-0 max-w-none top-[-0.01%] w-full" src={imgCloseUpOfIridescentSoapBubbles} />
           </div>
         </div>
       </div>
       <div className="absolute bottom-[53.75px] content-stretch flex flex-col h-[106.19px] items-start left-[259.19px] w-[115.19px]" data-node-id="2:33709" data-name="div.absolute">
         <div className="aspect-[115.19000244140625/106.19000244140625] relative shrink-0 w-full" data-node-id="2:33710" data-name="Yellow flag with a smiley face drawing">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgYellowFlagWithASmileyFaceDrawing} />
+            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgYellowFlagWithASmileyFaceDrawing} />
           </div>
         </div>
       </div>
       <div className="absolute bottom-[20.16px] content-stretch flex flex-col h-[149.06px] items-start right-[374.39px] w-[144px]" data-node-id="2:33711" data-name="div.absolute">
         <div className="aspect-[144/149.05999755859375] relative shrink-0 w-full" data-node-id="2:33712" data-name="Palm tree against a clear blue sky">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgPalmTreeAgainstAClearBlueSky} />
+            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={imgPalmTreeAgainstAClearBlueSky} />
           </div>
         </div>
       </div>

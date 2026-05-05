@@ -99,7 +99,7 @@
   function SimpleLogo({ src, inset }) {
     return (
       <div className="absolute opacity-100" style={{ inset }}>
-        <img alt="" className="absolute block inset-0 max-w-none size-full" src={src} />
+        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={src} />
       </div>
     );
   }
@@ -108,13 +108,13 @@
     return (
       <>
         <div className="absolute opacity-100" style={{ inset: '12.38% 0.27% 12.38% 0' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoCryptoMain} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoCryptoMain} />
         </div>
         <div className="absolute opacity-100" style={{ inset: '28.62% 87.7% 27.14% 2.06%' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoCryptoP2} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoCryptoP2} />
         </div>
         <div className="absolute opacity-100" style={{ inset: '43.64% 89.61% 40.89% 6.18%' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoCryptoP3} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoCryptoP3} />
         </div>
       </>
     );
@@ -136,7 +136,7 @@
     return (
       <div className="absolute" style={wrapStyle}>
         <div className="absolute" style={innerStyle}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={groupSrc} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={groupSrc} />
         </div>
       </div>
     );
@@ -147,16 +147,16 @@
       <div className="absolute" style={{ inset: '16.19% 10.26% 16.2% 10.26%' }}>
         {/* base mask group */}
         <div className="absolute" style={{ inset: '16.24% 10.32% 16.24% 10.26%', maskImage: `url('${imgLogoKajabiMask1}')`, WebkitMaskImage: `url('${imgLogoKajabiMask1}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoKajabi} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoKajabi} />
         </div>
         <div className="absolute" style={{ inset: '30.11% 10.32% 20.17% 42.71%', maskImage: `url('${imgLogoKajabiMask1}')`, WebkitMaskImage: `url('${imgLogoKajabiMask1}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoKajabiV1} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoKajabiV1} />
         </div>
         <div className="absolute" style={{ inset: '30.44% 26.12% 30.18% 41.62%', maskImage: `url('${imgLogoKajabiMask1}')`, WebkitMaskImage: `url('${imgLogoKajabiMask1}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoKajabiV2} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoKajabiV2} />
         </div>
         <div className="absolute" style={{ inset: '16.24% 65.51% 16.24% 10.26%', maskImage: `url('${imgLogoKajabiG7}')`, WebkitMaskImage: `url('${imgLogoKajabiG7}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoKajabiG8} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoKajabiG8} />
         </div>
       </div>
     );
@@ -166,10 +166,10 @@
     return (
       <>
         <div className="absolute opacity-100" style={{ inset: '0 76.98% 0 0' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoMercuryGroup} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoMercuryGroup} />
         </div>
         <div className="absolute opacity-100" style={{ inset: '31.4% 0.58% 31.4% 31.65%' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoMercuryV} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgLogoMercuryV} />
         </div>
       </>
     );
@@ -180,10 +180,10 @@
     return (
       <div className="overflow-clip relative shrink-0" style={{ width: 77, height: 96 }}>
         <div className="absolute opacity-100" style={{ inset: '0 -0.05% 0 0' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgApexMain} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgApexMain} />
         </div>
         <div className="absolute opacity-100" style={{ inset: '6.25% 7.74% 6.25% 7.79%' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgApexAccent} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgApexAccent} />
         </div>
         <div className="absolute" style={{ inset: '15.99% 21.3% 38.01% 21.35%' }}>
           <div className="absolute" style={{ inset: '16.25% 21.62% 38.27% 21.67%' }}>
@@ -198,13 +198,13 @@
               { inset: '49.95% 29.18% 43.47% 62.52%', src: imgApexFlare7 },
             ].map((f, i) => (
               <div key={i} className="absolute" style={{ inset: f.inset, maskImage: `url('${imgApexMask}')`, WebkitMaskImage: `url('${imgApexMask}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }}>
-                <img alt="" className="block max-w-none size-full" src={f.src} />
+                <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={f.src} />
               </div>
             ))}
           </div>
         </div>
         <div className="absolute opacity-100" style={{ inset: '68.07% 14.53% 17.66% 14.76%' }}>
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgApexBase} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={imgApexBase} />
         </div>
       </div>
     );
@@ -231,7 +231,7 @@
             <div className="absolute" style={{ left: -187.2, right: -187.2, top: -113.49, height: 1099.98, opacity: 1 }}>
               <div className="absolute inset-0 flex flex-col" style={{ background: '#020917' }}>
                 <div className="relative w-[1795.5px] h-[1099.98px] mx-auto">
-                  <img alt="" className="absolute left-0 top-0 max-w-none size-full" src={imgHeroBgImage} />
+                  <img loading="lazy" decoding="async" alt="" className="absolute left-0 top-0 max-w-none size-full" src={imgHeroBgImage} />
                 </div>
               </div>
             </div>
@@ -316,11 +316,11 @@
           {/* Product visual area: hero animation + product UI screenshot with edge gradients */}
           <div className="absolute overflow-clip flex flex-col items-start" style={{ left: 80, right: 80, top: 900, aspectRatio: '1280/772' }}>
             <div className="relative w-full" style={{ aspectRatio: '1280/772', opacity: 0 }}>
-              <img alt="" className="absolute left-0 top-0 max-w-none size-full" src={imgHeroAnimation} />
+              <img loading="lazy" decoding="async" alt="" className="absolute left-0 top-0 max-w-none size-full" src={imgHeroAnimation} />
             </div>
             <div className="absolute inset-0 flex flex-col items-start">
               <div className="relative" style={{ width: 1280, height: 772 }}>
-                <img alt="" className="absolute left-0 top-0 max-w-none size-full" src={imgHeroProduct} />
+                <img loading="lazy" decoding="async" alt="" className="absolute left-0 top-0 max-w-none size-full" src={imgHeroProduct} />
               </div>
             </div>
             {/* 4-side gradients */}
@@ -428,7 +428,7 @@ function PerfComponent1({ className, variant = "26" }) {
     <div className={className || `overflow-clip relative ${["32", "33", "34"].includes(variant) ? "size-[16px]" : is31 ? "size-[20px]" : is30 ? "h-[20px] w-[178.33px]" : is29 ? "opacity-0 size-[100px]" : is27 ? "h-[340px] w-[504px]" : "h-[384px] w-[1012px]"}`} id={is34 ? "node-2_8227" : is33 ? "node-2_8224" : is32 ? "node-2_8220" : is31 ? "node-2_8216" : is30 ? "node-2_8212" : is29 ? "node-2_8199" : is27 ? "node-2_8177" : "node-2_8085"}>
       {["31", "32", "33", "34"].includes(variant) && (
         <div className="absolute inset-[15.61%_22.34%_20.39%_27.89%] opacity-[var(--opacity\/100,1)]" id={is34 ? "node-2_8226" : is33 ? "node-2_8223" : is32 ? "node-2_8219" : "node-2_8215"} data-name="Vector">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={["33", "34"].includes(variant) ? PerfImgVector15 : is32 ? PerfImgVector14 : PerfImgVector13} />
+          <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={["33", "34"].includes(variant) ? PerfImgVector15 : is32 ? PerfImgVector14 : PerfImgVector13} />
         </div>
       )}
       {is26Or27 && (
@@ -723,7 +723,7 @@ function PerfComponent1({ className, variant = "26" }) {
               <>
                 <div className="absolute inset-[83.43%_0.98%_16.57%_0.98%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8129" data-name="Vector">
                   <div className="absolute inset-[-0.49px_0]">
-                    <img alt="" className="block max-w-none size-full" src={PerfImgVector} />
+                    <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector} />
                   </div>
                 </div>
                 <div className="absolute contents inset-[86.62%_14.73%_9.55%_16.83%]" data-node-id="2:8130" data-name="Group">
@@ -754,16 +754,16 @@ function PerfComponent1({ className, variant = "26" }) {
           </div>
           <div className={`absolute contents ${is27 ? "inset-[2.04%_0.98%_16.57%_0.98%]" : "inset-[3.21%_0_21.2%_-1.27%]"}`} id={is27 ? "node-2_8140" : "node-2_7995"} data-name="Group">
             <div className={`${String.raw`absolute opacity-[var(--opacity\/100,1)] `}${is27 ? "inset-[2.04%_0.98%_16.57%_0.98%]" : "inset-[3.21%_0_21.2%_-1.27%]"}`} id={is27 ? "node-2_8141" : "node-2_7996"} data-name="Group">
-              {is26 && <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup} />}
+              {is26 && <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup} />}
               {is27 && (
                 <div className="absolute inset-[-0.18%_0]">
-                  <img alt="" className="block max-w-none size-full" src={PerfImgGroup6} />
+                  <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgGroup6} />
                 </div>
               )}
             </div>
             {is26 && (
               <div className="absolute inset-[3.21%_0_21.2%_-1.27%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8005" data-name="Group">
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup1} />
+                <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup1} />
               </div>
             )}
           </div>
@@ -771,32 +771,32 @@ function PerfComponent1({ className, variant = "26" }) {
             <div className={`absolute ${is27 ? "contents inset-[9.16%_4.05%_14.25%_9.8%]" : String.raw`inset-[6.44%_2.93%_21.2%_4.59%] opacity-[var(--opacity\/100,1)]`}`} id={is27 ? "node-2_8152" : "node-2_8041"} data-name="Group">
               {is26 && (
                 <div className="absolute inset-[-0.36%_0_0_0]">
-                  <img alt="" className="block max-w-none size-full" src={PerfImgGroup2} />
+                  <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgGroup2} />
                 </div>
               )}
               {is27 && (
                 <div className="absolute contents inset-[9.16%_4.05%_14.25%_9.8%]" data-node-id="2:8153" data-name="Group">
                   <div className="absolute contents inset-[33.58%_65.49%_14.25%_9.8%]" data-node-id="2:8154" data-name="Group">
                     <div className="absolute inset-[33.58%_65.49%_16.72%_9.8%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8155" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector1} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector1} />
                     </div>
                     <div className="absolute inset-[33.58%_65.49%_16.57%_9.8%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8156" data-name="Vector">
                       <div className="absolute inset-[-0.29%_-0.4%_0_-0.4%]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector2} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector2} />
                       </div>
                     </div>
                     <div className="absolute inset-[83.43%_65.49%_16.57%_9.8%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8157" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector3} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector3} />
                     </div>
                     <div className="absolute inset-[83.43%_90.2%_14.25%_9.8%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8158" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector4} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector4} />
                     </div>
                     <div className="absolute inset-[83.43%_65.49%_14.25%_34.51%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8159" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector4} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector4} />
                     </div>
                     <div className="absolute inset-[33.58%_82.35%_58.87%_9.8%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8160" data-name="Vector">
                       <div className="absolute inset-[-1.92%_-1.25%]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector5} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector5} />
                       </div>
                     </div>
                     <p className="absolute font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] inset-[35.32%_84.06%_60.56%_10.98%] leading-[normal] not-italic opacity-[var(--opacity\/100,1)] text-[color:var(--color\/black\/-60\%,rgba(0,0,0,0.6))] text-[length:var(--font-size\/11_86,11.859px)] whitespace-nowrap" data-node-id="2:8161">
@@ -805,22 +805,22 @@ function PerfComponent1({ className, variant = "26" }) {
                   </div>
                   <div className="absolute contents inset-[32.56%_34.77%_14.25%_40.52%]" data-node-id="2:8162" data-name="Group">
                     <div className="absolute inset-[32.56%_34.77%_16.72%_40.52%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8163" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector6} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector6} />
                     </div>
                     <div className="absolute inset-[32.56%_34.77%_16.57%_40.52%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8164" data-name="Vector">
                       <div className="absolute inset-[-0.29%_-0.4%_0_-0.4%]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector7} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector7} />
                       </div>
                     </div>
                     <div className="absolute inset-[83.43%_34.77%_16.57%_40.52%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8165" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector8} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector8} />
                     </div>
                     <div className="absolute inset-[83.43%_34.77%_14.25%_65.23%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8166" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector4} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector4} />
                     </div>
                     <div className="absolute inset-[32.56%_51.63%_59.88%_40.52%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8167" data-name="Vector">
                       <div className="absolute inset-[-1.92%_-1.25%]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector5} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector5} />
                       </div>
                     </div>
                     <p className="absolute font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] inset-[34.3%_53.34%_61.58%_41.7%] leading-[normal] not-italic opacity-[var(--opacity\/100,1)] text-[color:var(--color\/black\/-60\%,rgba(0,0,0,0.6))] text-[length:var(--font-size\/11_86,11.859px)] whitespace-nowrap" data-node-id="2:8168">
@@ -829,22 +829,22 @@ function PerfComponent1({ className, variant = "26" }) {
                   </div>
                   <div className="absolute contents inset-[9.16%_4.05%_14.25%_71.24%]" data-node-id="2:8169" data-name="Group">
                     <div className="absolute inset-[9.16%_4.05%_16.72%_71.24%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8170" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector9} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector9} />
                     </div>
                     <div className="absolute inset-[9.16%_4.05%_16.57%_71.24%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8171" data-name="Vector">
                       <div className="absolute inset-[-0.2%_-0.4%_0_-0.4%]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector10} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector10} />
                       </div>
                     </div>
                     <div className="absolute inset-[83.43%_4.05%_16.57%_71.24%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8172" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector3} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector3} />
                     </div>
                     <div className="absolute inset-[83.43%_4.05%_14.25%_95.95%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8173" data-name="Vector">
-                      <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector4} />
+                      <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector4} />
                     </div>
                     <div className="absolute inset-[9.16%_20.92%_83.28%_71.24%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8174" data-name="Vector">
                       <div className="absolute inset-[-1.92%_-1.25%]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector11} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector11} />
                       </div>
                     </div>
                     <p className="absolute font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] inset-[10.91%_22.82%_84.98%_72.42%] leading-[normal] not-italic opacity-[var(--opacity\/100,1)] text-[color:var(--color\/black\/-80\%,rgba(0,0,0,0.8))] text-[length:var(--font-size\/11_86,11.859px)] whitespace-nowrap" data-node-id="2:8175">
@@ -857,7 +857,7 @@ function PerfComponent1({ className, variant = "26" }) {
             {is26 && (
               <div className="absolute inset-[5.67%_2.63%_45.27%_4.29%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8044" data-name="Group">
                 <div className="absolute inset-[-0.26%_0]">
-                  <img alt="" className="block max-w-none size-full" src={PerfImgGroup3} />
+                  <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgGroup3} />
                 </div>
               </div>
             )}
@@ -868,12 +868,12 @@ function PerfComponent1({ className, variant = "26" }) {
         <>
           <div className="absolute contents inset-[6.44%_2.93%_21.2%_4.59%]" data-node-id="2:8077" data-name="Group">
             <div className="absolute inset-[6.44%_2.93%_21.2%_4.59%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8078" data-name="Group">
-              <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup4} />
+              <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup4} />
             </div>
           </div>
           <div className="absolute contents inset-[6.44%_2.93%_21.2%_4.59%]" data-node-id="2:8081" data-name="Group">
             <div className="absolute inset-[6.44%_2.93%_21.2%_4.59%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8082" data-name="Group">
-              <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup5} />
+              <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup5} />
             </div>
           </div>
         </>
@@ -882,7 +882,7 @@ function PerfComponent1({ className, variant = "26" }) {
         <div className="absolute flex inset-[32.9%_17.52%_17.52%_34.62%] items-center justify-center" style={{ containerType: "size" }}>
           <div className="flex-none h-[hypot(-35.7233cqw,-31.0261cqh)] rotate-[131.98deg] w-[hypot(-64.2767cqw,68.9739cqh)]">
             <div className="opacity-[var(--opacity\/100,1)] relative size-full" data-node-id="2:8198" data-name="Vector">
-              <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector12} />
+              <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgVector12} />
             </div>
           </div>
         </div>
@@ -892,7 +892,7 @@ function PerfComponent1({ className, variant = "26" }) {
           <div className="absolute contents inset-0" data-node-id="2:8203" data-name="Group">
             <div className="absolute contents inset-0" data-node-id="2:8208" data-name="Mask group">
               <div className="absolute inset-[0_0_-0.12%_0] mask-position-[0px_0px,_0px_0px] opacity-[var(--opacity\/100,1)]" data-node-id="2:8204" style={{ maskImage: `url('${PerfImgGroup7}'), url('${PerfImgGroup8}')` }} data-name="Group">
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup9} />
+                <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={PerfImgGroup9} />
               </div>
             </div>
           </div>
@@ -1106,7 +1106,7 @@ function PerfSection() {
                     <div className="content-stretch flex items-start justify-center overflow-clip relative shrink-0" data-node-id="2:19477" data-name="div.overflow-hidden">
                       <div className="max-w-[85px] relative shrink-0 size-[85px]" data-node-id="2:19478" data-name="A headshot of Angelo Livanos, Senior Director at Lightspeed">
                         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                          <img alt="" className="absolute left-0 max-w-none size-full top-0" src={PerfImgAHeadshotOfAngeloLivanosSeniorDirectorAtLightspeed} />
+                          <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={PerfImgAHeadshotOfAngeloLivanosSeniorDirectorAtLightspeed} />
                         </div>
                       </div>
                     </div>
@@ -1116,22 +1116,22 @@ function PerfSection() {
                   <div className="bg-clip-padding border-0 border-[transparent] border-solid overflow-clip relative rounded-[inherit] size-full">
                     <div className="absolute inset-[85.53%_0_0.35%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19480;2:8189" data-name="Vector">
                       <div className="absolute inset-[-0.93%_0]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector16} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector16} />
                       </div>
                     </div>
                     <div className="absolute inset-[56.51%_0_29.37%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19480;2:8190" data-name="Vector">
                       <div className="absolute inset-[-0.93%_0]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector17} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector17} />
                       </div>
                     </div>
                     <div className="absolute inset-[28.01%_0_57.87%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19480;2:8191" data-name="Vector">
                       <div className="absolute inset-[-0.93%_0]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector16} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector16} />
                       </div>
                     </div>
                     <div className="absolute inset-[0.29%_0_86.37%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19480;2:8192" data-name="Vector">
                       <div className="absolute inset-[-0.98%_0]">
-                        <img alt="" className="block max-w-none size-full" src={PerfImgVector18} />
+                        <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={PerfImgVector18} />
                       </div>
                     </div>
                   </div>
@@ -1204,7 +1204,7 @@ function PerfSection() {
                     <div className="content-stretch flex items-start justify-center overflow-clip relative rounded-[3px] shrink-0 w-full" data-node-id="2:19517" data-name="hls-video">
                       <div className="h-[595.48px] relative shrink-0 w-[1058.66px]" data-node-id="2:19518" data-name="image">
                         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                          <img alt="" className="absolute left-0 max-w-none size-full top-0" src={PerfImgImage} />
+                          <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none size-full top-0" src={PerfImgImage} />
                         </div>
                       </div>
                     </div>
@@ -1217,7 +1217,7 @@ function PerfSection() {
                       <div className="absolute content-stretch flex h-[595.48px] items-center justify-center left-0 overflow-clip rounded-[3px] top-0 w-[1058.66px]" data-node-id="2:19524" data-name="div.absolute">
                         <div className="flex-[1_0_0] h-[595.48px] min-w-px relative" data-node-id="2:19525" data-name="Video thumbnail">
                           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <img alt="" className="absolute h-[121.91%] left-0 max-w-none top-[-10.95%] w-full" src={PerfImgVideoThumbnail} />
+                            <img loading="lazy" decoding="async" alt="" className="absolute h-[121.91%] left-0 max-w-none top-[-10.95%] w-full" src={PerfImgVideoThumbnail} />
                           </div>
                         </div>
                       </div>
@@ -1277,7 +1277,7 @@ function PerfSection() {
                       <div className="content-stretch flex flex-[1_0_0] flex-col h-full items-start min-w-px overflow-clip relative" data-node-id="2:19583" data-name="div.overflow-hidden">
                         <div className="flex-[1_0_0] min-h-px relative w-[107px]" data-node-id="2:19584" data-name="Build vs. buy: Why Anthropic chose Clain">
                           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <img alt="" className="absolute h-full left-[-4.69%] max-w-none top-0 w-[109.37%]" src={PerfImgVideoThumbnail} />
+                            <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-4.69%] max-w-none top-0 w-[109.37%]" src={PerfImgVideoThumbnail} />
                           </div>
                         </div>
                       </div>
@@ -1310,7 +1310,7 @@ function PerfSection() {
                       <div className="content-stretch flex flex-[1_0_0] flex-col h-full items-start min-w-px overflow-clip relative" data-node-id="2:19597" data-name="div.overflow-hidden">
                         <div className="flex-[1_0_0] min-h-px relative w-[107px]" data-node-id="2:19598" data-name="AI at enterprise scale: Why Lightspeed chose Clain">
                           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <img alt="" className="absolute h-full left-[-4.7%] max-w-none top-0 w-[109.4%]" src={PerfImgAiAtEnterpriseScaleWhyLightspeedChoseFin} />
+                            <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-4.7%] max-w-none top-0 w-[109.4%]" src={PerfImgAiAtEnterpriseScaleWhyLightspeedChoseFin} />
                           </div>
                         </div>
                       </div>
@@ -1343,7 +1343,7 @@ function PerfSection() {
                       <div className="content-stretch flex flex-[1_0_0] flex-col h-full items-start min-w-px overflow-clip relative" data-node-id="2:19611" data-name="div.overflow-hidden">
                         <div className="flex-[1_0_0] min-h-px relative w-[107px]" data-node-id="2:19612" data-name="How Rocket Money operationalized AI">
                           <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                            <img alt="" className="absolute h-full left-[-4.7%] max-w-none top-0 w-[109.4%]" src={PerfImgHowRocketMoneyOperationalizedAi} />
+                            <img loading="lazy" decoding="async" alt="" className="absolute h-full left-[-4.7%] max-w-none top-0 w-[109.4%]" src={PerfImgHowRocketMoneyOperationalizedAi} />
                           </div>
                         </div>
                       </div>
@@ -1505,10 +1505,10 @@ function IntegComponent1({ className, variant = "35" }) {
         <div className={`${String.raw`absolute opacity-[var(--opacity\/100,1)] `}${is69 ? "inset-[4.74%_1.04%_4.59%_0.33%]" : is39Or42Or45Or48Or54Or58Or62Or70Or74Or82Or86Or94Or98Or102Or108 ? "bottom-0 left-0 right-full top-0" : "inset-[5%_4.17%]"}`} id={is116 ? "node-2_8540" : is111 ? "node-2_8525" : is108 ? "node-2_8516" : is102 ? "node-2_8496" : is98 ? "node-2_8477" : is94 ? "node-2_8459" : is86 ? "node-2_8429" : is82 ? "node-2_8411" : is74 ? "node-2_8382" : is70 ? "node-2_8361" : is69 ? "node-2_8357" : is62 ? "node-2_8335" : is58 ? "node-2_8314" : is54 ? "node-2_8296" : is48 ? "node-2_8273" : is45 ? "node-2_8264" : is42 ? "node-2_8255" : is39 ? "node-2_8241" : is38 ? "node-2_8238" : is37 ? "node-2_8235" : is36 ? "node-2_8232" : "node-2_8229"} data-name="Vector">
           {is39Or42Or45Or48Or54Or58Or62Or70Or74Or82Or86Or94Or98Or102Or108 && (
             <div className={`absolute ${["54", "62", "94", "102"].includes(variant) ? "inset-[0_-1px]" : "inset-[0_-0.71px]"}`}>
-              <img alt="" className="block max-w-none size-full" src={is62 ? IntegImgVector10 : is54Or94Or102 ? IntegImgVector4 : IntegImgVector1} />
+              <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={is62 ? IntegImgVector10 : is54Or94Or102 ? IntegImgVector4 : IntegImgVector1} />
             </div>
           )}
-          {["35", "36", "37", "38", "69"].includes(variant) && <img alt="" className="absolute block inset-0 max-w-none size-full" src={is69 ? IntegImgVector11 : IntegImgVector} />}
+          {["35", "36", "37", "38", "69"].includes(variant) && <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={is69 ? IntegImgVector11 : IntegImgVector} />}
         </div>
       )}
       {["53", "57", "61", "81", "85", "93", "97", "101"].includes(variant) && (
@@ -1516,26 +1516,26 @@ function IntegComponent1({ className, variant = "35" }) {
           <div className={`absolute contents ${is101 ? "inset-[13.79%_1.78%_12.78%_1.82%]" : is97 ? "inset-[10.56%_0.15%_6.86%_0]" : is93 ? "inset-[2.81%_0.86%_5.59%_0.32%]" : is85 ? "inset-[1.4%_3.98%_2.39%_1.03%]" : is81 ? "inset-[0.36%_0.76%_2.48%_0.85%]" : is61 ? "inset-[2.88%_0.04%_4.68%_0.04%]" : is57 ? "inset-[4.35%_0.68%_4.2%_0.17%]" : "inset-[2.8%_1.46%_2.68%_3.15%]"}`} id={is101 ? "node-2_8486" : is97 ? "node-2_8468" : is93 ? "node-2_8450" : is85 ? "node-2_8420" : is81 ? "node-2_8403" : is61 ? "node-2_8323" : is57 ? "node-2_8306" : "node-2_8288"} data-name="Group">
             {["53", "57", "81", "85", "93", "97", "101"].includes(variant) && (
               <div className={`${String.raw`absolute mask-alpha mask-intersect mask-no-clip mask-no-repeat opacity-[var(--opacity\/100,1)] `}${is101 ? "inset-[13.79%_1.78%_16.97%_17.37%] mask-position-[-8.723px_-2.93px] mask-size-[52.271px_22.402px]" : is97 ? "inset-[10.56%_0.15%_6.86%_0] mask-position-[0.145px_-2.242px] mask-size-[77.403px_25.32px]" : is93 ? "inset-[17.98%_0.86%_5.59%_0.32%] mask-position-[0px_-3.094px] mask-size-[65.912px_19.276px]" : is85 ? "inset-[2.37%_76.62%_4.26%_1.03%] mask-position-[0.002px_0px] mask-size-[54.906px_12.611px]" : is81 ? "inset-[0.36%_0.76%_2.48%_0.85%] mask-position-[-0.002px_0px] mask-size-[65.931px_14.156px]" : is57 ? "inset-[4.35%_0.68%_4.2%_0.17%] mask-position-[0px_0px] mask-size-[79.354px_12.946px]" : "inset-[2.8%_1.46%_2.68%_3.15%] mask-position-[-1.327px_-0.297px] mask-size-[65.889px_28.422px]"}`} id={is101 ? "node-2_8487" : is97 ? "node-2_8469" : is93 ? "node-2_8451" : is85 ? "node-2_8421" : is81 ? "node-2_8404" : is57 ? "node-2_8307" : "node-2_8289"} style={is101 ? { maskImage: `url('${IntegImgVector27}')` } : is97 ? { maskImage: `url('${IntegImgVector24}')` } : is93 ? { maskImage: `url('${IntegImgVector21}')` } : is85 ? { maskImage: `url('${IntegImgVector18}')` } : is81 ? { maskImage: `url('${IntegImgVector16}')` } : is57 ? { maskImage: `url('${IntegImgVector5}')` } : { maskImage: `url('${IntegImgVector2}')` }} data-name="Vector">
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={is101 ? IntegImgVector28 : is97 ? IntegImgVector25 : is93 ? IntegImgVector22 : is85 ? IntegImgVector19 : is81 ? IntegImgVector17 : is57 ? IntegImgVector6 : IntegImgVector3} />
+                <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={is101 ? IntegImgVector28 : is97 ? IntegImgVector25 : is93 ? IntegImgVector22 : is85 ? IntegImgVector19 : is81 ? IntegImgVector17 : is57 ? IntegImgVector6 : IntegImgVector3} />
               </div>
             )}
             {["85", "93", "97", "101"].includes(variant) && (
               <div className={`${String.raw`absolute mask-alpha mask-intersect mask-no-clip mask-no-repeat opacity-[var(--opacity\/100,1)] `}${is101 ? "inset-[31.38%_73.32%_30.37%_9.6%] mask-position-[-4.576px_-7.055px] mask-size-[52.271px_22.402px]" : is97 ? "inset-[28.96%_79.38%_25.25%_7.63%] mask-position-[-5.795px_-7.094px] mask-size-[77.403px_25.32px]" : is93 ? "inset-[2.81%_9.83%_6.93%_63.79%] mask-position-[-42.335px_0px] mask-size-[65.912px_19.276px]" : "inset-[1.4%_3.98%_2.39%_10.21%] mask-position-[-5.1px_0.125px] mask-size-[54.906px_12.611px]"}`} id={is101 ? "node-2_8488" : is97 ? "node-2_8470" : is93 ? "node-2_8452" : "node-2_8422"} style={is101 ? { maskImage: `url('${IntegImgVector27}')` } : is97 ? { maskImage: `url('${IntegImgVector24}')` } : is93 ? { maskImage: `url('${IntegImgVector21}')` } : { maskImage: `url('${IntegImgVector18}')` }} data-name="Vector">
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={is101 ? IntegImgVector29 : is97 ? IntegImgVector26 : is93 ? IntegImgVector23 : IntegImgVector20} />
+                <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={is101 ? IntegImgVector29 : is97 ? IntegImgVector26 : is93 ? IntegImgVector23 : IntegImgVector20} />
               </div>
             )}
             {is61 && (
               <div className="absolute contents inset-[2.88%_0.04%_4.68%_0.04%]" data-node-id="2:8328" data-name="Mask group">
                 <div className="absolute contents inset-[2.88%_0.03%_4.68%_0.04%]" data-node-id="2:8324" data-name="Group">
                   <div className="absolute inset-[2.88%_0.03%_4.68%_0.04%] mask-position-[0px_-0.266px,_0px_0px] opacity-[var(--opacity\/100,1)]" data-node-id="2:8325" style={{ maskImage: `url('${IntegImgVector7}'), url('${IntegImgVector8}')` }} data-name="Vector">
-                    <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector9} />
+                    <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector9} />
                   </div>
                 </div>
               </div>
             )}
             {is101 && (
               <div className="absolute inset-[49.08%_81.09%_12.78%_1.82%] mask-alpha mask-intersect mask-no-clip mask-no-repeat mask-position-[-0.429px_-11.211px] mask-size-[52.271px_22.402px] opacity-[var(--opacity\/100,1)]" data-node-id="2:8489" style={{ maskImage: `url('${IntegImgVector27}')` }} data-name="Vector">
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector30} />
+                <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector30} />
               </div>
             )}
           </div>
@@ -1546,22 +1546,22 @@ function IntegComponent1({ className, variant = "35" }) {
           <div className="absolute contents inset-[1.17%_0.98%_1.12%_0.08%]" data-node-id="2:8374" data-name="Mask group">
             <div className="absolute contents inset-[1.2%_1.04%_0.82%_-0.03%]" data-node-id="2:8370" data-name="Group">
               <div className="absolute inset-[1.2%_1.04%_0.82%_-0.03%] mask-intersect mask-luminance mask-no-clip mask-no-repeat mask-position-[0.061px_-0.008px] mask-size-[54.991px_38.156px] opacity-[var(--opacity\/100,1)]" data-node-id="2:8371" style={{ maskImage: `url('${IntegImgVector12}')` }} data-name="Vector">
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector13} />
+                <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector13} />
               </div>
             </div>
           </div>
           <div className="absolute inset-[40.55%_11.07%_46.24%_14.36%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8375" data-name="Vector">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector14} />
+            <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector14} />
           </div>
           <div className="absolute inset-[35.38%_40.83%_40.74%_31.57%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8376" data-name="Vector">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector15} />
+            <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector15} />
           </div>
         </>
       )}
       {is107 && (
         <div className="absolute contents inset-[0.3%_0.16%_0.3%_0.05%]" data-node-id="2:8511" data-name="fin-text_svg__Layer_1">
           <div className="absolute inset-[0.3%_0.16%_0.3%_0.05%] opacity-[var(--opacity\/100,1)]" data-node-id="2:8512" data-name="Vector">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector31} />
+            <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector31} />
           </div>
         </div>
       )}
@@ -1676,14 +1676,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19685" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19685;2:8247" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19687" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19687;2:8252" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -1698,14 +1698,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19696" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19696;2:8258" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19698" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19698;2:8261" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -1720,14 +1720,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19707" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19707;2:8267" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19709" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19709;2:8270" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -1742,14 +1742,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19718" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19718;2:8276" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19720" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19720;2:8279" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -1764,14 +1764,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19729" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19729;2:8282" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19731" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19731;2:8285" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -1794,14 +1794,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19748" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19748;2:8300" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19750" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19750;2:8303" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -1820,14 +1820,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19765" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19765;2:8317" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19767" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19767;2:8320" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -1850,14 +1850,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19786" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19786;2:8339" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19788" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19788;2:8342" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -1867,14 +1867,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19794" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19794;2:8345" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19796" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19796;2:8348" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -1884,14 +1884,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19802" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19802;2:8351" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19804" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19804;2:8354" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -1914,14 +1914,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19815" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19815;2:8364" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19817" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19817;2:8367" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -1944,14 +1944,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19834" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19834;2:8385" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19836" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19836;2:8388" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -1961,14 +1961,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19842" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19842;2:8391" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19844" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19844;2:8394" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -1978,14 +1978,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19850" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19850;2:8397" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19852" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19852;2:8400" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -2008,14 +2008,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19867" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19867;2:8414" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19869" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19869;2:8417" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -2038,14 +2038,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19885" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19885;2:8432" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19887" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19887;2:8435" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -2055,14 +2055,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19893" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19893;2:8438" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19895" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19895;2:8441" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -2072,14 +2072,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19901" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19901;2:8444" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19903" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19903;2:8447" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -2103,7 +2103,7 @@ function IntegSection() {
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19919;2:8462" data-name="Vector">
                         <div className="absolute inset-[-0.58%_-0.37%]">
-                          <img alt="" className="block max-w-none size-full" src={IntegImgVector36} />
+                          <img loading="lazy" decoding="async" alt="" className="block max-w-none size-full" src={IntegImgVector36} />
                         </div>
                       </div>
                     </div>
@@ -2111,7 +2111,7 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19921" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19921;2:8465" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -2134,14 +2134,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19937" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19937;2:8480" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19939" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19939;2:8483" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -2164,14 +2164,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19956" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19956;2:8499" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19958" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19958;2:8502" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -2181,14 +2181,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19964" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19964;2:8505" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19966" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19966;2:8508" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -2207,14 +2207,14 @@ function IntegSection() {
                   <div className="absolute h-[188.037px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19978" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-[0_25.6%_46.82%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19978;2:8519" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector37} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector37} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[188.037px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19980" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-[0_25.6%_46.82%_0] opacity-[var(--opacity\/100,1)]" data-node-id="I2:19980;2:8522" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector38} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector38} />
                       </div>
                     </div>
                   </div>
@@ -2231,14 +2231,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19990" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19990;2:8528" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:19992" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19992;2:8531" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -2248,14 +2248,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:19998" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:19998;2:8534" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:20000" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20000;2:8537" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -2270,14 +2270,14 @@ function IntegSection() {
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:20009" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20009;2:8543" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector32} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.503px] left-[-0.5px] top-[-0.5px] w-[134.41px]" data-node-id="2:20011" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20011;2:8546" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector33} />
                       </div>
                     </div>
                   </div>
@@ -2287,14 +2287,14 @@ function IntegSection() {
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:20017" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20017;2:8549" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector34} />
                       </div>
                     </div>
                   </div>
                   <div className="absolute h-[85.514px] left-[-0.5px] top-[-0.5px] w-[134.42px]" data-node-id="2:20019" data-name="Component 1">
                     <div className="bg-clip-padding border-0 border-[transparent] border-solid relative size-full">
                       <div className="absolute inset-0 opacity-[var(--opacity\/100,1)]" data-node-id="I2:20019;2:8552" data-name="Vector">
-                        <img alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
+                        <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={IntegImgVector35} />
                       </div>
                     </div>
                   </div>
@@ -2401,7 +2401,7 @@ function TechnologySection() {
             </div>
             {/* Center — engine schematic */}
             <div className="flex justify-center">
-              <img alt="Clain AI Engine" className="block" style={{ width: 299, height: 'auto' }} src={techEngineSchematic} />
+              <img loading="lazy" decoding="async" alt="Clain AI Engine" className="block" style={{ width: 299, height: 'auto' }} src={techEngineSchematic} />
             </div>
             {/* Right column — even-numbered steps */}
             <div className="flex flex-col gap-[40px] pt-[40px]">
@@ -2510,7 +2510,7 @@ function AiTeamSection() {
             {/* Diagonal background SVG */}
             <div className="absolute" style={{ inset: '81.77px 0.06px 81.76px 0', overflow: 'hidden' }}>
               <div className="absolute" style={{ inset: '0.44% 0.09% -146.05% 0' }}>
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={teamImgGroupBg} />
+                <img loading="lazy" decoding="async" alt="" className="absolute block inset-0 max-w-none size-full" src={teamImgGroupBg} />
               </div>
             </div>
             {/* Edge gradients */}
@@ -2524,7 +2524,7 @@ function AiTeamSection() {
               {TEAM_MEMBERS.map((m) => (
                 <div key={m.name} className="flex flex-col items-center gap-[4px]" style={{ mixBlendMode: 'luminosity' }}>
                   <div className="rounded-full size-[80px] flex items-center justify-center overflow-hidden" style={{ background: '#080f1e', border: '1px solid rgba(255,255,255,0.2)' }}>
-                    <img alt={m.name} className="block size-[78px] object-cover rounded-full" src={m.img} />
+                    <img loading="lazy" decoding="async" alt={m.name} className="block size-[78px] object-cover rounded-full" src={m.img} />
                   </div>
                   <p className="m-0 mt-[8px] text-center whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13, lineHeight: '14px', color: 'white' }}>{m.name}</p>
                   <div className="flex flex-col items-center px-[8px] max-w-[132.19px]">
@@ -2677,7 +2677,7 @@ function FinalCtaSection() {
         {/* Solar flare background with mask */}
         <div className="absolute" style={{ left: 0, right: 0, top: -120, bottom: 48, maskImage: `url('${ctaImgMaskTransparent}')`, WebkitMaskImage: `url('${ctaImgMaskTransparent}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskSize: '100% 100%', WebkitMaskSize: '100% 100%' }}>
           <div className="absolute inset-0 overflow-hidden">
-            <img alt="" className="absolute left-0 max-w-none w-full" style={{ top: '-1.05%', height: '102.1%' }} src={ctaImgSolarFlare} />
+            <img loading="lazy" decoding="async" alt="" className="absolute left-0 max-w-none w-full" style={{ top: '-1.05%', height: '102.1%' }} src={ctaImgSolarFlare} />
           </div>
         </div>
         {/* Content grid */}
