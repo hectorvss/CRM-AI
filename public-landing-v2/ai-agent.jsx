@@ -1,6 +1,6 @@
 /* global React, ClainV2 */
 (function () {
-  const { useState } = React;
+  const { useState, useEffect } = React;
   const { PageShell } = ClainV2;
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2699,24 +2699,93 @@ function FinalCtaSection() {
 }
 
 
+  /* ─────────── Chapter Navigation (sticky left sidebar) ─────────── */
+  const AGENT_CHAPTERS = [
+    { id: 'performance',  num: '01', label: 'performance' },
+    { id: 'integrations', num: '02', label: 'integrations' },
+    { id: 'technology',   num: '03', label: 'technology' },
+    { id: 'ai-team',      num: '04', label: 'ai team' },
+    { id: 'pricing',      num: '05', label: 'pricing' },
+  ];
+
+  function AgentChapterNav({ activeId, onClick }) {
+    return (
+      <div className="content-stretch flex flex-col items-start relative w-full">
+        {AGENT_CHAPTERS.map((c) => (
+          <div key={c.id} className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+            <a
+              href={'#' + c.id}
+              onClick={(e) => { e.preventDefault(); onClick(c.id); }}
+              className="content-stretch cursor-pointer flex items-start justify-center py-[10px] relative shrink-0 w-full"
+              style={{ textDecoration: 'none' }}
+            >
+              <div className="content-stretch flex flex-1 items-center min-w-px relative">
+                <div className="content-stretch flex flex-col items-start pr-[12px] relative shrink-0">
+                  <p className="m-0 text-[11px] text-left tracking-[1.504px] uppercase whitespace-nowrap leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, color: activeId === c.id ? 'white' : 'rgba(255,255,255,0.6)' }}>{c.num}</p>
+                </div>
+                <div className="content-stretch flex flex-col items-start relative shrink-0">
+                  <p className="m-0 text-[11px] text-left tracking-[1.504px] uppercase whitespace-nowrap leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, color: activeId === c.id ? 'white' : 'rgba(255,255,255,0.6)' }}>{c.label}</p>
+                </div>
+              </div>
+            </a>
+            <div className="h-px relative shrink-0 w-full" style={{ background: activeId === c.id ? '#ff5600' : 'rgba(255,255,255,0.2)' }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   function AiAgentPage() {
+    const [activeSection, setActiveSection] = useState('performance');
+
+    useEffect(() => {
+      const sections = AGENT_CHAPTERS.map(c => document.getElementById(c.id)).filter(Boolean);
+      if (!sections.length) return;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries.filter(e => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+          if (visible.length) setActiveSection(visible[0].target.id);
+        },
+        { rootMargin: '-30% 0px -60% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
+      );
+      sections.forEach(s => observer.observe(s));
+      return () => observer.disconnect();
+    }, []);
+
+    function scrollToSection(id) {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     return (
       <PageShell>
         <HeroSection />
-        <div className="w-full" style={{ background: '#f6f6f1' }}>
-          <div className="max-w-[1154.67px] mx-auto relative">
-            <PerfSection />
+        {/* Main content area with sticky sidebar */}
+        <div style={{ background: '#020917', width: '100%' }}>
+          <div style={{ maxWidth: 1440, margin: '0 auto', paddingLeft: 24, paddingRight: 24, position: 'relative' }}>
+            <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
+              <aside style={{ width: 205, flexShrink: 0, position: 'sticky', top: 100, paddingTop: 16 }}>
+                <AgentChapterNav activeId={activeSection} onClick={scrollToSection} />
+              </aside>
+              <div style={{ flex: 1, minWidth: 0, maxWidth: 1155 }}>
+                <section id="performance"  style={{ scrollMarginTop: 80 }}>
+                  <div className="w-full" style={{ background: '#f6f6f1' }}>
+                    <PerfSection />
+                  </div>
+                </section>
+                <section id="integrations" style={{ scrollMarginTop: 80 }}>
+                  <div className="w-full" style={{ background: '#080f1e' }}>
+                    <IntegSection />
+                  </div>
+                </section>
+                <section id="technology"   style={{ scrollMarginTop: 80 }}><TechnologySection /></section>
+                <section id="ai-team"      style={{ scrollMarginTop: 80 }}><AiTeamSection /></section>
+                <section id="pricing"      style={{ scrollMarginTop: 80 }}><PricingSection /></section>
+              </div>
+            </div>
           </div>
+          <FinalCtaSection />
         </div>
-        <div className="w-full" style={{ background: '#080f1e' }}>
-          <div className="max-w-[1154.67px] mx-auto relative">
-            <IntegSection />
-          </div>
-        </div>
-        <TechnologySection />
-        <AiTeamSection />
-        <PricingSection />
-        <FinalCtaSection />
       </PageShell>
     );
   }
