@@ -358,6 +358,24 @@ h1, h2, h3, h4, h5 {
 .figma-page [data-clain-tab].clain-tab-active {
   opacity: 1 !important;
 }
+/* Brand-name pills inside body copy ("Clain" replacing the original 3-char
+   "Fin") were hardcoded to ~21px wide in the Figma export — too narrow for
+   5 letters. Allow them to auto-size to their content so the pill grows
+   instead of wrapping the word into "Cl / ain". */
+.figma-page [data-name="Component 1"][class*="bg-[rgba(17,17,17"] {
+  width: auto !important;
+  min-width: max-content;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.figma-page [data-name="Component 1"][class*="bg-[rgba(17,17,17"] > div,
+.figma-page [data-name="Component 1"][class*="bg-[rgba(17,17,17"] p {
+  width: auto !important;
+  white-space: nowrap !important;
+  position: static !important;
+  transform: none !important;
+}
+
 /* Neutralize Figma's hardcoded opacity-* utilities inside ANY tab cell so
    the cell-level opacity controls the visual state — otherwise nested
    `opacity-[0.6]` from Figma wins and the active card still looks dim. */

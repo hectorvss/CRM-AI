@@ -435,11 +435,11 @@
                       </div>
                     </div>
                     <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[24.18px] not-italic text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[10.5px] tracking-[-0.16px] w-[530.61px]" data-node-id="2:33043">
-                      <p className="leading-[22.4px]">Reporting in Clain shows you exactly what the AI resolved, where it.</p>
+                      <p className="leading-[22.4px]">Reports show what the AI resolved, where to improve.</p>
                     </div>
                     <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[68px] justify-center leading-[0] left-0 not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[55.28px] tracking-[-0.16px] w-[553.84px]" data-node-id="2:33044">
-                      <p className="leading-[22.4px] mb-0">Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more so the agent.</p>
-                      <p className="leading-[22.4px] mb-0">Set policy. Set guardrails. Set escalation thresholds. Then let Clain run , .</p>
+                      <p className="leading-[22.4px] mb-0">Plugs into 30+ tools so the agent has full context.</p>
+                      <p className="leading-[22.4px] mb-0">Set policy. Set guardrails. Then let Clain run.</p>
                       <p className="leading-[22.4px]">SLA, queue health, agent quality in one place.</p>
                     </div>
                   </div>
@@ -580,7 +580,7 @@
                 <span className="leading-[29.44px] text-[#111]">{`Agents see context, take action, escalate.`}</span>
                 <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">to resolve</span>
               </p>
-              <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">From product question to refund flow, the agent.</p>
+              <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Product questions and refund flows, both resolved.</p>
               <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Backed by audit trails so compliance and trust are.</p>
               <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">experience.</p>
             </div>
@@ -1913,7 +1913,7 @@
                 <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33519" data-name="p.text-heading-4">
                   <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[36.9px] text-[color:var(--color\/grey\/7,#111)] tracking-[-1.2px] w-full" data-node-id="2:33520">
                     <p className="leading-[40px] mb-0">{`"Our Lightspeed customer`}</p>
-                    <p className="leading-[40px] mb-0">Drops into existing tools , .</p>
+                    <p className="leading-[40px] mb-0">Drops into Zendesk, HubSpot, Salesforce.</p>
                     <p className="leading-[40px] mb-0">Customer service, evolved</p>
                     <p className="leading-[40px] mb-0">SLA, queue health, agent quality in one place.</p>
                     <p className="leading-[40px] mb-0">Built for teams shipping.</p>
