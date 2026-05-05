@@ -48,50 +48,47 @@
   function PlanColumn({ plan, isAnnual, width, showDemoBtn }) {
     const price = isAnnual ? plan.priceAnnual : plan.priceMonthly;
     return (
-      <div className="flex flex-col p-[24px]" style={{ width, minHeight: 608 }}>
-        {/* TOP: title, subtitle, description, price, buttons */}
-        <div className="flex flex-col" style={{ minHeight: 270 }}>
+      <div className="flex flex-col p-[24px] h-full" style={{ width, minHeight: 608 }}>
+        {/* TOP: title, subtitle, description, price, buttons — fixed-height block so all columns align */}
+        <div className="flex flex-col" style={{ height: 270 }}>
           <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.name}</h3>
-          <p className="m-0 mt-[10px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle}</p>
+          <p className="m-0 mt-[10px] text-[13px] leading-[19.6px] min-h-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle || ' '}</p>
           <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.description}</p>
-          {/* price */}
-          <div className="mt-[16px]">
-            <div className="flex items-baseline gap-[4px]">
-              <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>From</span>
-              <span className="text-[19px] leading-[19px] tracking-[-0.2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.unitPrice}</span>
-              <span className="text-[13px] leading-[19.6px] flex items-center gap-[6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>
-                {plan.unitLabel} <InfoIcon />
-              </span>
-            </div>
+          {/* price block — pinned to fixed slot so the CTA below sits at the same y across all columns */}
+          <div className="mt-auto" style={{ height: 60 }}>
             {plan.seatPrice && (
-              <div className="mt-[6px] flex items-baseline gap-[4px]">
-                <span className="text-[19px] leading-[19px] tracking-[-0.2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{price}</span>
+              <div className="flex items-baseline gap-[4px]">
+                <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>From</span>
+                <span className="text-[28px] leading-[28px] tracking-[-0.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>{price}</span>
                 <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
               </div>
             )}
             {plan.noSeats && (
-              <p className="m-0 mt-[6px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>No seats required</p>
-            )}
-          </div>
-          {/* buttons */}
-          <div className="flex gap-[12px] mt-[24px]">
-            <button onClick={() => ClainV2.navigate('/signup')} className="cursor-pointer rounded-[4px] h-[40px] px-[14px] flex items-center justify-center text-[13px] leading-[20px] border-0" style={{ fontFamily: FONT, background: COLOR_TEXT, color: 'white' }}>Start free trial</button>
-            {showDemoBtn && (
-              <button onClick={() => ClainV2.navigate('/demo')} className="cursor-pointer rounded-[4px] h-[40px] px-[15px] flex items-center justify-center text-[13px] leading-[20px] bg-white" style={{ fontFamily: FONT, color: COLOR_TEXT, border: '1px solid ' + COLOR_TEXT }}>Get a demo</button>
+              <p className="m-0 text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>No seats required</p>
             )}
           </div>
         </div>
+        {/* CTA: full-width subscribe-style button — sits below the fixed top block so all CTAs line up horizontally */}
+        <div className="mt-[16px]">
+          <button
+            onClick={() => ClainV2.navigate('/signup')}
+            className="cursor-pointer rounded-[8px] h-[44px] w-full px-[16px] flex items-center justify-center text-[14px] leading-[20px] border-0 transition-opacity hover:opacity-90"
+            style={{ fontFamily: FONT, background: COLOR_TEXT, color: 'white', fontWeight: 600 }}
+          >
+            {plan.cta || `Get ${plan.name}`}
+          </button>
+        </div>
 
         {/* SPACER */}
-        <div style={{ height: 40 }} />
+        <div style={{ height: 32 }} />
 
         {/* FEATURES */}
-        <div className="flex flex-col">
+        <div className="flex flex-col flex-1">
           <p className="m-0 text-[10px] uppercase tracking-[0.6px] leading-[10px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.featuresLabel}</p>
           <ul className="list-none p-0 m-0 mt-[26px] flex flex-col gap-[16px]">
             {plan.features.map((f, i) => <Bullet key={i}>{f}</Bullet>)}
           </ul>
-          <button onClick={() => ClainV2.navigate('/pricing/all-features')} className="mt-[26px] self-start bg-transparent border-0 p-0 cursor-pointer text-[13px] leading-[19.6px] underline" style={{ fontFamily: FONT, color: COLOR_TEXT }}>View all features</button>
+          <button onClick={() => ClainV2.navigate('/pricing/all-features')} className="mt-auto pt-[26px] self-start bg-transparent border-0 p-0 cursor-pointer text-[13px] leading-[19.6px] underline" style={{ fontFamily: FONT, color: COLOR_TEXT }}>View all features</button>
         </div>
       </div>
     );
@@ -127,12 +124,11 @@
         name: 'Starter',
         subtitle: 'Includes Clain AI Agent',
         description: 'The customer support plan for individuals, startups, and small businesses.',
-        unitPrice: '€0.012',
-        unitLabel: 'per Clain outcome',
         priceAnnual: '€42',
         priceMonthly: '€49',
         seatPrice: true,
         seatLabel: 'per seat/mo',
+        cta: 'Upgrade to Starter',
         featuresLabel: 'KEY FEATURES INCLUDE',
         features: [
           'Clain AI Agent (autonomous)',
@@ -146,12 +142,11 @@
         name: 'Growth',
         subtitle: 'Includes Clain AI Agent',
         description: 'Powerful automation tools and AI features for growing support teams.',
-        unitPrice: '€0.012',
-        unitLabel: 'per Clain outcome',
         priceAnnual: '€109',
         priceMonthly: '€129',
         seatPrice: true,
         seatLabel: 'per seat/mo',
+        cta: 'Upgrade to Growth',
         featuresLabel: 'EVERY STARTER FEATURE, PLUS',
         features: [
           'Tickets & SLA monitoring',
@@ -165,12 +160,11 @@
         name: 'Scale',
         subtitle: 'Includes Clain AI Agent',
         description: 'Collaboration, security, and multibrand features for large support teams.',
-        unitPrice: '€0.012',
-        unitLabel: 'per Clain outcome',
         priceAnnual: '€254',
         priceMonthly: '€299',
         seatPrice: true,
         seatLabel: 'per seat/mo',
+        cta: 'Upgrade to Scale',
         featuresLabel: 'EVERY GROWTH FEATURE, PLUS',
         features: [
           'SSO & identity management',
@@ -186,9 +180,8 @@
       name: 'Clain AI Agent',
       subtitle: '',
       description: 'Use Clain AI with your current helpdesk including Salesforce and more.',
-      unitPrice: '€0.012',
-      unitLabel: 'per Clain outcome',
       noSeats: true,
+      cta: 'Get Clain AI Agent',
       featuresLabel: 'FEATURES INCLUDE',
       features: [
         'Set up in under an hour on your current helpdesk',
@@ -239,20 +232,14 @@
                 Get Clain AI Agent and the full platform for a single, integrated experience
               </h1>
 
-              {/* Guarantee link */}
-              <a onClick={(e) => { e.preventDefault(); ClainV2.navigate('/demo'); }} href="/demo" className="cursor-pointer inline-flex items-center gap-[8px] py-[21px]">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke={COLOR_TEXT} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                <span className="text-[10px] uppercase tracking-[0.6px] underline" style={{ fontFamily: FONT, color: COLOR_TEXT }}>Clain AI guarantee</span>
-              </a>
-
-              {/* Billing toggle */}
-              <div className="inline-flex items-center gap-[10px] px-[6px] py-[6px] bg-white" style={{ border: '1px solid #dedbd6' }}>
-                <button onClick={() => setIsAnnual(true)} className="cursor-pointer border-0 px-[8px] py-[4px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: isAnnual ? '#e7e3db' : 'transparent' }}>Billed annually</button>
-                <button onClick={() => setIsAnnual(false)} className="cursor-pointer border-0 px-[8px] py-[4px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: !isAnnual ? '#e7e3db' : 'transparent' }}>Billed monthly</button>
+              {/* Billing toggle — sits where the guarantee link used to be, with breathing room */}
+              <div className="mt-[40px] inline-flex items-center gap-[10px] px-[6px] py-[6px] bg-white" style={{ border: '1px solid #dedbd6' }}>
+                <button onClick={() => setIsAnnual(true)} className="cursor-pointer border-0 px-[12px] py-[6px] text-[13px] leading-[19.6px] rounded-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: isAnnual ? '#e7e3db' : 'transparent', fontWeight: isAnnual ? 600 : 400 }}>Billed annually</button>
+                <button onClick={() => setIsAnnual(false)} className="cursor-pointer border-0 px-[12px] py-[6px] text-[13px] leading-[19.6px] rounded-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: !isAnnual ? '#e7e3db' : 'transparent', fontWeight: !isAnnual ? 600 : 400 }}>Billed monthly</button>
               </div>
 
               {/* Plans row */}
-              <div className="flex gap-[24px] items-stretch mt-[24px]">
+              <div className="flex gap-[24px] items-stretch mt-[40px]">
                 {/* LEFT — 3 plan columns inside one bordered container */}
                 <div className="flex flex-col flex-1" style={{ border: `1px solid ${BORDER_CLAY}` }}>
                   <div className="px-[24px] py-[10px]" style={{ background: BG_OFF_WHITE, borderBottom: `1px solid ${BORDER_CLAY}` }}>
@@ -279,6 +266,51 @@
               {/* Footer note */}
               <div className="mt-[40px] max-w-[600px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>
                 <p className="m-0">All plans include free, unlimited live chat, support email, in-app chats, banners, and tooltips. Pay-as-you-go for email campaigns, SMS, WhatsApp, and Phone. <a onClick={(e) => { e.preventDefault(); ClainV2.navigate('/pricing/channels'); }} href="#" className="underline" style={{ color: COLOR_TEXT }}>View channel pricing</a></p>
+              </div>
+
+              {/* ── How credits & seats work — same card UI as plans above, both columns flex so CTAs sit at the same baseline ── */}
+              <div className="mt-[40px]" style={{ border: `1px solid ${BORDER_CLAY}` }}>
+                <div className="px-[24px] py-[10px]" style={{ background: BG_OFF_WHITE, borderBottom: `1px solid ${BORDER_CLAY}` }}>
+                  <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>How credits and seats work</span>
+                </div>
+                <div className="flex items-stretch">
+                  {/* Credits column */}
+                  <div className="flex-1 p-[24px] flex flex-col" style={{ borderRight: `1px solid ${BORDER_CLAY}` }}>
+                    <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>AI Credits</h3>
+                    <p className="m-0 mt-[10px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>The intelligence powering your workspace</p>
+                    <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
+                      Each plan includes a monthly allowance of AI credits. One credit covers a unit of AI work — for example a tagged conversation, a generated summary, or a multi-step reasoning task. Top-ups are available and are consumed only after your monthly allowance.
+                    </p>
+                    <p className="mt-[24px] m-0 text-[10px] uppercase tracking-[0.6px] leading-[10px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>WHAT CREDITS POWER</p>
+                    <ul className="list-none p-0 m-0 mt-[16px] flex flex-col gap-[12px]">
+                      <Bullet>Simple classification &amp; tagging</Bullet>
+                      <Bullet>Conversation summaries</Bullet>
+                      <Bullet>Response recommendations</Bullet>
+                      <Bullet>Complex workflow reasoning</Bullet>
+                    </ul>
+                    <button onClick={() => ClainV2.navigate('/upgrade')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
+                      <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Buy credit packs</span>
+                    </button>
+                  </div>
+                  {/* Seats column */}
+                  <div className="flex-1 p-[24px] flex flex-col">
+                    <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>Seats</h3>
+                    <p className="m-0 mt-[10px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>One seat per teammate with full access</p>
+                    <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
+                      Each plan includes a base number of seats. Add more anytime as your team grows — billing prorates automatically. Lite seats for view-only collaborators are included free with every plan.
+                    </p>
+                    <p className="mt-[24px] m-0 text-[10px] uppercase tracking-[0.6px] leading-[10px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>WHAT'S INCLUDED PER PLAN</p>
+                    <ul className="list-none p-0 m-0 mt-[16px] flex flex-col gap-[12px]">
+                      <Bullet>Starter — up to 3 seats</Bullet>
+                      <Bullet>Growth — up to 10 seats</Bullet>
+                      <Bullet>Scale — up to 25 seats</Bullet>
+                      <Bullet>Lite collaborators — unlimited, free</Bullet>
+                    </ul>
+                    <button onClick={() => ClainV2.navigate('/upgrade')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
+                      <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Manage seats</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -407,9 +439,8 @@
             <CornerDots color="rgba(17,17,17,0.15)" />
             <div className="max-w-[1170px] mx-auto px-[16px] flex flex-col items-center text-center">
               <h2 className="m-0 text-[64px] leading-[68px] tracking-[-2px] max-w-[820px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 400 }}>Perfect customer experiences, powered by Clain</h2>
-              <div className="mt-[32px] flex gap-[12px]">
-                <button onClick={() => ClainV2.navigate('/signup')} className="cursor-pointer border-0 rounded-[4px] h-[40px] px-[16px] text-[13px] leading-[20px]" style={{ fontFamily: FONT, background: COLOR_TEXT, color: 'white' }}>Start free trial</button>
-                <button onClick={() => ClainV2.navigate('/demo')} className="cursor-pointer rounded-[4px] h-[40px] px-[16px] text-[13px] leading-[20px] bg-white" style={{ fontFamily: FONT, color: COLOR_TEXT, border: '1px solid ' + COLOR_TEXT }}>View demo</button>
+              <div className="mt-[32px]">
+                <button onClick={() => ClainV2.navigate('/signup')} className="cursor-pointer border-0 rounded-[8px] h-[48px] px-[28px] text-[14px] leading-[20px] transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Get started with Clain</button>
               </div>
             </div>
           </div>

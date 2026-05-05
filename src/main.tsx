@@ -1,6 +1,8 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import Prototype from './prototype/Prototype.tsx';
+import InboxPrototype2 from './prototype/InboxPrototype2.tsx';
 import PageErrorBoundary from './components/PageErrorBoundary.tsx';
 import {
   supabase,
@@ -124,8 +126,21 @@ function Root() {
   );
 }
 
+// Render standalone prototypes at ?prototype=N — no auth required.
+const protoParam = typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search).get('prototype')
+  : null;
+
+function PrototypeShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-[#f3f3f1] flex items-start justify-start overflow-auto">
+      {children}
+    </div>
+  );
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Root />
+    <PrototypeShell><Prototype /></PrototypeShell>
   </StrictMode>,
 );

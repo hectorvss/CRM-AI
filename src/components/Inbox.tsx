@@ -1,1546 +1,1027 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Conversation, Channel, CaseTab, Message } from '../types';
-import { aiApi, casesApi } from '../api/client';
-import { useApi } from '../api/hooks';
-import LoadingState from './LoadingState';
+import React, { useState } from 'react';
 
-// ── Lightweight emoji picker data ──────────────────────────────────────────
-const EMOJI_GROUPS = [
-  { label: 'Smileys', emojis: ['😊','😄','😂','🤣','😍','🥰','😎','🤔','😅','😬','🙄','😭','😤','😡','🤯','🤗','👍','👎','🙏','✅','❌','⚠️','🔥','💡','📎','🖇️','📷','📧','⏰','🔔'] },
+// ─── Types ────────────────────────────────────────────────────────────────────
+type RightTab = 'informacion' | 'copilot';
+type NavItem = { id: string; label: string; count?: number; icon?: string };
+
+// ─── Mock data ────────────────────────────────────────────────────────────────
+const CONVERSATIONS = [
+  {
+    id: '1',
+    channel: 'Messenger',
+    channelInitial: 'M',
+    channelColor: 'bg-teal-500',
+    contact: 'Messenger · [Demo]',
+    preview: 'Install Messenger',
+    time: '4 min',
+    messages: [
+      {
+        id: 'm1',
+        sender: 'bot',
+        content: `This is a demo message. It shows how a customer conversation from the Messenger will look in your Inbox. Conversations handled by Fin AI Agent will also appear here.\n\nOnce a channel is installed, all conversations come straight to your Inbox, so you can route them to the right team.`,
+        time: '4 minutos',
+        link: { label: 'Install Messenger', href: '#' },
+        avatar: 'M',
+        avatarColor: 'bg-teal-500',
+      },
+    ],
+  },
+  {
+    id: '2',
+    channel: 'Email',
+    channelInitial: 'E',
+    channelColor: 'bg-red-500',
+    contact: 'Email · [Demo]',
+    preview: 'This is a demo email. It...',
+    time: '4 min',
+    messages: [
+      {
+        id: 'e1',
+        sender: 'bot',
+        content: `This is a demo email. It shows how a customer email conversation will look in your Inbox. You can reply, assign, and manage all your emails directly from here.`,
+        time: '4 minutos',
+        avatar: 'E',
+        avatarColor: 'bg-red-500',
+      },
+    ],
+  },
+  {
+    id: '3',
+    channel: 'WhatsApp',
+    channelInitial: 'W',
+    channelColor: 'bg-green-500',
+    contact: 'WhatsApp · [Demo]',
+    preview: 'Set up WhatsApp or so...',
+    time: '4 min',
+    messages: [
+      {
+        id: 'w1',
+        sender: 'bot',
+        content: `Set up WhatsApp or so your customers can reach you through WhatsApp. All messages will appear here in your Inbox.`,
+        time: '4 minutos',
+        avatar: 'W',
+        avatarColor: 'bg-green-500',
+      },
+    ],
+  },
+  {
+    id: '4',
+    channel: 'Phone',
+    channelInitial: 'P',
+    channelColor: 'bg-purple-500',
+    contact: 'Phone · [Demo]',
+    preview: 'Set up phone or SMS',
+    time: '4 min',
+    messages: [
+      {
+        id: 'p1',
+        sender: 'bot',
+        content: `Set up phone or SMS to handle calls and text messages from your customers directly in your Inbox.`,
+        time: '4 minutos',
+        avatar: 'P',
+        avatarColor: 'bg-purple-500',
+      },
+    ],
+  },
 ];
 
-type Attachment = { id: string; name: string; size: number; type: string; dataUrl?: string; file: File };
+const NAV_ITEMS_MAIN: NavItem[] = [
+  { id: 'bandeja', label: 'Tu bandeja de entrada', count: 4, icon: 'inbox' },
+  { id: 'menciones', label: 'Menciones', count: 0, icon: 'at' },
+  { id: 'creado', label: 'Creado por ti', count: 0, icon: 'pencil' },
+  { id: 'todo', label: 'Todo', count: 4, icon: 'users' },
+  { id: 'sin_asignar', label: 'Sin asignar', count: 0, icon: 'user-x' },
+  { id: 'correo_no_deseado', label: 'Correo no deseado', count: 0, icon: 'ban' },
+  { id: 'tablero', label: 'Tablero', icon: 'chart' },
+];
 
-const COMMON_EMOJIS = ['😊','😄','😂','🤣','😍','🥰','😎','🤔','😅','😬','🙄','😭','😤','😡','🤯','🤗','👍','👎','🙏','✅','❌','⚠️','🔥','💡','❤️','💙','💚','💛','🎉','🎊','📎','🖇️','📷','📧','⏰','🔔','💬','📝','🔗','✍️','📌','🚀','⭐','💎','🏆'];
+const NAV_ITEMS_FIN: NavItem[] = [
+  { id: 'todas', label: 'Todas las conversaciones', icon: 'chat' },
+  { id: 'resuelto', label: 'Resuelto', icon: 'check' },
+  { id: 'escalado', label: 'Escalado y transferencia', icon: 'arrow-up' },
+  { id: 'pendiente', label: 'Pendiente', icon: 'clock' },
+  { id: 'correo_fin', label: 'Correo no deseado', icon: 'ban' },
+];
 
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+// ─── SVG Icons ────────────────────────────────────────────────────────────────
+const IconInbox = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+    <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />
+  </svg>
+);
+const IconAt = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />
+  </svg>
+);
+const IconPencil = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+const IconUsers = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" />
+  </svg>
+);
+const IconUserX = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" strokeWidth="0" fill="currentColor" />
+  </svg>
+);
+const IconBan = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+  </svg>
+);
+const IconChart = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" />
+    <line x1="6" y1="20" x2="6" y2="14" /><line x1="2" y1="20" x2="22" y2="20" />
+  </svg>
+);
+const IconChat = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+  </svg>
+);
+const IconCheck = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+const IconArrowUp = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
+  </svg>
+);
+const IconClock = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+const IconPlus = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+const IconSearch = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+const IconChevronDown = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+const IconChevronRight = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+const IconChevronLeft = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+);
+const IconStar = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </svg>
+);
+const IconDots = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /><circle cx="5" cy="12" r="1" fill="currentColor" />
+  </svg>
+);
+const IconGrid = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+    <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+  </svg>
+);
+const IconMoon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+  </svg>
+);
+const IconSort = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="9" y2="18" />
+  </svg>
+);
+const IconExternalLink = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+    <polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+);
+const IconSplitView = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="12" y1="3" x2="12" y2="21" />
+  </svg>
+);
+const IconChevronDown2 = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+const IconReply = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 00-4-4H4" />
+  </svg>
+);
+const IconBolt = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+);
+const IconSend = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+  </svg>
+);
+const IconPersonAdd = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="8.5" cy="7" r="4" />
+    <line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" />
+  </svg>
+);
+const IconMerge = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 009 9" />
+  </svg>
+);
+const IconNewConv = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+    <line x1="12" y1="8" x2="12" y2="13" /><line x1="9.5" y1="10.5" x2="14.5" y2="10.5" />
+  </svg>
+);
+const IconDownload = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+const IconEye = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+  </svg>
+);
+const IconSettings = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+  </svg>
+);
+const IconHelp = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" strokeWidth="2.5" strokeLinecap="round" />
+  </svg>
+);
+const IconLinkIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+  </svg>
+);
+const IconUser = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+  </svg>
+);
+const IconBuilding = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
+  </svg>
+);
+
+// ─── Nav icon helper ──────────────────────────────────────────────────────────
+function NavIcon({ id }: { id: string }) {
+  switch (id) {
+    case 'inbox': return <IconInbox />;
+    case 'at': return <IconAt />;
+    case 'pencil': return <IconPencil />;
+    case 'users': return <IconUsers />;
+    case 'user-x': return <IconUserX />;
+    case 'ban': return <IconBan />;
+    case 'chart': return <IconChart />;
+    case 'chat': return <IconChat />;
+    case 'check': return <IconCheck />;
+    case 'arrow-up': return <IconArrowUp />;
+    case 'clock': return <IconClock />;
+    default: return <IconChat />;
+  }
 }
 
-type RightTab = 'details' | 'copilot';
-type ComposeMode = 'reply' | 'internal';
-type CopilotMessage = { id: string; role: 'user' | 'assistant'; content: string; time: string };
-
-const formatTime = (value?: string | null) =>
-  value ? new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-
-const formatRelativeTime = (value?: string | null) => {
-  if (!value) return '-';
-  const diffMinutes = Math.max(1, Math.round((Date.now() - new Date(value).getTime()) / 60000));
-  if (diffMinutes < 60) return `${diffMinutes}m`;
-  const hours = Math.round(diffMinutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
-};
-
-const titleCase = (value?: string | null) =>
-  value ? value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) : 'N/A';
-
-const formatAbsoluteTime = (value?: string | null) =>
-  value ? new Date(value).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: '2-digit' }) : 'N/A';
-
-const truncateMiddle = (value?: string | null, max = 18) => {
-  if (!value) return 'N/A';
-  if (value.length <= max) return value;
-  const head = Math.ceil((max - 1) / 2);
-  const tail = Math.floor((max - 1) / 2);
-  return `${value.slice(0, head)}…${value.slice(-tail)}`;
-};
-
-const normalizeMessageText = (value?: string | null) =>
-  (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
-
-const fingerprintMessage = (message: Message) =>
-  [
-    message.type || 'unknown',
-    normalizeMessageText(message.sender),
-    normalizeMessageText(message.content),
-  ].join('|');
-
-export default function Inbox({ focusCaseId }: { focusCaseId?: string | null }) {
-  const [rightTab, setRightTab] = useState<RightTab>('copilot');
-  const [activeTab, setActiveTab] = useState<CaseTab>('assigned');
-  const [selectedId, setSelectedId] = useState<string>('');
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [composeMode, setComposeMode] = useState<ComposeMode>('reply');
-  const [composerText, setComposerText] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [localMessagesByCase, setLocalMessagesByCase] = useState<Record<string, Message[]>>({});
-  const [copilotInput, setCopilotInput] = useState('');
-  const [isCopilotSending, setIsCopilotSending] = useState(false);
-  const [copilotMessagesByCase, setCopilotMessagesByCase] = useState<Record<string, CopilotMessage[]>>({});
-  const [copilotSortOrder, setCopilotSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showMergeModal, setShowMergeModal] = useState(false);
-  const [mergeTargetId, setMergeTargetId] = useState('');
-  const [merging, setMerging] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterPriority, setFilterPriority] = useState('');
-  const [filterRiskLevel, setFilterRiskLevel] = useState('');
-  const [filterQ, setFilterQ] = useState('');
-  const filterPanelRef = useRef<HTMLDivElement>(null);
-  const submitLockRef = useRef(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
-
-  // Build active filter params from filter state — memoised so useApi deps are stable.
-  // These are query-string params, sent as-is to the server (server expects snake_case).
-  const activeFilters = useMemo(() => {
-    const params: Record<string, string> = {};
-    if (filterStatus)    params.status     = filterStatus;
-    if (filterPriority)  params.priority   = filterPriority;
-    if (filterRiskLevel) params.risk_level = filterRiskLevel;
-    if (filterQ)         params.q          = filterQ;
-    return params;
-  }, [filterStatus, filterPriority, filterRiskLevel, filterQ]);
-
-  const hasActiveFilters = Object.keys(activeFilters).length > 0;
-
-  // Fetch canonical cases from the backend. Static fixtures are no longer used
-  // as runtime data, so every visible case comes from the simulated API/DB flow.
-  const { data: apiCases, loading: casesLoading, error: casesError } = useApi(
-    () => casesApi.list(Object.keys(activeFilters).length > 0 ? activeFilters : undefined),
-    [refreshKey, filterStatus, filterPriority, filterRiskLevel, filterQ],
-    [],
+// ─── Component: Trial Banner ──────────────────────────────────────────────────
+function TrialBanner() {
+  const [visible, setVisible] = useState(true);
+  if (!visible) return null;
+  return (
+    <div className="flex items-center justify-between px-4 py-2 text-sm" style={{ background: '#f0eeff', borderBottom: '1px solid #e5e0ff' }}>
+      <span className="text-gray-700">
+        Quedan <strong>14 días</strong> en tu{' '}
+        <a href="#" className="text-indigo-600 font-medium underline">prueba de Advanced</a>.{' '}
+        Incluye uso ilimitado de Fin.
+      </span>
+      <div className="flex items-center gap-4">
+        <span className="text-gray-700">
+          Solicita un descuento del <strong>93 %</strong> en la Early Stage.
+        </span>
+        <button
+          onClick={() => setVisible(false)}
+          className="px-3 py-1.5 rounded-md text-sm font-semibold text-white"
+          style={{ background: '#1f1f1f' }}
+        >
+          Comprar Intercom
+        </button>
+      </div>
+    </div>
   );
-  const { data: selectedInboxView, loading: inboxViewLoading, error: inboxError } = useApi(
-    () => selectedId ? casesApi.inboxView(selectedId) : Promise.resolve(null),
-    [selectedId, refreshKey]
+}
+
+// ─── Component: Icon Sidebar (far left) ──────────────────────────────────────
+interface IconSidebarProps {
+  onNavigate: (page: string) => void;
+}
+
+function IconSidebar({ onNavigate }: IconSidebarProps) {
+  return (
+    <div
+      className="flex flex-col items-center py-3 gap-1 flex-shrink-0"
+      style={{ width: 44, background: '#fff', borderRight: '1px solid #e5e7eb' }}
+    >
+      {/* Logo */}
+      <div className="mb-2 flex items-center justify-center w-8 h-8 rounded-lg" style={{ background: '#1f1f1f' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
+        </svg>
+      </div>
+
+      {/* Inbox icon — active */}
+      <button
+        onClick={() => onNavigate('inbox')}
+        className="relative flex items-center justify-center w-8 h-8 rounded-lg text-indigo-600 transition-colors"
+        style={{ background: '#ede9fe' }}
+        title="Inbox"
+      >
+        <IconInbox />
+        <span className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold" style={{ background: '#1f1f1f' }}>4</span>
+      </button>
+
+      {/* Contacts */}
+      <button
+        onClick={() => onNavigate('contacts')}
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        title="Contactos"
+      >
+        <IconUsers />
+      </button>
+
+      {/* AI */}
+      <button
+        onClick={() => onNavigate('ai_studio')}
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        title="AI Studio"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+        </svg>
+      </button>
+
+      {/* Reports */}
+      <button
+        onClick={() => onNavigate('reports')}
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        title="Informes"
+      >
+        <IconChart />
+      </button>
+
+      {/* Workflows */}
+      <button
+        onClick={() => onNavigate('workflows')}
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        title="Flujos"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      </button>
+
+      <div className="flex-1" />
+
+      {/* Search */}
+      <button
+        className="flex items-center justify-center w-8 h-8 rounded-full border text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        style={{ borderColor: '#e5e7eb' }}
+        title="Buscar"
+      >
+        <IconSearch size={13} />
+      </button>
+
+      {/* Settings */}
+      <button
+        onClick={() => onNavigate('settings')}
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        title="Configuración"
+      >
+        <IconSettings />
+      </button>
+
+      {/* Help */}
+      <button
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        title="Ayuda"
+      >
+        <IconHelp />
+      </button>
+
+      {/* Avatar */}
+      <div className="relative mt-1">
+        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-semibold" style={{ background: '#6366f1' }}>H</div>
+        <span className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold">1</span>
+      </div>
+    </div>
   );
+}
 
-  useEffect(() => {
-    if (!selectedId && apiCases && apiCases.length > 0) {
-      setSelectedId(apiCases[0].id);
-    }
-  }, [apiCases, selectedId]);
+// ─── Component: Inbox Navigation Panel ───────────────────────────────────────
+interface InboxNavProps {
+  activeNavItem: string;
+  onNavItem: (id: string) => void;
+}
 
-  const mapApiCase = (c: any): Conversation => {
-    const orderIds = Array.isArray(c.orderIds) ? c.orderIds : [];
-    return {
-      id: c.id,
-      tab: (c.assignedUserId ? 'assigned' : 'unassigned') as CaseTab,
-      assignee: c.assignedUserId || c.assignedUserName || undefined,
-      contactName: c.customerName || 'Unknown',
-      channel: (c.sourceChannel as Channel) || 'web_chat',
-      lastMessage: c.latestMessagePreview || c.aiDiagnosis || c.type || 'New case',
-      time: c.createdAt ? new Date(c.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '-',
-      priority: c.priority === 'high' || c.priority === 'urgent' ? 'high' : 'normal',
-      tags: Array.isArray(c.tags) ? c.tags : [],
-      unread: c.status === 'new' || c.status === 'pending',
-      caseId: c.caseNumber || c.id,
-      orderId: orderIds[0] || 'N/A',
-      company: 'Acme Corp',
-      brand: 'Acme Store',
-      caseType: c.type || 'General',
-      riskLevel: c.riskLevel === 'high' || c.riskLevel === 'critical' ? 'High' : c.riskLevel === 'medium' ? 'Medium' : 'Low',
-      orderStatus: titleCase(c.systemStatusSummary?.order || c.systemStatusSummary?.orders || 'N/A'),
-      paymentStatus: titleCase(c.systemStatusSummary?.payment || c.systemStatusSummary?.payments || 'N/A'),
-      fulfillmentStatus: titleCase(c.systemStatusSummary?.fulfillment || 'N/A'),
-      refundStatus: titleCase(c.systemStatusSummary?.refund || c.systemStatusSummary?.returns || 'N/A'),
-      approvalStatus: titleCase(c.systemStatusSummary?.approval || c.approvalState || 'N/A'),
-      context: c.conflictSummary?.rootCause || c.aiDiagnosis || '',
-      assignedTeam: c.assignedTeamName || 'Support',
-      lastSync: '1m ago',
-      slaStatus: c.slaStatus === 'at_risk' ? 'SLA risk' : c.slaStatus === 'breached' ? 'Overdue' : c.slaStatus === 'on_track' ? 'Waiting' : 'Waiting',
-      slaTime: c.slaResolutionDeadline ? formatRelativeTime(c.slaResolutionDeadline) : 'N/A',
-      recommendedNextAction: c.conflictSummary?.recommendedAction || c.aiRecommendedAction || '',
-      conflictDetected: c.conflictSummary?.rootCause || (c.hasReconciliationConflicts ? c.conflictSeverity : undefined),
-      relatedCases: c.stateSnapshot?.related?.linkedCases?.map((linked: any) => ({
-        id: linked.caseNumber || linked.id,
-        type: linked.type || 'Case',
-        status: titleCase(linked.status || 'open'),
-      })) || [],
-      messages: [],
-    };
-  };
-
-  const conversations = (apiCases && apiCases.length > 0)
-    ? apiCases.map(mapApiCase)
-    : [];
-
-  const filteredConversations = conversations.filter(c => c.tab === activeTab);
-  const selectedBaseConv = filteredConversations.find(c => c.id === selectedId) || filteredConversations[0];
-
-  useEffect(() => {
-    if (!focusCaseId || !filteredConversations.length) return;
-    const target = filteredConversations.find((conv) => conv.id === focusCaseId || conv.caseId === focusCaseId);
-    if (target && target.id !== selectedId) {
-      setSelectedId(target.id);
-    }
-  }, [focusCaseId, filteredConversations, selectedId]);
-  const caseState = selectedInboxView?.state;
-  const selectedConv = selectedBaseConv ? (() => {
-    const apiMessages = selectedInboxView?.messages?.map((msg: any) => ({
-      id: msg.id,
-      type: msg.type === 'agent' ? 'agent' : msg.type === 'internal' ? 'internal' : msg.type === 'system' ? 'system' : msg.direction === 'outbound' ? 'agent' : 'customer',
-      sender: msg.senderName || (msg.direction === 'outbound' ? 'Agent' : 'Customer'),
-      content: msg.content,
-      time: formatTime(msg.sentAt),
-      // Surface delivery lifecycle for outbound messages (pending/sent/failed)
-      deliveryStatus: msg.direction === 'outbound' ? (msg.deliveryStatus ?? 'sent') : undefined,
-      deliveryError: msg.deliveryError ?? null,
-    })) || selectedBaseConv.messages || [];
-    const localMessages = localMessagesByCase[selectedBaseConv.id] || [];
-    const knownFingerprints = new Set(apiMessages.map((message: Message) => fingerprintMessage(message)));
-    const mergedMessages = [...apiMessages, ...localMessages].filter((message, index, list) => {
-      const signature = fingerprintMessage(message);
-      if (knownFingerprints.has(signature) && index >= apiMessages.length) {
-        return false;
-      }
-      return list.findIndex(item => fingerprintMessage(item) === signature) === index;
-    });
-    return {
-    ...selectedBaseConv,
-    orderId: caseState?.related?.orders?.[0]?.externalOrderId || caseState?.identifiers?.orderIds?.[0] || selectedBaseConv.orderId,
-    context: caseState?.conflict?.rootCause || selectedInboxView?.case?.aiDiagnosis || selectedBaseConv.context || 'Canonical analysis pending.',
-    recommendedNextAction: caseState?.conflict?.recommendedAction || selectedBaseConv.recommendedNextAction || 'Review canonical state',
-    conflictDetected: caseState?.conflict?.rootCause || selectedBaseConv.conflictDetected,
-    slaStatus: selectedInboxView?.sla?.label || selectedBaseConv.slaStatus,
-    slaTime: selectedInboxView?.sla?.time || selectedBaseConv.slaTime,
-    relatedCases: caseState?.related?.linkedCases?.map((linked: any) => ({
-      id: linked.caseNumber || linked.id,
-      type: linked.type || 'Case',
-      status: titleCase(linked.status || 'open'),
-    })) || selectedBaseConv.relatedCases,
-    messages: mergedMessages,
-  };
-  })() : undefined;
-
-  const tabItems = [
-    { id: 'unassigned', label: 'Unassigned', count: conversations.filter(c => c.tab === 'unassigned').length },
-    { id: 'assigned', label: 'Assigned to me', count: conversations.filter(c => c.tab === 'assigned').length },
-    { id: 'waiting', label: 'Waiting approval', count: conversations.filter(c => c.tab === 'waiting').length },
-    { id: 'high_risk', label: 'High risk', count: conversations.filter(c => c.tab === 'high_risk').length },
-  ];
-
-  const operationalLinks = (() => {
-    const links: Array<{ label: string; href: string; visible: boolean }> = [];
-    const firstOrder = caseState?.related?.orders?.[0];
-    const firstPayment = caseState?.related?.payments?.[0];
-    const firstReturn = caseState?.related?.returns?.[0];
-
-    links.push({
-      label: 'Order Management System (OMS)',
-      href: firstOrder?.externalOrderId ? `https://admin.shopify.com/store/demo/orders/${encodeURIComponent(firstOrder.externalOrderId)}` : '#',
-      visible: Boolean(firstOrder || selectedConv?.orderId),
-    });
-    links.push({
-      label: 'Payment Gateway (PSP)',
-      href: firstPayment?.externalPaymentId ? `https://dashboard.stripe.com/test/payments/${encodeURIComponent(firstPayment.externalPaymentId)}` : '#',
-      visible: Boolean(firstPayment || selectedConv?.paymentStatus !== 'N/A'),
-    });
-    links.push({
-      label: 'Carrier Tracking Portal',
-      href: firstOrder?.trackingUrl || '#',
-      visible: Boolean(firstOrder?.trackingNumber || firstOrder?.trackingUrl || selectedConv?.fulfillmentStatus !== 'N/A'),
-    });
-    links.push({
-      label: 'Return Record (RMS)',
-      href: firstReturn?.externalReturnId ? `https://returns.example.local/${encodeURIComponent(firstReturn.externalReturnId)}` : '#',
-      visible: Boolean(firstReturn || selectedConv?.refundStatus !== 'N/A'),
-    });
-    links.push({
-      label: 'Warehouse (WMS) Ticket',
-      href: firstOrder?.externalOrderId ? `https://wms.example.local/orders/${encodeURIComponent(firstOrder.externalOrderId)}` : '#',
-      visible: Boolean(firstOrder || selectedConv?.fulfillmentStatus !== 'N/A'),
-    });
-
-    return links.filter(link => link.visible);
-  })();
-
-  const copilotMessagesRaw = selectedConv ? (copilotMessagesByCase[selectedConv.id] || []) : [];
-  const copilotMessages = copilotSortOrder === 'desc' ? [...copilotMessagesRaw].reverse() : copilotMessagesRaw;
-
-  useEffect(() => {
-    if (filteredConversations.length > 0 && !filteredConversations.find(c => c.id === selectedId)) {
-      setSelectedId(filteredConversations[0].id);
-    }
-  }, [activeTab, filteredConversations, selectedId]);
-
-  useEffect(() => {
-    setComposeMode('reply');
-  }, [selectedId]);
-
-  useEffect(() => {
-    if (selectedInboxView?.latestDraft?.content) {
-      setComposerText(selectedInboxView.latestDraft.content);
-      return;
-    }
-    setComposerText('');
-  }, [selectedInboxView?.latestDraft?.id, selectedId]);
-
-  // Close emoji picker when clicking outside
-  useEffect(() => {
-    if (!showEmojiPicker) return;
-    const handler = (e: MouseEvent) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
-        setShowEmojiPicker(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showEmojiPicker]);
-
-  // Close filter panel when clicking outside
-  useEffect(() => {
-    if (!showFilterPanel) return;
-    const handler = (e: MouseEvent) => {
-      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node)) {
-        setShowFilterPanel(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showFilterPanel]);
-
-  // Reset attachments when switching cases
-  useEffect(() => { setAttachments([]); setShowEmojiPicker(false); }, [selectedId]);
-
-  const handleFilesSelected = useCallback((files: FileList | null) => {
-    if (!files) return;
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setAttachments(prev => [...prev, {
-          id: `att-${Date.now()}-${Math.random()}`,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          dataUrl: file.type.startsWith('image/') ? (e.target?.result as string) : undefined,
-          file,
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
-  }, []);
-
-  const removeAttachment = (id: string) => setAttachments(prev => prev.filter(a => a.id !== id));
-
-  const insertEmoji = (emoji: string) => {
-    const el = textareaRef.current;
-    if (!el) { setComposerText(prev => prev + emoji); return; }
-    const start = el.selectionStart ?? composerText.length;
-    const end = el.selectionEnd ?? composerText.length;
-    const next = composerText.slice(0, start) + emoji + composerText.slice(end);
-    setComposerText(next);
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + emoji.length, start + emoji.length); });
-    setShowEmojiPicker(false);
-  };
-
-  const applyFormat = (tag: 'bold' | 'italic' | 'link') => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart ?? 0;
-    const end = el.selectionEnd ?? 0;
-    const selected = composerText.slice(start, end);
-    let replacement = '';
-    if (tag === 'bold') replacement = `**${selected || 'bold text'}**`;
-    else if (tag === 'italic') replacement = `_${selected || 'italic text'}_`;
-    else if (tag === 'link') {
-      const url = window.prompt('Enter URL:', 'https://');
-      if (!url) return;
-      replacement = `[${selected || 'link text'}](${url})`;
-    }
-    const next = composerText.slice(0, start) + replacement + composerText.slice(end);
-    setComposerText(next);
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + replacement.length, start + replacement.length); });
-  };
-
-  const handleApplyDraft = () => {
-    const draft = selectedInboxView?.latestDraft?.content;
-    if (draft) {
-      setComposeMode('reply');
-      setComposerText(draft);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!selectedConv || !composerText.trim() || submitLockRef.current) return;
-
-    const content = composerText.trim();
-    const optimisticId = composeMode === 'internal' ? `local-note-${Date.now()}` : `local-reply-${Date.now()}`;
-
-    // ── Optimistic update: show message instantly ──────────────────────────
-    setLocalMessagesByCase(current => ({
-      ...current,
-      [selectedConv.id]: [
-        ...(current[selectedConv.id] || []),
-        composeMode === 'internal'
-          ? { id: optimisticId, type: 'internal' as const, sender: 'Internal Note', content, time: formatTime(new Date().toISOString()) }
-          : { id: optimisticId, type: 'agent' as const, sender: 'Alex Morgan', content, time: formatTime(new Date().toISOString()), status: 'sent' },
-      ],
-    }));
-    setComposerText('');
-    setAttachments([]);
-    setActionError(null);
-
-    // ── Background API call (non-blocking) ────────────────────────────────
-    submitLockRef.current = true;
-    setIsSubmitting(true);
-    try {
-      if (composeMode === 'internal') {
-        await casesApi.addInternalNote(selectedConv.id, content);
-      } else {
-        await casesApi.reply(selectedConv.id, content, selectedInboxView?.latestDraft?.id);
-      }
-      setRefreshKey(key => key + 1);
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Failed to send. Please try again.');
-      console.error('Inbox action failed:', error);
-      // Roll back the optimistic message on failure
-      setLocalMessagesByCase(current => ({
-        ...current,
-        [selectedConv.id]: (current[selectedConv.id] || []).filter(m => m.id !== optimisticId),
-      }));
-      setComposerText(content);
-    } finally {
-      setIsSubmitting(false);
-      submitLockRef.current = false;
-    }
-  };
-
-  const showFeedback = (msg: string, isError = false) => {
-    if (isError) setActionError(msg); else setActionSuccess(msg);
-    setTimeout(() => { setActionError(null); setActionSuccess(null); }, 3000);
-  };
-
-  const handleMarkResolved = async () => {
-    if (!selectedConv) return;
-    try {
-      await casesApi.resolve(selectedConv.id);
-      setRefreshKey(k => k + 1);
-      showFeedback('Case marked as resolved');
-    } catch {
-      showFeedback('Failed to resolve case', true);
-    }
-  };
-
-  const handleSnooze = async () => {
-    if (!selectedConv) return;
-    try {
-      await casesApi.updateStatus(selectedConv.id, 'snoozed', 'Snoozed by agent');
-      setRefreshKey(k => k + 1);
-      showFeedback('Case snoozed');
-    } catch {
-      showFeedback('Failed to snooze case', true);
-    }
-  };
-
-  const handleCopilotSubmit = async () => {
-    if (!selectedConv || !copilotInput.trim() || isCopilotSending) return;
-
-    const question = copilotInput.trim();
-    const userMessage: CopilotMessage = {
-      id: `copilot-user-${Date.now()}`,
-      role: 'user',
-      content: question,
-      time: formatTime(new Date().toISOString()),
-    };
-    const nextHistory = [...copilotMessages, userMessage];
-    setCopilotMessagesByCase(current => ({
-      ...current,
-      [selectedConv.id]: nextHistory,
-    }));
-    setCopilotInput('');
-    setIsCopilotSending(true);
-
-    try {
-      const result = await aiApi.copilot(
-        selectedConv.id,
-        question,
-        nextHistory.map(message => ({ role: message.role, content: message.content })),
-      );
-      const assistantMessage: CopilotMessage = {
-        id: `copilot-assistant-${Date.now()}`,
-        role: 'assistant',
-        content: result?.answer || 'I could not generate an answer from the current case state.',
-        time: formatTime(new Date().toISOString()),
-      };
-      setCopilotMessagesByCase(current => ({
-        ...current,
-        [selectedConv.id]: [...(current[selectedConv.id] || nextHistory), assistantMessage],
-      }));
-    } catch (error: any) {
-      setCopilotMessagesByCase(current => ({
-        ...current,
-        [selectedConv.id]: [
-          ...(current[selectedConv.id] || nextHistory),
-          {
-            id: `copilot-error-${Date.now()}`,
-            role: 'assistant',
-            content: `Copilot could not answer right now: ${error?.message || 'unknown error'}`,
-            time: formatTime(new Date().toISOString()),
-          },
-          ],
-      }));
-      setActionError(error?.message || 'Copilot could not answer right now');
-    } finally {
-      setIsCopilotSending(false);
-    }
-  };
-
-  const getSuggestedReply = (conv: Conversation) => {
-    const firstName = conv.contactName.split(' ')[0];
-    const orderId = conv.orderId;
-    const caseType = conv.caseType;
-
-    switch (caseType) {
-      case 'Refund Inquiry':
-        if (conv.refundStatus === 'Pending') {
-          return `Hi ${firstName}, I've checked your refund for order ${orderId}. It was approved on our end, but banks usually take 5-7 business days to process. I'm monitoring the clearance for you.`;
-        }
-        return `Hi ${firstName}, I'm looking into your refund request for order ${orderId}. I'll have an update for you shortly.`;
-      case 'Cancellation':
-        if (conv.fulfillmentStatus === 'Packing' || conv.fulfillmentStatus === 'Shipped') {
-          return `Hi ${firstName}, I've received your cancellation request for ${orderId}. Since the order is already in the ${conv.fulfillmentStatus.toLowerCase()} stage, I'm checking with our warehouse to see if we can still stop it.`;
-        }
-        return `Hi ${firstName}, I've received your cancellation request for ${orderId}. I'm processing it now and will confirm once it's cancelled.`;
-      case 'Return/Replacement':
-        return `Hi ${firstName}, I'm sorry about the damage to order ${orderId}. I've initiated a replacement request and our team will review the photos shortly. We'll send you a return label as well.`;
-      case 'Payment Issue':
-        return `Hi ${firstName}, I'm investigating the payment discrepancy for ${orderId}. I'm checking our payment gateway logs to verify the transaction status and will get back to you as soon as I have more info.`;
-      case 'Address Change':
-        if (conv.fulfillmentStatus === 'Shipped') {
-          return `Hi ${firstName}, I see you'd like to change the address for ${orderId}. Unfortunately, the order has already shipped. I'll contact the carrier to see if we can reroute it.`;
-        }
-        return `Hi ${firstName}, I can help you with the address change for ${orderId}. I'm updating our records now to ensure it ships to the correct location.`;
-      case 'Delivery Issue':
-        return `Hi ${firstName}, I'm sorry to hear about the delivery issues with ${orderId}. I've contacted the carrier to investigate why the delivery attempts failed and will update you shortly.`;
-      case 'Billing Update':
-        return `Hi ${firstName}, I've received your request to update the billing details for ${orderId}. I'm forwarding this to our finance team to regenerate the invoice with the correct information.`;
-      case 'Fraud Alert':
-        return `Hi ${firstName}, we've detected some unusual activity on your account. For your security, we've temporarily held your order ${orderId} while we verify the details with you.`;
-      case 'Inventory Inquiry':
-        return `Hi ${firstName}, thank you for your interest in our products. I'm checking our current warehouse stock levels to confirm if we can fulfill your bulk order request for ${orderId || 'your inquiry'}.`;
-      default:
-        return `Hi ${firstName}, I'm looking into your case ${conv.caseId} regarding ${caseType}. I'll have an update for you shortly.`;
-    }
-  };
-
-  const getChannelIcon = (channel: Channel | string) => {
-    switch (channel) {
-      case 'whatsapp':  return 'forum';
-      case 'email':
-      case 'gmail':
-      case 'outlook':
-      case 'postmark':  return 'mail';
-      case 'sms':       return 'sms';
-      case 'messenger': return 'chat';
-      case 'instagram': return 'photo_camera';
-      case 'telegram':  return 'send';
-      case 'discord':   return 'sports_esports';
-      case 'slack':     return 'tag';
-      case 'teams':     return 'groups';
-      case 'front':     return 'inbox';
-      case 'intercom':  return 'support_agent';
-      case 'zendesk':   return 'confirmation_number';
-      case 'aircall':   return 'phone_in_talk';
-      default:          return 'chat_bubble';
-    }
-  };
-
-  const getChannelColor = (channel: Channel | string) => {
-    switch (channel) {
-      case 'whatsapp':  return 'text-whatsapp bg-whatsapp/10';
-      case 'email':
-      case 'gmail':
-      case 'outlook':
-      case 'postmark':  return 'text-blue-600 bg-blue-100';
-      case 'sms':       return 'text-emerald-600 bg-emerald-100';
-      case 'messenger': return 'text-[#0084ff] bg-[#0084ff]/10';
-      case 'instagram': return 'text-pink-600 bg-pink-100';
-      case 'telegram':  return 'text-sky-600 bg-sky-100';
-      case 'discord':   return 'text-indigo-600 bg-indigo-100';
-      case 'slack':     return 'text-purple-600 bg-purple-100';
-      case 'teams':     return 'text-violet-600 bg-violet-100';
-      case 'front':     return 'text-amber-600 bg-amber-100';
-      case 'intercom':  return 'text-blue-500 bg-blue-100';
-      case 'zendesk':   return 'text-green-700 bg-green-100';
-      case 'aircall':   return 'text-orange-600 bg-orange-100';
-      default:          return 'text-gray-600 bg-gray-200';
-    }
-  };
-
-  const getChannelLabel = (channel: Channel | string): string => {
-    const map: Record<string, string> = {
-      whatsapp: 'WhatsApp', email: 'Email', web_chat: 'Web Chat', sms: 'SMS',
-      messenger: 'Messenger', instagram: 'Instagram', telegram: 'Telegram',
-      discord: 'Discord', slack: 'Slack', teams: 'Teams', front: 'Front',
-      intercom: 'Intercom', zendesk: 'Zendesk', aircall: 'Aircall',
-      postmark: 'Email', gmail: 'Gmail', outlook: 'Outlook',
-    };
-    return map[channel] ?? channel;
-  };
+function InboxNav({ activeNavItem, onNavItem }: InboxNavProps) {
+  const [finExpanded, setFinExpanded] = useState(true);
+  const [showConfigTooltip, setShowConfigTooltip] = useState(true);
 
   return (
-    <>
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
-      {/* Inbox Header */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white dark:bg-card-dark rounded-t-xl mx-2 mt-2 border-b border-gray-100 dark:border-gray-700 shadow-card z-10">
-        <div className="flex items-center space-x-4 min-w-0">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Cases</h1>
-          <div className="flex space-x-1 min-w-0 overflow-x-auto custom-scrollbar">
-            {tabItems.map(tab => (
-              <span 
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as CaseTab)}
-                className={`px-3 py-1 text-sm font-medium rounded-full cursor-pointer transition-colors ${
-                  activeTab === tab.id 
-                    ? 'bg-black text-white' 
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                {tab.label} ({tab.count})
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center space-x-3 flex-shrink-0">
-          <div className="flex items-center text-gray-500 text-sm mr-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
-            Online
-          </div>
-          {/* Filter button + panel */}
-          <div className="relative" ref={filterPanelRef}>
-            <button
-              onClick={() => setShowFilterPanel(p => !p)}
-              className={`p-2 rounded-lg transition-colors ${
-                hasActiveFilters
-                  ? 'text-secondary bg-secondary/10 hover:bg-secondary/20'
-                  : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-              title="Filter cases"
-            >
-              <span className="material-symbols-outlined">filter_list</span>
-              {hasActiveFilters && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-secondary" />
-              )}
-            </button>
-
-            {showFilterPanel && (
-              <div className="absolute right-0 top-10 z-40 w-72 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">Filter cases</span>
-                  {hasActiveFilters && (
-                    <button
-                      onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterRiskLevel(''); setFilterQ(''); }}
-                      className="text-xs text-red-500 hover:text-red-700 font-medium"
-                    >
-                      Clear all
-                    </button>
-                  )}
-                </div>
-
-                {/* Search */}
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">Search</label>
-                  <input
-                    type="text"
-                    value={filterQ}
-                    onChange={e => setFilterQ(e.target.value)}
-                    placeholder="Customer, case #, order…"
-                    className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
-                  />
-                </div>
-
-                {/* Status */}
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">Status</label>
-                  <select
-                    value={filterStatus}
-                    onChange={e => setFilterStatus(e.target.value)}
-                    className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
-                  >
-                    <option value="">All statuses</option>
-                    <option value="new">New</option>
-                    <option value="open">Open</option>
-                    <option value="pending">Pending</option>
-                    <option value="snoozed">Snoozed</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </div>
-
-                {/* Priority */}
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">Priority</label>
-                  <select
-                    value={filterPriority}
-                    onChange={e => setFilterPriority(e.target.value)}
-                    className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
-                  >
-                    <option value="">All priorities</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
-
-                {/* Risk level */}
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1 font-semibold">Risk level</label>
-                  <select
-                    value={filterRiskLevel}
-                    onChange={e => setFilterRiskLevel(e.target.value)}
-                    className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-secondary/30 focus:border-secondary"
-                  >
-                    <option value="">All risk levels</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
-
-                <button
-                  onClick={() => setShowFilterPanel(false)}
-                  className="w-full mt-1 py-1.5 rounded-lg bg-secondary text-white text-sm font-semibold hover:bg-secondary/90 transition-colors"
-                >
-                  Apply
-                </button>
-              </div>
-            )}
-          </div>
+    <div
+      className="flex flex-col flex-shrink-0 h-full overflow-y-auto"
+      style={{ width: 220, background: '#fff', borderRight: '1px solid #e5e7eb' }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="font-semibold text-gray-900 text-base">Inbox</span>
+        <div className="flex items-center gap-1">
+          <button className="p-1 rounded hover:bg-gray-100 text-gray-500"><IconPlus /></button>
+          <button className="p-1 rounded hover:bg-gray-100 text-gray-500"><IconSearch size={13} /></button>
         </div>
       </div>
 
-      {/* Main Content Area (3 Panes) */}
-      <div className="relative flex-1 flex mx-2 mb-2 bg-card-light dark:bg-card-dark shadow-card overflow-hidden rounded-b-xl border border-t-0 border-gray-100 dark:border-gray-800">
-        {(casesError || inboxError || actionError) && (
-          <div className="absolute left-1/2 top-20 z-20 w-[min(960px,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-card dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
-            <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-lg mt-0.5">error</span>
-              <div className="min-w-0">
-                <div className="font-semibold">Inbox action unavailable</div>
-                <div className="text-xs opacity-90">{actionError || inboxError || casesError}</div>
-              </div>
-            </div>
+      {/* Search */}
+      <div className="px-3 pb-2">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-gray-400" style={{ background: '#f3f4f6' }}>
+          <IconSearch size={13} />
+          <span>Buscar</span>
+        </div>
+      </div>
+
+      {/* Main nav items */}
+      <div className="flex flex-col gap-px px-2">
+        {NAV_ITEMS_MAIN.map(item => (
+          <button
+            key={item.id}
+            onClick={() => onNavItem(item.id)}
+            className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm w-full text-left transition-colors ${
+              activeNavItem === item.id
+                ? 'bg-indigo-50 text-indigo-700 font-medium'
+                : 'text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <span className="text-gray-400 flex-shrink-0">
+              {item.icon && <NavIcon id={item.icon} />}
+            </span>
+            <span className="flex-1 truncate">{item.label}</span>
+            {item.count !== undefined && (
+              <span className={`text-xs ${item.count > 0 ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>
+                {item.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Fin para servicio */}
+      <div className="mt-3 px-2">
+        <button
+          onClick={() => setFinExpanded(!finExpanded)}
+          className="flex items-center justify-between w-full px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-gray-700"
+        >
+          <span>Fin para servicio</span>
+          <div className="flex items-center gap-1">
+            <span className="text-gray-400 hover:text-gray-600"><IconPlus size={12} /></span>
+            {finExpanded ? <IconChevronDown /> : <IconChevronRight />}
+          </div>
+        </button>
+        {finExpanded && (
+          <div className="flex flex-col gap-px mt-1">
+            {NAV_ITEMS_FIN.map(item => (
+              <button
+                key={item.id}
+                onClick={() => onNavItem(item.id)}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm w-full text-left transition-colors ${
+                  activeNavItem === item.id
+                    ? 'bg-indigo-50 text-indigo-700 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span className="text-gray-400 flex-shrink-0">
+                  {item.icon && <NavIcon id={item.icon} />}
+                </span>
+                <span className="flex-1 truncate">{item.label}</span>
+              </button>
+            ))}
           </div>
         )}
-        
-        {/* Left Pane: Conversation List */}
-        <div className="w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col bg-gray-50/30 dark:bg-black/5">
-          <div className="overflow-y-auto flex-1 custom-scrollbar p-2 space-y-2">
-            {casesLoading && conversations.length === 0 && (
-              <LoadingState
-                title="Loading cases"
-                message="Fetching cases from Supabase."
-                compact
-              />
-            )}
-            {!casesLoading && filteredConversations.length > 0 && filteredConversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  onClick={() => setSelectedId(conv.id)}
-                  className={`p-4 rounded-xl border cursor-pointer group relative transition-all duration-200 ${
-                    selectedId === conv.id
-                      ? `bg-white dark:bg-gray-800 border-indigo-500 shadow-card scale-[1.02] z-10`
-                      : 'bg-white dark:bg-card-dark border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 shadow-sm hover:shadow-card'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="flex flex-col">
-                      <span className={`font-semibold text-sm ${selectedId === conv.id ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
-                        {conv.contactName}
-                      </span>
-                      <span className="text-xs text-gray-400 font-mono">{conv.orderId}</span>
-                    </div>
-                    <span className="text-xs text-gray-400">{conv.time}</span>
-                  </div>
-                  <div className="mb-2">
-                    <p className={`text-sm truncate ${selectedId === conv.id ? 'text-gray-900 dark:text-gray-100 font-medium' : 'text-gray-600 dark:text-gray-300 font-normal'}`}>
-                      {conv.lastMessage}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {conv.orderStatus === 'Delivered' && <span className="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-blue-200">Delivered</span>}
-                    {conv.fulfillmentStatus === 'Packing' && <span className="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-blue-200">Packed</span>}
-                    {conv.paymentStatus === 'Paid' && <span className="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-blue-200">Captured</span>}
-                    {conv.refundStatus === 'Pending' && <span className="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-blue-200">Refund Pending</span>}
-                    {conv.tags?.includes('Return') && <span className="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-blue-200">Return</span>}
-                    {conv.priority === 'high' && <span className="bg-red-50 text-red-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-red-200">High Risk</span>}
-                    {conv.approvalStatus === 'Pending' && <span className="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-blue-200">Approval Needed</span>}
-                    {conv.conflictDetected && <span className="bg-red-50 text-red-700 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border border-red-200">Conflict</span>}
-                  </div>
-                </div>
-            ))}
-            {!casesLoading && filteredConversations.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <span className="material-symbols-outlined text-5xl text-gray-200 dark:text-gray-700 mb-3">
-                  {activeTab === 'high_risk' ? 'shield_check' : activeTab === 'waiting' ? 'pending_actions' : 'inbox'}
-                </span>
-                <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  {activeTab === 'unassigned' && "No unassigned cases"}
-                  {activeTab === 'assigned' && "No assigned cases"}
-                  {activeTab === 'waiting' && "No cases waiting for approval"}
-                  {activeTab === 'high_risk' && "No high-risk cases"}
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 max-w-[180px] leading-relaxed">
-                  {conversations.length === 0
-                    ? "Cases will appear here when customers contact you or when webhooks are received."
-                    : "All cases are in other tabs."}
-                </p>
-                {conversations.length === 0 && (
-                  <div className="flex flex-col gap-2 w-full max-w-[200px]">
-                    <button
-                      onClick={() => casesApi.list({ limit: '1' }).then(() => window.location.reload()).catch(() => {})}
-                      className="text-xs px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Refresh
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+      </div>
+
+      {/* Inbox para el equipo */}
+      <div className="mt-2 px-2">
+        <button className="flex items-center justify-between w-full px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-gray-700">
+          <span>Inbox para el equipo</span>
+          <div className="flex items-center gap-1">
+            <span className="text-gray-400 hover:text-gray-600"><IconPlus size={12} /></span>
+            <IconChevronRight />
           </div>
-        </div>
+        </button>
+      </div>
 
-        {/* Middle Pane: Chat Window */}
-        {casesLoading && conversations.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center bg-white dark:bg-card-dark border-r border-gray-100 dark:border-gray-700">
-            <LoadingState
-              title="Loading inbox"
-              message="Fetching your cases from Supabase."
-            />
+      {/* Compañeros de equipo */}
+      <div className="mt-1 px-2">
+        <button className="flex items-center justify-between w-full px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-gray-700">
+          <span>Compañeros de equipo</span>
+          <div className="flex items-center gap-1">
+            <span className="text-gray-400 hover:text-gray-600"><IconPlus size={12} /></span>
+            <IconChevronRight />
           </div>
-        ) : selectedConv ? (
-          <div className={`flex-1 flex flex-col min-w-0 relative border-r border-gray-100 dark:border-gray-700 ${
-            selectedConv.channel === 'whatsapp' ? 'bg-[#efeae2] dark:bg-[#0b141a]' : 'bg-white dark:bg-card-dark'
-          }`}>
-          {/* Chat Header */}
-          <div className="h-14 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-4 px-6 bg-white dark:bg-card-dark">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              {selectedConv.channel === 'email' ? (
-                <div className="w-8 h-8 rounded bg-blue-100 text-blue-700 flex flex-shrink-0 items-center justify-center font-bold text-xs border border-blue-200">TB</div>
-              ) : (
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                  selectedConv.id === '1' ? 'bg-pink-500' : selectedConv.id === '4' ? 'bg-purple-500' : 'bg-indigo-500'
-                }`}>
-                  {selectedConv.contactName.split(' ').map(n => n[0]).join('')}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 min-w-0">
-                  <span className="truncate min-w-0" title={`${selectedConv.caseId}: ${selectedConv.lastMessage}`}>
-                    {selectedConv.caseId}: {selectedConv.lastMessage}
-                  </span>
-                  <span className="text-xs font-normal text-gray-400 flex-shrink-0">via {getChannelLabel(selectedConv.channel)}</span>
-                </h2>
-                <p className="text-xs text-gray-500 truncate" title={`${selectedConv.contactName} • ${selectedConv.orderId} • ${selectedConv.brand}`}>
-                  {selectedConv.contactName} • {selectedConv.orderId} • {selectedConv.brand}
-                </p>
-              </div>
+        </button>
+      </div>
+
+      <div className="flex-1" />
+
+      {/* Configurar tooltip */}
+      {showConfigTooltip && (
+        <div className="m-3 p-3 rounded-xl shadow-md" style={{ background: '#1f1f1f' }}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-white text-sm font-semibold">Configurar</span>
             </div>
-            <div className="flex items-center space-x-2 flex-shrink-0">
-              {!isRightSidebarOpen && (
-                <button 
-                  onClick={() => setIsRightSidebarOpen(true)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
-                  title="Show Sidebar"
-                >
-                  <span className="material-symbols-outlined text-lg">view_sidebar</span>
-                </button>
-              )}
-              <button
-                onClick={handleMarkResolved}
-                title="Mark as resolved"
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
-              >
-                <span className="material-symbols-outlined text-lg">check_circle</span>
-              </button>
-              <button
-                onClick={handleSnooze}
-                title="Snooze case"
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-amber-50 dark:hover:bg-amber-900/20 text-gray-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-              >
-                <span className="material-symbols-outlined text-lg">snooze</span>
-              </button>
-              <div className="relative">
-                <button
-                  onClick={() => setShowMoreMenu(p => !p)}
-                  title="More actions"
-                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
-                >
-                  <span className="material-symbols-outlined text-lg">more_horiz</span>
-                </button>
-                {showMoreMenu && (
-                  <div className="absolute right-0 top-9 z-30 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1">
-                    {[
-                      { label: 'Assign to me', status: 'open' },
-                      { label: 'Mark as pending', status: 'pending' },
-                      { label: 'Close case', status: 'closed' },
-                    ].map(({ label, status }) => (
-                      <button
-                        key={status}
-                        onClick={async () => {
-                          setShowMoreMenu(false);
-                          if (!selectedConv) return;
-                          try {
-                            await casesApi.updateStatus(selectedConv.id, status);
-                            setRefreshKey(k => k + 1);
-                            showFeedback(`Case set to ${status}`);
-                          } catch {
-                            showFeedback('Failed to update case status', true);
-                          }
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                      >
-                        {label}
-                      </button>
-                    ))}
-                    <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
-                    <button
-                      onClick={() => { setShowMoreMenu(false); setMergeTargetId(''); setShowMergeModal(true); }}
-                      className="w-full text-left px-4 py-2 text-sm text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                    >
-                      Merge into another case…
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+            <button onClick={() => setShowConfigTooltip(false)} className="text-gray-400 hover:text-white text-xs">✕</button>
           </div>
-
-          {/* Action feedback toasts */}
-          {(actionSuccess || actionError) && (
-            <div className={`mx-4 mt-2 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
-              actionError
-                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
-                : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
-            }`}>
-              <span className="material-symbols-outlined text-base">{actionError ? 'error' : 'check_circle'}</span>
-              {actionError || actionSuccess}
-            </div>
-          )}
-
-          {/* Chat Messages */}
-          <div className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar ${
-            selectedConv.channel === 'whatsapp'
-              ? "bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-opacity-10 dark:bg-opacity-5"
-              : "bg-gray-50/30 dark:bg-black/20"
-          }`}>
-            {inboxViewLoading && !selectedInboxView && (
-              <div className="flex items-center justify-center h-full">
-                <LoadingState
-                  title="Loading messages"
-                  message="Fetching conversation history."
-                />
-              </div>
-            )}
-            {/* Operational Status Summary */}
-            <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 shadow-card flex flex-wrap gap-4 items-center justify-between mb-2 ${inboxViewLoading && !selectedInboxView ? 'hidden' : ''}`}>
-              <div className="flex flex-wrap gap-4">
-                <div className="flex flex-col">
-                  <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Order</span>
-                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{selectedConv.orderStatus}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Payment</span>
-                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{selectedConv.paymentStatus}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Fulfillment</span>
-                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{selectedConv.fulfillmentStatus}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Refund</span>
-                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{selectedConv.refundStatus}</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Approval</span>
-                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{selectedConv.approvalStatus}</span>
-                </div>
-              </div>
-              <div className="flex flex-col items-end min-w-0 max-w-[45%]">
-                <span className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Recommended Action</span>
-                <span className="text-xs font-bold text-secondary truncate max-w-full" title={selectedConv.recommendedNextAction}>{selectedConv.recommendedNextAction}</span>
-              </div>
-            </div>
-
-            {/* Conflict Detection (if any) */}
-            {!inboxViewLoading && selectedConv.conflictDetected && (
-              <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-lg p-3 flex items-start gap-3 shadow-card">
-                <span className="material-symbols-outlined text-red-500 text-[18px] flex-shrink-0 mt-0.5">warning</span>
-                <div>
-                  <h4 className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-0.5">Conflict Detected</h4>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">{selectedConv.conflictDetected}</p>
-                </div>
-              </div>
-            )}
-
-            {!inboxViewLoading && (
-              <div className="flex justify-center">
-                <span className="text-xs text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded shadow-card">Today, 08:15 AM</span>
-              </div>
-            )}
-
-            {!inboxViewLoading && selectedConv.messages?.map((msg) => {
-              if (msg.type === 'system') {
-                return (
-                  <div key={msg.id} className="flex justify-center my-2">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400 bg-gray-100/50 dark:bg-gray-800/50 px-3 py-1 rounded-full border border-gray-200/50 dark:border-gray-700/50">
-                      {msg.content}
-                    </span>
-                  </div>
-                );
-              }
-
-              if (msg.type === 'internal') {
-                return (
-                  <div key={msg.id} className="flex space-x-3 my-4">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 flex-shrink-0 border border-gray-200 dark:border-gray-600">
-                      <span className="material-symbols-outlined text-sm">lock</span>
-                    </div>
-                    <div className="space-y-1 max-w-[85%] w-full">
-                      <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 p-3 rounded-xl rounded-tl-none shadow-card">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Internal Note · {msg.sender}</span>
-                          <span className="text-xs text-gray-400">{msg.time}</span>
-                        </div>
-                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
-                          {msg.content}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              const isRight = msg.type === 'agent' || msg.type === 'ai';
-              const isAI = msg.type === 'ai';
-
-              if (selectedConv.channel === 'whatsapp') {
-                return (
-                  <div key={msg.id} className={`flex ${isRight ? 'justify-end' : 'justify-start'} my-2`}>
-                    <div className={`max-w-[75%] p-3 rounded-xl shadow-card text-[15px] ${
-                      isRight 
-                        ? "bg-[#dcf8c6] dark:bg-[#005c4b] rounded-tr-none text-gray-800 dark:text-[#e9edef] border border-whatsapp/20" 
-                        : "bg-white dark:bg-[#202c33] rounded-tl-none text-gray-800 dark:text-[#e9edef]"
-                    }`}>
-                      {isAI && (
-                        <div className="flex items-center gap-1 mb-1 text-xs font-semibold text-gray-500 dark:text-gray-300">
-                          <span className="material-symbols-outlined text-[14px]">smart_toy</span>
-                          AI Assistant
-                        </div>
-                      )}
-                      <span className="whitespace-pre-wrap break-words">{msg.content}</span>
-                      <span className={`float-right flex items-center gap-1 text-[11px] ml-4 mt-2 ${isRight ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400'}`}>
-                        {msg.time}
-                        {isRight && msg.deliveryStatus === 'pending' && (
-                          <span title="Sending..." className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-[10px] font-medium">
-                            <span className="material-symbols-outlined text-[12px]">schedule</span>Pending
-                          </span>
-                        )}
-                        {isRight && msg.deliveryStatus === 'failed' && (
-                          <span title={msg.deliveryError || 'Delivery failed'} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-[10px] font-medium">
-                            <span className="material-symbols-outlined text-[12px]">error</span>Failed
-                          </span>
-                        )}
-                        {isRight && (msg.deliveryStatus === 'sent' || msg.deliveryStatus === undefined) && (
-                          <span className="material-symbols-outlined text-[14px] text-blue-500" title="Sent">done_all</span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div key={msg.id} className={`flex space-x-3 my-4 ${isRight ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${
-                    isAI ? 'bg-secondary' : isRight ? 'bg-gray-700 dark:bg-gray-600' : 'bg-gray-400 dark:bg-gray-500'
-                  }`}>
-                    {isAI ? <span className="material-symbols-outlined text-sm">smart_toy</span> : msg.sender.split(' ').map((n: string) => n[0]).join('')}
-                  </div>
-                  <div className={`space-y-1 max-w-[85%] ${isRight ? 'text-right' : ''}`}>
-                    <div className={`p-4 rounded-2xl shadow-card border bg-white dark:bg-card-dark border-gray-100 dark:border-gray-700 ${
-                      isRight ? 'rounded-tr-none' : 'rounded-tl-none'
-                    }`}>
-                      {isAI && <div className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">AI Suggestion</div>}
-                      <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
-                        {msg.content}
-                      </p>
-                    </div>
-                    <span className="text-xs text-gray-400 px-1">{msg.time}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Reply Area */}
-          <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark">
-            {/* Hidden file inputs */}
-            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => handleFilesSelected(e.target.files)} />
-            <input ref={imageInputRef} type="file" multiple accept="image/*" className="hidden" onChange={e => handleFilesSelected(e.target.files)} />
-
-            <div className={`bg-white dark:bg-card-dark border rounded-xl p-2 transition-all focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary shadow-card ${
-              composeMode === 'internal' ? 'border-amber-200 dark:border-amber-800/40' : 'border-gray-200 dark:border-gray-700'
-            }`}>
-              {/* Toolbar */}
-              <div className="flex items-center gap-1 border-b border-gray-100 dark:border-gray-700 pb-2 mb-2 px-1">
-                <button title="Bold" onClick={() => applyFormat('bold')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                  <span className="material-symbols-outlined text-[18px]">format_bold</span>
-                </button>
-                <button title="Italic" onClick={() => applyFormat('italic')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                  <span className="material-symbols-outlined text-[18px]">format_italic</span>
-                </button>
-                <button title="Insert link" onClick={() => applyFormat('link')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                  <span className="material-symbols-outlined text-[18px]">link</span>
-                </button>
-                <div className="h-4 w-px bg-gray-200 dark:bg-gray-600 mx-1"></div>
-                {/* Mode toggle */}
-                <button
-                  onClick={() => setComposeMode(mode => mode === 'reply' ? 'internal' : 'reply')}
-                  className={`relative inline-flex items-center h-5 rounded-full w-9 flex-shrink-0 transition-colors focus:outline-none ${composeMode === 'reply' ? 'bg-secondary' : 'bg-amber-400'}`}
-                >
-                  <span className={`inline-block w-3 h-3 transform bg-white rounded-full shadow transition-transform ${composeMode === 'reply' ? 'translate-x-5' : 'translate-x-1'}`}></span>
-                </button>
-                <span className={`text-xs font-medium flex-shrink-0 ${composeMode === 'reply' ? 'text-secondary' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {composeMode === 'reply' ? `Reply via ${getChannelLabel(selectedConv.channel)}` : 'Internal Note'}
-                </span>
-                {/* Emoji picker trigger */}
-                <div className="ml-auto relative" ref={emojiPickerRef}>
-                  <button
-                    title="Emoji"
-                    onClick={() => setShowEmojiPicker(prev => !prev)}
-                    className={`p-1.5 rounded transition-colors ${showEmojiPicker ? 'bg-gray-100 dark:bg-gray-700 text-secondary' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">sentiment_satisfied</span>
-                  </button>
-                  {showEmojiPicker && (
-                    <div className="absolute bottom-full right-0 mb-2 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3 z-50">
-                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Emojis</p>
-                      <div className="grid grid-cols-8 gap-1">
-                        {COMMON_EMOJIS.map(emoji => (
-                          <button
-                            key={emoji}
-                            onClick={() => insertEmoji(emoji)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-base transition-colors"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Textarea */}
-              <textarea
-                ref={textareaRef}
-                value={composerText}
-                onChange={e => setComposerText(e.target.value)}
-                onKeyDown={e => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
-                }}
-                className="w-full bg-transparent border-0 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 shadow-none text-sm text-gray-800 dark:text-gray-200 resize-none h-20 px-2 appearance-none"
-                placeholder={composeMode === 'reply' ? `Write your reply to ${selectedConv.contactName}...` : `Write an internal note for ${selectedConv.contactName}...`}
-              />
-
-              {/* Attachment previews */}
-              {attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 px-2 pb-2">
-                  {attachments.map(att => (
-                    <div key={att.id} className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg px-2 py-1 text-xs max-w-[160px] group">
-                      {att.dataUrl ? (
-                        <img src={att.dataUrl} alt={att.name} className="w-5 h-5 rounded object-cover flex-shrink-0" />
-                      ) : (
-                        <span className="material-symbols-outlined text-[16px] text-gray-500 flex-shrink-0">description</span>
-                      )}
-                      <span className="truncate text-gray-700 dark:text-gray-300">{att.name}</span>
-                      <span className="text-gray-400 flex-shrink-0">{formatFileSize(att.size)}</span>
-                      <button onClick={() => removeAttachment(att.id)} className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 ml-0.5">
-                        <span className="material-symbols-outlined text-[14px]">close</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Bottom bar */}
-              <div className="flex justify-between items-center px-2 pt-1">
-                <div className="flex items-center gap-1">
-                  <button
-                    title="Attach file"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">attach_file</span>
-                  </button>
-                  <button
-                    title="Attach image"
-                    onClick={() => imageInputRef.current?.click()}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">image</span>
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400 hidden sm:inline">Press ⌘ + Enter to send</span>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={!composerText.trim() && attachments.length === 0}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      composeMode === 'internal'
-                        ? 'bg-amber-500 text-white hover:bg-amber-600'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    {composeMode === 'reply' ? 'Send' : 'Save note'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 dark:bg-black/20 text-gray-400">
-          <span className="material-symbols-outlined text-6xl mb-4 opacity-20">auto_awesome</span>
-          <p className="text-lg font-medium opacity-50">Select a case to view details</p>
+          <p className="text-gray-400 text-xs leading-4">Configura canales para comunicarte con tus clientes</p>
         </div>
       )}
+    </div>
+  );
+}
 
-        {/* Right Pane: Details / Copilot Sidebar */}
-        <div className={`transition-all duration-300 bg-white dark:bg-card-dark flex flex-col overflow-hidden ${isRightSidebarOpen ? 'w-80 lg:w-96 border-l border-gray-100 dark:border-gray-700' : 'w-0 border-none'}`}>
-          {selectedConv ? (
-            <>
-              {/* Tabs */}
-              <div className="relative flex items-center justify-center px-4 pt-4 pb-3 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setRightTab('details')}
-                    className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
-                      rightTab === 'details'
-                        ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
-                        : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-                    }`}
-                  >
-                    Details
-                  </button>
-                  <button
-                    onClick={() => setRightTab('copilot')}
-                    className={`inline-flex items-center rounded-full px-4 py-1.5 text-sm font-semibold transition-colors border ${
-                      rightTab === 'copilot'
-                        ? 'text-white dark:text-gray-900 bg-gray-900 dark:bg-white border-gray-900 dark:border-white'
-                        : 'text-gray-700 dark:text-gray-300 bg-transparent border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'
-                    }`}
-                  >
-                    Copilot
-                  </button>
-                </div>
-                <button
-                  onClick={() => setIsRightSidebarOpen(false)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-all"
-                  title="Hide Sidebar"
-                >
-                  <span className="material-symbols-outlined text-[20px]">view_sidebar</span>
-                </button>
-              </div>
+// ─── Component: Conversation List ─────────────────────────────────────────────
+interface ConvListProps {
+  selected: string;
+  onSelect: (id: string) => void;
+}
 
-              {/* Tab Content */}
-              <div className={`flex-1 min-h-0 ${rightTab === 'copilot' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
-                {rightTab === 'copilot' ? (
-                  <div className="flex flex-col h-full min-h-0">
+function ConversationList({ selected, onSelect }: ConvListProps) {
+  return (
+    <div
+      className="flex flex-col flex-shrink-0 h-full overflow-y-auto"
+      style={{ width: 245, background: '#fff', borderRight: '1px solid #e5e7eb' }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="font-semibold text-gray-900 text-sm leading-tight">Hector Vidal<br />Sanchez</span>
+        <div className="flex items-center gap-1">
+          <button className="p-1 rounded hover:bg-gray-100 text-gray-500"><IconSearch size={13} /></button>
+        </div>
+      </div>
 
+      {/* Sort bar */}
+      <div className="flex items-center gap-2 px-4 pb-2 text-xs text-gray-500">
+        <span className="font-semibold text-gray-900">4 Abierta</span>
+        <span>·</span>
+        <span>Última actividad</span>
+        <button className="ml-auto text-gray-400 hover:text-gray-600"><IconSort /></button>
+        <div className="flex items-center gap-0.5 text-gray-400">
+          <IconChevronLeft />
+          <IconChevronRight />
+        </div>
+      </div>
 
-                    {/* ── Chat messages ───────────────────────────────── */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 space-y-3 min-h-0">
-                      {copilotMessages.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                          <div className="relative">
-                            <div className="super-agent-title-glow pointer-events-none absolute -inset-x-6 -inset-y-4 rounded-full bg-sky-500/5 blur-2xl dark:bg-sky-400/5" />
-                            <h1 className="relative flex flex-wrap justify-center gap-x-2 gap-y-1 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">
-                              {['Ask', 'about', 'this', 'case'].map((word, index) => (
-                                <span
-                                  key={`${word}-${index}`}
-                                  className="super-agent-title-word inline-block"
-                                  style={{ animationDelay: `${120 + index * 80}ms` }}
-                                >
-                                  {word}
-                                </span>
-                              ))}
-                            </h1>
-                          </div>
-                        </div>
-                      ) : (
-                        copilotMessages.map(message => (
-                          <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start items-end gap-2'}`}>
-                            {message.role === 'assistant' && (
-                              <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0 shadow-sm shadow-secondary/20">
-                                <span className="material-symbols-outlined text-white text-[13px]">auto_awesome</span>
-                              </div>
-                            )}
-                            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed border ${
-                              message.role === 'user'
-                                ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600 rounded-br-sm'
-                                : 'bg-white dark:bg-card-dark text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 rounded-bl-sm shadow-card'
-                            }`}>
-                              <p className="whitespace-pre-wrap">{message.content}</p>
-                              <span className={`block mt-1 text-[10px] ${message.role === 'user' ? 'text-white/60' : 'text-gray-400'}`}>{message.time}</span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                      {isCopilotSending && (
-                        <div className="flex justify-start">
-                          <div className="bg-white dark:bg-card-dark border border-gray-100 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5 shadow-card">
-                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.3s]"></span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.15s]"></span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce"></span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {/* Case Attributes */}
-                    <div className="p-4">
-                      <button className="w-full py-2 flex items-center justify-between text-sm font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-lg text-gray-600">assignment</span>
-                          Case Attributes
-                        </div>
-                        <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
-                      </button>
-                      <div className="grid grid-cols-2 gap-4 mt-3">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Case ID</span>
-                          <span className="text-xs font-bold text-gray-900 dark:text-white" title={selectedConv.id}>{selectedConv.caseId}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Order ID</span>
-                          <span className="text-xs font-bold text-gray-900 dark:text-white" title={selectedConv.orderId}>{truncateMiddle(selectedConv.orderId, 22)}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Assignee</span>
-                          <span className="text-xs font-bold text-gray-900 dark:text-white">{selectedConv.assignee || 'Unassigned'}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Assigned Team</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedConv.assignedTeam}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Case Type</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedConv.caseType}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Priority</span>
-                          <span className={`text-xs font-bold ${selectedConv.priority === 'high' ? 'text-red-600' : 'text-green-600'}`}>{selectedConv.priority === 'high' ? 'High' : 'Normal'}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Approval Status</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedConv.approvalStatus}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Last Sync</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{formatAbsoluteTime(selectedInboxView?.case?.updatedAt) || selectedConv.lastSync}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">Channel</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{getChannelLabel(selectedConv.channel)}</span>
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] uppercase tracking-wider text-gray-500">SLA</span>
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{selectedConv.slaStatus} · {selectedConv.slaTime}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Operational Links */}
-                    <div className="p-4">
-                      <button className="w-full py-2 flex items-center justify-between text-sm font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-lg text-gray-600">link</span>
-                          Operational Links
-                        </div>
-                        <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
-                      </button>
-                      <div className="space-y-2 mt-2">
-                        {operationalLinks.length > 0 ? operationalLinks.map(link => (
-                          <a
-                            key={link.label}
-                            href={link.href}
-                            target={link.href === '#' ? undefined : '_blank'}
-                            rel="noreferrer"
-                            className="flex items-center justify-between gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-xs text-blue-600 dark:text-blue-400 border border-transparent hover:border-blue-100 transition-all"
-                          >
-                            <span className="truncate">{link.label}</span>
-                            <span className="material-symbols-outlined text-sm flex-shrink-0">open_in_new</span>
-                          </a>
-                        )) : (
-                          <p className="text-xs text-gray-400 italic p-2">No operational links available for this case yet.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Related Cases */}
-                    <div className="p-4">
-                      <button className="w-full py-2 flex items-center justify-between text-sm font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-lg text-gray-600">history</span>
-                          Related Cases
-                        </div>
-                        <span className="material-symbols-outlined text-lg text-gray-400">expand_more</span>
-                      </button>
-                      <div className="space-y-2 mt-2">
-                        {selectedConv.relatedCases && selectedConv.relatedCases.length > 0 ? (
-                          selectedConv.relatedCases.map(rc => (
-                            <div key={rc.id} className="p-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="text-xs font-bold text-gray-900 dark:text-white">{rc.id}</span>
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{rc.status}</span>
-                              </div>
-                              <p className="text-[10px] text-gray-500">{rc.type}</p>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-xs text-gray-400 italic p-2">No related cases found.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Internal Notes */}
-                    <div className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                          <span className="material-symbols-outlined text-lg text-gray-600">sticky_note_2</span>
-                          Internal Notes
-                        </h3>
-                        <button
-                          onClick={() => setComposeMode('internal')}
-                          className="text-xs text-secondary font-bold hover:underline"
-                        >
-                          + Add Note
-                        </button>
-                      </div>
-                      <div className="space-y-3">
-                        {selectedInboxView?.internalNotes?.length ? selectedInboxView.internalNotes.map((note: any) => (
-                          <div key={note.id} className="p-3 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-100 dark:border-yellow-800/20">
-                            <p className="text-xs text-yellow-900 dark:text-yellow-100 leading-relaxed italic">
-                              "{note.content}"
-                            </p>
-                            <div className="mt-2 flex justify-between items-center text-[10px] text-yellow-700/70">
-                              <span>{note.createdBy || 'Internal Note'}</span>
-                              <span>{formatTime(note.createdAt)}</span>
-                            </div>
-                          </div>
-                        )) : (
-                          <p className="text-xs text-gray-400 italic p-2">No internal notes yet.</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Copilot Input Area — only for Copilot tab */}
-              {rightTab === 'copilot' && <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-card-dark flex-shrink-0">
-                <div className="relative bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-2 focus-within:ring-2 focus-within:ring-secondary/20 focus-within:border-secondary transition-all shadow-card">
-                  <button className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"><span className="material-symbols-outlined text-[20px]">auto_awesome</span></button>
-                  <input
-                    value={copilotInput}
-                    onChange={(event) => setCopilotInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
-                        event.preventDefault();
-                        handleCopilotSubmit();
-                      }
-                    }}
-                    disabled={!selectedConv || isCopilotSending}
-                    className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-sm text-gray-800 dark:text-gray-200 px-2 h-9 disabled:opacity-50"
-                    placeholder="Ask Copilot about this case..."
-                    type="text"
-                  />
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setCopilotSortOrder(o => o === 'asc' ? 'desc' : 'asc')}
-                      title={`Sort: ${copilotSortOrder === 'asc' ? 'oldest first' : 'newest first'}`}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">{copilotSortOrder === 'asc' ? 'sort' : 'sort'}</span>
-                    </button>
-                    <button
-                      onClick={handleCopilotSubmit}
-                      disabled={!copilotInput.trim() || isCopilotSending}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg disabled:opacity-40"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">arrow_upward</span>
-                    </button>
-                  </div>
-                </div>
-              </div>}
-            </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gray-50/50 dark:bg-black/10">
-              <span className="material-symbols-outlined text-5xl text-gray-200 mb-4">analytics</span>
-              <p className="text-sm text-gray-400 italic">Select a case to view operational details and AI-powered insights.</p>
+      {/* Conversation items */}
+      <div className="flex flex-col">
+        {CONVERSATIONS.map(conv => (
+          <button
+            key={conv.id}
+            onClick={() => onSelect(conv.id)}
+            className={`flex items-start gap-3 px-4 py-3 text-left border-b transition-colors ${
+              selected === conv.id ? 'bg-indigo-50 border-indigo-100' : 'hover:bg-gray-50 border-gray-100'
+            }`}
+          >
+            <div className={`flex-shrink-0 w-8 h-8 rounded-full ${conv.channelColor} flex items-center justify-center text-white text-sm font-semibold mt-0.5`}>
+              {conv.channelInitial}
             </div>
-          )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-900 truncate">{conv.contact}</span>
+                <span className="text-xs text-gray-400 flex-shrink-0 ml-1">{conv.time}</span>
+              </div>
+              <p className="text-xs text-gray-500 truncate mt-0.5">{conv.preview}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Bottom pagination controls */}
+      <div className="mt-auto px-4 py-3 flex items-center gap-2 border-t border-gray-100">
+        <button className="flex items-center justify-center w-7 h-7 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+          </svg>
+        </button>
+        <button className="flex items-center justify-center w-7 h-7 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Component: Conversation View ─────────────────────────────────────────────
+interface ConvViewProps {
+  conv: typeof CONVERSATIONS[0];
+}
+
+function ConversationView({ conv }: ConvViewProps) {
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const menuItems = [
+    { icon: <IconPersonAdd />, label: 'Administrar participantes' },
+    { icon: <IconMerge />, label: 'Fusionar con...', shortcut: 'Ctrl Shift M' },
+    { icon: <IconNewConv />, label: 'Nueva conversación' },
+    { icon: <IconDownload />, label: 'Exportar conversación como texto' },
+    { icon: <IconDownload />, label: 'Exportar conversación como PDF' },
+    { icon: <IconEye />, label: 'Mostrar eventos de conversación', shortcut: 'Ctrl Shift E' },
+  ];
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full" style={{ background: '#fff' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+        <span className="font-semibold text-gray-900">{conv.channel}</span>
+        <div className="flex items-center gap-1">
+          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-400"><IconStar /></button>
+          <div className="relative">
+            <button
+              onClick={() => setShowDropdown(!showDropdown)}
+              className={`p-1.5 rounded hover:bg-gray-100 text-gray-400 ${showDropdown ? 'bg-gray-100' : ''}`}
+            >
+              <IconDots />
+            </button>
+            {showDropdown && (
+              <div
+                className="absolute right-0 top-full mt-1 w-64 rounded-xl shadow-lg border border-gray-100 bg-white py-1 z-50"
+                onMouseLeave={() => setShowDropdown(false)}
+              >
+                {menuItems.map((item, i) => (
+                  <button
+                    key={i}
+                    className="flex items-center gap-3 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                  >
+                    <span className="text-gray-400 flex-shrink-0">{item.icon}</span>
+                    <span className="flex-1">{item.label}</span>
+                    {item.shortcut && (
+                      <span className="text-xs text-gray-400">{item.shortcut}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-400"><IconGrid /></button>
+          <button className="p-1.5 rounded hover:bg-gray-100 text-gray-400"><IconMoon /></button>
+          <button className="w-7 h-7 rounded-full bg-gray-800 flex items-center justify-center text-white text-xs font-bold">H</button>
+        </div>
+      </div>
+
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4" onClick={() => setShowDropdown(false)}>
+        {conv.messages.map(msg => (
+          <div key={msg.id} className="flex flex-col gap-3">
+            {/* Message bubble */}
+            <div className="rounded-xl border border-gray-100 p-4 text-sm text-gray-700 leading-relaxed max-w-lg" style={{ background: '#f9fafb' }}>
+              {msg.content.split('\n\n').map((para, i) => (
+                <p key={i} className={i > 0 ? 'mt-3' : ''}>{para}</p>
+              ))}
+              {msg.link && (
+                <a href={msg.link.href} className="text-indigo-600 underline mt-2 block">{msg.link.label}</a>
+              )}
+            </div>
+            {/* Timestamp */}
+            <div className="flex items-center gap-2">
+              <div className={`w-6 h-6 rounded-full ${msg.avatarColor} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                {msg.avatar}
+              </div>
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <span>💬</span> {msg.time}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Reply bar */}
+      <div className="border-t border-gray-100 flex-shrink-0" onClick={() => setShowDropdown(false)}>
+        {/* Mode selector */}
+        <div className="flex items-center px-4 py-2 border-b border-gray-100">
+          <button className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900">
+            <IconReply />
+            <span>Responder</span>
+            <IconChevronDown2 />
+          </button>
+        </div>
+        {/* Composer */}
+        <div className="px-4 py-3">
+          <div className="text-sm text-gray-400 mb-3">Usa Ctrl+K para atajos</div>
+          <div className="flex items-center justify-between">
+            <button className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+              <IconBolt />
+            </button>
+            <button className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-700 border border-gray-200 hover:bg-gray-50">
+              <IconSend />
+              <span>Enviar</span>
+              <IconChevronDown2 />
+            </button>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
 
-    {/* ── Case merge modal ─────────────────────────────────────────────── */}
-    {showMergeModal && selectedConv && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Merge case</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            This case (<span className="font-medium">{(selectedConv as any).caseId ?? selectedConv.id}</span>) will be merged
-            <em> into</em> the target. Enter the target case ID.
-          </p>
-          <input
-            type="text"
-            placeholder="Target case ID (e.g. case-uuid)"
-            value={mergeTargetId}
-            onChange={e => setMergeTargetId(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4"
-          />
-          <div className="flex gap-3 justify-end">
+// ─── Component: Right Info Panel ──────────────────────────────────────────────
+interface RightPanelProps {
+  tab: RightTab;
+  onTab: (t: RightTab) => void;
+  conv: typeof CONVERSATIONS[0];
+}
+
+function RightPanel({ tab, onTab, conv }: RightPanelProps) {
+  const [linksExpanded, setLinksExpanded] = useState(true);
+  const [atribExpanded, setAtribExpanded] = useState(true);
+  const [datosExpanded, setDatosExpanded] = useState(true);
+
+  return (
+    <div
+      className="flex flex-col flex-shrink-0 h-full overflow-y-auto"
+      style={{ width: 280, background: '#fff', borderLeft: '1px solid #e5e7eb' }}
+    >
+      {/* Tabs */}
+      <div className="flex items-center border-b border-gray-100">
+        <div className="flex items-center flex-1">
+          <button
+            onClick={() => onTab('informacion')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'informacion'
+                ? 'border-orange-400 text-gray-900'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Información
+          </button>
+          <button
+            onClick={() => onTab('copilot')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              tab === 'copilot'
+                ? 'border-orange-400 text-gray-900'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Copilot
+          </button>
+        </div>
+        <div className="flex items-center gap-1 px-3">
+          <button className="p-1 rounded hover:bg-gray-100 text-gray-400"><IconExternalLink /></button>
+          <button className="p-1 rounded hover:bg-gray-100 text-gray-400"><IconSplitView /></button>
+        </div>
+      </div>
+
+      {tab === 'informacion' ? (
+        <div className="flex flex-col overflow-y-auto">
+          {/* Asignación */}
+          <div className="px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+              <span>Persona asignada</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[10px] font-bold">H</div>
+                <span className="text-gray-700 font-medium">Hector Vidal Sanche</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>Inbox para el equipo</span>
+              <button className="flex items-center gap-1 text-gray-500 hover:text-gray-700">
+                <span className="text-gray-400"><IconUser /></span>
+                <span>Sin asignar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Enlaces */}
+          <div className="border-b border-gray-100">
             <button
-              onClick={() => setShowMergeModal(false)}
-              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              onClick={() => setLinksExpanded(!linksExpanded)}
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50"
             >
-              Cancel
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400"><IconLinkIcon /></span>
+                <span>Enlaces</span>
+              </div>
+              {linksExpanded ? <IconChevronDown /> : <IconChevronRight />}
             </button>
+            {linksExpanded && (
+              <div className="px-4 pb-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs text-gray-600">
+                  <span>Folio de atención de seguimiento</span>
+                  <button className="text-gray-400 hover:text-gray-700"><IconPlus size={12} /></button>
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-600">
+                  <span>Folios de atención de back-office</span>
+                  <button className="text-gray-400 hover:text-gray-700"><IconPlus size={12} /></button>
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-600">
+                  <span>Conversaciones secundarias</span>
+                  <button className="text-gray-400 hover:text-gray-700"><IconPlus size={12} /></button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Atributos de conversación */}
+          <div className="border-b border-gray-100">
             <button
-              disabled={!mergeTargetId.trim() || merging}
-              onClick={async () => {
-                if (!mergeTargetId.trim()) return;
-                setMerging(true);
-                try {
-                  await casesApi.merge(mergeTargetId.trim(), selectedConv.id);
-                  setShowMergeModal(false);
-                  setRefreshKey(k => k + 1);
-                  showFeedback('Case merged successfully');
-                } catch {
-                  showFeedback('Merge failed — check the target case ID', true);
-                } finally {
-                  setMerging(false);
-                }
-              }}
-              className="px-4 py-2 text-sm font-semibold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-colors"
+              onClick={() => setAtribExpanded(!atribExpanded)}
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50"
             >
-              {merging ? 'Merging…' : 'Merge'}
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
+                </span>
+                <span>Atributos de conversación</span>
+              </div>
+              {atribExpanded ? <IconChevronDown /> : <IconChevronRight />}
+            </button>
+            {atribExpanded && (
+              <div className="px-4 pb-3 flex flex-col gap-2">
+                {[
+                  { label: 'Título de IA', value: '—' },
+                  { label: 'ID', value: '215474178470870' },
+                  { label: 'Empresa', value: '[Demo]', icon: <IconBuilding /> },
+                  { label: 'Marca', value: 'Acme' },
+                  { label: 'Tema', value: null, action: '+ Agregar' },
+                  { label: 'CX Score rating', value: '—' },
+                  { label: 'CX Score explanat...', value: '—' },
+                ].map((row, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">{row.label}</span>
+                    <div className="flex items-center gap-1 text-xs text-gray-700 font-medium">
+                      {row.icon && <span className="text-gray-400">{row.icon}</span>}
+                      {row.action
+                        ? <button className="text-xs text-indigo-600 hover:text-indigo-800">{row.action}</button>
+                        : <span>{row.value}</span>
+                      }
+                    </div>
+                  </div>
+                ))}
+                <button className="text-xs text-indigo-600 hover:text-indigo-800 text-left mt-1">Ver todo</button>
+              </div>
+            )}
+          </div>
+
+          {/* Temas */}
+          <div className="px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-gray-900">Temas</span>
+            </div>
+            <button className="flex items-center justify-center w-6 h-6 rounded border border-gray-200 text-gray-400 hover:bg-gray-50 text-sm">+</button>
+          </div>
+
+          {/* Datos del usuario */}
+          <div className="border-b border-gray-100">
+            <button
+              onClick={() => setDatosExpanded(!datosExpanded)}
+              className="flex items-center justify-between w-full px-4 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400"><IconUser /></span>
+                <span>Datos del usuario</span>
+              </div>
+              {datosExpanded ? <IconChevronDown /> : <IconChevronRight />}
+            </button>
+            {datosExpanded && (
+              <div className="px-4 pb-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">Nombre</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-700 font-medium">{conv.channel}</span>
+                    <button className="text-gray-400 hover:text-gray-600">
+                      <IconDots />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">Empresa</span>
+                  <span className="text-xs text-gray-700 font-medium">[Demo]</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Copilot tab */
+        <div className="flex flex-col h-full">
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <h3 className="font-semibold text-gray-900 text-sm mb-2">Hola, qué tal?</h3>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Copilot no pudo encontrar una respuesta en el centro de conocimiento de su equipo o en el historial de conversaciones. Por favor, reformule o{' '}
+              <a href="#" className="text-indigo-600 underline">agregue contenido</a> para ayudar a Copilot a responder más preguntas.
+            </p>
+            <button className="mt-3 text-sm text-indigo-600 font-medium hover:text-indigo-800">
+              2 fuentes que podrían ayudar →
+            </button>
+          </div>
+          {/* Copilot input */}
+          <div className="border-t border-gray-100 px-4 py-3 flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Haz una pregunta de seguimiento..."
+              className="flex-1 text-sm text-gray-700 outline-none placeholder-gray-400"
+            />
+            <button className="text-gray-400 hover:text-gray-600">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <line x1="17" y1="10" x2="3" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="3" y2="18" />
+              </svg>
+            </button>
+            <button className="text-indigo-600 hover:text-indigo-800">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Inbox Component ─────────────────────────────────────────────────────
+interface InboxProps {
+  focusCaseId?: string | null;
+  onNavigate?: (page: string) => void;
+}
+
+export default function Inbox({ focusCaseId, onNavigate }: InboxProps) {
+  const [activeNavItem, setActiveNavItem] = useState('bandeja');
+  const [selectedConv, setSelectedConv] = useState(CONVERSATIONS[0].id);
+  const [rightTab, setRightTab] = useState<RightTab>('informacion');
+
+  const currentConv = CONVERSATIONS.find(c => c.id === selectedConv) ?? CONVERSATIONS[0];
+
+  const handleNavigate = (page: string) => {
+    if (onNavigate) onNavigate(page);
+  };
+
+  return (
+    <div className="flex flex-col h-full w-full overflow-hidden" style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}>
+      {/* Trial banner */}
+      <TrialBanner />
+
+      {/* Main content */}
+      <div className="flex flex-1 min-h-0">
+        {/* Icon sidebar */}
+        <IconSidebar onNavigate={handleNavigate} />
+
+        {/* Inbox navigation */}
+        <InboxNav activeNavItem={activeNavItem} onNavItem={setActiveNavItem} />
+
+        {/* Conversation list */}
+        <ConversationList selected={selectedConv} onSelect={setSelectedConv} />
+
+        {/* Conversation detail */}
+        <ConversationView conv={currentConv} />
+
+        {/* Right info panel */}
+        <RightPanel tab={rightTab} onTab={setRightTab} conv={currentConv} />
       </div>
-    )}
-    </>
+    </div>
   );
 }

@@ -350,9 +350,12 @@ app.get(/^\/app(\/.*)?$/, (_req, res, next) => {
 //   /v2/*.html    → no cache (route entry).
 function landingCacheHeaders(res: import('express').Response, filePath: string) {
   if (/[/\\]assets[/\\]/.test(filePath)) {
+    // Content-addressed Figma exports — never need revalidation.
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   } else if (/\.(js|css|svg)$/.test(filePath)) {
-    res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+    // Dev server: no client cache so iterating .jsx → .js always shows up.
+    // Production cache headers are set by vercel.json and override this.
+    res.setHeader('Cache-Control', 'no-cache');
   } else if (/\.html?$/.test(filePath)) {
     res.setHeader('Cache-Control', 'no-cache');
   }

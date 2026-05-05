@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 import Sidebar from './components/Sidebar';
 import Inbox from './components/Inbox';
+import Contacts from './components/Contacts';
 import Home from './components/Home';
 import AIStudio from './components/AIStudio';
 import Workflows from './components/Workflows';
@@ -191,7 +192,17 @@ export default function App() {
   // then check session + subscribe to auth state changes.
   const [authReady, setAuthReady] = useState(false);
 
+  // Dev-only: skip all auth gates when VITE_SKIP_AUTH=true
+  const skipAuth = (import.meta as any).env?.VITE_SKIP_AUTH === 'true';
+
   useEffect(() => {
+    if (skipAuth) {
+      setAuthenticated(true);
+      setHasMembership(true);
+      setAccessSnapshot({ canUseApp: true, reason: null, status: 'active', trialUsed: false, canActivateTrial: false });
+      setAuthReady(true);
+      return;
+    }
     let sub: { unsubscribe: () => void } | null = null;
 
     (async () => {
@@ -399,6 +410,43 @@ export default function App() {
     [navigationTarget],
   );
 
+  // Dev-only: skip all auth gates immediately and render the full app
+  if (skipAuth) {
+    return (
+      <div className="font-sans h-screen flex overflow-hidden" style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}>
+          <main className="flex-1 flex flex-col h-full min-w-0 relative">
+            <PageErrorBoundary page={currentPage}>
+              {currentPage === 'inbox' && <Inbox focusCaseId={pageFocus.caseId} onNavigate={navigate} />}
+              {currentPage === 'contacts' && <Contacts onNavigate={navigate} />}
+              {currentPage === 'super_agent' && <SuperAgent onNavigate={navigate} activeTarget={navigationTarget} />}
+              {currentPage === 'home' && <Home onNavigate={navigate} />}
+              {currentPage === 'ai_studio' && <AIStudio />}
+              {currentPage === 'workflows' && <Workflows onNavigate={navigate} focusWorkflowId={pageFocus.workflowId} />}
+              {currentPage === 'approvals' && <Approvals onNavigate={navigate} focusApprovalId={pageFocus.approvalId} />}
+              {currentPage === 'knowledge' && <Knowledge />}
+              {currentPage === 'customers' && <Customers onNavigate={navigate} focusCustomerId={pageFocus.customerId} />}
+              {currentPage === 'tools_integrations' && <ToolsIntegrations />}
+              {currentPage === 'reports' && <Reports />}
+              {currentPage === 'settings' && <Settings onNavigate={navigate} initialSection={navigationTarget.section} />}
+              {currentPage === 'upgrade' && <Upgrade />}
+              {currentPage === 'profile' && <Profile onNavigate={navigate} initialSection={navigationTarget.section} />}
+              {currentPage === 'orders' && <Orders onNavigate={navigate} focusEntityId={pageFocus.orderId} focusSection={navigationTarget.section} />}
+              {currentPage === 'returns' && <Returns onNavigate={navigate} focusEntityId={pageFocus.returnId} focusSection={navigationTarget.section} />}
+              {currentPage === 'payments' && <Payments onNavigate={navigate} focusEntityId={pageFocus.paymentId} focusSection={navigationTarget.section} />}
+              {currentPage === 'case_graph' && <CaseGraph onPageChange={(target) => {
+                if (typeof target === 'string') {
+                  navigate(target, target === 'case_graph' ? pageFocus.caseId : null);
+                } else {
+                  navigate(target);
+                }
+              }} focusCaseId={pageFocus.caseId} />}
+            </PageErrorBoundary>
+          </main>
+          <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={navigate} />
+      </div>
+    );
+  }
+
   // Loading auth state (includes runtime config fetch on first load)
   if (!authReady || authenticated === null) {
     return (
@@ -410,7 +458,8 @@ export default function App() {
 
   // Unauthenticated — redirect back to the landing if auth is enabled.
   // supabaseAuthEnabled is updated at runtime after ensureSupabaseClient().
-  const hasSupabaseAuth = supabaseAuthEnabled;
+  const isDemoPreview = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === '1' && (import.meta as any).env?.DEV;
+  const hasSupabaseAuth = supabaseAuthEnabled && !isDemoPreview;
   if (hasSupabaseAuth && !authenticated) {
     // If we're at /app and not logged in, send them to the landing signin
     window.location.href = '/#/signin';
