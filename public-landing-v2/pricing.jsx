@@ -62,28 +62,35 @@
           <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.name}</h3>
           <p className="m-0 mt-[10px] text-[13px] leading-[19.6px] min-h-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle || ' '}</p>
           <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.description}</p>
-          {/* price block — strikethrough MSRP small on top, then "From €42 per team/mo" as one cohesive line. Sits at the bottom of the fixed top-area so all CTAs align across columns. */}
-          <div className="mt-auto" style={{ height: 60 }}>
+          {/* price block — two columns:
+                LEFT  → "From" on top, strikethrough MSRP below
+                RIGHT → big current price on top, "per team/mo" below */}
+          <div className="mt-auto flex items-start justify-between" style={{ height: 60 }}>
             {plan.seatPrice && (
-              <div className="flex flex-col gap-[6px]">
-                {plan.originalPrice && (
-                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through', textDecorationThickness: '1px' }}>{plan.originalPrice}/mo</span>
-                )}
-                <div className="flex items-baseline gap-[6px] flex-wrap">
-                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>From</span>
-                  <span className="text-[28px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
-                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+              <>
+                <div className="flex flex-col gap-[4px]">
+                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>From</span>
+                  {plan.originalPrice && (
+                    <span className="text-[13px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through', textDecorationThickness: '1px' }}>{plan.originalPrice}/mo</span>
+                  )}
                 </div>
-              </div>
+                <div className="flex flex-col items-end gap-[4px]">
+                  <span className="text-[28px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
+                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+                </div>
+              </>
             )}
             {plan.isBusiness && (
-              <div className="flex flex-col gap-[6px]">
-                <div className="flex items-baseline gap-[6px]">
-                  <span className="text-[28px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
-                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>pricing</span>
+              <>
+                <div className="flex flex-col gap-[4px]">
+                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Pricing</span>
+                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>by contract</span>
                 </div>
-                <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Negotiated by contract</span>
-              </div>
+                <div className="flex flex-col items-end gap-[4px]">
+                  <span className="text-[28px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
+                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>negotiated</span>
+                </div>
+              </>
             )}
             {plan.noSeats && !plan.isBusiness && (
               <div className="flex flex-col gap-[2px]">
@@ -333,7 +340,7 @@
                       <Bullet>Scale — 60,000 credits / month</Bullet>
                       <Bullet>Top-ups available; consumed after monthly allowance</Bullet>
                     </ul>
-                    <div className="mt-auto pt-[64px]">
+                    <div className="mt-auto pt-[32px]">
                       <button onClick={() => ClainV2.navigate('/all-features#credits')} className="cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
                         <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Buy credit packs</span>
                       </button>
@@ -353,7 +360,7 @@
                       <Bullet>Scale — 20 seats included (€19 / extra seat)</Bullet>
                       <Bullet>Lite collaborators — unlimited, free</Bullet>
                     </ul>
-                    <div className="mt-auto pt-[64px]">
+                    <div className="mt-auto pt-[32px]">
                       <button onClick={() => ClainV2.navigate('/all-features#seats')} className="cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
                         <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Manage seats</span>
                       </button>
