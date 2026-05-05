@@ -105,6 +105,7 @@
       { slug: '/copilot',         name: 'Copilot' },
       { slug: '/pricing',         name: 'Pricing' },
       { slug: '/ai-agent/slack',  name: 'AI Agent for Slack' },
+      { slug: '/startups',        name: 'Features' },
     ],
   };
 

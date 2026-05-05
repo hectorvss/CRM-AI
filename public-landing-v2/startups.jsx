@@ -1,343 +1,755 @@
 /* global React, ClainV2 */
-/* AUTO-GENERATED from Figma extraction with placeholder copy.
-   See scripts/figma-build-placeholders.py
-   Long-form marketing text has been replaced by `__COPY_PAGE_NNN__`
-   tokens. Source-of-truth mapping in public-landing-v2/_copy_manifest.json */
+/* Features (Startups Early Stage Program) page — extracted from Figma node 2:7722
+   8 sections + final CTA. Linked from "Features" entry in nav dropdown. */
 (function () {
   const { PageShell } = ClainV2;
-  const Component = ({ className, variant, ...rest }) => (
-    <div className={className} data-figma-component={variant ?? 'default'} {...rest} />
-  );
-  const imgVector = "/v2/assets/fcc32a6372b3e597f84d8096d416902c9bf995ff.svg";
-  const imgVector1 = "/v2/assets/1d1c76813f25f7ee00370f391d0c60c8946f230e.svg";
-  const imgEarlyStageHeroBgTrees = "/v2/assets/97a7ed3f6441bd6c4ce87cf4fe0dc875ce90c680.png";
-  const imgEarlyStageHeroForegroundImage = "/v2/assets/7c339321d9493a753873039ddbeb76d33d1a8f58.png";
-  const imgFinProductShotBackgroundWebp = "/v2/assets/566e56a9838acf2d12161de02da8b24222e5c741.png";
-  const imgFinProductShotForegroundWebp = "/v2/assets/338ee1bb86ce79b9fc3992c71a224a3144639505.png";
 
-  function StartupsPage() {
+  // FEATURES (Startups) — HERO section (Figma node 2:6663)
+  // Layout: 2-column grid (text left + image right)
+  const featHeroImgVector  = "/v2/assets/07fbbe05-828d-4e9e-acc1-7b95e78bc123.svg";
+  const featHeroImgVector1 = "/v2/assets/3831d266-6dc8-475e-b703-dd9ef65f655f.svg";
+  const featHeroImgBgTrees = "/v2/assets/4ca4ca4f-48f9-4bb9-ba68-6b8f023e1a37.jpg";
+  const featHeroImgFg      = "/v2/assets/e72a131a-ed35-41e2-944e-00055aad0cb3.png";
+
+  function FeatHeroDottedSpacer() {
     return (
-      <PageShell>
-        <div className="figma-page">
-          <div className="gap-x-[56px] gap-y-[56px] grid grid-cols-[repeat(2,minmax(0,1fr))] grid-rows-[_668px] px-[24px] relative size-full" data-node-id="2:6663" data-name="section.hero__JL3bA">
-      <div className="col-1 gap-x-[32px] gap-y-[32px] grid grid-cols-[repeat(1,minmax(0,1fr))] grid-rows-[___303.39px_14px_152.38px] h-[533.77px] justify-self-stretch relative row-1 shrink-0" data-node-id="2:6664" data-name="div.hero_content__fPtqo">
-        <div className="col-1 content-stretch flex flex-col gap-[var(--item-spacing\/30_79,30.795px)] items-start justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:6665" data-name="div.hero_heading__Ds8YC">
-          <div className="bg-[var(--color\/orange\/89,#e8e4dc)] content-stretch flex items-center px-[9px] py-[5px] relative rounded-[16px] shrink-0 w-[168.34px]" data-node-id="2:6667" data-name="div.badge__UtuQ3">
-            <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Bold',sans-serif)] font-[var(--font-weight\/700,700)] justify-center leading-[0] not-italic relative shrink-0 text-[15.1px] text-[color:var(--color\/red\/7,#17100e)] whitespace-nowrap" data-node-id="2:6670">
-              <p className="leading-[var(--line-height\/16,16px)]">Early Stage Program</p>
-            </div>
-          </div>
-          <div className="content-stretch flex flex-col items-start max-w-[952.1519775390625px] pb-[0.595px] relative shrink-0 w-full" data-node-id="2:6672" data-name="h1.display__Ajr5Q">
-            <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Light',sans-serif)] font-[var(--font-weight\/300,300)] justify-center leading-[0] not-italic relative shrink-0 text-[79.9px] text-[color:var(--color\/black\/solid,black)] tracking-[var(--letter-spacing\/-4_09,-4.09px)] w-full" data-node-id="2:6674">
-              <p className="leading-[var(--line-height\/81_8,81.8px)] mb-0">Startups get 90%</p>
-              <p className="leading-[var(--line-height\/81_8,81.8px)] mb-0">off Intercom + 1</p>
-              <p className="leading-[var(--line-height\/81_8,81.8px)]">year of Fin free</p>
-            </div>
-          </div>
+      <div className="opacity-100 overflow-clip relative size-[12px]">
+        <div className="absolute inset-0 opacity-100">
+          <img alt="" className="absolute block inset-0 max-w-none size-full" src={featHeroImgVector} />
         </div>
-        <div className="col-1 content-stretch flex flex-col h-[14px] items-start justify-self-stretch opacity-[var(--line-height\/20,0.2)] overflow-clip relative row-2 shrink-0" data-node-id="2:6679" data-name="div.dotted_line__v2JjZ">
-          <Component className="opacity-[var(--opacity\/100,1)] overflow-clip relative shrink-0 size-[12px]" />
+        <div className="absolute inset-[37.5%] opacity-100">
+          <img alt="" className="absolute block inset-0 max-w-none size-full" src={featHeroImgVector1} />
         </div>
-        <div className="col-1 content-stretch flex flex-col gap-[var(--item-spacing\/32,32px)] items-start justify-self-stretch relative row-3 self-start shrink-0" data-node-id="2:6683" data-name="div.hero_description__UK6Q5">
-          <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:6684" data-name="p.text__NkKDj">
-            <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[16.5px] text-[color:var(--color\/black\/solid,black)] w-full" data-node-id="2:6685">
-              <p className="leading-[var(--line-height\/21_6,21.6px)] mb-0">Clain is the customer service platform built around an autonomous AI agent that.</p>
-              <p className="leading-[var(--line-height\/21_6,21.6px)] mb-0">{`Built for teams who measure success in resolution rate, not response time.`}</p>
-              <p className="leading-[var(--line-height\/21_6,21.6px)] mb-0">Every conversation in Clain trains the next one — your knowledge, your.</p>
-              <p className="leading-[var(--line-height\/21_6,21.6px)]">reduced costs.</p>
+      </div>
+    );
+  }
+
+  function FeaturesHero() {
+    return (
+      <div className="grid grid-cols-2 gap-[56px] grid-rows-[668px] px-[24px] relative w-full" data-node-id="2:6663">
+        {/* Left column — content */}
+        <div className="grid gap-[32px] grid-cols-1 grid-rows-[303.39px_14px_152.38px] h-[533.77px] justify-self-stretch relative row-1 shrink-0">
+          {/* Heading + badge */}
+          <div className="content-stretch flex flex-col gap-[30.795px] items-start justify-self-stretch relative row-1 self-start shrink-0">
+            {/* Badge "Early Stage Program" */}
+            <div className="bg-[#e8e4dc] content-stretch flex items-center px-[9px] py-[5px] relative rounded-[16px] shrink-0 w-[168.34px]">
+              <p className="m-0 text-[15.1px] text-[#17100e] whitespace-nowrap leading-[16px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>Early Stage Program</p>
+            </div>
+            {/* H1 — 3 lines */}
+            <div className="content-stretch flex flex-col items-start max-w-[952.15px] pb-[0.595px] relative shrink-0 w-full">
+              <p className="m-0 text-[79.9px] text-black tracking-[-4.09px] w-full" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, lineHeight: '81.8px' }}>
+                <span style={{ display: 'block' }}>Startups get 90%</span>
+                <span style={{ display: 'block' }}>off Clain + 1</span>
+                <span style={{ display: 'block' }}>year of Clain free</span>
+              </p>
             </div>
           </div>
-          <div className="content-stretch flex h-[34px] items-start relative shrink-0 w-full" data-node-id="2:6688" data-name="div.ctas__qwBVw">
-            <a className="content-stretch cursor-pointer flex flex-col items-start relative self-stretch shrink-0 w-[97px]" href="/signup" data-node-id="2:6689" target="_blank" data-name="Component 2">
-              <div className="bg-[var(--color\/red\/7,#17100e)] border-[length:var(--stroke-weight\/1,1px)] border-[var(--color\/black\/-0\%,rgba(0,0,0,0))] border-solid content-stretch flex flex-col items-center px-[17px] py-[10px] relative rounded-[6px] shrink-0 w-full" data-node-id="I2:6689;2:6437" data-name="span.foreground__FzNcQ">
-                <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Semi_Bold',sans-serif)] font-[var(--font-weight\/600,600)] justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/white\/solid,white)] text-center tracking-[var(--letter-spacing\/-0_35,-0.35px)] whitespace-nowrap" data-node-id="I2:6689;2:6438" role="link" tabIndex="0">
-                  <p className="cursor-pointer leading-[var(--line-height\/14,14px)]">Apply now</p>
+
+          {/* Dotted line spacer */}
+          <div className="content-stretch flex flex-col h-[14px] items-start justify-self-stretch overflow-clip relative row-2 shrink-0" style={{ opacity: 0.2 }}>
+            <FeatHeroDottedSpacer />
+          </div>
+
+          {/* Description + CTA */}
+          <div className="content-stretch flex flex-col gap-[32px] items-start justify-self-stretch relative row-3 self-start shrink-0">
+            <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+              <p className="m-0 text-[16.5px] text-black w-full" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '21.6px' }}>
+                <span style={{ display: 'block' }}>Startups get 93% off the only complete platform for perfect customer service&mdash;Clain AI</span>
+                <span style={{ display: 'block' }}>{`Agent and Clain's Helpdesk. Includes 300 free Clain outcomes and 15 free Clain`}</span>
+                <span style={{ display: 'block' }}>qualifications per month so you can deliver exceptional customer experiences at</span>
+                <span style={{ display: 'block' }}>reduced costs.</span>
+              </p>
+            </div>
+            <div className="content-stretch flex items-start relative shrink-0 w-full">
+              <a onClick={() => ClainV2.navigate('/signup')} className="content-stretch cursor-pointer flex flex-col items-start relative self-stretch shrink-0">
+                <div className="bg-[#17100e] content-stretch flex flex-col items-center px-[17px] py-[10px] relative rounded-[6px] shrink-0 w-full" style={{ border: '1px solid rgba(0,0,0,0)' }}>
+                  <p className="m-0 text-[12.9px] text-white text-center tracking-[-0.35px] whitespace-nowrap leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Apply now</p>
                 </div>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Right column — product visual */}
+        <div className="content-stretch flex flex-col items-start justify-self-stretch relative row-1 self-start shrink-0">
+          <div className="aspect-square relative shrink-0 w-full">
+            {/* Background image (trees) */}
+            <div className="absolute content-stretch flex flex-col inset-0 items-start justify-center overflow-clip">
+              <div className="flex-1 min-h-[668px] min-w-[668px] relative w-full">
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={featHeroImgBgTrees} />
+                </div>
+              </div>
+            </div>
+            {/* Foreground image */}
+            <div className="absolute content-stretch flex flex-col inset-0 items-start overflow-clip">
+              <div className="aspect-square relative shrink-0 w-full">
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  <img alt="" className="absolute left-0 max-w-none size-full top-0" src={featHeroImgFg} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+  // FEATURES — CUSTOMER LOGOS section "Join 10,000+ fast-growing startups using Clain" (Figma node 2:6702)
+  // Heading + horizontal marquee row of customer logos as styled text + Apply now CTA
+  const featLogosImgMask = "/v2/assets/204df16f-d450-4003-a46b-75e7db9eae1e.svg";
+
+  const FEATURES_CUSTOMER_LOGOS = [
+    { name: 'Lovable',     left: 0,      top: 5, weight: 300, size: 30.8, tracking: '-2.56px', textTransform: 'none' },
+    { name: 'Synthesia',   left: 160.14, top: 5, weight: 400, size: 26.6, tracking: '-0.32px', textTransform: 'none' },
+    { name: 'ChatPRD',     left: 345.3,  top: 9, weight: 900, size: 31.5, tracking: '-1.28px', textTransform: 'none' },
+    { name: 'Gamma',       left: 542.72, top: 5, weight: 700, size: 29.9, tracking: '-0.96px', textTransform: 'none' },
+    { name: 'Polymarket',  left: 714.89, top: 0, weight: 400, size: 26,   tracking: '-0.64px', textTransform: 'none' },
+    { name: 'Chess.com',   left: 906.36, top: 4, weight: 400, size: 31,   tracking: '-0.96px', textTransform: 'none' },
+  ];
+
+  function FeaturesCustomerLogosSection() {
+    return (
+      <div className="bg-[#f4f3ec] content-stretch flex flex-col items-center justify-center relative w-full" data-node-id="2:6702">
+        {/* Heading */}
+        <div className="content-stretch flex flex-col items-center max-w-[600px] px-[44.91px] relative shrink-0">
+          <p className="m-0 text-[46.2px] text-black text-center tracking-[-2.309px] whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, lineHeight: '46.17px' }}>
+            <span style={{ display: 'block' }}>{`Join 10,000+ fast-growing `}</span>
+            <span style={{ display: 'block' }}>startups using Clain</span>
+          </p>
+        </div>
+
+        {/* Marquee row */}
+        <div className="content-stretch flex flex-col items-start max-w-[1080px] pt-[48px] relative shrink-0 w-[1080px]">
+          <div className="h-[47px] relative shrink-0 w-full">
+            <div className="absolute content-stretch flex h-[47px] items-start justify-center left-0 right-0 top-0" style={{ maskImage: `url('${featLogosImgMask}')`, WebkitMaskImage: `url('${featLogosImgMask}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskSize: '100% 47px', WebkitMaskSize: '100% 47px', maskPosition: '0% 0px', WebkitMaskPosition: '0% 0px' }}>
+              <div className="flex-1 h-full min-w-px relative">
+                <div className="absolute bottom-0 left-0 top-0 w-[1379.19px]">
+                  {FEATURES_CUSTOMER_LOGOS.map((logo) => (
+                    <div key={logo.name} className="absolute content-stretch flex flex-col items-center px-[8px]" style={{ left: logo.left, top: logo.top, padding: logo.name === 'ChatPRD' ? '3px 8px' : '0px 8px' }}>
+                      <p className="m-0 text-black text-center whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: logo.weight, fontSize: logo.size, lineHeight: 'normal', letterSpacing: logo.tracking }}>{logo.name}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div className="content-stretch flex flex-col items-start pt-[48px] relative shrink-0 w-full">
+          <div className="content-stretch flex flex-col items-center relative shrink-0 w-full">
+            <a onClick={() => ClainV2.navigate('/signup')} className="content-stretch cursor-pointer flex items-start justify-center relative shrink-0">
+              <div className="bg-[#17100e] content-stretch flex flex-col items-center px-[17px] py-[9px] relative rounded-[6px] shrink-0" style={{ border: '1px solid rgba(0,0,0,0)' }}>
+                <p className="m-0 text-[14.6px] text-white text-center tracking-[-0.4px] whitespace-nowrap leading-[16px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Apply now</p>
               </div>
             </a>
           </div>
         </div>
       </div>
-      <div className="col-2 content-stretch flex flex-col items-start justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:6694" data-name="div.hero_media__nV8RR">
-        <div className="aspect-[668/668] relative shrink-0 w-full" data-node-id="2:6695" data-name="div.product_visual__fsg20">
-          <div className="absolute content-stretch flex flex-col inset-0 items-start justify-center overflow-clip" data-node-id="2:6696" data-name="div.background_image__em8RQ">
-            <div className="flex-[1_0_0] min-h-[668px] min-w-[668px] relative w-full" data-node-id="2:6697" data-name="early-stage-hero-bg-trees">
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgEarlyStageHeroBgTrees} />
+    );
+  }
+
+
+  // FEATURES — SAVE YEAR ON YEAR section (Figma node 2:6751)
+  // 3 cards (Year 1 / Year 2 / Year 3) with discounts 93% / 50% / 25%
+  // No image assets — pure structure with yellow highlight bg behind percentages
+
+  function FeaturesSaveYearSection() {
+    const yellowHighlight = {
+      backgroundImage: "linear-gradient(0deg, rgba(246,244,49,0) 9%, rgb(246,244,49) 9%, rgb(246,244,49) 85%, rgba(246,244,49,0) 85%)",
+    };
+    const cards = [
+      { year: 'Year 1', pct: '93%', body: ['for the 1st year—with 300 free Clain outcomes', 'and 15 free Clain qualifications per month.', 'Phone, SMS, and WhatsApp are charged at', 'list price.'] },
+      { year: 'Year 2', pct: '50%', body: ['for the 2nd year—with 150 free Clain outcomes', 'and 15 free Clain qualifications per month.', 'Phone, SMS, and WhatsApp are charged at', 'list price.'] },
+      { year: 'Year 3', pct: '25%', body: ['for the 3rd year—with 75 free Clain outcomes',  'and 15 free Clain qualifications per month.', 'Phone, SMS, and WhatsApp are charged at', 'list price.'] },
+    ];
+    return (
+      <div className="content-stretch flex flex-col items-start px-[120px] relative w-full" data-node-id="2:6751">
+        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-[1200px]">
+          <div className="content-stretch flex flex-col gap-[32px] items-start relative shrink-0 w-full">
+            {/* Heading */}
+            <div className="content-stretch flex flex-col items-center justify-center relative shrink-0 w-full">
+              <div className="content-stretch flex flex-col items-center max-w-[618px] relative shrink-0">
+                <p className="m-0 text-[45.3px] text-black text-center tracking-[-2.309px] whitespace-nowrap leading-[46.17px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>Save year on year</p>
               </div>
             </div>
-            <div className="absolute bg-[var(--color\/red\/7,#17100e)] left-0 opacity-0 size-[668px] top-0" data-node-id="2:6699" data-name="::after" />
-          </div>
-          <div className="absolute content-stretch flex flex-col inset-0 items-start overflow-clip" data-node-id="2:6700" data-name="div.foreground_image__issP7">
-            <div className="aspect-[668/668] relative shrink-0 w-full" data-node-id="2:6701" data-name="early-stage-hero-foreground-image">
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgEarlyStageHeroForegroundImage} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-        <div className="content-stretch flex flex-col gap-[var(--item-spacing\/l,48px)] items-center relative size-full" data-node-id="2:6889" data-name="section.section__Qkzgs">
-      <div className="grid grid-cols-[repeat(1,minmax(0,1fr))] grid-rows-[_138.52px] h-[138.52px] max-w-[1540px] relative shrink-0 w-[960px]" data-node-id="2:6890" data-name="div.content_block__ZrOQg">
-        <div className="col-1 content-stretch flex flex-col items-center justify-center justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:6891" data-name="div#the-highest-performing-ai-agent-natively-integrated-with-the-intercom-helpdesk">
-          <div className="content-stretch flex flex-col items-center max-w-[698.6439819335938px] px-[81.33px] relative shrink-0" data-node-id="2:6892" data-name="h2.display__Ajr5Q">
-            <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Light',sans-serif)] font-[var(--font-weight\/300,300)] justify-center leading-[0] not-italic relative shrink-0 text-[46px] text-[color:var(--color\/black\/solid,black)] text-center tracking-[var(--letter-spacing\/-2_31,-2.309px)] whitespace-nowrap" data-node-id="2:6894">
-              <p className="leading-[var(--line-height\/46_17,46.17px)] mb-0">Built for AI-first teams</p>
-              <p className="leading-[var(--line-height\/46_17,46.17px)] mb-0">One platform, every channel</p>
-              <p className="leading-[var(--line-height\/46_17,46.17px)]">Resolve before you route</p>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-[1200px]" data-node-id="2:6896" data-name="div.container__Etr3H">
-        <div className="gap-x-[120px] gap-y-[120px] grid grid-cols-[__minmax(0,1.26fr)_minmax(0,1fr)] grid-rows-[repeat(1,minmax(0,1fr))] h-[719.19px] relative rounded-[8px] shrink-0 w-full" data-node-id="2:6897" data-name="div.product_card_layout__w_Kna">
-          <div className="col-2 grid grid-cols-[_456.64px] grid-rows-[_719.19px] h-[719.19px] justify-self-stretch relative row-1 shrink-0" data-node-id="2:6898" data-name="div.product_card_region__qUtdi">
-            <div className="col-1 gap-x-[16px] gap-y-[16px] grid grid-cols-[repeat(1,minmax(0,1fr))] grid-rows-[__128.25px_149.52px] h-[293.77px] justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:6899" data-name="div.trigger_list__w8Xci">
-              <div className="col-1 content-stretch flex flex-col gap-[var(--item-spacing\/3_99,3.99px)] items-start justify-self-stretch pt-[20px] relative row-1 self-start shrink-0" data-node-id="2:6900" data-name="button#trigger-fin-ai-agent">
-                <div className="absolute bg-[var(--color\/red\/7-20\%,rgba(23,16,14,0.2))] h-[2px] left-0 right-0 top-0" data-node-id="2:6901" data-name="div.trigger_progress_bg__hW850" />
-                <div className="absolute bg-[var(--color\/red\/7,#17100e)] h-[2px] left-0 right-0 top-0" data-node-id="2:6902" data-name="div.trigger_progress_bar__EZ1fD" />
-                <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:6903" data-name="span.trigger_title__tS4V8">
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Bold',sans-serif)] font-[var(--font-weight\/700,700)] justify-center leading-[0] not-italic relative shrink-0 text-[15.1px] text-[color:var(--color\/red\/7,#17100e)] tracking-[var(--letter-spacing\/-0_16,-0.16px)] w-full" data-node-id="2:6904">
-                    <p className="leading-[var(--line-height\/19_2,19.2px)]">Fin AI Agent</p>
+
+            {/* 3 cards */}
+            <div className="grid grid-cols-12 gap-[24px] grid-rows-[287.34px] h-[287.34px] relative shrink-0 w-full">
+              {cards.map((c, i) => (
+                <div key={c.year} className="border-[1px] border-[rgba(23,16,14,0.4)] border-solid col-span-4 content-stretch flex flex-col items-start justify-self-stretch p-[25px] relative row-1 self-start shrink-0">
+                  {/* Year + discount */}
+                  <div className="relative shrink-0 w-full">
+                    <div className="content-stretch flex flex-col gap-[31.99px] items-start pb-[20px] relative size-full">
+                      <div className="border-[rgba(23,16,14,0.4)] border-b-[1px] border-solid content-stretch flex flex-col items-start pb-[17px] relative shrink-0 w-full">
+                        <p className="m-0 text-[14.9px] text-black whitespace-nowrap leading-[19.2px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>{c.year}</p>
+                      </div>
+                      <div className="content-stretch flex h-[33.41px] items-center pb-[1.41px] relative shrink-0 w-full">
+                        {/* Discount % with yellow highlight */}
+                        <div className="content-stretch flex items-start py-[3px] relative shrink-0" style={yellowHighlight}>
+                          <p className="m-0 text-[30.4px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>{c.pct}</p>
+                        </div>
+                        <p className="m-0 text-[33.4px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>{` discount`}</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="h-[85.06px] relative shrink-0 w-full" data-node-id="2:6906" data-name="span.trigger_description__QgHnL">
-                  <div className="-translate-y-1/2 absolute flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] h-[86px] justify-center leading-[0] left-0 not-italic text-[14.6px] text-[color:var(--color\/red\/7,#17100e)] top-[42.4px] w-[453.32px]" data-node-id="2:6907">
-                    <p className="leading-[var(--line-height\/21_28,21.28px)] mb-0">Connect every channel — email, live chat, voice, WhatsApp,.</p>
-                    <p className="leading-[var(--line-height\/21_28,21.28px)] mb-0">{`Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more.`}</p>
-                    <p className="leading-[var(--line-height\/21_28,21.28px)] mb-0">Clain combines an autonomous AI agent with a modern inbox.</p>
-                    <p className="leading-[var(--line-height\/21_28,21.28px)]">Resolve customer questions.</p>
+                  {/* Body copy */}
+                  <div className="relative shrink-0 w-full">
+                    <div className="content-stretch flex flex-col items-start pb-[20px] relative size-full">
+                      <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+                        <p className="m-0 text-[14.5px] w-full leading-[19.2px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, color: 'rgba(23,16,14,0.8)' }}>
+                          {c.body.map((line, j) => <span key={j} style={{ display: 'block' }}>{line}</span>)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div className="col-1 content-stretch flex flex-col gap-[var(--item-spacing\/3_99,3.99px)] items-start justify-self-stretch pt-[20px] relative row-2 self-start shrink-0" data-node-id="2:6908" data-name="Component 4">
-                <div className="absolute bg-[var(--color\/red\/7-20\%,rgba(23,16,14,0.2))] h-[2px] left-0 right-0 top-0" data-node-id="I2:6908;2:6474" data-name="div.trigger_progress_bg__hW850" />
-                <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="I2:6908;2:6475" data-name="span.trigger_title__tS4V8">
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Bold',sans-serif)] font-[var(--font-weight\/700,700)] justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/red\/7-60\%,rgba(23,16,14,0.6))] tracking-[var(--letter-spacing\/-0_16,-0.16px)] w-full" data-node-id="I2:6908;2:6476">
-                    <p className="leading-[var(--line-height\/19_2,19.2px)]">Helpdesk</p>
-                  </div>
-                </div>
-                <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="I2:6908;2:6479" data-name="span.trigger_description__QgHnL">
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/red\/7-60\%,rgba(23,16,14,0.6))] w-full" data-node-id="I2:6908;2:6480">
-                    <p className="leading-[var(--line-height\/21_28,21.28px)] mb-0">Trained on your knowledge, your tickets, your tone of voice.</p>
-                    <p className="leading-[var(--line-height\/21_28,21.28px)] mb-0">Clain's AI agent has tools. It looks up orders, processes.</p>
-                    <p className="leading-[var(--line-height\/21_28,21.28px)] mb-0">Reporting in Clain shows you exactly what the AI resolved, where.</p>
-                    <p className="leading-[var(--line-height\/21_28,21.28px)] mb-0">Agents see context, take action, escalate when it matters.</p>
-                    <p className="leading-[var(--line-height\/21_28,21.28px)]">experience.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="col-1 content-stretch flex flex-col items-start justify-center justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:6914" data-name="div.product_card_region__qUtdi">
-            <div className="content-stretch flex h-[719.19px] items-center justify-center overflow-clip relative shrink-0 w-full" data-node-id="2:6915" data-name="div.panel_media__DZl29">
-              <div className="absolute content-stretch flex flex-col h-[719.19px] items-start justify-center left-0 overflow-clip top-0 w-[575.36px]" data-node-id="2:6916" data-name="div.img_root__pA_XT">
-                <div className="flex-[1_0_0] min-h-[719.1900024414062px] min-w-[575.3599853515625px] relative w-full" data-node-id="2:6917" data-name="Fin Product Shot - Background.webp">
-                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgFinProductShotBackgroundWebp} />
-                  </div>
-                </div>
-                <div className="absolute bg-[var(--color\/red\/7,#17100e)] h-[719.19px] left-0 opacity-0 top-0 w-[575.36px]" data-node-id="2:6920" data-name="::after" />
-              </div>
-              <div className="content-stretch flex flex-[1_0_0] flex-col h-full items-start min-w-px overflow-clip relative" data-node-id="2:6921" data-name="div.hide-on-percy">
-                <div className="aspect-[575.3599853515625/719.1900024414062] relative shrink-0 w-full" data-node-id="2:6922" data-name="Fin Product Shot - Foreground.webp">
-                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <img alt="" className="absolute left-0 max-w-none size-full top-0" src={imgFinProductShotForegroundWebp} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-        <div className="bg-[var(--color\/red\/7,#17100e)] relative size-full" data-node-id="2:7203" data-name="section.faqs_section__CnxRP">
-      <div className="absolute content-stretch flex flex-col items-start left-[136.8px] pb-[40px] right-[48px] top-[120px]" data-node-id="2:7204" data-name="h2.display__Ajr5Q">
-        <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Light',sans-serif)] font-[var(--font-weight\/300,300)] justify-center leading-[0] not-italic relative shrink-0 text-[45.1px] text-[color:var(--color\/white\/solid,white)] tracking-[var(--letter-spacing\/-1_76,-1.76px)] whitespace-nowrap" data-node-id="2:7205">
-          <p className="leading-[var(--line-height\/46_17,46.17px)]">FAQs</p>
-        </div>
-      </div>
-      <div className="-translate-y-1/2 absolute bg-[var(--color\/red\/7,#17100e)] gap-x-[24px] gap-y-[24px] grid grid-cols-[repeat(2,minmax(0,1fr))] grid-rows-[_577.91px] h-[577.91px] left-0 right-0 top-[calc(50%+43.09px)]" data-node-id="2:7208" data-name="article.faqs__REiGk">
-        <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch pb-[211.91px] relative row-1 self-start shrink-0" data-node-id="2:7209" data-name="div.faqs_trigger_list__sJn0z">
-          <div className="content-stretch flex flex-col items-start pl-[24px] relative shrink-0 w-full" data-node-id="2:7210" data-name="div">
-            <div className="border-[rgba(255,255,255,0.2)] border-b-[length:var(--stroke-weight\/1,1px)] border-solid border-t-[length:var(--stroke-weight\/1,1px)] content-stretch flex h-[70px] items-start justify-center pl-[112.8px] py-[25px] relative shrink-0 w-[684px]" data-node-id="2:7211" data-name="Component 6">
-              <div className="flex-[1_0_0] min-w-px relative self-stretch" data-node-id="I2:7211;2:6505" data-name="span">
-                <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start relative size-full">
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Semi_Bold',sans-serif)] font-[var(--font-weight\/600,600)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/white\/solid,white)] tracking-[var(--letter-spacing\/-0_88,-0.88px)] w-full" data-node-id="I2:7211;2:6506">
-                    <p className="leading-[var(--line-height\/20,20px)]">Plug Clain into your stack with 30+ native integrations.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="content-stretch flex flex-col items-start pl-[24px] relative shrink-0 w-full" data-node-id="2:7214" data-name="div">
-            <div className="border-[rgba(255,255,255,0.2)] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex h-[69px] items-start justify-center pb-[25px] pl-[112.8px] pt-[24px] relative shrink-0 w-[684px]" data-node-id="2:7215" data-name="Component 6">
-              <div className="flex-[1_0_0] min-w-px relative self-stretch" data-node-id="I2:7215;2:6500" data-name="span">
-                <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start relative size-full">
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Semi_Bold',sans-serif)] font-[var(--font-weight\/600,600)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/white\/-60\%,rgba(255,255,255,0.6))] tracking-[var(--letter-spacing\/-0_88,-0.88px)] w-full" data-node-id="I2:7215;2:6501">
-                    <p className="leading-[var(--line-height\/20,20px)]">Reporting that shows what AI.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="content-stretch flex flex-col items-start pl-[24px] relative shrink-0 w-full" data-node-id="2:7218" data-name="div">
-            <div className="border-[rgba(255,255,255,0.2)] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex h-[69px] items-start justify-center pb-[25px] pl-[112.8px] pt-[24px] relative shrink-0 w-[684px]" data-node-id="2:7219" data-name="Component 6">
-              <div className="flex-[1_0_0] min-w-px relative self-stretch" data-node-id="I2:7219;2:6500" data-name="span">
-                <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start relative size-full">
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Semi_Bold',sans-serif)] font-[var(--font-weight\/600,600)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/white\/-60\%,rgba(255,255,255,0.6))] tracking-[var(--letter-spacing\/-0_88,-0.88px)] w-full" data-node-id="I2:7219;2:6501">
-                    <p className="leading-[var(--line-height\/20,20px)]">Built so support, success and.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="content-stretch flex flex-col items-start pl-[24px] relative shrink-0 w-full" data-node-id="2:7222" data-name="div">
-            <div className="border-[rgba(255,255,255,0.2)] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex h-[69px] items-start justify-center pb-[25px] pl-[112.8px] pt-[24px] relative shrink-0 w-[684px]" data-node-id="2:7223" data-name="Component 6">
-              <div className="flex-[1_0_0] min-w-px relative self-stretch" data-node-id="I2:7223;2:6500" data-name="span">
-                <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start relative size-full">
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Semi_Bold',sans-serif)] font-[var(--font-weight\/600,600)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/white\/-60\%,rgba(255,255,255,0.6))] tracking-[var(--letter-spacing\/-0_88,-0.88px)] w-full" data-node-id="I2:7223;2:6501">
-                    <p className="leading-[var(--line-height\/20,20px)]">{`Tracks every action, every tool call,.`}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="content-stretch flex flex-col items-start pl-[24px] relative shrink-0 w-full" data-node-id="2:7226" data-name="div">
-            <div className="border-[rgba(255,255,255,0.2)] border-b-[length:var(--stroke-weight\/1,1px)] border-solid content-stretch flex h-[89px] items-start justify-center pb-[25px] pl-[112.8px] pt-[24px] relative shrink-0 w-[684px]" data-node-id="2:7227" data-name="Component 6">
-              <div className="flex-[1_0_0] min-w-px relative self-stretch" data-node-id="I2:7227;2:6500" data-name="span">
-                <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start relative size-full">
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Semi_Bold',sans-serif)] font-[var(--font-weight\/600,600)] justify-center leading-[0] not-italic relative shrink-0 text-[18.6px] text-[color:var(--color\/white\/-60\%,rgba(255,255,255,0.6))] tracking-[var(--letter-spacing\/-0_88,-0.88px)] w-full" data-node-id="I2:7227;2:6501">
-                    <p className="leading-[var(--line-height\/20,20px)] mb-0">Set policy. Set guardrails. Set escalation thresholds. Then let.</p>
-                    <p className="leading-[var(--line-height\/20,20px)]">companies?</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="col-2 content-stretch flex flex-col items-start justify-center justify-self-stretch relative row-1 self-start shrink-0" data-node-id="2:7230" data-name="div.faqs_tab_panel_list__mvFzy">
-          <div className="bg-[var(--color\/cyan\/89,#ccfaf4)] content-stretch flex flex-col items-start justify-center min-h-[480px] relative shrink-0 w-full" data-node-id="2:7231" data-name="div#panel-1W4Ch7r1ksmeEZUt9Lxnz4">
-            <div className="content-stretch flex flex-col gap-[var(--item-spacing\/23_3,23.3px)] items-start max-h-[900px] max-w-[936px] overflow-auto p-[32px] shrink-0 sticky top-0 w-full" data-node-id="2:7240" data-name="div.faqs_content__ytbrW">
-              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:7243" data-name="h2">
-                <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Bold',sans-serif)] font-[var(--font-weight\/700,700)] justify-center leading-[0] not-italic relative shrink-0 text-[16.9px] text-[color:var(--color\/black\/solid,black)] w-full" data-node-id="2:7244">
-                  <p className="leading-[normal]">Set guardrails. Let the agent run. Audit every.</p>
-                </div>
-              </div>
-              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:7246" data-name="p">
-                <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/red\/7,#17100e)] w-full" data-node-id="2:7247">
-                  <p className="leading-[var(--line-height\/21_6,21.6px)] mb-0">Born after the LLM transition: Clain isn't a helpdesk with an AI bolted on, it's an AI agent.</p>
-                  <p className="leading-[var(--line-height\/21_6,21.6px)]">From SMB to enterprise, Clain runs the same agent — what.</p>
-                </div>
-              </div>
-              <div className="content-stretch flex flex-col items-start pt-[0.69px] relative shrink-0 w-full" data-node-id="2:7249" data-name="p">
-                <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/red\/7,#17100e)] w-full" data-node-id="2:7250">
-                  <p className="leading-[var(--line-height\/21_6,21.6px)]">Cuts time-to-first-response from hours to.</p>
-                </div>
-              </div>
-              <div className="content-stretch flex flex-col items-start pt-[0.71px] relative shrink-0 w-full" data-node-id="2:7251" data-name="ul">
-                <div className="content-stretch flex items-center pl-[15px] relative shrink-0 w-full" data-node-id="2:7252" data-name="li">
-                  <div className="-translate-y-1/2 absolute flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] h-[19px] justify-center leading-[0] left-0 not-italic text-[color:var(--color\/red\/7,#17100e)] text-[length:var(--font-size\/16,16px)] top-[11px] w-[7.33px]" data-node-id="2:7253">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">-</p>
-                  </div>
-                  <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[15.1px] text-[color:var(--color\/red\/7,#17100e)] whitespace-nowrap" data-node-id="2:7256">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">{`6 Advanced Seats `}</p>
-                  </div>
-                  <a className="content-stretch cursor-pointer flex items-start relative shrink-0" href="/help/en/articles/9361928-early-stage-program" data-node-id="2:7258" target="_blank" data-name="a.anchor_text__lbOeY">
-                    <div className="bg-gradient-to-b from-[94.737%] from-[var(--color\/red\/7-0\%,rgba(23,16,14,0))] h-[19px] relative shrink-0 to-[94.737%] to-[var(--color\/red\/7,#17100e)] w-[112.77px]" data-node-id="2:7259" data-name="span.label__oEsP5">
-                      <div className="-translate-y-1/2 absolute flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] h-[22px] justify-center leading-[0] left-0 not-italic text-[14.3px] text-[color:var(--color\/red\/7,#17100e)] text-left top-[9.5px] w-[112.97px]" data-node-id="2:7260" role="link" tabIndex="0">
-                        <p className="cursor-pointer leading-[var(--line-height\/21_6,21.6px)]">(see all features)</p>
+                  {/* View pricing link */}
+                  <a onClick={() => ClainV2.navigate('/pricing')} className="cursor-pointer relative shrink-0">
+                    <div className="content-stretch flex flex-col items-start pr-[10px] relative size-full">
+                      <div className="content-stretch flex items-start relative shrink-0" style={{ borderBottom: '1px solid #17100e' }}>
+                        <p className="m-0 text-[14.9px] text-black text-left whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, lineHeight: 'normal' }}>View pricing</p>
                       </div>
                     </div>
                   </a>
                 </div>
-                <div className="content-stretch flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] items-start leading-[0] not-italic pl-[15px] relative shrink-0 text-[color:var(--color\/red\/7,#17100e)] w-full" data-node-id="2:7263" data-name="li">
-                  <div className="-translate-y-1/2 absolute flex flex-col h-[19px] justify-center left-0 text-[length:var(--font-size\/16,16px)] top-[10.5px] w-[7.33px]" data-node-id="2:7264">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">-</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+  // FEATURES — "The highest-performing AI Agent natively integrated with the Clain Helpdesk" (Figma node 2:6889)
+  // 2-column layout: product image (left) + 2 trigger items "Clain AI Agent" + "Helpdesk" (right)
+  const featHighestImgBg = "/v2/assets/27f5f036-35db-4499-9aea-d7d975c718aa.png";
+  const featHighestImgFg = "/v2/assets/4036c35b-2ef6-4359-a22f-56d71bd1ca30.png";
+
+  function FeaturesHighestPerformingSection() {
+    return (
+      <div className="content-stretch flex flex-col gap-[48px] items-center relative w-full" data-node-id="2:6889">
+        {/* Heading */}
+        <div className="grid grid-cols-1 grid-rows-[138.52px] h-[138.52px] max-w-[1540px] relative shrink-0 w-[960px]">
+          <div className="content-stretch flex flex-col items-center justify-center justify-self-stretch relative row-1 self-start shrink-0">
+            <div className="content-stretch flex flex-col items-center max-w-[698.64px] px-[81.33px] relative shrink-0">
+              <p className="m-0 text-[46px] text-black text-center tracking-[-2.309px] whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, lineHeight: '46.17px' }}>
+                <span style={{ display: 'block' }}>The highest-performing AI</span>
+                <span style={{ display: 'block' }}>Agent natively integrated</span>
+                <span style={{ display: 'block' }}>with the Clain Helpdesk</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Product card layout */}
+        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-[1200px]">
+          <div className="grid grid-cols-[1.26fr_1fr] gap-x-[120px] gap-y-[120px] grid-rows-1 h-[719.19px] relative rounded-[8px] shrink-0 w-full">
+            {/* Right column — 2 trigger items */}
+            <div className="col-2 grid grid-cols-1 grid-rows-[719.19px] h-[719.19px] justify-self-stretch relative row-1 shrink-0">
+              <div className="grid grid-cols-1 gap-[16px] grid-rows-[128.25px_149.52px] h-[293.77px] justify-self-stretch relative row-1 self-start shrink-0">
+                {/* Active: Clain AI Agent */}
+                <div className="content-stretch flex flex-col gap-[3.99px] items-start justify-self-stretch pt-[20px] relative row-1 self-start shrink-0">
+                  <div className="absolute bg-[rgba(23,16,14,0.2)] h-[2px] left-0 right-0 top-0" />
+                  <div className="absolute bg-[#17100e] h-[2px] left-0 right-0 top-0" />
+                  <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+                    <p className="m-0 text-[15.1px] text-[#17100e] tracking-[-0.16px] w-full leading-[19.2px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>Clain AI Agent</p>
                   </div>
-                  <div className="flex flex-col justify-center relative shrink-0 text-[15px] whitespace-nowrap" data-node-id="2:7265">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">6 Copilot Seats</p>
-                  </div>
-                </div>
-                <div className="content-stretch flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] items-start leading-[0] not-italic pl-[15px] relative shrink-0 text-[color:var(--color\/red\/7,#17100e)] w-full" data-node-id="2:7267" data-name="li">
-                  <div className="-translate-y-1/2 absolute flex flex-col h-[19px] justify-center left-0 text-[length:var(--font-size\/16,16px)] top-[10.5px] w-[7.33px]" data-node-id="2:7268">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">-</p>
-                  </div>
-                  <div className="flex flex-col justify-center relative shrink-0 text-[15px] whitespace-nowrap" data-node-id="2:7269">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">20 Lite Seats</p>
-                  </div>
-                </div>
-                <div className="content-stretch flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] items-start leading-[0] not-italic pl-[15px] relative shrink-0 text-[color:var(--color\/red\/7,#17100e)] w-full" data-node-id="2:7270" data-name="li">
-                  <div className="-translate-y-1/2 absolute flex flex-col h-[19px] justify-center left-0 text-[length:var(--font-size\/16,16px)] top-[10.5px] w-[7.33px]" data-node-id="2:7271">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">-</p>
-                  </div>
-                  <div className="flex flex-col justify-center relative shrink-0 text-[14.6px] whitespace-nowrap" data-node-id="2:7272">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">Resolves repeat questions instantly so humans.</p>
-                  </div>
-                </div>
-              </div>
-              <div className="content-stretch flex flex-col items-start pt-[0.69px] relative shrink-0 w-full" data-node-id="2:7273" data-name="p">
-                <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/red\/7,#17100e)] w-full" data-node-id="2:7274">
-                  <p className="leading-[var(--line-height\/21_6,21.6px)]">Speaks 40+ languages out of the box, with.</p>
-                </div>
-              </div>
-              <div className="content-stretch flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] items-start leading-[0] not-italic pt-[0.71px] relative shrink-0 text-[color:var(--color\/red\/7,#17100e)] w-full" data-node-id="2:7275" data-name="ul">
-                <div className="content-stretch flex flex-col items-start pl-[15px] relative shrink-0 w-full" data-node-id="2:7276" data-name="li">
-                  <div className="-translate-y-1/2 absolute flex flex-col h-[19px] justify-center left-0 text-[length:var(--font-size\/16,16px)] top-[10.5px] w-[7.33px]" data-node-id="2:7277">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">-</p>
-                  </div>
-                  <div className="flex flex-col justify-center relative shrink-0 text-[14.9px] whitespace-nowrap" data-node-id="2:7278">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">Fewer tickets, happier teams</p>
-                  </div>
-                </div>
-                <div className="content-stretch flex flex-col items-start pl-[15px] relative shrink-0 w-full" data-node-id="2:7280" data-name="li">
-                  <div className="-translate-y-1/2 absolute flex flex-col h-[19px] justify-center left-0 text-[length:var(--font-size\/16,16px)] top-[10.5px] w-[7.33px]" data-node-id="2:7281">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">-</p>
-                  </div>
-                  <div className="flex flex-col justify-center relative shrink-0 text-[14.6px] whitespace-nowrap" data-node-id="2:7282">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">Drops into existing tools —.</p>
-                  </div>
-                </div>
-                <div className="content-stretch flex flex-col items-start pl-[15px] relative shrink-0 w-full" data-node-id="2:7283" data-name="li">
-                  <div className="-translate-y-1/2 absolute flex flex-col h-[19px] justify-center left-0 text-[length:var(--font-size\/16,16px)] top-[10.5px] w-[7.33px]" data-node-id="2:7284">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">-</p>
-                  </div>
-                  <div className="flex flex-col justify-center relative shrink-0 text-[14.5px] whitespace-nowrap" data-node-id="2:7285">
-                    <p className="leading-[var(--line-height\/21_6,21.6px)]">Live SLA, queue health and agent quality in one.</p>
-                  </div>
-                </div>
-              </div>
-              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:7287" data-name="p">
-                <div className="flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/red\/7,#17100e)] w-full" data-node-id="2:7288">
-                  <p className="leading-[var(--line-height\/21_6,21.6px)] mb-0">Tickets in Clain are not just queues. They're conversations the agent already.</p>
-                  <p className="leading-[var(--line-height\/21_6,21.6px)]">Built for teams shipping faster.</p>
-                </div>
-              </div>
-              <div className="h-[43.88px] relative shrink-0 w-full" data-node-id="2:7289" data-name="p">
-                <div className="-translate-y-1/2 absolute flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Semi_Bold',sans-serif)] font-semibold h-[44px] justify-center leading-[0] left-0 not-italic text-[0px] text-[color:var(--color\/red\/7,#17100e)] top-[21.99px] w-[599.37px]" data-node-id="2:7290">
-                  <p className="mb-0 text-[#17100e] text-[14.8px]">
-                    <span className="font-['Inter:Semi_Bold',sans-serif] font-semibold leading-[21.6px]">Compliance and trust are built in: SOC2, GDPR, audit logs of every.</span>
-                    <span className="font-['Inter:Regular',sans-serif] font-normal leading-[21.6px]">{` phone, SMS &`}</span>
-                  </p>
-                  <p className="font-['Inter:Regular',sans-serif] font-normal leading-[21.6px] text-[#17100e] text-[14.8px]">{`Pairs Clain AI with humans for end-to-end.`}</p>
-                </div>
-                <a className="absolute content-stretch cursor-pointer flex items-start left-[298.56px] top-[23.29px]" href="/help/en/articles/9061703-usage-based-channels" data-node-id="2:7293" target="_blank" data-name="a.anchor_text__lbOeY">
-                  <div className="bg-gradient-to-b from-[94.737%] from-[var(--color\/red\/7-0\%,rgba(23,16,14,0))] h-[19px] relative shrink-0 to-[94.737%] to-[var(--color\/red\/7,#17100e)] w-[160.45px]" data-node-id="2:7294" data-name="span.label__oEsP5">
-                    <div className="-translate-y-1/2 absolute flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] h-[22px] justify-center leading-[0] left-0 not-italic text-[14.6px] text-[color:var(--color\/red\/7,#17100e)] text-left top-[9.5px] w-[160.65px]" data-node-id="2:7295" role="link" tabIndex="0">
-                      <p className="cursor-pointer leading-[var(--line-height\/21_6,21.6px)]">See usage based costs</p>
+                  <div className="h-[85.06px] relative shrink-0 w-full">
+                    <div className="-translate-y-1/2 absolute flex flex-col h-[86px] justify-center left-0 text-[14.6px] text-[#17100e] top-[42.4px] w-[453.32px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>
+                      <p className="leading-[21.28px] mb-0">Clain resolves everything from simple queries to complex, across all</p>
+                      <p className="leading-[21.28px] mb-0">{`your channels. You're in complete control: see exactly what's`}</p>
+                      <p className="leading-[21.28px] mb-0">working, make improvements yourself in minutes, and watch</p>
+                      <p className="leading-[21.28px]">performance continuously improve.</p>
                     </div>
                   </div>
-                </a>
-                <div className="-translate-y-1/2 absolute flex flex-col font-[family-name:var(--font-family\/font-1,'Inter:Regular',sans-serif)] font-[var(--font-weight\/400,400)] h-[22px] justify-center leading-[0] left-[459.02px] not-italic text-[color:var(--color\/red\/7,#17100e)] text-[length:var(--font-size\/16,16px)] top-[32.79px] w-[4.01px]" data-node-id="2:7297">
-                  <p className="leading-[var(--line-height\/21_6,21.6px)]">.</p>
+                </div>
+
+                {/* Inactive: Helpdesk */}
+                <div className="content-stretch flex flex-col gap-[3.99px] items-start justify-self-stretch pt-[20px] relative row-2 self-start shrink-0">
+                  <div className="absolute bg-[rgba(23,16,14,0.2)] h-[2px] left-0 right-0 top-0" />
+                  <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+                    <p className="m-0 text-[14.8px] tracking-[-0.16px] w-full leading-[19.2px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, color: 'rgba(23,16,14,0.6)' }}>Helpdesk</p>
+                  </div>
+                  <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+                    <p className="m-0 text-[14.6px] w-full leading-[21.28px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, color: 'rgba(23,16,14,0.6)' }}>
+                      <span style={{ display: 'block' }}>Clain seamlessly hands off to your team with full context—no</span>
+                      <span style={{ display: 'block' }}>switching tools, no lost information. Get a powerful helpdesk</span>
+                      <span style={{ display: 'block' }}>designed to work as one with Clain, with complete visibility across</span>
+                      <span style={{ display: 'block' }}>all AI and human conversations to optimize your customer</span>
+                      <span style={{ display: 'block' }}>experience.</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Left column — product image */}
+            <div className="col-1 content-stretch flex flex-col items-start justify-center justify-self-stretch relative row-1 self-start shrink-0">
+              <div className="content-stretch flex h-[719.19px] items-center justify-center overflow-clip relative shrink-0 w-full">
+                <div className="absolute content-stretch flex flex-col h-[719.19px] items-start justify-center left-0 overflow-clip top-0 w-[575.36px]">
+                  <div className="flex-1 min-h-[719.19px] min-w-[575.36px] relative w-full">
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                      <img alt="" className="absolute left-0 max-w-none size-full top-0" src={featHighestImgBg} />
+                    </div>
+                  </div>
+                </div>
+                <div className="content-stretch flex flex-1 flex-col h-full items-start min-w-px overflow-clip relative">
+                  <div className="aspect-[575.36/719.19] relative shrink-0 w-full">
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                      <img alt="" className="absolute left-0 max-w-none size-full top-0" src={featHighestImgFg} />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    );
+  }
+
+
+  // FEATURES — ELIGIBILITY REQUIREMENTS section (Figma node 2:6837)
+  // 3 cards: "Early stage" / "Small team" / "New customer"
+
+  function FeaturesEligibilitySection() {
+    const yellowHl = {
+      backgroundImage: "linear-gradient(0deg, rgba(246,244,49,0) 9%, rgb(246,244,49) 9%, rgb(246,244,49) 85%, rgba(246,244,49,0) 85%)",
+    };
+    return (
+      <div className="content-stretch flex flex-col items-start px-[120px] relative w-full" data-node-id="2:6837">
+        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-[1200px]">
+          <div className="content-stretch flex flex-col gap-[32px] items-start relative shrink-0 w-full">
+            {/* Heading */}
+            <div className="content-stretch flex flex-col items-center justify-center relative shrink-0 w-full">
+              <div className="content-stretch flex flex-col items-center max-w-[618px] min-w-[448.64px] relative shrink-0">
+                <p className="m-0 text-[46.2px] text-black text-center tracking-[-2.309px] whitespace-nowrap leading-[46.17px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>Eligibility requirements</p>
+              </div>
+            </div>
+
+            {/* 3 cards */}
+            <div className="grid grid-cols-12 gap-[24px] grid-rows-[205px] h-[205px] relative shrink-0 w-full">
+              {/* Card 1: Early stage */}
+              <div className="border-[1px] border-[rgba(23,16,14,0.4)] border-solid col-span-4 content-stretch flex flex-col items-start justify-self-stretch pb-[58.41px] pt-[25px] px-[25px] relative row-1 self-start shrink-0">
+                <div className="relative shrink-0 w-full">
+                  <div className="content-stretch flex flex-col gap-[32px] items-start pb-[19.99px] relative size-full">
+                    <div className="border-[rgba(23,16,14,0.4)] border-b-[1px] border-solid content-stretch flex flex-col items-start pb-[17px] relative shrink-0 w-full">
+                      <p className="m-0 text-[14.9px] text-black whitespace-nowrap leading-[19.2px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>Early stage</p>
+                    </div>
+                    <div className="content-stretch flex h-[33.41px] items-center pb-[1.41px] relative shrink-0 w-full">
+                      <p className="m-0 text-[33.4px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>{`Up to `}</p>
+                      <div className="content-stretch flex items-start py-[3px] relative shrink-0" style={yellowHl}>
+                        <p className="m-0 text-[28.6px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>$10M</p>
+                      </div>
+                      <p className="m-0 text-[33.4px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>{` in funding.`}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Small team */}
+              <div className="border-[1px] border-[rgba(23,16,14,0.4)] border-solid col-span-4 content-stretch flex flex-col items-start justify-self-stretch p-[25px] relative row-1 self-start shrink-0">
+                <div className="relative shrink-0 w-full">
+                  <div className="content-stretch flex flex-col gap-[31px] items-start pb-[17.4px] relative size-full">
+                    <div className="border-[rgba(23,16,14,0.4)] border-b-[1px] border-solid content-stretch flex flex-col items-start pb-[17px] relative shrink-0 w-full">
+                      <p className="m-0 text-[15.1px] text-black whitespace-nowrap leading-[19.2px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>Small team</p>
+                    </div>
+                    <div className="content-stretch flex flex-col items-start pb-[3.59px] relative shrink-0 w-full">
+                      <p className="m-0 text-[32.7px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>Fewer than</p>
+                      <div className="content-stretch flex items-start py-[3px] relative shrink-0" style={yellowHl}>
+                        <p className="m-0 text-[30.9px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>15 employees.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: New customer */}
+              <div className="border-[1px] border-[rgba(23,16,14,0.4)] border-solid col-span-4 content-stretch flex flex-col items-start justify-self-stretch p-[25px] relative row-1 self-start shrink-0">
+                <div className="relative shrink-0 w-full">
+                  <div className="content-stretch flex flex-col gap-[32px] items-start pb-[20px] relative size-full">
+                    <div className="border-[rgba(23,16,14,0.4)] border-b-[1px] border-solid content-stretch flex flex-col items-start pb-[17px] relative shrink-0 w-full">
+                      <p className="m-0 text-[14.9px] text-black whitespace-nowrap leading-[19.2px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>New customer</p>
+                    </div>
+                    <div className="h-[66.81px] relative shrink-0 w-full">
+                      <p className="m-0 text-[33.4px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>Not currently an</p>
+                      <div className="content-stretch flex items-start py-[3px] relative shrink-0 mt-[3px]" style={yellowHl}>
+                        <p className="m-0 text-[33.4px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>Clain</p>
+                        <p className="m-0 text-[33.4px] text-black tracking-[-1.336px] whitespace-nowrap leading-[33.4px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, marginLeft: '8px' }}>{`customer.`}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+  // FEATURES — "It's official: Clain is the best AI agent on the market" (Figma node 2:7111)
+  // 2-column white card with G2 chart on the right
+  const featG2ImgFin     = "/v2/assets/a1563166-92de-4349-b6aa-0bf956095ff1.png";
+  const featG2ImgZendesk = "/v2/assets/16443745-b04b-438c-b183-f38db1553e1e.png";
+  const featG2ImgAda     = "/v2/assets/be0330f4-eeaa-4406-82c4-6e6b14599b00.png";
+
+  function FeaturesG2ChartSection() {
+    const bars = [
+      { name: ['Clain by', 'Clain'], value: '89',  img: featG2ImgFin,     active: true  },
+      { name: ['Zendesk AI', 'Agent'], value: '59', img: featG2ImgZendesk, active: false },
+      { name: ['Decagon'], value: '54', img: featG2ImgZendesk, active: false },
+      { name: ['Forethought'], value: '40', img: featG2ImgZendesk, active: false },
+      { name: ['Ada'], value: '33', img: featG2ImgAda, active: false },
+    ];
+    return (
+      <div className="bg-[#f4f3ec] content-stretch flex items-center justify-center px-[40px] relative w-full" data-node-id="2:7111">
+        <div className="bg-white border-[1px] border-[rgba(23,16,14,0.4)] border-solid content-stretch flex gap-[32px] items-start justify-center max-w-[1200px] p-[33px] relative rounded-[8px] shrink-0 w-[1200px]">
+
+          {/* Left content */}
+          <div className="flex-1 min-w-px relative self-stretch">
+            <div className="content-stretch flex flex-col gap-[24px] items-start relative size-full">
+              <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+                <p className="m-0 text-[48px] text-black tracking-[-2.4px] w-full" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, lineHeight: '48px' }}>
+                  <span style={{ display: 'block' }}>It&rsquo;s official: Clain is the best</span>
+                  <span style={{ display: 'block' }}>AI agent on the market</span>
+                </p>
+              </div>
+              <div className="content-stretch flex flex-col items-start max-w-[505.44px] relative shrink-0 w-[505.44px]">
+                <p className="m-0 text-[18.1px] text-black tracking-[-1px] whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '24px' }}>
+                  <span style={{ display: 'block' }}>In G2&rsquo;s most recent User Satisfaction Ratings for Customer</span>
+                  <span style={{ display: 'block' }}>Service, Clain rates highest across the board. Based on over</span>
+                  <span style={{ display: 'block' }}>19,000 reviews from real customers.</span>
+                </p>
+              </div>
+              <div className="content-stretch flex gap-[12px] items-start relative shrink-0 w-full">
+                <a onClick={() => ClainV2.navigate('#')} className="content-stretch cursor-pointer flex flex-col items-start relative self-stretch shrink-0">
+                  <div className="bg-[#17100e] content-stretch flex flex-col items-center px-[17px] py-[10px] relative rounded-[6px] shrink-0 w-full" style={{ border: '1px solid rgba(0,0,0,0)' }}>
+                    <p className="m-0 text-[12.9px] text-white text-center tracking-[-0.35px] whitespace-nowrap leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Read the G2 Report</p>
+                  </div>
+                </a>
+                <a onClick={() => ClainV2.navigate('#')} className="content-stretch cursor-pointer flex flex-col items-start relative self-stretch shrink-0">
+                  <div className="content-stretch flex flex-col items-center px-[17px] py-[10px] relative rounded-[6px] shrink-0 w-full" style={{ border: '1px solid #17100e' }}>
+                    <p className="m-0 text-[13.3px] text-[#17100e] text-center tracking-[-0.35px] whitespace-nowrap leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Read G2 Clain Reviews</p>
+                  </div>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Right G2 chart */}
+          <div className="flex-1 min-w-px relative self-stretch">
+            <div className="content-stretch flex flex-col gap-[24px] items-start relative size-full">
+              <div className="border-[#17100e] border-b-[2px] border-solid content-stretch flex flex-col items-start pb-[10px] relative shrink-0 w-full">
+                <p className="m-0 text-[15px] text-black tracking-[-0.4px] whitespace-nowrap leading-[19.2px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>{`G2's AI Agent score`}</p>
+              </div>
+              <div className="grid grid-cols-1 grid-rows-[56px_56px_56px_56px_56px] h-[280px] relative shrink-0 w-full">
+                {bars.map((bar, i) => (
+                  <div key={i} className="col-1 content-stretch flex gap-[8px] h-[56px] items-start justify-self-stretch relative shrink-0">
+                    <div className="content-stretch flex h-full items-center relative shrink-0">
+                      <div className="content-stretch flex h-full items-center relative shrink-0 w-[99.75px]">
+                        <div className="flex flex-col text-[18.4px] text-[#17100e] tracking-[-0.8px] whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>
+                          {bar.name.map((line, j) => (
+                            <p key={j} className="m-0 leading-[20px]">{line}</p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="content-stretch flex flex-1 h-[56px] items-start min-w-px relative">
+                      {bar.active ? (
+                        <>
+                          <div className="absolute content-stretch flex flex-col inset-0 items-start justify-center overflow-clip">
+                            <div className="flex-1 min-h-[56px] relative w-full">
+                              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                                <img alt="" className="absolute h-[122.42%] left-0 max-w-none top-[-11.21%] w-full" src={bar.img} />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="absolute content-stretch flex flex-col h-[32px] items-center right-[24px] top-[12px] w-[48px]">
+                            <p className="m-0 text-[29.6px] text-white text-center tracking-[-1.92px] whitespace-nowrap leading-[32px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>{bar.value}</p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="content-stretch flex flex-1 h-[56px] items-start justify-between min-w-px relative">
+                          <div className="flex-1 h-full min-w-px relative">
+                            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                              <img alt="" className="absolute left-0 max-w-none size-full top-0" src={bar.img} />
+                            </div>
+                          </div>
+                          <div className="content-stretch flex h-full items-center pr-[24px] relative shrink-0">
+                            <div className="content-stretch flex flex-col items-center relative shrink-0 w-[48px]">
+                              <p className="m-0 text-[29.6px] text-[#17100e] text-center tracking-[-1.92px] whitespace-nowrap leading-[32px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>{bar.value}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+  // FEATURES — FAQS section (Figma node 2:7203)
+  // Dark bg #17100e, heading "FAQs", left column = 5 question triggers, right column = expanded panel (cyan #ccfaf4)
+
+  const FEATURES_FAQS = [
+    { q: 'What does the Clain Early Stage Program cover?', active: true },
+    { q: 'How much does Clain AI Agent cost?', active: false },
+    { q: 'What happens after the first year?', active: false },
+    { q: `What if we're larger than 15 employees?`, active: false },
+    { q: 'How can I become a partner and offer this discount to my portfolio companies?', active: false },
+  ];
+
+  function FeaturesFaqsSection() {
+    return (
+      <div className="bg-[#17100e] relative w-full" data-node-id="2:7203" style={{ minHeight: 904 }}>
+        {/* Heading */}
+        <div className="absolute content-stretch flex flex-col items-start left-[136.8px] pb-[40px] right-[48px] top-[120px]">
+          <p className="m-0 text-[45.1px] text-white tracking-[-1.76px] whitespace-nowrap leading-[46.17px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>FAQs</p>
+        </div>
+
+        {/* 2-column grid */}
+        <div className="-translate-y-1/2 absolute bg-[#17100e] grid grid-cols-2 gap-[24px] grid-rows-[577.91px] h-[577.91px] left-0 right-0 top-[calc(50%+43.09px)]">
+
+          {/* Left — 5 trigger questions */}
+          <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch pb-[211.91px] relative row-1 self-start shrink-0">
+            {FEATURES_FAQS.map((faq, i) => (
+              <div key={i} className="content-stretch flex flex-col items-start pl-[24px] relative shrink-0 w-full">
+                <div className={"content-stretch flex items-start justify-center pl-[112.8px] py-[25px] relative shrink-0 w-[684px] " + (i === 0 ? "border-[rgba(255,255,255,0.2)] border-b-[1px] border-solid border-t-[1px]" : "border-[rgba(255,255,255,0.2)] border-b-[1px] border-solid")} style={i > 0 ? { paddingTop: 24, paddingBottom: 25 } : {}}>
+                  <div className="flex-1 min-w-px relative self-stretch">
+                    <div className="content-stretch flex flex-col items-start size-full">
+                      <p className="m-0 text-[18.6px] tracking-[-0.88px] w-full leading-[20px] cursor-pointer" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, color: faq.active ? 'white' : 'rgba(255,255,255,0.6)' }}>{faq.q}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Right — expanded panel (cyan card with content for the active question) */}
+          <div className="col-2 content-stretch flex flex-col items-start justify-center justify-self-stretch relative row-1 self-start shrink-0">
+            <div className="bg-[#ccfaf4] content-stretch flex flex-col items-start justify-center min-h-[480px] relative shrink-0 w-full">
+              <div className="content-stretch flex flex-col gap-[23.3px] items-start max-h-[900px] max-w-[936px] overflow-auto p-[32px] shrink-0 sticky top-0 w-full">
+
+                {/* H2 question */}
+                <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+                  <p className="m-0 text-[16.9px] text-black w-full leading-[normal]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>What does the Clain Early Stage Program cover?</p>
+                </div>
+
+                {/* Intro paragraph */}
+                <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+                  <p className="m-0 text-[14.6px] text-[#17100e] w-full" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '21.6px' }}>
+                    <span style={{ display: 'block' }}>Get access to the best AI-first helpdesk from just $65/month, with 93% off in your first year,</span>
+                    <span style={{ display: 'block' }}>50% off in your second year, and 25% off in your third year.</span>
+                  </p>
+                </div>
+
+                {/* "Your Early Stage plan includes:" intro */}
+                <div className="content-stretch flex flex-col items-start pt-[0.69px] relative shrink-0 w-full">
+                  <p className="m-0 text-[14.6px] text-[#17100e] w-full leading-[21.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>Your Early Stage plan includes the following:</p>
+                </div>
+
+                {/* List 1 — bullet items */}
+                <div className="content-stretch flex flex-col items-start pt-[0.71px] relative shrink-0 w-full">
+                  <div className="content-stretch flex items-center pl-[15px] relative shrink-0 w-full">
+                    <span className="-translate-y-1/2 absolute h-[19px] left-0 top-[11px] w-[7.33px] text-[16px] text-[#17100e]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '21.6px' }}>-</span>
+                    <p className="m-0 text-[15.1px] text-[#17100e] whitespace-nowrap leading-[21.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>{`6 Advanced Seats `}</p>
+                    <a onClick={() => ClainV2.navigate('#')} className="content-stretch cursor-pointer flex items-start relative shrink-0">
+                      <p className="m-0 text-[14.3px] text-[#17100e] text-left w-[112.97px] leading-[21.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, borderBottom: '1px solid #17100e' }}>(see all features)</p>
+                    </a>
+                  </div>
+                  {['6 Copilot Seats', '20 Lite Seats', 'Proactive Support Plus (500 messages sent per month)'].map((item, i) => (
+                    <div key={i} className="content-stretch flex items-center pl-[15px] relative shrink-0 w-full">
+                      <span className="-translate-y-1/2 absolute h-[19px] left-0 top-[11px] w-[7.33px] text-[16px] text-[#17100e]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '21.6px' }}>-</span>
+                      <p className="m-0 text-[15px] text-[#17100e] whitespace-nowrap leading-[21.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>{item}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* "Plus a free year of Clain AI Agent:" */}
+                <div className="content-stretch flex flex-col items-start pt-[0.69px] relative shrink-0 w-full">
+                  <p className="m-0 text-[14.6px] text-[#17100e] w-full leading-[21.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>Plus a free year of Clain AI Agent, including:</p>
+                </div>
+
+                {/* List 2 */}
+                <div className="content-stretch flex flex-col items-start pt-[0.71px] relative shrink-0 w-full">
+                  {['300 Clain outcomes per month', '15 Clain qualifications per month', 'Pro (unlimited conversations analyzed per month)'].map((item, i) => (
+                    <div key={i} className="content-stretch flex items-center pl-[15px] relative shrink-0 w-full">
+                      <span className="-translate-y-1/2 absolute h-[19px] left-0 top-[11px] w-[7.33px] text-[16px] text-[#17100e]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '21.6px' }}>-</span>
+                      <p className="m-0 text-[14.7px] text-[#17100e] whitespace-nowrap leading-[21.6px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>{item}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer paragraph */}
+                <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
+                  <p className="m-0 text-[14.6px] text-[#17100e] w-full" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, lineHeight: '21.6px' }}>
+                    <span style={{ display: 'block' }}>Your 93% discount applies to usage based costs for email, messages sent (over 500 per</span>
+                    <span style={{ display: 'block' }}>month) and additional seats (over 6).</span>
+                  </p>
+                </div>
+
+                {/* Final note + link */}
+                <div className="relative shrink-0 w-full">
+                  <p className="m-0 text-[14.8px] text-[#17100e]" style={{ fontFamily: "'Inter', sans-serif", lineHeight: '21.6px' }}>
+                    <span style={{ fontWeight: 600 }}>The discount does not apply to additional outcomes or qualifications,</span>
+                    <span style={{ fontWeight: 400 }}>{` phone, SMS & WhatsApp, which are charged at list price. `}</span>
+                    <a onClick={() => ClainV2.navigate('#')} className="cursor-pointer" style={{ borderBottom: '1px solid #17100e', color: '#17100e' }}>See usage based costs</a>
+                    <span style={{ fontWeight: 400 }}>.</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+  // FEATURES — OTHER HELPFUL RESOURCES section (Figma node 2:7302)
+  // Heading + 4-card grid: Exclusive deals / Early Stage Academy / Inside the Clain Blog / Clain Community
+  const featResImgVector  = "/v2/assets/c9613fc7-b542-4bad-8c0d-adb634d4fc5f.svg";
+  const featResImgVector1 = "/v2/assets/29672266-a5a3-4240-9df2-c163060facf6.svg";
+
+  function FeatResDottedLine() {
+    return (
+      <div className="opacity-100 overflow-clip relative size-[12px]">
+        <div className="absolute inset-0 opacity-100">
+          <img alt="" className="absolute block inset-0 max-w-none size-full" src={featResImgVector} />
+        </div>
+        <div className="absolute inset-[37.5%] opacity-100">
+          <img alt="" className="absolute block inset-0 max-w-none size-full" src={featResImgVector1} />
+        </div>
+      </div>
+    );
+  }
+
+  const FEATURES_RESOURCE_CARDS = [
+    { num: '01', title: 'Exclusive deals on startup tools', body: ['Program members get credits and discounts', 'worth $100K on Stripe, Notion and more.'] },
+    { num: '02', title: 'Early Stage Academy',              body: ['Deep-dive courses from Clain experts on', 'topics like support, engagement, and sales.'] },
+    { num: '03', title: 'Inside the Clain Blog',            body: ['Our blog and podcast give you in-depth', 'interviews, best practices, insights and more.'] },
+    { num: '04', title: 'Clain Community',                  body: ['Join our community forum to ask questions or', 'connect with Clain customers and', 'partners.'] },
+  ];
+
+  function FeaturesResourcesSection() {
+    return (
+      <div className="content-stretch flex flex-col gap-[48px] items-center justify-center px-[12px] relative w-full" data-node-id="2:7302">
+        {/* Heading */}
+        <div className="content-stretch flex flex-col items-start px-[118px] relative shrink-0 w-[1416px]">
+          <div className="grid grid-cols-1 grid-rows-[46.17px] h-[46.17px] max-w-[1540px] relative shrink-0 w-[1180px]">
+            <div className="content-stretch flex flex-col items-center justify-center justify-self-stretch relative row-1 self-start shrink-0">
+              <div className="content-stretch flex flex-col items-center max-w-[698.64px] relative shrink-0">
+                <p className="m-0 text-[46.2px] text-black text-center tracking-[-2.309px] whitespace-nowrap leading-[46.17px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>Other helpful resources</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 4-card grid */}
+        <div className="grid grid-cols-4 gap-[24px] grid-rows-[329.55px] h-[361.55px] max-w-[1512px] p-[16px] relative shrink-0 w-full">
+          {FEATURES_RESOURCE_CARDS.map((card) => (
+            <div key={card.num} className="bg-[#f4f3ec] border-[1px] border-[rgba(23,16,14,0.4)] border-solid content-stretch flex flex-col items-start justify-between justify-self-stretch max-h-[500px] overflow-clip p-[21px] relative row-1 self-start shrink-0">
+              {/* Header — number + dotted line */}
+              <div className="relative shrink-0 w-full">
+                <div className="content-stretch flex flex-col gap-[23.67px] items-start pb-[24px] relative size-full">
+                  <p className="m-0 text-black tracking-[-2.309px] whitespace-nowrap leading-[46.17px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, fontSize: 40 }}>{card.num}</p>
+                  <div className="content-stretch flex flex-col h-[14px] items-start overflow-clip relative shrink-0 w-full" style={{ opacity: 0.2 }}>
+                    <FeatResDottedLine />
+                  </div>
+                </div>
+              </div>
+
+              {/* Title + body + Learn more link */}
+              <div className="relative shrink-0 w-full" style={{ minHeight: 98.58 }}>
+                <p className="m-0 text-[17px] text-black tracking-[-0.183px] whitespace-nowrap leading-[21.98px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>{card.title}</p>
+                <div className="pt-[8px]">
+                  <p className="m-0 text-[12.7px] text-black whitespace-nowrap leading-[16.8px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400 }}>
+                    {card.body.map((line, i) => <span key={i} style={{ display: 'block' }}>{line}</span>)}
+                  </p>
+                </div>
+                <div className="pt-[8px]">
+                  <a onClick={() => ClainV2.navigate('#')} className="content-stretch cursor-pointer flex flex-col items-start pr-[10px] relative shrink-0">
+                    <div className="content-stretch flex items-start relative shrink-0" style={{ borderBottom: '1px solid #17100e' }}>
+                      <p className="m-0 text-[14.9px] text-black text-left whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, lineHeight: 'normal' }}>Learn more</p>
+                    </div>
+                  </a>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+
+  // FEATURES — BANNER CTA section (Figma node 2:7395)
+  // Full-bleed dark image bg + heading "Get started with our Early Stage Program today" + Apply now button
+  const featBannerImgBg = "/v2/assets/51dd9f25-cad9-43a0-a1da-0dac77d2c7f9.png";
+
+  function FeaturesBannerCtaSection() {
+    return (
+      <div className="bg-[#f4f3ec] content-stretch flex flex-col items-start p-[16px] relative w-full" data-node-id="2:7395">
+        <div className="h-[844.8px] max-w-[1920px] overflow-clip relative shrink-0 w-full">
+          {/* BG image */}
+          <div className="absolute aspect-[1408/844.8] content-stretch flex flex-col items-start justify-center left-0 overflow-clip right-0 top-0">
+            <div className="content-stretch flex flex-col items-start justify-center overflow-clip relative shrink-0 w-full">
+              <div className="h-[844.8px] min-w-[1408px] relative shrink-0 w-full">
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  <img alt="" className="absolute h-full left-[-0.07%] max-w-none top-0 w-[100.13%]" src={featBannerImgBg} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Content centered */}
+          <div className="absolute grid grid-cols-1 grid-rows-[716.8px] h-[844.8px] left-0 px-[24px] py-[64px] right-0 top-0">
+            <div className="col-1 content-stretch flex flex-col gap-[24px] items-center justify-self-center relative row-1 self-center shrink-0">
+              <div className="content-stretch flex flex-col items-center max-w-[677.28px] px-[37.59px] relative shrink-0">
+                <p className="m-0 text-[53.9px] text-white text-center tracking-[-2.886px] whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, lineHeight: '57.72px' }}>
+                  <span style={{ display: 'block' }}>Get started with our Early</span>
+                  <span style={{ display: 'block' }}>Stage Program today</span>
+                </p>
+              </div>
+              <div className="content-stretch flex items-start relative shrink-0">
+                <a onClick={() => ClainV2.navigate('/signup')} className="content-stretch cursor-pointer flex flex-col items-start relative self-stretch shrink-0">
+                  <div className="bg-white content-stretch flex flex-col items-center px-[17px] py-[10px] relative rounded-[6px] shrink-0 w-full" style={{ border: '1px solid rgba(0,0,0,0)' }}>
+                    <p className="m-0 text-[12.9px] text-[#17100e] text-center tracking-[-0.35px] whitespace-nowrap leading-[14px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Apply now</p>
+                  </div>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+  function StartupsPage() {
+    return (
+      <PageShell>
+        <div className="bg-[#f4f3ec]">
+          <FeaturesHero />
+          <FeaturesCustomerLogosSection />
+          <FeaturesSaveYearSection />
+          <FeaturesHighestPerformingSection />
+          <FeaturesEligibilitySection />
+          <FeaturesG2ChartSection />
+          <FeaturesFaqsSection />
+          <FeaturesResourcesSection />
+          <FeaturesBannerCtaSection />
         </div>
       </PageShell>
     );
