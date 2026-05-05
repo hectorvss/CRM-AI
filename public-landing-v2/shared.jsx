@@ -567,17 +567,33 @@
         active = (active + 1) % cells.length;
       };
 
-      // Click on any card jumps immediately to it and resets the timer
-      cells.forEach((cell, i) => {
-        cell.style.cursor = 'pointer';
-        cell.addEventListener('click', () => {
-          if (intervalId) { clearInterval(intervalId); intervalId = null; }
-          active = i;
-          activate(active);
-          active = (i + 1) % cells.length;
-          intervalId = setInterval(tick, cycleMs);
-        });
-      });
+      // Click on any card jumps immediately to it and resets the timer.
+      // Use event delegation on the cells' common parent so clicks bubble up
+      // even from deeply-nested children (h4 / p / Learn more <a>) and aren't
+      // accidentally swallowed by inner stopPropagation or new-tab links.
+      cells.forEach((cell) => { cell.style.cursor = 'pointer'; });
+      const parent = cells[0].parentElement || document.body;
+      const cellSet = new Set(cells);
+      const onClick = (e) => {
+        let node = e.target;
+        while (node && node !== parent) {
+          if (cellSet.has(node)) {
+            const i = cells.indexOf(node);
+            if (intervalId) { clearInterval(intervalId); intervalId = null; }
+            active = i;
+            activate(active);
+            active = (i + 1) % cells.length;
+            intervalId = setInterval(tick, cycleMs);
+            return;
+          }
+          node = node.parentNode;
+        }
+      };
+      // Avoid double-binding if setupTabsCarousels runs again on the same root
+      if (!parent.__clainTabClick) {
+        parent.addEventListener('click', onClick);
+        parent.__clainTabClick = true;
+      }
 
       const start = () => {
         if (started) return;

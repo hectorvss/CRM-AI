@@ -5,12 +5,13 @@
 
 import { useState } from 'react';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'fin' | 'knowledge' | 'reports' | 'outbound';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'billing' | 'fin' | 'knowledge' | 'reports' | 'outbound';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
 const IMG_SLA_BANNER       = "http://localhost:3845/assets/b19e591362b8c4de77f19587d881d94b1042678b.png";
 const IMG_TICKETS_PORTAL   = "http://localhost:3845/assets/6971188673fd3013af5484de1fa365316c0b94cc.png";
+const IMG_TICKETS_TYPES    = "http://localhost:3845/assets/d0b4c46e141639aad99c27b726fe8bde688d0a73.png";
 // AppStore banners (1-30005, 1-30014)
 const IMG_APPSTORE_BUILT   = "http://localhost:3845/assets/ad347ce8da225bd35f5b32fe6b12f1e0c920c359.png";
 const IMG_APPSTORE_MEETING = "http://localhost:3845/assets/47092718aa85d977f81b82ebb8e30be7d57c735d.png";
@@ -19,6 +20,15 @@ const IMG_APP_SALESFORCE   = "http://localhost:3845/assets/3bdcbcb8a69c1ab5dcd0f
 const IMG_APP_INSTAGRAM    = "http://localhost:3845/assets/5f4fa567fe2eaa00f674696aab535d70118387b9.png";
 const IMG_APP_GA           = "http://localhost:3845/assets/f2498aefe57b15048759bd0c7d413343f479d4c7.png";
 const IMG_APP_JIRA         = "http://localhost:3845/assets/568c5d9e60a43fc756b02a5671654a0b4ff4ae53.png";
+// AppStore additional sections (1-30113, 1-30125, 1-30168, 1-30180, 1-30235)
+const IMG_APP_WHATSAPP     = "http://localhost:3845/assets/ed48cfb27c99c5386eb14f1637be6b27f26a0f07.png";
+const IMG_APP_DELIGHTED    = "http://localhost:3845/assets/b549080f72c68b942d7026aefdaed6104eae652a.png";
+const IMG_APP_QUICKLINKS   = "http://localhost:3845/assets/08b4d6a3bbb57338581614032b63927bd7df4230.png";
+const IMG_APP_DEMO         = "http://localhost:3845/assets/914e49234ac9bdbbba12fee4a9fe382f5a5e0963.png";
+const IMG_APP_STRIPE       = "http://localhost:3845/assets/fe71d140eb03f8f8f8d7da4781359f8957d0db1e.png";
+// PeopleView previews (1-37921, 1-34193 main group SVG)
+const IMG_QUALIFICATION    = "http://localhost:3845/assets/87ca775140e54d5c3863f89d37ef855026b40c28.svg";
+const IMG_USERDATA_BANNER  = "http://localhost:3845/assets/ab0de40d6c4bdf7484aba9ff89ed27f73d76959e.svg";
 // Connector icons (SVG, 1-31284…1-31315)
 const SVG_CONN_CREATE      = "http://localhost:3845/assets/9547459195af209d7fc7a8266b21ba259e45d7b3.svg";
 const SVG_CONN_MCP         = "http://localhost:3845/assets/b76967aa85b0e0a5adba750c204f52d62caa1075.svg";
@@ -93,7 +103,7 @@ const ICON_EMPTY_STATE       = "https://www.figma.com/api/mcp/asset/29703bc6-2e1
 // ── Shared: Left Nav ──────────────────────────────────────────────────────────
 function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const isContacts = view === 'contacts' || view === 'allLeads';
-  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people';
+  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'billing';
   const isActive = (v: View) => view === v;
 
   function NavBtn({ nav, icon, label, badge }: { nav: View; icon: string; label: string; badge?: number }) {
@@ -1111,11 +1121,24 @@ const INBOX_SUB: { label: string; nav: View | null }[] = [
 const DATOS_SUB: { label: string; nav: View | null }[] = [
   { label: "Etiquetas",                    nav: 'labels' },
   { label: "Personas",                     nav: 'people' },
-  { label: "Empresas",                     nav: null },
+  { label: "Empresas",                     nav: 'companies' },
   { label: "Conversaciones",               nav: 'settings' },
   { label: "Objetos personalizados",       nav: null },
   { label: "Importaciones y exportaciones", nav: 'imports' },
   { label: "Temas",                        nav: null },
+];
+
+const WORKSPACE_SUB: { label: string; nav: View | null; warn?: boolean }[] = [
+  { label: "General",                nav: null },
+  { label: "Compañeros de equipo",   nav: null },
+  { label: "Horario de atención",    nav: null },
+  { label: "Marcas",                 nav: null },
+  { label: "Seguridad",              nav: 'workspaceSecurity', warn: true },
+  { label: "Multilingüe",            nav: 'workspaceMultilingual' },
+];
+
+const SUSCRIPCION_SUB: { label: string; nav: View | null }[] = [
+  { label: "Facturación", nav: 'billing' },
 ];
 const SETTINGS_NAV_BOTTOM = [
   { label: "Centro de ayuda",   hasChevron: true },
@@ -1144,10 +1167,12 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 ];
 
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people';
+  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies';
   const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla';
   const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin';
   const isIntegSection = view === 'appStore' || view === 'connectors';
+  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual';
+  const isSuscripcionSection = view === 'billing';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
 
   function SubItems({ items }: { items: typeof DATOS_SUB }) {
@@ -1180,15 +1205,56 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-0.5">
-        {SETTINGS_NAV_TOP.map((item) => (
-          <button
-            key={item.label}
-            className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-          >
-            <span>{item.label}</span>
-            {item.hasChevron && <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className="w-3.5 h-3.5 opacity-40" />}
-          </button>
-        ))}
+        {/* Inicio (no chevron) */}
+        <button className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+          <span>Inicio</span>
+        </button>
+
+        {/* Espacio de trabajo section */}
+        <button
+          onClick={() => onNavigate('workspaceSecurity')}
+          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
+        >
+          <span>Espacio de trabajo</span>
+          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isWorkspaceSection ? 'rotate-90' : ''}`} />
+        </button>
+        {isWorkspaceSection && (
+          <div className="flex flex-col gap-0.5 pl-3">
+            {WORKSPACE_SUB.map((sub) => {
+              const active = sub.nav !== null && view === sub.nav;
+              return (
+                <button
+                  key={sub.label}
+                  onClick={() => sub.nav && onNavigate(sub.nav)}
+                  className={`flex items-center w-full px-3 py-[7px] rounded-lg text-[13px] text-left ${
+                    active
+                      ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]"
+                      : "font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]"
+                  }`}
+                >
+                  <span className="flex-1">{sub.label}</span>
+                  {sub.warn && <span className="text-[#f59e0b] ml-1">⚠</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Suscripción section */}
+        <button
+          onClick={() => onNavigate('billing')}
+          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
+        >
+          <span>Suscripción</span>
+          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isSuscripcionSection ? 'rotate-90' : ''}`} />
+        </button>
+        {isSuscripcionSection && <SubItems items={SUSCRIPCION_SUB} />}
+
+        {/* Canales (placeholder) */}
+        <button className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+          <span>Canales</span>
+          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className="w-3.5 h-3.5 opacity-40" />
+        </button>
 
         {/* Inbox section */}
         <button
@@ -2557,7 +2623,7 @@ function TicketsView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
                 description="Usa los folios de atención del cliente para las consultas directas de los clientes, los de back-office para gestionar el trabajo interno o el seguimiento, y los de seguimiento para coordinar cuestiones complejas."
                 primaryBtn="+ Crear tipo de folio de atención"
                 secondaryBtn="Más información sobre los folios"
-                imageSlot={<div className="w-full h-[160px] rounded-[8px] bg-gradient-to-br from-[#fce7f3] to-[#f0abcc] flex items-center justify-center opacity-80"><div className="text-[12px] text-[#9d174d] font-medium">Ticket types preview</div></div>}
+                imageSlot={<img src={IMG_TICKETS_TYPES} alt="Ticket types preview" className="w-full h-[206px] rounded-[8px] object-cover" data-node-id="1:22052" />}
               />
               <div className="px-6 py-4 flex flex-col gap-4">
                 <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
@@ -2860,11 +2926,30 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
 
 // ── AppStoreView ──────────────────────────────────────────────────────────────
 
-const APP_STORE_APPS: { name: string; img: string; desc: string }[] = [
+type AppCardData = { name: string; img: string; desc: string };
+const APP_STORE_POPULAR: AppCardData[] = [
   { name: 'Salesforce',        img: IMG_APP_SALESFORCE, desc: 'Sync data and streamline workflows for sales, marketing…' },
   { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
   { name: 'Google Analytics',  img: IMG_APP_GA,         desc: 'Measure the impact of your Messenger on website…' },
   { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
+];
+const APP_STORE_NEW: AppCardData[] = [
+  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
+  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
+  { name: 'WhatsApp',          img: IMG_APP_WHATSAPP,   desc: 'Easily receive and reply to WhatsApp messages from your…' },
+  { name: 'Delighted Inc.',    img: IMG_APP_DELIGHTED,  desc: 'Sync customer feedback and trigger surveys based on key…' },
+];
+const APP_STORE_FREE: AppCardData[] = [
+  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
+  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
+  { name: 'Quick Links',       img: IMG_APP_QUICKLINKS, desc: 'Save time by creating smart links for your common tools or…' },
+  { name: 'Get a Demo',        img: IMG_APP_DEMO,       desc: 'Capture and qualify leads who want a product demo' },
+];
+const APP_STORE_SUPPORT: AppCardData[] = [
+  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
+  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
+  { name: 'WhatsApp',          img: IMG_APP_WHATSAPP,   desc: 'Easily receive and reply to WhatsApp messages from your…' },
+  { name: 'Stripe',            img: IMG_APP_STRIPE,     desc: 'View Stripe data from Intercom' },
 ];
 
 function AppCard({ name, img, desc }: { name: string; img: string; desc: string }) {
@@ -2949,7 +3034,7 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   <p className="text-[15px] font-semibold text-[#1a1a1a]">Popular</p>
                   <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
                 </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_APPS.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
+                <div className="grid grid-cols-4 gap-3">{APP_STORE_POPULAR.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
               </div>
               {/* New & noteworthy */}
               <div>
@@ -2957,7 +3042,7 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   <p className="text-[15px] font-semibold text-[#1a1a1a]">New & noteworthy</p>
                   <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
                 </div>
-                <div className="grid grid-cols-4 gap-3">{[...APP_STORE_APPS].reverse().map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
+                <div className="grid grid-cols-4 gap-3">{APP_STORE_NEW.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
               </div>
               {/* Free apps */}
               <div>
@@ -2965,7 +3050,15 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   <p className="text-[15px] font-semibold text-[#1a1a1a]">Free apps to install</p>
                   <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
                 </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_APPS.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
+                <div className="grid grid-cols-4 gap-3">{APP_STORE_FREE.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
+              </div>
+              {/* For support teams */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[15px] font-semibold text-[#1a1a1a]">For support teams</p>
+                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
+                </div>
+                <div className="grid grid-cols-4 gap-3">{APP_STORE_SUPPORT.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
               </div>
             </div>
           </div>
@@ -3113,11 +3206,8 @@ function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                   <p className="text-[13px] text-[#646462] mb-3">Puedes usar estos datos como contexto en el buzón, como reglas para automatizaciones, audiencia para mensajes salientes y mucho más.</p>
                   <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/></svg>Cómo enviar atributos de usuario personalizados</button>
                 </div>
-                <div className="w-[270px] bg-white border border-[#e9eae6] rounded-[8px] p-4 flex-shrink-0">
-                  <p className="text-[10px] font-semibold uppercase text-[#646462] tracking-wider mb-2">USER DATA</p>
-                  {[['Name','Luis Easton'],['Company','Acme'],['Location','London'],['Plan','Premium'],['Lifetime value','$40k'],['# of projects','234']].map(([k,v]) => (
-                    <div key={k} className="flex items-center justify-between py-1 text-[12px]"><span className="text-[#646462]">{k}</span><span className="text-[#1a1a1a] font-medium">{v}</span></div>
-                  ))}
+                <div className="w-[508px] flex-shrink-0 flex items-center justify-center">
+                  <img src={IMG_USERDATA_BANNER} alt="People data banner" className="w-[508px] h-[251px]" data-node-id="1:34193" />
                 </div>
               </div>
               <div className="px-6 pb-6">
@@ -3192,12 +3282,8 @@ function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                   <button className="mt-4 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Agregar datos</button>
                   <p className="text-[12px] text-[#646462] mt-3">Cambiar esta configuración modificará los datos de calificación visibles en todos los perfiles de usuarios y leads.</p>
                 </div>
-                <div className="w-[200px] flex-shrink-0">
-                  <div className="border border-[#e0e7ff] bg-[#f5f7ff] rounded-[12px] p-4">
-                    <div className="flex items-center justify-center w-12 h-12 bg-[#e0e7ff] rounded-full mb-3">👤</div>
-                    <p className="text-[12px] font-semibold text-[#1a1a1a] mb-3">Qualification</p>
-                    {[1,2,3].map(i => <div key={i} className="h-2 bg-[#dbeafe] rounded mb-2" />)}
-                  </div>
+                <div className="w-[208px] flex-shrink-0 flex items-center justify-center">
+                  <img src={IMG_QUALIFICATION} alt="Vista previa del perfil de calificación" className="w-[208px] h-[299px]" data-node-id="1:37921" />
                 </div>
               </div>
             )}
@@ -3221,6 +3307,427 @@ function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                 <p className="text-[13px] text-[#646462] max-w-[600px] text-center">Para impedir que una persona envíe mensajes, haz clic en el botón Bloquear en el menú desplegable junto al perfil de la persona.</p>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── EmpresasView (1-41345 + 1-42522) ──────────────────────────────────────────
+
+function EmpresasView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'atributos' | 'segmentos'>('atributos');
+  const tabs = [
+    { id: 'atributos' as const, label: 'Atributos' },
+    { id: 'segmentos' as const, label: 'Segmentos' },
+  ];
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Empresas</h1>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              {tab === 'atributos' && <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Crear atributo</button>}
+            </div>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {tab === 'atributos' && (
+              <div className="px-6 py-4">
+                <input placeholder="🔍  Nombre del campo..." className="w-full max-w-[380px] border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] mb-3 focus:outline-none focus:border-[#3b59f6]" />
+                <table className="w-full text-[13px]">
+                  <thead><tr className="border-b border-[#e9eae6]">
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Nombre del atributo</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Formato</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Creado</th>
+                  </tr></thead>
+                  <tbody>
+                    {[
+                      { icon: '🏢', name: 'Company name', desc: 'The name of a company', format: 'Texto' },
+                      { icon: '🔢', name: 'Company ID', desc: 'A number identifying a company', format: 'Texto' },
+                      { icon: '📅', name: 'Company last seen', desc: 'The last day anyone from a company visited your site or app', format: 'Fecha' },
+                      { icon: '📅', name: 'Company created at', desc: 'The day a company was added to Intercom', format: 'Fecha' },
+                      { icon: '👥', name: 'People', desc: 'The number of people in a company', format: 'Número' },
+                      { icon: '📊', name: 'Company web sessions', desc: 'All visits from anyone in a company to your product\'s site or app', format: 'Número' },
+                      { icon: '💼', name: 'Plan', desc: 'A specific plan or level within your product that companies have signed up t', format: 'Texto' },
+                      { icon: '💰', name: 'Monthly Spend', desc: 'The monthly revenue you receive from a company', format: 'Número decimal' },
+                    ].map(r => (
+                      <tr key={r.name} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                        <td className="px-4 py-3"><div className="flex items-start gap-2"><span>{r.icon}</span><div><p className="font-medium text-[#1a1a1a]">{r.name}</p><p className="text-[12px] text-[#646462]">{r.desc}</p></div></div></td>
+                        <td className="px-4 py-3 text-[#646462] align-top">{r.format}</td>
+                        <td className="px-4 py-3 text-[#646462] align-top">1 hora atrás</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {tab === 'segmentos' && (
+              <div className="px-6 py-4">
+                <table className="w-full text-[13px]">
+                  <thead><tr className="border-b border-[#e9eae6]">
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Nombre del segmento <span className="text-[#ccc]">↕</span></th>
+                    <th className="text-right px-4 py-2 font-medium text-[#646462] text-[12px]">Empresas <span className="text-[#ccc]">↕</span></th>
+                  </tr></thead>
+                  <tbody>
+                    {[['Active', 0], ['All', 0], ['New', 0]].map(([name, count]) => (
+                      <tr key={name as string} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                        <td className="px-4 py-3"><span className="text-[#1a1a1a] font-medium">{name}</span> <span className="text-[#646462]">(Segmento predefinido)</span></td>
+                        <td className="px-4 py-3 text-right"><a href="#" className="text-[#3b59f6] hover:underline">Ver {count} empresas</a></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── WorkspaceSecurityView (1-44080) ───────────────────────────────────────────
+
+function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'enlaces'>('enlaces');
+  const [untrustedOn, setUntrustedOn] = useState(true);
+  const [maliciousOn, setMaliciousOn] = useState(true);
+  const [showDefaults, setShowDefaults] = useState(true);
+  const tabs = [
+    { id: 'workspace' as const, label: 'Espacio de trabajo' },
+    { id: 'datos'     as const, label: 'Datos' },
+    { id: 'messenger' as const, label: 'Messenger' },
+    { id: 'archivos'  as const, label: 'Archivos adjuntos' },
+    { id: 'enlaces'   as const, label: 'Enlaces' },
+    { id: 'auth'      as const, label: 'Autenticación de clientes' },
+    { id: 'estado'    as const, label: 'Comprobación de estado' },
+  ];
+
+  function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+    return (
+      <button onClick={onToggle} className={`w-8 h-[18px] rounded-full relative flex-shrink-0 transition-colors ${on ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}>
+        <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-all ${on ? 'right-0.5' : 'left-0.5'}`}/>
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {/* Yellow security warning banner */}
+          <div className="bg-[#fef3c7] border-b border-[#fde68a] px-6 py-3 flex items-center justify-center text-[13px] text-[#1a1a1a] flex-shrink-0">
+            <span className="text-[#f59e0b] mr-2">⚠</span>
+            Ingresa un contacto de seguridad obligatorio en caso de un incidente de seguridad. Haz <a href="#" className="text-[#3b59f6] underline ml-1">clic aquí</a>.
+          </div>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Seguridad</h1>
+            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+              Más información <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0 overflow-x-auto">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => t.id === 'enlaces' && setTab('enlaces')}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
+            <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Seguridad de los enlaces</h2>
+            <p className="text-[13px] text-[#646462] mb-5">Controla la configuración de seguridad de los enlaces en las conversaciones</p>
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              {/* Untrusted card */}
+              <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                <div className="bg-[#f8f8f7] py-10 flex items-center justify-center">
+                  <div className="bg-[#ffe8d6] border border-[#fdba74] rounded-full px-4 py-2 text-[13px] text-[#1a1a1a] flex items-center gap-2">
+                    <span className="text-[#f97316]">⚠</span>
+                    <span>www.untrusted-warning.com</span>
+                  </div>
+                </div>
+                <div className="px-4 py-3 flex items-start gap-3">
+                  <Toggle on={untrustedOn} onToggle={() => setUntrustedOn(v => !v)} />
+                  <div className="flex-1">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Advertencias no confiables</p>
+                    <p className="text-[12px] text-[#646462]">Pide a tus compañeros de equipo que revisen detenidamente los enlaces que no son de confianza antes de abrirlos. <a href="#" className="text-[#3b59f6] underline">(Ver ejemplo)</a></p>
+                  </div>
+                </div>
+              </div>
+              {/* Malicious card */}
+              <div className="border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                <div className="bg-[#f8f8f7] py-10 flex items-center justify-center">
+                  <div className="bg-[#fee2e2] border border-[#fca5a5] rounded-full px-4 py-2 text-[13px] text-[#1a1a1a] flex items-center gap-2">
+                    <span className="text-[#dc2626]">▲</span>
+                    <span>www.malicious-warning.com</span>
+                  </div>
+                </div>
+                <div className="px-4 py-3 flex items-start gap-3">
+                  <Toggle on={maliciousOn} onToggle={() => setMaliciousOn(v => !v)} />
+                  <div className="flex-1">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a] mb-0.5">Advertencias maliciosas</p>
+                    <p className="text-[12px] text-[#646462]">Detecta enlaces maliciosos y exige a los compañeros de equipo que reconozcan los riesgos antes de abrir. <a href="#" className="text-[#3b59f6] underline">(Ver ejemplo)</a></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Enlaces de confianza y bloqueados</h2>
+            <p className="text-[13px] text-[#646462] mb-4">Define políticas para controlar qué enlaces son de confianza o están bloqueados dentro de las conversaciones. Los enlaces de confianza no activarán advertencias ni se someterán a detección maliciosa. Los enlaces utilizados por tu espacio de trabajo se consideran predeterminada. Los compañeros de equipo no podrán abrir enlaces bloqueados.</p>
+            <div className="flex items-center gap-3 mb-4">
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Añadir política</button>
+              <Toggle on={showDefaults} onToggle={() => setShowDefaults(v => !v)} />
+              <span className="text-[13px] text-[#1a1a1a]">Mostrar políticas predeterminadas</span>
+            </div>
+            <table className="w-full text-[13px]">
+              <thead><tr className="border-b border-[#e9eae6] bg-[#fafaf9]">
+                <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Item</th>
+                <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Type</th>
+                <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Action</th>
+                <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Added By</th>
+                <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Date</th>
+              </tr></thead>
+              <tbody>
+                {['*.intercom.com', '*.intercom.io', '*.intercomcdn.com', '*.intercomcdn.eu', '*.intercom-attachments.com', '*.intercom-attachments-1.com'].map(item => (
+                  <tr key={item} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                    <td className="px-4 py-2 text-[#1a1a1a]">{item}</td>
+                    <td className="px-4 py-2"><span className="bg-[#f0f0ec] rounded-full px-2 py-0.5 text-[12px] text-[#646462]">Dominio</span></td>
+                    <td className="px-4 py-2 text-[#646462]">Predeterminado</td>
+                    <td className="px-4 py-2"><span className="bg-[#dcfce7] text-[#166534] rounded-full px-2 py-0.5 text-[12px]">Trusted</span></td>
+                    <td className="px-4 py-2 text-[#646462]">Intercom</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex justify-center mt-4">
+              <button className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Load more</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── WorkspaceMultilingualView (1-45264) ───────────────────────────────────────
+
+function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'general' | 'glosario'>('general');
+  const [aiTranslate, setAiTranslate] = useState(false);
+  const [defaultLang, setDefaultLang] = useState('English');
+
+  function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+    return (
+      <button onClick={onToggle} className={`w-8 h-[18px] rounded-full relative flex-shrink-0 transition-colors ${on ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}>
+        <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-all ${on ? 'right-0.5' : 'left-0.5'}`}/>
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Multilingüe</h1>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Más información</button>
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Guardar</button>
+            </div>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+            {(['general', 'glosario'] as const).map(id => (
+              <button key={id} onClick={() => setTab(id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors capitalize ${
+                  tab === id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {id === 'general' ? 'General' : 'Glosario'}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
+            {tab === 'general' && <>
+              {/* AI translation card */}
+              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-8">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Traducciones de IA para el buzón</h3>
+                  <p className="text-[13px] text-[#646462]">Traduce automáticamente las respuestas de los clientes al idioma predeterminado de tu espacio de trabajo en el buzón, y las respuestas de los miembros del equipo al idioma del cliente en todos los canales para ofrecer conversaciones fluidas.</p>
+                </div>
+                <div className="flex flex-col items-start gap-2 max-w-[380px]">
+                  <div className="flex items-center gap-2">
+                    <Toggle on={aiTranslate} onToggle={() => setAiTranslate(v => !v)} />
+                    <span className="text-[13px] text-[#1a1a1a]">Habilitar la traducción de IA para el buzón</span>
+                  </div>
+                  <p className="text-[12px] text-[#646462]">Al habilitar esto, das tu consentimiento para el uso de funciones impulsadas por IA y aceptas los <a href="#" className="text-[#3b59f6] underline">Términos y condiciones</a>.</p>
+                  <p className="text-[12px] text-[#646462]">Todos los compañeros de equipo podrán ver las traducciones, pero solo los compañeros de equipo con <a href="#" className="text-[#3b59f6] underline">acceso a Copilot</a> podrán traducir automáticamente sus respuestas usando Traducción del buzón con IA.</p>
+                </div>
+              </div>
+
+              <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">Idiomas</h2>
+              {/* Workspace languages */}
+              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-4">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Idiomas del área de trabajo</h3>
+                  <p className="text-[13px] text-[#646462]">Establece tus idiomas predeterminados y adicionales para la comunicación con el cliente en todos los canales.</p>
+                </div>
+                <div className="w-[380px] flex-shrink-0">
+                  <p className="text-[13px] font-medium text-[#1a1a1a] mb-1">Idioma predeterminado</p>
+                  <p className="text-[12px] text-[#646462] mb-2">Seleccione el idioma predeterminado para la atención a clientes.</p>
+                  <select value={defaultLang} onChange={e => setDefaultLang(e.target.value)} className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] mb-3 bg-white">
+                    <option>English</option><option>Español</option><option>Français</option><option>Deutsch</option>
+                  </select>
+                  <p className="text-[13px] font-medium text-[#1a1a1a] mb-1">Idiomas adicionales</p>
+                  <p className="text-[12px] text-[#646462] mb-2">Seleccione hasta dos idiomas adicionales.</p>
+                  <button className="text-[13px] text-[#fa7938] font-medium">+ Agregar idioma</button>
+                </div>
+              </div>
+
+              {/* Supported languages */}
+              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-4">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Idiomas admitidos</h3>
+                  <p className="text-[13px] text-[#646462]">Idiomas que Fin y Messenger pueden detectar y traducir automáticamente las conversaciones en este espacio de trabajo.</p>
+                  <a href="#" className="text-[13px] text-[#3b59f6] underline mt-2 inline-block">Consulta la lista completa de idiomas compatibles</a>
+                </div>
+                <div className="w-[380px] flex-shrink-0">
+                  <select className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white">
+                    <option>Todo</option>
+                  </select>
+                </div>
+              </div>
+
+              <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-3 mt-4">Tono de traducción</h2>
+            </>}
+            {tab === 'glosario' && (
+              <p className="text-[13px] text-[#646462]">Glosario de traducciones (próximamente).</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── BillingView (1-46200 + 1-47188) ───────────────────────────────────────────
+
+function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'suscripcion' | 'facturas' | 'pago'>('suscripcion');
+  const tabs = [
+    { id: 'suscripcion' as const, label: 'Suscripción' },
+    { id: 'facturas'    as const, label: 'Facturas' },
+    { id: 'pago'        as const, label: 'Detalles de pago' },
+  ];
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Facturación</h1>
+            <div className="flex items-center gap-2">
+              {tab === 'suscripcion' && <>
+                <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                  Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                </button>
+                <button className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Deja un comentario</button>
+              </>}
+            </div>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
+            {tab === 'suscripcion' && <>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a]">Prueba gratuita</h2>
+                  <p className="text-[13px] text-[#646462] mt-1">Fecha de finalización de la prueba: 20 may 2026</p>
+                </div>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">USD 0.00</p>
+              </div>
+              {/* Plan card */}
+              <div className="border border-[#e9eae6] rounded-[12px] mb-4">
+                <div className="px-5 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">Plan</p>
+                  <button className="text-[13px] text-[#646462] flex items-center gap-1 hover:text-[#1a1a1a]">≡ Ver funciones incluidas</button>
+                </div>
+                <div className="px-5 py-4 flex items-center gap-3">
+                  <span className="text-[14px] font-medium text-[#1a1a1a]">Advanced</span>
+                  <span className="bg-[#e0e7ff] text-[#4338ca] rounded-full px-2 py-0.5 text-[11px] font-medium">Prueba De Advanced</span>
+                  <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1 ml-auto">⚙ Cambiar plan</button>
+                </div>
+                <div className="px-5 py-3 border-t border-[#e9eae6] bg-[#fafaf9]">
+                  <p className="text-[12px] text-[#646462] flex items-start gap-2"><span className="text-[#3b59f6]">ⓘ</span>Los cambios de plazas pueden tardar hasta 24 horas en reflejarse aquí.</p>
+                </div>
+              </div>
+              {/* Complementos card */}
+              <div className="border border-[#e9eae6] rounded-[12px]">
+                <div className="px-5 py-3 border-b border-[#e9eae6]">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">Complementos</p>
+                </div>
+                {[['Asistencia proactiva Plus', 'Prueba'], ['Fin AI Copilot', 'Prueba'], ['Pro', 'Prueba']].map(([n, b]) => (
+                  <div key={n} className="px-5 py-3 border-b border-[#f3f3f1] last:border-0 flex items-center gap-3">
+                    <span className="text-[13px] text-[#1a1a1a]">{n}</span>
+                    <span className="bg-[#e0e7ff] text-[#4338ca] rounded-full px-2 py-0.5 text-[11px] font-medium">{b}</span>
+                  </div>
+                ))}
+              </div>
+            </>}
+
+            {tab === 'facturas' && (
+              <p className="text-[13px] text-[#646462]">No hay facturas disponibles aún.</p>
+            )}
+
+            {tab === 'pago' && <>
+              <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-4">Pago</h2>
+              <div className="flex flex-col gap-2 mb-8">
+                <p className="text-[13px] text-[#1a1a1a]"><span>📅</span> <strong>Fecha de facturación:</strong> 5th de cada mes</p>
+                <p className="text-[13px] text-[#1a1a1a]"><span>💳</span> Facturado a: no se agregó una tarjeta de crédito. <a href="#" className="text-[#3b59f6] underline ml-1">Agregar tarjeta</a></p>
+                <p className="text-[13px] text-[#1a1a1a]"><span>🏢</span> Ubicación de la empresa: no se agregó la dirección de la empresa. <a href="#" className="text-[#3b59f6] underline ml-1">Agregar dirección de la empresa</a></p>
+                <p className="text-[13px] text-[#1a1a1a]"><span>🏢</span> Nombre de la empresa: Acme. <a href="#" className="text-[#3b59f6] underline ml-1">Editar nombre de la empresa</a></p>
+              </div>
+              <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Contactos de facturación</h2>
+              <p className="text-[13px] text-[#646462] mb-3">Envía facturas, excedentes y otros mensajes relacionados con la facturación a la siguiente lista: <span className="text-[#646462]">⓵</span></p>
+              <div className="border border-[#e9eae6] rounded-[8px] p-3 mb-2 flex flex-wrap items-center gap-2">
+                <span className="bg-[#f3f3f1] rounded-full px-3 py-1 text-[13px] text-[#1a1a1a]">hectorvidal041103@gmail.com</span>
+                <input placeholder="Ingresa una dirección de correo electrónico" className="flex-1 min-w-[200px] outline-none text-[13px] bg-transparent" />
+              </div>
+              <p className="text-[12px] text-[#646462] mb-4">Puedes agregar varias direcciones de correo electrónico separándolas con una coma o un espacio.</p>
+              <button className="bg-[#f3f3f1] text-[#646462] rounded-full px-4 py-[7px] text-[13px] font-semibold cursor-not-allowed">Guardar</button>
+            </>}
           </div>
         </div>
       </div>
@@ -3259,6 +3766,10 @@ export default function Prototype() {
       case 'connectors':     return <ConnectorsView view={view} onNavigate={setView} />;
       case 'labels':         return <LabelsView view={view} onNavigate={setView} />;
       case 'people':         return <PeopleView view={view} onNavigate={setView} />;
+      case 'companies':      return <EmpresasView view={view} onNavigate={setView} />;
+      case 'workspaceSecurity':     return <WorkspaceSecurityView view={view} onNavigate={setView} />;
+      case 'workspaceMultilingual': return <WorkspaceMultilingualView view={view} onNavigate={setView} />;
+      case 'billing':        return <BillingView view={view} onNavigate={setView} />;
       case 'fin':            return <WIPView label="Fin AI" />;
       case 'knowledge':return <WIPView label="Knowledge Base" />;
       case 'reports':  return <WIPView label="Reports" />;
