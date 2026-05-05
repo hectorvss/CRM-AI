@@ -57,10 +57,15 @@
           {/* price block — pinned to fixed slot so the CTA below sits at the same y across all columns */}
           <div className="mt-auto" style={{ height: 60 }}>
             {plan.seatPrice && (
-              <div className="flex items-baseline gap-[4px]">
-                <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>From</span>
-                <span className="text-[28px] leading-[28px] tracking-[-0.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>{price}</span>
-                <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+              <div className="flex flex-col gap-[2px]">
+                <div className="flex items-baseline gap-[6px]">
+                  <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>From</span>
+                  <span className="text-[28px] leading-[28px] tracking-[-0.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>{price}</span>
+                  {plan.originalPrice && (
+                    <span className="text-[16px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through' }}>{plan.originalPrice}</span>
+                  )}
+                  <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+                </div>
               </div>
             )}
             {plan.noSeats && (
@@ -119,11 +124,15 @@
     const [openFaq, setOpenFaq] = useState(0);
     const [activeTestimonial, setActiveTestimonial] = useState(0);
 
+    // MSRP shown as strikethrough next to the discounted price — same numbers
+    // as the SaaS Plans tab (originalPrice). Discount applies to both billing
+    // cycles; credit allowances are workspace-wide, not per seat.
     const platformPlans = [
       {
         name: 'Starter',
         subtitle: 'Includes Clain AI Agent',
         description: 'The customer support plan for individuals, startups, and small businesses.',
+        originalPrice: '€149',
         priceAnnual: '€42',
         priceMonthly: '€49',
         seatPrice: true,
@@ -132,16 +141,17 @@
         featuresLabel: 'KEY FEATURES INCLUDE',
         features: [
           'Clain AI Agent (autonomous)',
+          '5,000 AI credits/month — workspace total',
           'Inbox with shared views',
           'Knowledge Hub',
-          '5,000 AI credits/month',
-          'Up to 3 seats',
+          '3 seats included',
         ],
       },
       {
         name: 'Growth',
         subtitle: 'Includes Clain AI Agent',
         description: 'Powerful automation tools and AI features for growing support teams.',
+        originalPrice: '€399',
         priceAnnual: '€109',
         priceMonthly: '€129',
         seatPrice: true,
@@ -149,17 +159,19 @@
         cta: 'Upgrade to Growth',
         featuresLabel: 'EVERY STARTER FEATURE, PLUS',
         features: [
+          '20,000 AI credits/month — workspace total',
           'Tickets & SLA monitoring',
           'Workflow automation builder',
           'Round robin assignment',
           'Reporting + AI Insights',
-          'Up to 10 seats',
+          '8 seats included',
         ],
       },
       {
         name: 'Scale',
         subtitle: 'Includes Clain AI Agent',
         description: 'Collaboration, security, and multibrand features for large support teams.',
+        originalPrice: '€899',
         priceAnnual: '€254',
         priceMonthly: '€299',
         seatPrice: true,
@@ -167,11 +179,12 @@
         cta: 'Upgrade to Scale',
         featuresLabel: 'EVERY GROWTH FEATURE, PLUS',
         features: [
+          '60,000 AI credits/month — workspace total',
           'SSO & identity management',
           'HIPAA support',
           'Service level agreements (SLAs)',
           'Multibrand Help Center',
-          'Up to 25 seats',
+          '20 seats included',
         ],
       },
     ];
@@ -279,14 +292,14 @@
                     <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>AI Credits</h3>
                     <p className="m-0 mt-[10px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>The intelligence powering your workspace</p>
                     <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
-                      Each plan includes a monthly allowance of AI credits. One credit covers a unit of AI work — for example a tagged conversation, a generated summary, or a multi-step reasoning task. Top-ups are available and are consumed only after your monthly allowance.
+                      Each plan includes a monthly allowance of AI credits — <strong style={{ color: COLOR_TEXT, fontWeight: 600 }}>shared across your entire team</strong>, not per seat. One credit covers a unit of AI work: a tagged conversation, a generated summary, or a multi-step reasoning task. Adding more seats <strong style={{ color: COLOR_TEXT, fontWeight: 600 }}>does not add credits</strong>; to extend your team's allowance, buy credit packs separately.
                     </p>
-                    <p className="mt-[24px] m-0 text-[10px] uppercase tracking-[0.6px] leading-[10px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>WHAT CREDITS POWER</p>
+                    <p className="mt-[24px] m-0 text-[10px] uppercase tracking-[0.6px] leading-[10px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>MONTHLY ALLOWANCE PER PLAN</p>
                     <ul className="list-none p-0 m-0 mt-[16px] flex flex-col gap-[12px]">
-                      <Bullet>Simple classification &amp; tagging</Bullet>
-                      <Bullet>Conversation summaries</Bullet>
-                      <Bullet>Response recommendations</Bullet>
-                      <Bullet>Complex workflow reasoning</Bullet>
+                      <Bullet>Starter — 5,000 credits / month</Bullet>
+                      <Bullet>Growth — 20,000 credits / month</Bullet>
+                      <Bullet>Scale — 60,000 credits / month</Bullet>
+                      <Bullet>Top-ups available; consumed after monthly allowance</Bullet>
                     </ul>
                     <button onClick={() => ClainV2.navigate('/upgrade')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
                       <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Buy credit packs</span>
@@ -297,13 +310,13 @@
                     <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>Seats</h3>
                     <p className="m-0 mt-[10px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>One seat per teammate with full access</p>
                     <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
-                      Each plan includes a base number of seats. Add more anytime as your team grows — billing prorates automatically. Lite seats for view-only collaborators are included free with every plan.
+                      Each plan includes a base number of seats. Add more anytime as your team grows — billing prorates automatically. <strong style={{ color: COLOR_TEXT, fontWeight: 600 }}>Adding a seat does not increase your AI credits allowance</strong> — credits remain shared by the workspace and are billed separately. Lite seats for view-only collaborators are included free with every plan.
                     </p>
-                    <p className="mt-[24px] m-0 text-[10px] uppercase tracking-[0.6px] leading-[10px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>WHAT'S INCLUDED PER PLAN</p>
+                    <p className="mt-[24px] m-0 text-[10px] uppercase tracking-[0.6px] leading-[10px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>SEATS INCLUDED PER PLAN</p>
                     <ul className="list-none p-0 m-0 mt-[16px] flex flex-col gap-[12px]">
-                      <Bullet>Starter — up to 3 seats</Bullet>
-                      <Bullet>Growth — up to 10 seats</Bullet>
-                      <Bullet>Scale — up to 25 seats</Bullet>
+                      <Bullet>Starter — 3 seats included (€25 / extra seat)</Bullet>
+                      <Bullet>Growth — 8 seats included (€22 / extra seat)</Bullet>
+                      <Bullet>Scale — 20 seats included (€19 / extra seat)</Bullet>
                       <Bullet>Lite collaborators — unlimited, free</Bullet>
                     </ul>
                     <button onClick={() => ClainV2.navigate('/upgrade')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
