@@ -240,12 +240,12 @@
           <div className="content-stretch flex flex-col items-start pb-[0.56px] relative shrink-0 w-full" data-node-id="2:32951" data-name="p.text-body-xl">
             <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[#111] text-[0px] tracking-[-0.8px] w-full" data-node-id="2:32952">
               <p className="mb-0 text-[23.6px]">
-                <span className="leading-[29.44px] text-[#111]">{`The agent reasons, looks up and acts on your data.`}</span>
-                <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">so you have full</span>
+                <span className="leading-[29.44px] text-[#111]">{`The agent reasons, looks up and acts on your data,`}</span>
+                <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">{` so support stays in control.`}</span>
               </p>
-              <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Agents see context, take action, escalate when it matters.</p>
+              <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">It sees context, takes action, escalates when it matters.</p>
               <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Plugs into your stack with 30+ integrations.</p>
-              <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">customer experiences.</p>
+              <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">Built for modern customer experiences.</p>
             </div>
           </div>
           <div className="content-stretch flex gap-[var(--item-spacing\/8,8px)] items-start pt-[0.89px] relative shrink-0 w-full" data-node-id="2:32954" data-name="div.flex">
@@ -337,16 +337,8 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] relative row-2 self-start shrink-0" data-node-id="2:32996" data-name="div.text-body-lg">
                   <div className="h-[67.17px] relative shrink-0 w-full" data-node-id="2:32997" data-name="p">
-                    <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[10.5px] tracking-[-0.16px] w-[166.76px]" data-node-id="2:32998">
-                      <p className="leading-[22.4px]">{`A single solution means `}</p>
-                    </div>
-                    <div className="absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-[166.56px] top-px w-[20.81px]" data-node-id="2:32999" data-name="Component 1">
-                      <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:32999;2:32239">
-                        <p className="leading-[22.4px]">Clain</p>
-                      </div>
-                    </div>
-                    <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[190.75px] not-italic text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[10.5px] tracking-[-0.16px] w-[293.37px]" data-node-id="2:33001">
-                      <p className="leading-[22.4px]">Resolves repeat questions instantly.</p>
+                    <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[10.5px] tracking-[-0.16px] w-full" data-node-id="2:32998">
+                      <p className="leading-[22.4px]">Clain resolves repeat questions instantly.</p>
                     </div>
                     <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[45px] justify-center leading-[0] left-0 not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[44.08px] tracking-[-0.16px] w-[501.96px]" data-node-id="2:33002">
                       <p className="leading-[22.4px] mb-0">Every conversation trains the next, on your terms.</p>
@@ -383,13 +375,8 @@
                     <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[10.5px] tracking-[-0.16px] w-[523.67px]" data-node-id="2:33018">
                       <p className="leading-[22.4px]">Email, chat, voice, WhatsApp, Messenger, Slack.</p>
                     </div>
-                    <div className="absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-0 top-[23.39px] w-[20.81px]" data-node-id="2:33019" data-name="Component 1">
-                      <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:33019;2:32239">
-                        <p className="leading-[22.4px]">Clain</p>
-                      </div>
-                    </div>
-                    <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[24.19px] not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[32.89px] tracking-[-0.16px] w-[451.7px]" data-node-id="2:33021">
-                      <p className="leading-[22.4px]">Clain's AI agent has tools. It looks up orders, processes.</p>
+                    <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[32.89px] tracking-[-0.16px] w-full" data-node-id="2:33021">
+                      <p className="leading-[22.4px]">Clain's AI agent looks up orders, processes refunds, escalates.</p>
                     </div>
                     <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[55.29px] tracking-[-0.16px] w-[341.92px]" data-node-id="2:33022">
                       <p className="leading-[22.4px]">Drops into Zendesk, HubSpot, Salesforce.</p>
@@ -429,13 +416,8 @@
                 </div>
                 <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] relative row-2 self-start shrink-0" data-node-id="2:33039" data-name="div.text-body-lg">
                   <div className="h-[89.56px] relative shrink-0 w-full" data-node-id="2:33040" data-name="p">
-                    <div className="absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-0 top-px w-[20.81px]" data-node-id="2:33041" data-name="Component 1">
-                      <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:33041;2:32239">
-                        <p className="leading-[22.4px]">Clain</p>
-                      </div>
-                    </div>
-                    <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[24.18px] not-italic text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[10.5px] tracking-[-0.16px] w-[530.61px]" data-node-id="2:33043">
-                      <p className="leading-[22.4px]">Reports show what the AI resolved, where to improve.</p>
+                    <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-0 not-italic text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[10.5px] tracking-[-0.16px] w-full" data-node-id="2:33043">
+                      <p className="leading-[22.4px]">Clain shows what the AI resolved and where to improve.</p>
                     </div>
                     <div className="-translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[68px] justify-center leading-[0] left-0 not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] top-[55.28px] tracking-[-0.16px] w-[553.84px]" data-node-id="2:33044">
                       <p className="leading-[22.4px] mb-0">Plugs into 30+ tools so the agent has full context.</p>
@@ -533,7 +515,7 @@
                 </div>
                 <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33105" data-name="span.text-body">
                   <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[13.2px] text-[color:var(--color\/grey\/7-50\%,rgba(17,17,17,0.5))] w-full" data-node-id="2:33106">
-                    <p className="leading-[19.6px]">Trained on your help center, ticket.</p>
+                    <p className="leading-[19.6px]">Trained on your help center and tickets.</p>
                   </div>
                 </div>
               </div>
@@ -577,12 +559,12 @@
           <div className="content-stretch flex flex-col items-start pb-[0.56px] relative shrink-0 w-full" data-node-id="2:33128" data-name="p.text-body-xl">
             <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[#111] text-[0px] tracking-[-0.8px] w-full" data-node-id="2:33129">
               <p className="mb-0 text-[23.6px]">
-                <span className="leading-[29.44px] text-[#111]">{`Agents see context, take action, escalate.`}</span>
-                <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">to resolve</span>
+                <span className="leading-[29.44px] text-[#111]">{`Agents see context, take action, escalate,`}</span>
+                <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">{` always with a human in the loop.`}</span>
               </p>
               <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Product questions and refund flows, both resolved.</p>
-              <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Backed by audit trails so compliance and trust are.</p>
-              <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">experience.</p>
+              <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Backed by audit trails compliance teams trust.</p>
+              <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">Built for modern customer experiences.</p>
             </div>
           </div>
           <div className="content-stretch flex gap-[var(--item-spacing\/8,8px)] items-start pt-[0.9px] relative shrink-0 w-full" data-node-id="2:33130" data-name="div.flex">
@@ -640,8 +622,8 @@
                           <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33155">
                             <p className="leading-[19.6px] mb-0">Built after the LLM transition, not bolted on.</p>
                             <p className="leading-[19.6px] mb-0">Clain pulls customer context from every system you already use.</p>
-                            <p className="leading-[19.6px] mb-0">From SMB to enterprise, Clain runs the same agent, what.</p>
-                            <p className="leading-[19.6px]">faster.</p>
+                            <p className="leading-[19.6px] mb-0">From SMB to enterprise, Clain runs the same agent.</p>
+                            <p className="leading-[19.6px]">Built to scale with your team.</p>
                           </div>
                         </div>
                       </div>
@@ -696,7 +678,7 @@
                     <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33177" data-name="p">
                       <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[13.1px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33178">
                         <p className="leading-[19.6px] mb-0">The helpdesk where AI is the default state.</p>
-                        <p className="leading-[19.6px] mb-0">Less queueing, less swivel-chair, more.</p>
+                        <p className="leading-[19.6px] mb-0">Less queueing, less swivel-chair, more resolution.</p>
                         <p className="leading-[19.6px]">engineering support.</p>
                       </div>
                     </div>
@@ -883,16 +865,8 @@
                         <p className="leading-[22.4px] mb-0">Plugs into your stack with 30+ integrations.</p>
                         <p className="leading-[22.4px]">Reports show what AI resolved.</p>
                       </div>
-                      <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%-68.62px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[118.45px]" data-node-id="2:33383">
-                        <p className="leading-[22.4px]">{`Built for both `}</p>
-                      </div>
-                      <div className="-translate-x-1/2 absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-[calc(50%+0.81px)] top-[68.17px] w-[20.81px]" data-node-id="2:33384" data-name="Component 1">
-                        <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:33384;2:32247">
-                          <p className="leading-[22.4px]">Clain</p>
-                        </div>
-                      </div>
-                      <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+71.31px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[113.43px]" data-node-id="2:33386">
-                        <p className="leading-[22.4px]">and your team.</p>
+                      <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[268.61px]" data-node-id="2:33383">
+                        <p className="leading-[22.4px]">Built for Clain and your team.</p>
                       </div>
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[45px] justify-center leading-[0] left-[calc(50%+0.09px)] not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[111.26px] tracking-[-0.16px] w-[252.03px]" data-node-id="2:33387">
                         <p className="leading-[22.4px] mb-0">Set guardrails. Let the agent run.</p>
@@ -989,7 +963,7 @@
                         </div>
                         <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33430" data-name="p">
                           <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33431">
-                            <p className="leading-[19.6px] mb-0">Use Clain Copilot to give every human agent the AI's.</p>
+                            <p className="leading-[19.6px] mb-0">Use Clain Copilot to give every human agent the AI's edge.</p>
                             <p className="leading-[19.6px] mb-0">Speaks 40+ languages with the same quality.</p>
                             <p className="leading-[19.6px]">The platform built around an autonomous AI agent.</p>
                           </div>
@@ -1114,10 +1088,9 @@
                         <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33484" data-name="p">
                           <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33485">
                             <p className="leading-[19.6px] mb-0">Clain AI plus humans, end-to-end resolution.</p>
-                            <p className="leading-[19.6px] mb-0">Trained on your help center, ticket history.</p>
+                            <p className="leading-[19.6px] mb-0">Trained on your help center and ticket history.</p>
                             <p className="leading-[19.6px] mb-0">Lets the AI agent reason, look up, and act on your data.</p>
-                            <p className="leading-[19.6px] mb-0">{`Plugs into your stack with 30+ integrations.`}</p>
-                            <p className="leading-[19.6px]">Explorer, and Trends.</p>
+                            <p className="leading-[19.6px]">{`Plugs into your stack with 30+ integrations.`}</p>
                           </div>
                         </div>
                       </div>
@@ -1145,9 +1118,9 @@
                       <div className="content-stretch flex flex-col items-start mb-[-0.61px] relative shrink-0 w-full" data-node-id="2:33496" data-name="p">
                         <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[13.1px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33497">
                           <p className="leading-[19.6px] mb-0">Product questions and refund flows, both resolved.</p>
-                          <p className="leading-[19.6px] mb-0">Backed by audit trails so compliance and.</p>
-                          <p className="leading-[19.6px] mb-0">Clain pulls customer context from every.</p>
-                          <p className="leading-[19.6px]">quality drops.</p>
+                          <p className="leading-[19.6px] mb-0">Backed by audit trails compliance teams trust.</p>
+                          <p className="leading-[19.6px] mb-0">Clain pulls customer context from every system.</p>
+                          <p className="leading-[19.6px]">Spots where quality drops.</p>
                         </div>
                       </div>
                     </div>
@@ -1175,7 +1148,7 @@
                         <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33509">
                           <p className="leading-[19.6px] mb-0">Designed so a junior agent and an autonomous.</p>
                           <p className="leading-[19.6px] mb-0">The helpdesk where AI is the default state.</p>
-                          <p className="leading-[19.6px]">Less queueing, less swivel-chair, more.</p>
+                          <p className="leading-[19.6px]">Less queueing, less swivel-chair, more resolution.</p>
                         </div>
                       </div>
                     </div>
@@ -1261,12 +1234,12 @@
           <div className="content-stretch flex flex-col items-start pb-[0.56px] relative shrink-0 w-full" data-node-id="2:33128" data-name="p.text-body-xl">
             <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[#111] text-[0px] tracking-[-0.8px] w-full" data-node-id="2:33129">
               <p className="mb-0 text-[23.6px]">
-                <span className="leading-[29.44px] text-[#111]">{`Tracks every action, tool call and handoff.`}</span>
-                <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">to resolve</span>
+                <span className="leading-[29.44px] text-[#111]">{`Tracks every action, tool call and handoff,`}</span>
+                <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">{` ready for any audit.`}</span>
               </p>
-              <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Reporting that shows what AI resolved and what you.</p>
+              <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Reports show what AI resolved and what to improve.</p>
               <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Support, success and sales on one surface.</p>
-              <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">experience.</p>
+              <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">Built for modern customer experiences.</p>
             </div>
           </div>
           <div className="content-stretch flex gap-[var(--item-spacing\/8,8px)] items-start pt-[0.9px] relative shrink-0 w-full" data-node-id="2:33130" data-name="div.flex">
@@ -1324,7 +1297,7 @@
                           <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33155">
                             <p className="leading-[19.6px] mb-0">Email, chat, voice, WhatsApp and Slack.</p>
                             <p className="leading-[19.6px] mb-0">Set guardrails. Let the agent run. Audit every step it takes.</p>
-                            <p className="leading-[19.6px] mb-0">Clain's AI agent has tools. It looks up orders, processes.</p>
+                            <p className="leading-[19.6px] mb-0">Clain's AI agent looks up orders, processes refunds, escalates.</p>
                             <p className="leading-[19.6px]">faster.</p>
                           </div>
                         </div>
@@ -1380,8 +1353,8 @@
                     <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33177" data-name="p">
                       <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[13.1px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33178">
                         <p className="leading-[19.6px] mb-0">Resolves repeats so humans handle the long tail.</p>
-                        <p className="leading-[19.6px] mb-0">Speaks 40+ languages out of the box, with the same.</p>
-                        <p className="leading-[19.6px]">engineering support.</p>
+                        <p className="leading-[19.6px] mb-0">Speaks 40+ languages out of the box.</p>
+                        <p className="leading-[19.6px]">Backed by enterprise engineering support.</p>
                       </div>
                     </div>
                   </div>
@@ -1594,16 +1567,8 @@
                         <p className="leading-[22.4px] mb-0">Clain AI plus humans, end-to-end resolution.</p>
                         <p className="leading-[22.4px]">Trained on your help center and policies.</p>
                       </div>
-                      <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%-68.62px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[118.45px]" data-node-id="2:33383">
-                        <p className="leading-[22.4px]">{`Connects `}</p>
-                      </div>
-                      <div className="-translate-x-1/2 absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-[calc(50%+0.81px)] top-[68.17px] w-[20.81px]" data-node-id="2:33384" data-name="Component 1">
-                        <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:33384;2:32247">
-                          <p className="leading-[22.4px]">Clain</p>
-                        </div>
-                      </div>
-                      <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+71.31px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[113.43px]" data-node-id="2:33386">
-                        <p className="leading-[22.4px]">to your data.</p>
+                      <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[268.61px]" data-node-id="2:33383">
+                        <p className="leading-[22.4px]">Connects Clain to your data.</p>
                       </div>
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[45px] justify-center leading-[0] left-[calc(50%+0.09px)] not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[111.26px] tracking-[-0.16px] w-[252.03px]" data-node-id="2:33387">
                         <p className="leading-[22.4px] mb-0">From product question to refund.</p>
@@ -1632,10 +1597,10 @@
               <div className="content-stretch flex flex-col gap-[var(--item-spacing\/15_5,15.5px)] h-[154.475px] items-start relative shrink-0 w-[458.67px]" data-node-id="2:33397" data-name="div.col-span-full">
                 <div className="content-stretch flex flex-col items-start max-w-[405.760009765625px] relative shrink-0 w-[405.75px]" data-node-id="2:33398" data-name="p.text-body-lg">
                   <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7,#111)] tracking-[-0.16px] whitespace-nowrap" data-node-id="2:33399">
-                    <p className="leading-[22.4px] mb-0">Backed by audit trails so compliance and trust are.</p>
-                    <p className="leading-[22.4px] mb-0">Set policy. Set guardrails. Set escalation thresholds. Then.</p>
-                    <p className="leading-[22.4px] mb-0">Clain pulls customer context from every system you already use.</p>
-                    <p className="leading-[22.4px]">maintain.</p>
+                    <p className="leading-[22.4px] mb-0">Backed by audit trails compliance teams trust.</p>
+                    <p className="leading-[22.4px] mb-0">Set policy. Set guardrails. Set escalation thresholds.</p>
+                    <p className="leading-[22.4px] mb-0">Clain pulls customer context from every system.</p>
+                    <p className="leading-[22.4px]">Built to scale and maintain quality.</p>
                   </div>
                 </div>
                 <div className="bg-[#111] content-stretch flex items-start relative shrink-0" data-node-id="2:33400" data-name="Component 4">
@@ -1701,8 +1666,8 @@
                         <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33430" data-name="p">
                           <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[13px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33431">
                             <p className="leading-[19.6px] mb-0">Built after the LLM transition, not bolted on.</p>
-                            <p className="leading-[19.6px] mb-0">Designed so a junior agent and an autonomous agent share.</p>
-                            <p className="leading-[19.6px]">From SMB to enterprise, Clain runs the same agent, what.</p>
+                            <p className="leading-[19.6px] mb-0">Junior agents and autonomous agents share one stack.</p>
+                            <p className="leading-[19.6px]">From SMB to enterprise, Clain runs the same agent.</p>
                           </div>
                         </div>
                       </div>
@@ -1825,7 +1790,7 @@
                         <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33484" data-name="p">
                           <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33485">
                             <p className="leading-[19.6px] mb-0">Trained on your knowledge, tickets and tone.</p>
-                            <p className="leading-[19.6px] mb-0">Agents see context, take action, escalate when.</p>
+                            <p className="leading-[19.6px] mb-0">Agents see context, act, escalate when needed.</p>
                             <p className="leading-[19.6px] mb-0">Plugs into your stack with 30+ integrations.</p>
                             <p className="leading-[19.6px] mb-0">{`Clain AI plus humans, end-to-end resolution.`}</p>
                             <p className="leading-[19.6px]">Explorer, and Trends.</p>
@@ -1855,7 +1820,7 @@
                       </div>
                       <div className="content-stretch flex flex-col items-start mb-[-0.61px] relative shrink-0 w-full" data-node-id="2:33496" data-name="p">
                         <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[13.1px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33497">
-                          <p className="leading-[19.6px] mb-0">Reporting that shows what AI resolved and what.</p>
+                          <p className="leading-[19.6px] mb-0">Reports show what AI resolved and what to improve.</p>
                           <p className="leading-[19.6px] mb-0">Built so support, success and sales work.</p>
                           <p className="leading-[19.6px] mb-0">Set guardrails. Let the agent run. Audit.</p>
                           <p className="leading-[19.6px]">quality drops.</p>
@@ -1885,7 +1850,7 @@
                       <div className="content-stretch flex flex-col items-start relative shrink-0 w-full" data-node-id="2:33508" data-name="p">
                         <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[12.9px] text-[color:var(--color\/grey\/7-70\%,rgba(17,17,17,0.7))] whitespace-nowrap" data-node-id="2:33509">
                           <p className="leading-[19.6px] mb-0">Cuts first-response time from hours to seconds.</p>
-                          <p className="leading-[19.6px] mb-0">Resolves repeat questions instantly so humans.</p>
+                          <p className="leading-[19.6px] mb-0">Resolves repeats so humans focus on the hard ones.</p>
                           <p className="leading-[19.6px]">Speaks 40+ languages with the same quality.</p>
                         </div>
                       </div>
@@ -1976,13 +1941,13 @@
           <div className="absolute content-stretch flex flex-col inset-[-0.87px_0_64px_0] items-start" data-node-id="2:33547" data-name="div.col-span-full">
             <div className="content-stretch flex flex-col items-start pb-[0.56px] relative shrink-0 w-full" data-node-id="2:33548" data-name="p.text-body-xl">
               <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[#111] text-[0px] tracking-[-0.8px] w-full" data-node-id="2:33549">
-                <p className="leading-[29.44px] mb-0 text-[23.6px]">Trained on your help center, ticket history and.</p>
+                <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Trained on your help center, ticket history and policies.</p>
                 <p className="mb-0 text-[23.6px]">
-                  <span className="leading-[29.44px] text-[#111]">{`Resolve before you route`}</span>
-                  <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">with deep domain</span>
+                  <span className="leading-[29.44px] text-[#111]">{`Resolves before you route,`}</span>
+                  <span className="leading-[29.44px] text-[rgba(17,17,17,0.4)]">{` with deep domain expertise.`}</span>
                 </p>
                 <p className="leading-[29.44px] mb-0 text-[23.6px] text-[rgba(17,17,17,0.4)]">Lets the AI agent reason, look up, and act on your data.</p>
-                <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">your team an edge</p>
+                <p className="leading-[29.44px] text-[23.6px] text-[rgba(17,17,17,0.4)]">Gives your team a real edge.</p>
               </div>
             </div>
           </div>
@@ -2049,8 +2014,8 @@
               <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] relative row-2 self-start shrink-0" data-node-id="2:33580" data-name="p.text-body-lg">
                 <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[14.6px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[-0.16px] whitespace-nowrap" data-node-id="2:33581">
                   <p className="leading-[22.4px] mb-0">{`Solve queries across email, chat, voice, social.`}</p>
-                  <p className="leading-[22.4px] mb-0">Designed so a junior agent and an autonomous.</p>
-                  <p className="leading-[22.4px]">The first helpdesk where AI resolution is.</p>
+                  <p className="leading-[22.4px] mb-0">Designed so juniors and autonomous agents both win.</p>
+                  <p className="leading-[22.4px]">The first helpdesk built around AI resolution.</p>
                 </div>
               </div>
               <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch pb-[3px] pt-[2px] relative row-3 self-start shrink-0" data-node-id="2:33582" data-name="div">
@@ -2086,7 +2051,7 @@
               </div>
               <div className="col-1 content-stretch flex flex-col items-start justify-self-stretch max-w-[576px] relative row-2 self-start shrink-0" data-node-id="2:33597" data-name="p.text-body-lg">
                 <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] tracking-[-0.16px] whitespace-nowrap" data-node-id="2:33598">
-                  <p className="leading-[22.4px] mb-0">Less queueing, less swivel-chair, more.</p>
+                  <p className="leading-[22.4px] mb-0">Less queueing, less swivel-chair, more resolution.</p>
                   <p className="leading-[22.4px] mb-0">Clain combines an autonomous AI agent with a modern inbox.</p>
                   <p className="leading-[22.4px]">and best practices.</p>
                 </div>
@@ -2195,15 +2160,10 @@
             </div>
             <div className="content-stretch flex flex-col items-start max-w-[355.0400085449219px] pb-[20px] relative shrink-0" data-node-id="2:33654" data-name="p.text-body-lg:margin">
               <div className="h-[44.78px] max-w-[355.0400085449219px] relative shrink-0 w-[355.03px]" data-node-id="2:33656" data-name="p.text-body-lg">
-                <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%-66.43px)] not-italic text-[15.4px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[10.5px] tracking-[-0.16px] w-[166.73px]" data-node-id="2:33657">
-                  <p className="leading-[22.4px]">{`Powered end-to-end by `}</p>
+                <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.4px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[10.5px] tracking-[-0.16px] w-[300px]" data-node-id="2:33657">
+                  <p className="leading-[22.4px]">Powered end-to-end by Clain.</p>
                 </div>
-                <div className="-translate-x-1/2 absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-[calc(50%+27.14px)] top-px w-[20.81px]" data-node-id="2:33658" data-name="Component 1">
-                  <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:33658;2:32247">
-                    <p className="leading-[22.4px]">Clain</p>
-                  </div>
-                </div>
-                <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[32.89px] tracking-[-0.16px] w-[260.51px]" data-node-id="2:33661">
+                <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[32.89px] tracking-[-0.16px] w-[300px]" data-node-id="2:33661">
                   <p className="leading-[22.4px]">Agents see context, act, escalate.</p>
                 </div>
               </div>
