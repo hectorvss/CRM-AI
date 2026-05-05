@@ -1,0 +1,2367 @@
+# Landing v2 — Editable copy by page
+
+Generated automatically by `scripts/extract-landing-copy.cjs`. Run it again whenever copy changes.
+
+Each page is grouped into buckets so you can read straight through and audit:
+
+* **Headings** — h1/h2/h3, eyebrows, big numbers
+* **Body** — paragraphs, descriptions, taglines
+* **Features** — bullet lists, capability rows
+* **CTAs** — buttons + action links
+* **FAQs** — question/answer pairs
+* **Nav** — link labels
+
+---
+
+## agent-customer
+
+### Headings
+- Clain is now a Customer Agent
+- They’re all using Clain as a Customer Agent - and seeing these results because Clain is built on an integrated Customer Agent Platform.
+- The Customer Agent Platform has three capabilities.
+- Come meet Clain, the Customer Agent
+- The future of Clain and the Customer Agent category
+- Clain handles roles across the customer journey
+- New role launching soon
+- Join us to learn more about Clain’s newest role.
+- Clain is taking on more roles across the customer journey. We’ll share more soon.
+- Matt Duffy
+- Tyler Ryll
+
+### Body
+- Your customers don’t think in departments. Neither does Clain. Clain is a single
+- Customer Agent that qualifies leads, closes sales, resolves issues, and moves
+- between roles as the conversation demands.
+- Start free trial
+- Contact sales
+- [ Clain CEO Eoghan introduces Customer Agent ]
+- Play
+- Six months ago, we shared our vision that
+- Clain would go beyond customer service and become a single Customer Agent,
+- Now, that’s a reality.
+- Attio
+- Fellow
+- Roles:
+- Agent Operations:
+- Models:
+- Over the coming weeks, we’ll go deeper into each part of the Customer Agent Platform and introduce new roles Clain can do.
+- May 14
+- San Francisco + Livestream
+- Register
+- Clain delivers perfect
+- customer service
+- Clain resolves even your most complex support queries accurately and
+- reliably. Clain connects to your business tools, can take action on behalf of
+- your customers, and works across every channel - live chat, email, phone,
+- Slack, and more.
+- Learn more
+- Clain handles inbound sales
+- end to end
+- New
+- From first question to qualified opportunity, Clain handles inbound sales
+- end to end. It engages prospects, helps them understand your product,
+- and passes the right ones to sales.
+- May 7
+- Another new role, coming
+- soon
+- One unified Customer Agent for the
+- entire customer experience
+
+---
+
+## agent-trust
+
+### Headings
+- Start free trial
+- View demo
+- Safe AI deployment is
+- a shared partnership
+- Secure by design
+- Enterprise security and privacy
+- standards you can trust
+- Learn more
+- Proven scale and
+- reliability
+- Clain Million Dollar Guarantee
+- Apply Now
+- We ensure
+- You define
+- Information Security Management
+- AI Governance
+- Privacy Protection
+- Access Control
+- Data Protection
+- Multi-model resilience
+- Global Infrastructure
+- Continuous availability
+
+### Body
+- Safe AI, built on
+- partnership
+- Clain is designed with the highest commitment to security, reliability,
+- and transparency.
+- standards—and give you the tools to safely deploy AI within your
+- own boundaries.
+- Partnership
+- Safe AI deployment is a partnership. Clain is built
+- for transparency and control at every step—we
+- maintain the security and reliability foundation, while
+- you define the policies and boundaries that fit your
+- business.
+- AI Agent Safety
+- AI safety isn’t a checkbox—it’s built into every
+- part of Clain. Clain’s self-serve tools give you full visibility
+- and control over how your AI Agent behaves, before it
+- ever reaches a customer. You can define boundaries,
+- add business logic, and continuously test behavior as
+- your workflows evolve.
+- Fig 2.B
+- Procedures
+- Handle complex workflows with confidence. Procedures let Clain perform multi-
+- step actions, apply business rules, trigger approvals, or connect to external
+- systems—all while staying within your defined parameters.
+- Learn more
+- Simulations
+- Test how Clain behaves in any situation. Run realistic, end-to-end conversations
+- that mirror customer scenarios—from simple FAQs to sensitive, high-impact
+- cases.
+- Trust
+- Trusted by over 6,000
+- customers
+- Clain has successfully resolved over 40m
+- conversations across 6000+ organizations from
+- regulated fintech platforms handling millions in
+- transactions to healthcare companies managing
+- sensitive patient data.
+- Why Rocket Money
+- chose Clain AI Agent
+- With millions of users and rising support
+- complexity, Rocket Money didn’t just
+- add agents—they transformed their
+- support model with Clain, shifting how
+- their team works, and proving
+- automation can be both efficient and
+- trusted.
+- Rocket Money resolution rate
+- With Michelle McGowan From Rocket Money
+- “There’s a lot of transparency baked into how you configure Clain and build the workflows, which gives us control over the end-to-end experience. That was the light bulb moment for us; we were going to be letting this thing loose on our support queue, so we needed to have that level of transparency and control over the experience.”
+- George Dilthey
+- Head of Support at Clay
+- Clay g2 satisfaction scores
+- “We saw quick success with Clain — reaching around a 50% resolution rate early on, and scaling that to over 70% over time, all while keeping customer satisfaction high.”
+- Yair Gal
+- Support lead at consensys
+- Learn how Swyftx reached a 91%
+- answer rate and earned customer trust
+- with Clain’s unrestricted, intelligent AI
+- support.
+- Clain Answer rate
+- Security and Privacy
+- Clain meets the highest global standards for data
+- security, privacy, and AI governance. Every layer of
+- our platform—from infrastructure to model handling—
+- is designed to protect your business and your
+- customers.
+- Fig 4.A
+- Reliability and Scale
+- Clain’s infrastructure powers millions of secure
+- conversations every month—with the reliability global
+- enterprises depend on. Our systems are architected
+- for continuous uptime, built with redundancy across
+- regions, and backed by a 99.8% SLA to ensure every
+- customer interaction happens without interruption.
+- Guarantee
+- Clain is the highest performing AI Agent,
+- consistently beating competitors in head-to-head
+- evaluations. That’s why we offer the Clain Million Dollar
+- Guarantee.
+- #1 AGENT ON G2
+- 2M+ conversations resolved monthly
+- If you sign up for our Clain Guarantee Success
+- Program and do not achieve at least a resolution
+- rate of 65%, we will pay you $1M.
+- Eligibility criteria:
+- We’re excited to partner with all high volume customers
+- (over 250k monthly conversations) in North America
+- and Europe. Phase one of this program will admit
+- customers on Clain Helpdesk.
+- Deploy Clain with
+- confidence today
+- We meet the world’s leading compliance
+
+---
+
+## ai-agent-slack
+
+### Headings
+- Voice
+- Email
+- Messenger
+- WhatsApp
+- Social
+- Slack
+- API
+- Speed that customers notice
+- Channel-native communication
+- Secure and reliable
+- Conversational by design
+- Completely on-brand
+- Consistent across devices
+- Designed for messaging apps
+- Personal and conversational
+- Seamless customer experiences
+- Slack-native experience
+- Works alongside your team
+- Complete visibility
+- Flexible integration
+- Keep your brand front and center
+- Complete control
+
+### Body
+- One AI Agent.
+- For
+- Slack.
+- Social.
+- Clain delivers unrivaled performance across every channel.
+- Wherever customers reach out, Clain provides fast, accurate,
+- personalized support—ensuring consistent, high-quality
+- customer experiences at scale.
+- Voice
+- Natural conversations.
+- Instant answers.
+- Clain Voice transforms phone support into a
+- better experience for every caller. Phone
+- conversations feel natural, reflect your brand, and get
+- resolved without IVR menus or long hold times.
+- Learn more
+- Customer:
+- headphones
+- Clain Voice Support
+- unmute
+- Fig 1.A
+- Conversations that feel natural
+- Clain speaks with empathy, handles interruptions
+- smoothly, and keeps calls moving with relevant,
+- Customizable to your brand
+- Choose from distinct voices, add greetings, set
+- availability, and define escalation paths—so every
+- call aligns with your brand and policies.
+- Integrates with your telephony system
+- Clain connects to your existing telephony
+- infrastructure, unlocking AI-powered phone
+- support without disrupting how your team already
+- works.
+- Email
+- Fast, branded
+- resolutions
+- over email
+- Clain replies instantly from your domain, in your
+- brand voice, with clarity and accuracy—making email
+- as fast and reliable as any other support channel.
+- Fig 2.A
+- channels – chat, email, phone, even sales.
+- consistent, tireless, and always available. If
+- can handle.
+- Matt Jessell
+- VP of sales operations at Avocado
+- Live Chat
+- Instant, conversational
+- support over Messenger
+- Clain Messenger resolves customer queries over
+- live chat across web, iOS, and Android, while giving
+- you full control over branding and style.
+- Conversations feel clear, natural, and conversational.
+- Fig 3.A
+- Social messaging
+- Meet customers on their favorite
+- apps
+- Clain provides quick, personal support on
+- WhatsApp, Instagram, Facebook Messenger, SMS,
+- and Discord, meeting customers where they already
+- are, with conversations that feel natural and personal.
+- Fig 4.A
+- Slack
+- Clain delivers trusted
+- support in Slack
+- Clain supports your customers directly in Slack
+- communities and dedicated Connect channels—
+- resolving questions instantly, with replies that stay
+- threaded and feel native to Slack.
+- Fig 5.A
+- Rolling out Clain in Slack and over email was a big
+- moment for us. These are two of our most critical
+- I was
+- amazed at how smooth the rollout actually was.
+- Within days, Clain was confidently resolving a high
+- percentage of questions across both channels.
+- Jess Bergson
+- Head of CX at Clay
+- API
+- Integrate Clain into your
+- app, delivering fast, accurate support wherever your
+- customers need it, without changing your existing
+- systems.
+- Fig 6.A
+- FAQs
+- Get started with the
+- #1 AI Agent today
+- Do you have the Nova
+- We're fully committed to Clain as our frontline across
+- It's
+- customers are satisfied, there's no limit to what Clain
+- Clain's replies are designed for messaging apps, so
+- Clain's answers appear naturally in Slack threads,
+- you can review Clain's answers, track performance,
+- support channels—Slack especially, since it's so
+- public—so we needed it to be flawless.
+- Use Clain's API to embed Clain into your custom
+- keeping your platform's design and flow intact.
+
+---
+
+## ai-agent
+
+### Headings
+- Anthropic
+- Asana
+- Autodesk
+- Clay
+- Kalshi
+- Culture Amp
+- DoorDash
+- Gamma
+- Glean
+- Kajabi
+- LaunchDarkly
+- Linear
+- Mercury
+- Miro
+- Riot Games
+- Rocket Money
+- Shutterstock
+- Snowflake
+- Synthesia
+- Toast
+- Vanta
+- WHOOP
+- Refine the query
+- Retrieve relevant content
+- Rerank for precision
+- Generate a response
+- Validate accuracy
+- Engine optimization
+- Pratik Bothra
+- Rob Clancy
+- Mario Kostelac
+- Molly Mahar
+- Brian McDonnell
+- Fedor Parfenov
+- Fergal Reid
+- Pedro Tabacof
+- Alexey Tarasov
+- Rati Zvirawa
+
+### Body
+- The #1 AI Agent for
+- all
+- your customer service
+- POWERED BY CLAIN APEX 1.0
+- The highest-performing, fastest
+- model for customer service.
+- Learn more
+- MAY 2023
+- JUN 2023
+- JUL 2023
+- AUG 2023
+- SEP 2023
+- OCT 2023
+- NOV 2023
+- DEC 2023
+- JAN 2024
+- FEB 2024
+- MAR 2024
+- APR 2024
+- MAY 2024
+- JUN 2024
+- JUL 2024
+- AUG 2024
+- SEP 2024
+- OCT 2024
+- NOV 2024
+- DEC 2024
+- JAN 2025
+- FEB 2025
+- MAR 2025
+- APR 2025
+- MAY 2025
+- JUN 2025
+- JUL 2025
+- AUG 2025
+- SEP 2025
+- OCT 2025
+- NOV 2025
+- DEC 2025
+- DECAGON
+- FORETHOUGHT
+- FIN
+- Unrivaled Performance
+- Clain outperforms
+- every competitor.
+- Every time.
+- Clain’s average resolution rate increases 1% every month
+- Clain wins every head-to-head test ON RESOLUTION RATE
+- Resolution rate based
+- on independent
+- testing conducted by
+- Clain customers.
+- Fintech Customer
+- “Clain is in a completely
+- different league. It’s now
+- involved in 99% of
+- conversations and
+- successfully resolves up to
+- 65% end-to-end—even the
+- more complex ones.
+- Angelo Livanos, Vice President of Global
+- Support at Lightspeed
+- “If you’re debating whether to build
+- your own AI solution or buy one, my
+- advice would be to buy – and
+- specifically, buy Clain.”
+- Play
+- Now Playing
+- Build vs. buy: Why
+- Anthropic chose Clain
+- Play Next
+- AI at enterprise scale:
+- Why Lightspeed chose
+- How Rocket Money
+- operationalized AI
+- Seamless integration
+- Clain works with any
+- helpdesk
+- Set up Clain with your existing helpdesk or as
+- part of the Clain Customer Service Suite—with
+- support for additional platforms and custom channels.
+- Key features
+- Set up in under an hour.
+- Integrates into your current support channels—tickets, email,
+- live chat, and more.
+- Follows your existing assignment rules, automations, and
+- reporting.
+- Escalates to agents in your preferred inbox.
+- Clain Suite
+- Clain for Salesforce
+- Superior Technology
+- Powered by the
+- Clain AI Engine&trade;
+- The Clain AI Engine&trade; is a patented AI architecture specifically engineered for complex customer service queries. Every layer is optimized for accuracy, speed, and reliability—so Clain can resolve more conversations, more effectively than competing AI Agents.
+- Fig 4.A —
+- Trusted and fully certified
+- AI Team
+- Built by a world-class
+- team of AI experts
+- The AI Group, an expert team of over 40
+- machine learning scientists, engineers and designers,
+- continuously optimize Clain&rsquo;s performance through
+- cutting-edge research, experimentation, and
+- AI Group Leadership
+- Get the #1 AI Agent for
+- all your customer service
+- CLAIN MILLION DOLLAR GUARANTEE
+- Clain with your
+- current helpdesk
+- Clain AI Agent works seamlessly with any helpdesk,
+- including Salesforce, HubSpot, and more.
+- per outcome
+- 50 outcomes per month
+- minimum
+- Clain with
+- Clain&rsquo;s Helpdesk
+- Combine Clain AI Agent with Clain&rsquo;s Helpdesk to
+- get the full Clain Customer Service Suite.
+- From
+- per
+- outcome
+- per helpdesk seat
+- per month
+- Get started with the
+- #1 AI Agent today
+- In order to optimize the accuracy of an answer that an LLM generates, the inputs the LLM receives must be refined for comprehension.
+- The retrieval process, powered by our proprietary clain-cx-retrieval model, searches across all knowledge sources and selects the most relevant information for accurate answers.
+- The reranking process, powered by our proprietary clain-cx-reranker model, scores retrieved content for relevance and accuracy, then selects the optimal pieces for the LLM to use.
+- Clain Apex 1.0 is the generative core of Clain. It takes the most relevant content retrieved and ranked by the Clain model suite, applies your configured policies, and produces a direct answer or decides the question needs a human.
+- In the final step, the Clain AI Engine™ checks whether the LLM output meets response accuracy and safety standards.
+- To calibrate performance, the Clain AI Engine™ uses integrated tools that optimize answer generation, efficiency, precision, and coverage.
+- inset-[61.34%_94.07%_34.84%_1.37%] text-[length:var(--font-size\/10_87,10.871px)]
+- inset-[40.99%_94.07%_55.19%_1.37%] text-[length:var(--font-size\/10_87,10.871px)]
+- inset-[20.64%_94.07%_75.53%_1.37%] text-[length:var(--font-size\/10_87,10.871px)]
+- inset-[0.3%_94.07%_95.88%_1.37%] text-[length:var(--font-size\/10_87,10.871px)]
+- inset-[6.44%_2.93%_21.2%_4.59%] opacity-[var(--opacity\/100,1)]
+- Fig 2.A -
+- Fig 2.B -
+- Fig 2.C -
+
+---
+
+## all-features
+
+### Headings
+- Compare every plan, side by side
+- AI credit packs
+- Seats & team scaling
+- Early Stage Program
+- Ready to ship better support?
+- Frequently asked questions
+- Starter
+- For individuals, startups, and small teams
+- Growth
+- For growing support and ops teams
+- Scale
+- For high-volume, multi-workflow teams
+- Business
+- Custom capacity, governance, and security
+- Capacity
+- Clain AI Agent
+- Models
+- Inbox & helpdesk
+- Channels & integrations
+- Security & compliance
+- Support
+
+### Body
+- Pricing · All features
+- Every plan includes the full helpdesk and the autonomous AI Agent. What changes is AI capacity, seat capacity, models, integrations, and security depth. Toggle billing below; everything updates in place.
+- Features
+- 14-day free trial on every plan. No card required.
+- Buy more capacity
+- Top-up packs are available to any plan and are consumed only after your monthly included credits are used. They remain available as long as your subscription is active. Credits are workspace-wide — adding seats does not add credits.
+- Popular
+- One-off pack
+- credits
+- one-off
+- Grow your team
+- Plan
+- Seats included
+- Extra seat price
+- For startups
+- Who qualifies
+- Company age
+- Under 2 years
+- Headcount
+- Under 25 employees
+- Total funding raised
+- Under $5M
+- Discount
+- 50% off year one
+- 14-day free trial on every plan. No card required. Switch or cancel anytime.
+- €25 / extra seat / mo
+- €22 / extra seat / mo
+- €19 / extra seat / mo
+- Negotiated by contract
+
+### CTAs
+- Upgrade to Starter
+- Upgrade to Growth
+- Upgrade to Scale
+- Talk to sales
+
+### FAQs
+- Are AI credits per seat or per workspace?
+- What counts as one AI credit?
+- Can I switch plans or seats anytime?
+- Do unused credits roll over?
+- Is there a free trial?
+- I am an early-stage startup — is there a discount?
+- Per workspace — every team member shares the same monthly allowance. Adding a seat does not add credits. To extend your allowance, buy a credit pack which is consumed only after your monthly included credits are used.
+- One credit covers one unit of AI work — for example a tagged conversation, a generated summary, a response recommendation, or a multi-step reasoning task. Heavier tasks (long context, frontier-tier models) consume more.
+- Yes. Plans and seats are self-serve from Billing → Subscription. Billing prorates automatically. Annual contracts unlock the discounted pricing shown.
+- Included monthly credits reset at the end of each cycle. Top-up credits do not — they remain available as long as your subscription is active.
+- 14-day free trial, full access, no card required. Start any plan from /signup.
+- Yes — early-stage companies (under 2 years old, under $5M raised) get 50% off year one through the Clain Early Stage Program. See the dedicated page below.
+
+### Other
+- Adding a seat does not change your AI credits allowance
+- 50% off year one
+- 50% off the first year on Starter, Growth or Scale
+- $100K worth of deals on Stripe, Notion and partner tools
+- Early Stage Academy — courses with Clain experts
+- Direct line to the Clain founders' community
+
+---
+
+## auth
+
+### Headings
+- Back to your inbox.
+- Two-factor authentication
+- Reset password
+- Confirm your email
+- Get started with Clain.
+- Set your new password.
+- Got it. Thanks.
+- Tell us just enough.
+- Your team is already in.
+
+### Body
+- Clain
+- Live · customer
+- Sign in
+- Access your Clain workspace. If you don't have an account yet, create one for free or request a demo.
+- or with email
+- Remember me on this device
+- Enter the 6-digit code from your authenticator app.
+- We'll email you a link to reset it.
+- If an account exists for that email, you'll receive a reset link shortly.
+- Create account
+- We've sent you a confirmation link. Open it from your inbox to activate your account.
+- Reset password
+- At least 10 characters. After that you can sign in normally.
+- Password updated successfully.
+- We'll reach out within 24h at the email you provided.
+- Request demo
+- A founder shows you the product. Bring your current setup and a real hard case — we'll show you how Clain handles it live, with your data.
+- Trusted by
+- 8 fields. A human reads it, not a bot.
+
+### Nav
+- privacy policy
+
+### Other
+- Work email
+- Password
+- Full name
+- Company
+- Confirm password
+- The link is invalid or has expired. Request a new one.
+- New password
+- Confirm new password
+- Zero sales reps.
+- Role
+- Monthly ticket volume
+- Current helpdesk
+- What would you like to show us?
+
+---
+
+## copilot
+
+### Headings
+- We&rsquo;ve been in the customer service business since 2011, and in that time we&rsquo;ve learned a lot from you, our customer service experts.
+- Angelo Livanos
+- View demo
+- Inbox
+- Tickets
+- Phone
+
+### Body
+- Increase agent efficiency
+- by 31% with Copilot
+- Clain&rsquo;s Copilot gives every support agent a personal AI assistant. Copilot provides instant answers, so your team can stop wasting time and focus on what really matters: forging deeper relationships with customers.
+- View demo
+- Sun, 3 May 2026
+- Give your agents time for
+- what really matters
+- Learn everything about
+- Copilot in 73 seconds
+- Our Lightspeed customer service
+- agents are dramatically more efficient
+- when using Copilot. In testing, agents
+- using Copilot were able to close 31%
+- more customer conversations daily,
+- compared to agents not using Copilot.
+- Senior Director of Global Support, Lightspeed
+- Copilot is getting better,
+- every single day
+- Part of the only complete, AI-
+- first customer service platform
+- Copilot is just one of the powerful tools for agents, which also includes
+- tickets, phone and a collaborative shared inbox.
+- Enter the new age of
+- customer service with
+- Copilot
+- Multilingual capability
+- Sync content from external platforms
+- Import external URLs and files
+- AI compose
+- AI generated summaries
+- AI ticket autofill
+- Maximize productivity with an AI-enhanced inbox.
+- Resolve complex issues more efficiently with tickets designed to streamline collaboration.
+- Use phone calls, video calls, and screen sharing to troubleshoot customer issues faster.
+- if an agent needs help or doesn't know
+- customer's plan, location, personas, and
+
+### Other
+- agents spend too much time searching for answers
+- troubleshooting complex issues
+- when training and onboarding.
+- AI is changing everything.
+- Clain&rsquo;s Copilot gives every agent their own personal AI assistant.
+- So your agents can onboard faster, work more efficiently, and spend more time focused on what really matters: building deeper, lasting customer relationships.
+
+---
+
+## home
+
+### Headings
+- Clain is a customer service platform built around an autonomous AI agent. Every conversation trains the next one, so each customer interaction improves the next — across email, chat, voice and social, with the audit trails and guardrails enterprise teams need.
+- Clain AI is a world-class autonomous agent trusted by ambitious teams worldwide — from fast-moving startups to enterprise leaders shipping faster customer service every quarter.
+
+### Body
+- Built for AI-first teams
+- for the AI Agent era
+- Start free trial
+- View demo
+- Fully-featured helpdesk
+- AI-powered Insights
+- Self-improving system
+- One platform, every channel
+- for AI
+- and human agents
+- so you have full
+- Agents see context, take action, escalate when it matters.
+- Plug Clain into your stack with 30+ native integrations.
+- customer experiences.
+- Resolve before you route
+- Reporting that shows what AI resolved and what you should improve.
+- Built so support, success and sales work from.
+- Clain is the customer service platform built around an.
+- Set guardrails. Let the agent run.
+- Cuts time-to-first-response from hours to.
+- Fin
+- Resolves repeat questions instantly.
+- Every conversation in Clain trains the next one — your knowledge, your.
+- Built for teams who measure success in resolution rate, not.
+- Speaks 40+ languages out of the box, with.
+- Connect every channel — email, live chat, voice, WhatsApp, Messenger,.
+- Clain's AI agent has tools. It looks up orders, processes.
+- Drops into existing tools — Zendesk, HubSpot,.
+- Learn more
+- Reporting in Clain shows you exactly what the AI resolved, where it.
+- Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more so the agent.
+- Set policy. Set guardrails. Set escalation thresholds. Then let Clain run —.
+- Live SLA, queue health and agent quality in one dashboard.
+- Fin AI Agent
+- A world-
+- class AI Agent
+- Tracks every action, every tool.
+- Pairs Clain AI with humans.
+- Fewer tickets, happier teams
+- would be to buy – and
+- Isabel Larrow
+- Trained on your help center, ticket.
+- A fully-featured
+- AI-powered helpdesk
+- to resolve
+- From product question to refund flow, the agent.
+- Backed by audit trails so compliance and trust are.
+- experience.
+- Resolve queries faster
+- Copilot
+- Born after the LLM transition: Clain isn't a helpdesk with.
+- Clain pulls customer context from every system you already use.
+- From SMB to enterprise, Clain runs the same agent — what.
+- faster.
+- AI-enhanced ticketing
+- Designed so a junior agent and an autonomous agent.
+- Tickets in Clain are not just queues. They're conversations.
+- Compliance and trust are built in: SOC2, GDPR, audit logs of.
+- No code automations
+- The first helpdesk where AI resolution is the default state.
+- Less queueing, less swivel-chair, more.
+- engineering support.
+- AI that handles the boring
+- across every channel
+- Omnichannel
+- Clain combines an autonomous AI agent with a modern inbox.
+- Resolve customer questions across email, chat, voice.
+- Trained on your knowledge, your tickets, your.
+- Live customer
+- intelligence
+- Plug Clain into your stack with 30+.
+- Reporting that shows what AI.
+- Built so support, success and sales.
+- and your human
+- Modern helpdesk, rebuilt
+- Apps and
+- integrations
+- Cuts time-to-first-response from hours to seconds, always.
+- Clain resolves the long tail — the 60% of tickets your team.
+- Resolves repeat questions instantly so humans handle the.
+- maintain.
+- Engage customers
+- at the right moment
+- Onboarding tools
+- Use Clain Copilot to give every human agent the AI's.
+- Speaks 40+ languages out of the box, with the same agent quality.
+- Proactive notifications
+- Drops into existing tools — Zendesk, HubSpot, Salesforce, more.
+- Agents that actually work
+- Automate the repetitive
+- Built for teams shipping faster customer service every quarter.
+- Every conversation in Clain trains the next one — your.
+- Tracks every action, every tool call,.
+- Monitor and improve
+- every interaction
+- Insights
+- Pairs Clain AI with humans for end-to-end resolution.
+- Trained on your help center, ticket history.
+- Lets the AI agent reason, look up, and act on your data.
+- Explorer, and Trends.
+- Always-on QA
+- From product question to refund flow, the.
+- Backed by audit trails so compliance and.
+- Clain pulls customer context from every.
+- quality drops.
+- Reporting
+- Designed so a junior agent and an autonomous.
+- The first helpdesk where AI resolution is the.
+- Clain combines an autonomous.
+- Inbox, tickets, knowledge
+- Resolve customer questions.
+- Trained on your knowledge,.
+- Built around the agent
+- Angelo Livanos
+- Reporting that shows what AI resolved and what you.
+- Built so support, success and sales work from the.
+- Connect every channel — email, live chat, voice, WhatsApp,.
+- Set guardrails. Let the agent run. Audit every step it takes.
+- Reporting in Clain shows you exactly what the AI resolved,.
+- Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more so.
+- Speaks 40+ languages out of the box, with the same.
+- Smarter every conversation
+- Built for teams shipping faster customer.
+- Tracks every action, every tool call, every handoff.
+- Email
+- Messenger
+- Slack.
+- Slack
+- Pairs Clain AI with humans for.
+- Trained on your help center,.
+- Lets the AI agent reason, look up,.
+- From product question to refund.
+- From reactive to proactive
+- Set policy. Set guardrails. Set escalation thresholds. Then.
+- Designed so a junior agent and an autonomous agent share.
+- Less queueing, less swivel-chair, more conversations.
+- End-to-end resolution
+- Native AI, end to end
+- Resolve customer questions across email,.
+- Agents see context, take action, escalate when.
+- Reporting that shows what AI resolved and what.
+- Built so support, success and sales work.
+- Set guardrails. Let the agent run. Audit.
+- Resolves repeat questions instantly so humans.
+- Speaks 40+ languages out of the box, with the.
+- Drops into existing tools —.
+- Customer service, evolved
+- Live SLA, queue health and agent.
+- Built for teams shipping.
+- A true partner with
+- deep domain expertise
+- Trained on your help center, ticket history and.
+- with deep domain
+- your team an edge
+- Backed by audit trails so.
+- compliance standards.
+- Clain pulls customer context.
+- The first helpdesk where AI resolution is.
+- The AI Agent Blueprint
+- and best practices.
+- George Dilthey
+- Head of Support at Clay
+- Transparent pricing
+- Intercom with Fin
+- for a single, fully
+- Agents see context, take action,.
+- Per Seat/Mo
+- Per Outcome
+- powered by Intercom
+- A complete solution
+- A single solution means
+- "If you’re debating whether to
+- specifically, buy Fin."
+- Agents see context, take action, escalate.
+- attributes, giving
+- "Our Lightspeed customer
+- daily."
+- "I truly believe that the way the
+- success that I've seen."
+- Combine Intercom with
+
+---
+
+## how-agent-works
+
+### Headings
+- Learn more
+- FAQs
+- Get started with the
+- #1 AI Agent today
+- Start free trial
+- View demo
+- Data Connectors
+- Knowledge Sources
+- Guidance
+- Simulation library
+- Previews
+- Audience testing
+- Email
+- Live chat
+- WhatsApp
+- Slack
+- API
+- Social
+- CX Score
+- AI Suggestions
+- Optimize Dashboard
+
+### Body
+- Built to resolve the most
+- complex queries on every
+- channel
+- Clain handles even the most complex queries through a continuous
+- improvement loop called the Clain Flywheel.
+- Procedures, knowledge, and policies, test performance before
+- launch, deploy across every channel, then analyze and improve
+- with AI-powered Insights—so every query is resolved accurately
+- and consistently.
+- POWERED BY CLAIN APEX 1.0
+- The highest-performing, fastest
+- model for customer service.
+- Learn more
+- Train
+- Train Clain to resolve the
+- most complex queries
+- Train Clain on your Procedures, knowledge, and
+- policies, so it follows your rules and resolves complex,
+- multi-step queries accurately and reliably.
+- Featured Capabilities:
+- New
+- Procedures
+- Procedures let Clain handle complex queries with multiple steps,
+- business logic, third party systems, or cross-team approvals. Combine
+- natural language instructions with deterministic controls to create
+- powerful Procedures that follow your exact rules when needed.
+- Test
+- Test performance with
+- AI-driven Simulations
+- Run fully simulated customer conversations
+- from start to finish to see exactly how Clain will behave
+- before going live—so you know your Procedures work
+- as intended.
+- Simulations
+- Run fully simulated customer conversations from start to finish to test
+- how Clain will respond. You can see what Clain is doing, when it is
+- reasoning, and where it passes or fails.
+- Deploy
+- Deploy Clain across
+- every channel
+- Deploy Clain across phone, email, chat, Slack,
+- and more so every customer receives accurate,
+- personalized responses, wherever they reach out.
+- Featured Channels:
+- Voice
+- Clain Voice is a radically better experience for every caller. It delivers
+- instant, natural conversations that feel human and never lose context.
+- Clain Voice is simple to set up, easy to preview, and works with all major
+- telephony systems.
+- Analyze
+- Analyze Clain with AI-
+- powered Insights
+- Monitor performance, spot trends, and
+- optimize with AI-powered Suggestions—then use
+- those Insights to retrain Clain and continuously improve
+- your customer experience.
+- Topics Explorer
+- Topics Explorer groups every customer conversation into Topics and
+- Subtopics. Spot patterns, track trends, and catch issues before they
+- impact customer experience.
+- FAQs
+- Train Clain on your
+
+### FAQs
+- What types of work can Clain handle?
+- How does Clain keep responses accurate and on-brand?
+- Does Clain support multilingual workflows?
+- Clain handles complex, multi-step support queries across every channel — from simple FAQs to deeply contextual conversations involving Procedures, knowledge sources, and external systems like Shopify, Stripe, and Salesforce.
+- Clain uses Guidance to enforce your brand voice, vocabulary, and policies on every response. Combined with Procedures and curated Knowledge Sources, Clain stays accurate, consistent, and on-brand across every customer interaction.
+- Yes — Clain detects the customer\
+
+---
+
+## how-it-works
+
+### Headings
+- How Clain drives efficiency
+- Instant insight with pre-built reporting
+- Ticketing designed for teamwork
+- Integrate with your existing tools
+- Inbox
+- Copilot
+- Tickets
+- Omnichannel
+- Help Center
+- Apps & Integrations
+- Reporting
+- Knowledge Hub
+- Outbound
+- An AI assistant for every agent
+- Automate repetitive tasks
+- Support every customer, in every language
+- Onboard customers faster
+- Stay ahead of known issues
+- Answer common questions in advance
+
+### Body
+- The next-gen platform
+- designed for efficiency
+- Clain is a modern, AI-powered platform with the tools, workflows and insights agents need to work faster and deliver the highest quality customer service.
+- AI tools that
+- maximize productivity
+- Agents can resolve complex queries more efficiently in any language with instant assistance from Copilot, no-code workflows, and AI Inbox Translation.
+- when using Copilot. In testing, agents using
+- Copilot were able to close 31% more
+- customer conversations daily, compared to
+- Angelo Livanos
+- Vice President, Global Support
+- fast and friction-free
+- Clain is fast to set up and easy to use. Pre-built reports, built-in ticketing, and native integrations with tools like Slack and Jira help teams work seamlessly and stay aligned.
+- Monitor, analyze and optimize your support with powerful, customizable reports and real-time performance metrics.
+- Resolve complex issues more efficiently with Tickets designed to streamline collaboration and keep the conversation going—no switching tools or lost context.
+- Connect apps like Slack, Jira, and Salesforce directly in Clain, so your agents can take action and access customer information in one place.
+- Outbound messaging
+- that reduces support volume
+- Onboard, educate, and notify your customers with in-context, automated messages that reduce support volume and improve your customer experience.
+- Ranked #1 on G2 in 97 categories
+- Experience the next-gen
+- platform today
+- Resolve customer questions across email, chat, phone, and social in one AI-powered inbox.
+- An AI assistant that helps agents find answers faster and resolve issues more efficiently.
+- Streamline complex issue resolution with collaborative ticketing built for modern teams.
+- Meet customers wherever they are with seamless cross-channel support.
+- Empower customers to find answers on their own with a beautiful, searchable help center.
+- Connect your favorite tools and extend Clain with powerful integrations.
+- Monitor, analyze and optimize your support with powerful, customizable reports.
+- Centralize your content for AI and human support in one powerful knowledge base.
+- Proactively reach customers with targeted messages that reduce support volume.
+- Copilot provides expert training, troubleshooting, and guidance so agents can find answers faster and get more done for customers.
+- No-code workflows handle repetitive tasks, so agents can focus on helping customers, not managing processes.
+- Clain unifies messages from every channel and uses AI to translate 45+ languages in real time—so agents can respond faster, without switching tools.
+- Onboard users with interactive guides, personalized tasks, and in-app highlights that help them get started successfully.
+- Send timely messages about bugs, outages, or changes, so your customers stay informed and your team stays in control.
+- Highlight tips, surface support content, and announce new features in-product so customers get answers before they reach out.
+- “Our agents are dramatically more efficient
+- agents not using Copilot.”
+- Modern software that's
+- Clain is rated highest on G2's most recent User Satisfaction Ratings for CS.
+
+### CTAs
+- Start free trial
+
+### Nav
+- View demo
+
+---
+
+## inbox
+
+### Body
+- [ Inbox ]
+- Built for AI-first teams
+- AI-enhanced Inbox
+- Clain is the customer service platform built around an autonomous AI agent that resolves real.
+- and efficiency.
+- Start free trial
+- Clain combines an autonomous AI agent.
+- Fast, modern, and
+- built for collaboration
+- Resolve customer questions.
+- Trained on your knowledge, your tickets, your.
+- Agents see context, take action,.
+- Fast, modern, and fully
+- configurable
+- Plug Clain into your stack with 30+ native.
+- Reporting that shows what AI.
+- A central hub for easy
+- collaboration
+- Built so support, success and sales work.
+- Set guardrails. Let the agent run. Audit.
+- Copilot
+- One platform, every channel
+- by 31% with Copilot
+- Every conversation in Clain trains the next one — your knowledge, your.
+- Built for teams who measure success in resolution rate, not response.
+- Connect every channel — email, live chat, voice, WhatsApp,.
+- Cuts time-to-first-response from.
+- guidance
+- Resolves repeat questions instantly so humans.
+- Speaks 40+ languages out of the box, with.
+- Drops into existing tools — Zendesk,.
+- Live SLA, queue health and agent quality in one dashboard.
+- Built for teams shipping faster customer service every quarter.
+- Tracks every action, every tool call,.
+- Clain's AI agent has tools. It looks up orders, processes.
+- Pairs Clain AI with humans for end-to-end resolution.
+- Trained on your help center,.
+- Lets the AI agent reason, look up, and act on your data.
+- Reporting in Clain shows you exactly what the AI resolved,.
+- from.
+- AI Inbox Translation
+- Make every agent
+- fluent in +45 languages
+- Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more so.
+- Set policy. Set guardrails. Set escalation thresholds. Then.
+- From product question to refund.
+- Modern design
+- Fully configurable
+- Backed by audit trails so compliance and.
+- Clain pulls customer context from.
+- Keyboard-first
+- Designed so a junior agent and an.
+- The first helpdesk where AI.
+- Powerful macros
+- Less queueing, less swivel-chair, more.
+- Clain combines an autonomous AI agent with a.
+- Tickets
+- Tickets that continue
+- the conversation
+- Learn more
+- Customer Tickets
+- Resolve customer questions across email, chat, voice and social.
+- Resolve before you route
+- Back-office Tickets
+- Trained on your knowledge, your tickets, your tone of voice.
+- Agents see context, take action, escalate when it matters.
+- Tracker Tickets
+- Plug Clain into your stack with 30+ native integrations.
+- Omnichannel
+- Fewer tickets, happier teams
+- Born after the LLM transition: Clain isn't a helpdesk with an AI bolted.
+- From SMB to enterprise, Clain runs the same agent — what changes is the.
+- Built so support, success and sales.
+- Set guardrails. Let the agent run. Audit every.
+- Facebook, and more.
+- Speaks 40+ languages out of the box, with the same.
+- phone support.
+- AI that handles the boring
+- Drops into existing tools — Zendesk, HubSpot, Salesforce, more.
+- Live SLA, queue health and agent.
+- Data and Integrations
+- Built for teams shipping faster.
+- Tracks every action, every.
+- Tickets in Clain are not just queues. They're conversations the agent.
+- easily customizable.
+- Apps and integrations
+- Compliance and trust are built in: SOC2, GDPR, audit logs of every model.
+- Pairs Clain AI with humans for.
+- Reporting
+- Optimize your team’s
+- performance in real time
+- Manager views
+- Clain resolves the long tail — the 60% of tickets your team.
+- Trained on your help center, ticket.
+- Real-time dashboard
+- From product question to refund flow, the agent.
+- Backed by audit trails so compliance and trust are non-negotiable.
+- easy-to-use reports.
+- Additional features
+- Workload management
+- Designed so a junior agent and an autonomous.
+- The first helpdesk where AI resolution.
+- SLAs
+- Clain combines an autonomous AI.
+- team’s performance.
+- Workflows
+- Resolve customer questions across email,.
+- bots, and more.
+- Helpdesk Updates
+- Modern helpdesk, rebuilt
+- Agents that actually work
+- 20 Updates Shipped
+- Inbox
+- Composer drafts
+- Automate the repetitive
+- Agents see context, take.
+- Edit sent notes
+- Unassign unsnoozed
+- conversations
+- Auto-unassign when away
+- Plug Clain into your stack with.
+- Inbox, tickets, knowledge
+- and open
+- Built around the agent
+- Smarter every conversation
+- Realtime Dashboard
+- Delete user notes
+- Channel indicators on
+- Search in Views
+- Duplicate a View
+- Inbox assignment limits
+- Built so support, success and.
+- Slack side conversations
+- From reactive to proactive
+- inboxes
+- Delay send / undo send
+- 11 Updates Shipped
+- Phone
+- End-to-end resolution
+- Warm transfer to team
+- CSAT for outbound calls
+- Phone numbers for brands
+- Recording consent (GDPR)
+- Native AI, end to end
+- Customer service, evolved
+- callbacks
+- Quick reply stored on
+- assignment visibility
+- 11 new call metrics
+- 10 Updates Shipped
+- Data Foundations
+- Set guardrails. Let the agent.
+- Cuts time-to-first-response.
+- OAuth providers
+- Results API
+- Resolves repeat questions.
+- Speaks 40+ languages out of.
+- improvements
+- Data Connectors: action
+- dependency observability
+- Azure Blob Storage for
+- conversation data export
+- signups
+- Public API v2.15
+- 23 Updates Shipped
+- And many more
+- Drops into existing tools —.
+- notes)
+- delete)
+- Built for teams shipping.
+- own, edit others)
+- Conversation permissions
+- Select ticket state when
+- converting
+- Lets the AI agent reason, look.
+- Backed by audit trails so compliance.
+- Clain pulls customer context from every.
+- Designed so a junior agent and.
+- device
+- Holiday office hours
+- upload, carousel, grid)
+- AI titles in Messenger
+- Email recipients status
+- Less queueing, less swivel-chair,.
+- Clain combines an autonomous.
+- hours
+- Workspace avatars
+- Disable team mentions at
+- workspace level
+- Dovetail
+- Gifted
+- Pat Barlow
+- Support Lead at Dovetail
+- Sara Kim
+- Head of CX at Gifted
+- Get the fastest AI-
+- enhanced Inbox today
+- Use Clain Copilot to give every human agent the AI's context, suggested.
+- Trained on your knowledge,.
+- "Clain replaced three tools with a single inbox where the AI agent and our humans share the same context. Resolution times dropped, our team finally enjoys their day, and our customers notice the difference."
+- "What surprised us most is how Clain handled the long tail. The AI now resolves the bulk of repeat questions on its own, and the rest reach our agents already triaged, summarised and pre-drafted."
+
+### Nav
+- View demo
+
+---
+
+## knowledge
+
+### Body
+- [ Knowledge Hub ]
+- Clain combines an autonomous.
+- and human support
+- Clain is the customer service platform built around an autonomous AI agent that.
+- management system.
+- Start free trial
+- Resolve customer questions across email,.
+- Built for AI-first teams
+- Trained on your knowledge, your.
+- Agents see context, take action, escalate when it matters.
+- Plug Clain into your stack with 30+ native integrations.
+- Every conversation in Clain trains the next one — your.
+- Content creation
+- Reporting that shows what AI resolved and what.
+- Built so support, success and sales work from.
+- Content management
+- Set guardrails. Let the agent run. Audit.
+- Cuts time-to-first-response from hours to seconds, always.
+- Content optimization
+- Resolves repeat questions instantly so humans.
+- to fill content gaps.
+- One platform, every channel
+- Speaks 40+ languages out of the.
+- Drops into existing tools — Zendesk, HubSpot, Salesforce, more.
+- Built for teams who measure success in resolution rate, not.
+- same place.
+- Import existing content
+- Live SLA, queue health and agent quality in one dashboard.
+- Connect every channel — email, live chat, voice, WhatsApp,.
+- Create new content
+- Built for teams shipping faster customer service every quarter.
+- Tracks every action, every tool call, every handoff.
+- Pairs Clain AI with humans for.
+- Organize and manage
+- your content at scale
+- Trained on your help center,.
+- Lets the AI agent reason, look up, and act on your data.
+- From product question to refund flow, the.
+- Backed by audit trails so compliance.
+- Clain's AI agent has tools. It looks up orders, processes.
+- Reporting in Clain shows you exactly what the AI resolved,.
+- content.
+- Take bulk actions
+- Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more.
+- Set policy. Set guardrails. Set escalation thresholds. Then.
+- languages, and more.
+- Clain pulls customer context from.
+- Designed so a junior agent and an autonomous agent.
+- Born after the LLM transition: Clain isn't a helpdesk with.
+- and public articles.
+- Improve performance with
+- content optimized for AI
+- Resolve before you route
+- From SMB to enterprise, Clain runs the same agent — what.
+- Tickets in Clain are not just queues. They're conversations.
+- questions.
+- Fewer tickets, happier teams
+- The first helpdesk where AI resolution is the default state.
+- Less queueing, less swivel-chair, more conversations.
+- AI that handles the boring
+- Clain combines an autonomous AI agent.
+- Content sources
+- Compliance and trust are built in: SOC2, GDPR, audit logs of.
+- Content types
+- Clain resolves the long tail — the 60% of tickets your team handles that.
+- and webpages
+- Helpdesk Updates
+- Modern helpdesk, rebuilt
+- Agents that actually work
+- 20 Updates Shipped
+- Inbox
+- Composer drafts
+- Automate the repetitive
+- Resolve customer questions.
+- Edit sent notes
+- Unassign unsnoozed
+- conversations
+- Auto-unassign when away
+- Inbox, tickets, knowledge
+- Agents see context, take.
+- and open
+- Built around the agent
+- Smarter every conversation
+- Realtime Dashboard
+- Delete user notes
+- Channel indicators on
+- Search in Views
+- Duplicate a View
+- Inbox assignment limits
+- Plug Clain into your stack.
+- Slack side conversations
+- From reactive to proactive
+- inboxes
+- Delay send / undo send
+- 11 Updates Shipped
+- Phone
+- End-to-end resolution
+- Warm transfer to team
+- CSAT for outbound calls
+- Phone numbers for brands
+- Recording consent (GDPR)
+- Native AI, end to end
+- Customer service, evolved
+- callbacks
+- Quick reply stored on
+- assignment visibility
+- 11 new call metrics
+- 10 Updates Shipped
+- Data Foundations
+- Reporting that shows what AI.
+- Built so support, success and.
+- OAuth providers
+- Results API
+- Set guardrails. Let the agent.
+- Cuts time-to-first-response.
+- improvements
+- Data Connectors: action
+- dependency observability
+- Azure Blob Storage for
+- conversation data export
+- signups
+- Public API v2.15
+- 23 Updates Shipped
+- And many more
+- Resolves repeat questions instantly.
+- notes)
+- delete)
+- Drops into existing tools —.
+- Live SLA, queue health and.
+- Built for teams shipping faster.
+- own, edit others)
+- Conversation permissions
+- Tracks every action, every.
+- Select ticket state when
+- converting
+- Lets the AI agent reason, look up,.
+- From product question to refund flow,.
+- Backed by audit trails so.
+- device
+- Holiday office hours
+- Clain pulls customer context.
+- upload, carousel, grid)
+- AI titles in Messenger
+- Email recipients status
+- Designed so a junior agent and an.
+- The first helpdesk where AI.
+- Less queueing, less.
+- hours
+- Workspace avatars
+- Disable team mentions at
+- workspace level
+- A central knowledge
+- management
+- system you can trust
+- Enerflo
+- Quandoo
+- Susanna Tham
+- Tracks every action, every tool.
+- Centralize your
+- support content today
+- Content sources & types
+- Use Clain Copilot to give every human agent the AI's context, suggested.
+- "Clain unified our help center, ticket history and policy docs into a single source of truth that the AI agent reads from. Our customers get accurate answers in seconds and our team finally trusts the knowledge base."
+- "Our knowledge used to live in five different tools. With Clain, the agent reads the latest version automatically and our team only updates the source of truth once."
+
+### Nav
+- View demo
+
+---
+
+## omnichannel
+
+### Body
+- [ Omnichannel ]
+- Meet your customers
+- wherever they are
+- Clain is the customer service platform built around an autonomous AI agent that.
+- Clain combines an autonomous AI agent with a modern inbox.
+- Start free trial
+- Resolve customer questions across email,.
+- Built for AI-first teams
+- One platform, every channel
+- Get complete oversight
+- Trained on your knowledge, your tickets, your.
+- Agents see context, take action, escalate when.
+- touchpoint.
+- Plug Clain into your stack with.
+- Reporting that shows what AI resolved.
+- Built so support, success and sales work.
+- channel.
+- Modernize your support
+- Set guardrails. Let the agent run. Audit.
+- Cuts time-to-first-response from.
+- Instagram.
+- Email
+- On-brand email support
+- Resolve before you route
+- Every conversation in Clain trains the next one — your.
+- Built for teams who measure success in resolution rate, not response.
+- Resolves repeat questions.
+- Speaks 40+ languages out of the box, with the.
+- Drops into existing tools — Zendesk,.
+- Live SLA, queue health and agent quality.
+- identity.
+- Fewer tickets, happier teams
+- Built for teams shipping faster customer service.
+- Tracks every action, every tool call, every handoff.
+- to them.
+- Track email performance
+- Pairs Clain AI with humans for.
+- Trained on your help center, ticket history and.
+- support.
+- Phone
+- Calls and conversations
+- in one place
+- Connect every channel — email, live chat, voice, WhatsApp,.
+- Clain's AI agent has tools. It looks up orders, processes.
+- Reporting in Clain shows you exactly what the AI resolved,.
+- Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more.
+- Learn more
+- Messenger
+- Live chat with a best-
+- in-class Messenger
+- Lets the AI agent reason, look up, and act on your data.
+- From product question to refund flow, the agent.
+- Fully customizable
+- Backed by audit trails so compliance and trust are non-negotiable.
+- Clain pulls customer context from every system you.
+- Self-serve enabled
+- Designed so a junior agent and an autonomous agent share.
+- The first helpdesk where AI resolution is the default state.
+- Less queueing, less swivel-chair, more.
+- Set policy. Set guardrails. Set escalation thresholds. Then.
+- anytime, anywhere.
+- WhatsApp
+- Global support is just
+- a WhatsApp away
+- Trained on your knowledge, your tickets,.
+- Modern helpdesk, rebuilt
+- Agents see context, take action, escalate when it matters.
+- Plug Clain into your stack with 30+ native integrations.
+- Agents that actually work
+- Reporting that shows what AI resolved and what you should improve.
+- Built so support, success and sales work from the same surface.
+- Set guardrails. Let the agent.
+- Capture CSAT on WhatsApp
+- Cuts time-to-first-response from hours to seconds, always.
+- Resolves repeat questions instantly so humans handle.
+- SMS and social media
+- Instagram
+- Live SLA, queue health and agent quality in one dashboard.
+- Built for teams shipping faster customer.
+- to images.
+- Facebook
+- Pairs Clain AI with humans for end-to-end.
+- seamless experience.
+- SMS
+- Automate the repetitive
+- Helpdesk Updates
+- Inbox, tickets, knowledge
+- Built around the agent
+- 20 Updates Shipped
+- Inbox
+- Composer drafts
+- Smarter every conversation
+- From product question to.
+- Edit sent notes
+- Unassign unsnoozed
+- conversations
+- Auto-unassign when away
+- Backed by audit trails so.
+- From reactive to proactive
+- Clain pulls customer context.
+- and open
+- End-to-end resolution
+- Native AI, end to end
+- Realtime Dashboard
+- Delete user notes
+- Channel indicators on
+- Search in Views
+- Duplicate a View
+- Inbox assignment limits
+- Designed so a junior agent.
+- Slack side conversations
+- Customer service, evolved
+- inboxes
+- Delay send / undo send
+- 11 Updates Shipped
+- Warm transfer to team
+- CSAT for outbound calls
+- Phone numbers for brands
+- Recording consent (GDPR)
+- callbacks
+- Quick reply stored on
+- AI that handles the boring
+- assignment visibility
+- 11 new call metrics
+- 10 Updates Shipped
+- Data Foundations
+- The first helpdesk where AI.
+- Less queueing, less.
+- OAuth providers
+- Results API
+- Clain combines an autonomous.
+- Resolve customer questions.
+- improvements
+- Data Connectors: action
+- dependency observability
+- Azure Blob Storage for
+- conversation data export
+- signups
+- Public API v2.15
+- 23 Updates Shipped
+- And many more
+- Trained on your knowledge, your.
+- notes)
+- Agents see context, take action,.
+- delete)
+- Plug Clain into your stack.
+- Reporting that shows what AI.
+- Built so support, success and.
+- own, edit others)
+- Conversation permissions
+- Select ticket state when
+- converting
+- Speaks 40+ languages out of the box,.
+- Live SLA, queue health and.
+- device
+- Holiday office hours
+- Built for teams shipping.
+- upload, carousel, grid)
+- AI titles in Messenger
+- Email recipients status
+- Tracks every action, every tool.
+- Trained on your help center,.
+- hours
+- Workspace avatars
+- Disable team mentions at
+- workspace level
+- Effortless
+- omnichannel support
+- Rebag
+- Godtlevert
+- From product question to refund flow,.
+- Designed so a junior agent and an.
+- The first helpdesk where AI resolution is.
+- Milan Jovancevic
+- Less queueing, less swivel-chair,.
+- Clain combines an autonomous AI agent.
+- Resolve customer questions across.
+- Plug Clain into your stack with 30+.
+- Start delivering
+- Born after the LLM transition: Clain isn't a helpdesk with an AI bolted on,.
+- Lets the AI agent reason, look.
+- "The biggest benefit of Intercom is that
+- won’t regret it."
+
+### Nav
+- View demo
+
+---
+
+## paywall
+
+### Headings
+- Starter
+- Growth
+- Scale
+
+### Body
+- / mo
+- Plans & Pricing
+- get started.
+- Try Clain free for 14 days — no card required. Or pick a plan and go live today.
+- Recommended · No card required
+- 14-day free trial
+- Full access to Inbox, Copilot, Reporting and integrations — 1,000 AI credits, real countdown.
+- Monthly
+- 20% OFF
+- Business
+- Need custom volume, SSO or enterprise compliance?
+- Tailored credits, seat allocation, SLA guarantees and onboarding.
+- Need help with onboarding, migration or technical setup?
+
+### Features
+- 5,000 AI credits / month
+- 3 seats included (€25 / extra seat)
+- Core support workflows
+- Email + chat integrations
+- Basic reporting & analytics
+- 20,000 AI credits / month
+- 8 seats included (€22 / extra seat)
+- Advanced multi-step workflows
+- Custom API integrations
+- Priority email support
+- 60,000 AI credits / month
+- 20 seats included (€19 / extra seat)
+- Unlimited custom workflows
+- Dedicated customer success manager
+- Custom reporting dashboards
+
+### CTAs
+- Get Starter
+- Upgrade to Growth
+- Upgrade to Scale
+
+### Nav
+- support@clain.io
+
+---
+
+## pricing
+
+### Headings
+- Get Clain AI Agent and the full platform for a single, integrated experience
+- AI Credits
+- Seats
+- Startups get 90% off
+- FAQs
+- Perfect customer experiences, powered by Clain
+- Starter
+- Growth
+- Scale
+- Business
+- Find the right plan for your team
+- See the ROI impact Clain could have on your business
+
+### Body
+- From
+- Pricing
+- by contract
+- Custom
+- negotiated
+- Pay as you go
+- No seats required
+- Special promotion
+- Save up to 73% on every plan
+- Our Clain AI Agent + platform plans
+- Need more? Talk to sales
+- How credits and seats work
+- The intelligence powering your workspace
+- MONTHLY ALLOWANCE PER PLAN
+- Buy credit packs
+- One seat per teammate with full access
+- SEATS INCLUDED PER PLAN
+- Manage seats
+- Get an estimate
+- Get a direct line to your customers with
+- best-in-class support.
+- Thousands of businesses
+- have already seen transformational results
+- Includes Clain AI Agent
+- The customer support plan for individuals, startups, and small businesses.
+- Powerful automation tools and AI features for growing support teams.
+- Collaboration, security, and multibrand features for large support teams.
+- Custom plan, talk to sales
+- For organisations with custom capacity, governance, security, and compliance needs.
+- Get an estimated cost for Clain’s AI-first customer service platform — based on your team size, expected Clain outcomes, and more.
+- Estimate how much time and money Clain could save your team — based on your current and future support volume.
+
+### Features
+- Clain AI Agent (autonomous)
+- 5,000 AI credits/month — workspace total
+- Inbox with shared views
+- Knowledge Hub
+- 3 seats included
+- 20,000 AI credits/month — workspace total
+- Tickets & SLA monitoring
+- Workflow automation builder
+- Round robin assignment
+- Reporting + AI Insights
+- 8 seats included
+- 60,000 AI credits/month — workspace total
+- SSO & identity management
+- HIPAA support
+- Service level agreements (SLAs)
+- Multibrand Help Center
+- 20 seats included
+- Custom AI credit allocation
+- Custom seat allocation
+- Enterprise-grade security & compliance
+- Bring Your Own Model (BYOM)
+- Custom SLA & uptime guarantees
+- Tailored onboarding & dedicated success manager
+
+### CTAs
+- Upgrade to Starter
+- Upgrade to Growth
+- Upgrade to Scale
+- Talk to sales
+- Estimate cost
+- See ROI
+
+### FAQs
+- How does Clain pricing work?
+- How is Clain AI Agent priced?
+- Can I use Clain with my existing helpdesk?
+- What plans does Clain offer?
+- What is a seat (Full vs Lite)?
+- Are there additional usage charges?
+- Do I need a contract?
+- What’s the minimum to get started?
+- Is there a free trial?
+- How do I change my plan or seats?
+- Are there discounts available?
+- Clain pricing has two components — Seats: you pay per teammate based on your plan (Starter, Growth, Scale). Usage: you pay for what you use (e.g. Clain outcomes, messaging channels). All plans include access to Clain’s helpdesk and Clain AI Agent.
+- Clain AI Agent is included in every plan with a monthly credit allowance. One credit = one resolved interaction. Flexible usage at €0.012 per outcome.
+- Yes. Clain integrates with Zendesk, HubSpot, Salesforce, Freshdesk and others via API.
+- Starter, Growth, Scale self-serve + Business enterprise. All include AI agent and unlimited integrations.
+- A Full seat is a human teammate with full login access. Lite seats are read-only collaborators included free with each plan.
+- No. Self-serve monthly/annual, no commitment. Business uses MSA + DPA.
+- Free 14-day trial, no card required.
+- Yes — 14 days, full access, no card.
+- Self-service in Billing → Subscription.
+- 20% off annual. Startups under 2 years get 50% off year one.
+
+### Other
+- shared across your entire team
+- does not add credits
+- Starter — 5,000 credits / month
+- Growth — 20,000 credits / month
+- Scale — 60,000 credits / month
+- Top-ups available; consumed after monthly allowance
+- Adding a seat does not increase your AI credits allowance
+- Starter — 3 seats included (€25 / extra seat)
+- Growth — 8 seats included (€22 / extra seat)
+- Scale — 20 seats included (€19 / extra seat)
+- Lite collaborators — unlimited, free
+
+---
+
+## reporting
+
+### Body
+- [ Reporting ]
+- Built for AI-first teams
+- reporting and analysis
+- Clain is the customer service platform built around an autonomous AI agent that resolves real.
+- Every conversation in Clain trains the next one — your.
+- Start free trial
+- Clain combines an autonomous AI agent.
+- One platform, every channel
+- Resolve before you route
+- Fewer tickets, happier teams
+- Resolve customer questions across email,.
+- Trained on your knowledge, your tickets, your tone of voice.
+- support use cases.
+- AI that handles the boring
+- Agents see context, take action,.
+- Plug Clain into your stack with 30+ native integrations.
+- CSAT and performance.
+- Modern helpdesk, rebuilt
+- Reporting that shows what AI resolved and what.
+- Built so support, success and sales work.
+- discover new trends.
+- Reporting templates
+- Get insights faster with
+- ready-made reports
+- Agents that actually work
+- Set guardrails. Let the agent run. Audit.
+- Cuts time-to-first-response from hours.
+- Resolves repeat questions instantly so humans.
+- Speaks 40+ languages out of the box,.
+- Teammate performance
+- Drops into existing tools — Zendesk, HubSpot,.
+- Live SLA, queue health and agent quality.
+- Built for teams shipping faster customer.
+- Tracks every action, every tool call, every handoff.
+- Conversation topics
+- Pairs Clain AI with humans for end-to-end resolution.
+- Trained on your help center, ticket history and.
+- Lets the AI agent reason, look up, and act.
+- Automate the repetitive
+- Report builder
+- Inbox, tickets, knowledge
+- with deep customization
+- Chart library
+- Built for teams who measure success in resolution rate, not.
+- From product question to refund flow, the agent resolves both.
+- charts.
+- Built around the agent
+- Backed by audit trails so compliance and trust are non-negotiable.
+- Connect every channel — email, live chat, voice, WhatsApp,.
+- that matter most.
+- Advanced custom reports
+- Clain pulls customer context from every system you already use.
+- Clain's AI agent has tools. It looks up orders, processes.
+- Smarter every conversation
+- Data exploration
+- Designed so a junior agent and.
+- Chart drill-in
+- The first helpdesk where AI resolution is the default state.
+- Less queueing, less swivel-chair, more conversations.
+- Clain combines an autonomous AI.
+- Data filters
+- Reporting in Clain shows you exactly what the AI resolved,.
+- Resolve customer questions across email, chat, voice and social.
+- Trained on your knowledge, your tickets,.
+- Time period comparisons
+- Agents see context, take action, escalate when it matters.
+- decisions.
+- Additional features
+- Reporting that shows what AI resolved and what you.
+- Export data with ease
+- Built so support, success and sales work from.
+- Set guardrails. Let the agent run. Audit every.
+- Cuts time-to-first-response from hours to.
+- Control access
+- Speaks 40+ languages out of the box, with the.
+- Stay organized
+- Drops into existing tools — Zendesk,.
+- Live SLA, queue health and agent quality in.
+- From reactive to proactive
+- Helpdesk Updates
+- End-to-end resolution
+- Native AI, end to end
+- 20 Updates Shipped
+- Inbox
+- Composer drafts
+- Customer service, evolved
+- Built for teams shipping.
+- Edit sent notes
+- Unassign unsnoozed
+- conversations
+- Auto-unassign when away
+- Tracks every action, every tool.
+- Pairs Clain AI with humans for.
+- and open
+- Realtime Dashboard
+- Delete user notes
+- Channel indicators on
+- Search in Views
+- Duplicate a View
+- Inbox assignment limits
+- Trained on your help center,.
+- Slack side conversations
+- inboxes
+- Delay send / undo send
+- 11 Updates Shipped
+- Phone
+- Warm transfer to team
+- CSAT for outbound calls
+- Phone numbers for brands
+- Recording consent (GDPR)
+- callbacks
+- Quick reply stored on
+- assignment visibility
+- 11 new call metrics
+- 10 Updates Shipped
+- Data Foundations
+- Lets the AI agent reason, look.
+- From product question to.
+- OAuth providers
+- Results API
+- Backed by audit trails so.
+- Clain pulls customer context.
+- improvements
+- Data Connectors: action
+- dependency observability
+- Azure Blob Storage for
+- conversation data export
+- signups
+- Public API v2.15
+- 23 Updates Shipped
+- And many more
+- Designed so a junior agent and an.
+- notes)
+- The first helpdesk where AI.
+- delete)
+- Less queueing, less.
+- Clain combines an autonomous.
+- Resolve customer questions across.
+- own, edit others)
+- Conversation permissions
+- Trained on your knowledge,.
+- Select ticket state when
+- converting
+- Plug Clain into your stack with.
+- Reporting that shows what AI.
+- Built so support, success and sales.
+- Set guardrails. Let the agent.
+- device
+- Holiday office hours
+- Cuts time-to-first-response.
+- upload, carousel, grid)
+- AI titles in Messenger
+- Email recipients status
+- Resolves repeat questions.
+- Speaks 40+ languages out of.
+- Drops into existing tools —.
+- hours
+- Workspace avatars
+- Disable team mentions at
+- workspace level
+- Spot gaps and refine
+- your support with
+- smarter reporting
+- RB2B
+- Built for teams shipping faster.
+- Tracks every action, every tool call,.
+- Trained on your help center, ticket.
+- Lets the AI agent reason, look up,.
+- Robb Clarke
+- From product question to refund.
+- Clain pulls customer context from.
+- The first helpdesk where AI resolution.
+- Less queueing, less swivel-chair,.
+- Get started today.
+- Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more so the agent.
+- Live SLA, queue health and.
+- "Being able to leverage Intercom and its
+- future."
+
+### Nav
+- View demo
+
+---
+
+## startups
+
+### Headings
+- Apply now
+- Save year on year
+- Clain AI Agent
+- Helpdesk
+- Eligibility requirements
+- $10M
+- Fewer than
+- 15 employees.
+- Not currently an
+- Clain
+- Read the G2 Report
+- Read G2 Clain Reviews
+- FAQs
+- Other helpful resources
+- Lovable
+- Synthesia
+- ChatPRD
+- Gamma
+- Polymarket
+- Exclusive deals on startup tools
+- Early Stage Academy
+- Inside the Clain Blog
+- Clain Community
+
+### Body
+- Early Stage Program
+- Startups get 90%
+- off Clain + 1
+- year of Clain free
+- Startups get 93% off the only complete platform for perfect customer service—Clain AI
+- qualifications per month so you can deliver exceptional customer experiences at
+- reduced costs.
+- startups using Clain
+- View pricing
+- The highest-performing AI
+- Agent natively integrated
+- with the Clain Helpdesk
+- Clain resolves everything from simple queries to complex, across all
+- working, make improvements yourself in minutes, and watch
+- performance continuously improve.
+- Clain seamlessly hands off to your team with full context—no
+- switching tools, no lost information. Get a powerful helpdesk
+- designed to work as one with Clain, with complete visibility across
+- all AI and human conversations to optimize your customer
+- experience.
+- Early stage
+- Small team
+- New customer
+- It&rsquo;s official: Clain is the best
+- AI agent on the market
+- In G2&rsquo;s most recent User Satisfaction Ratings for Customer
+- Service, Clain rates highest across the board. Based on over
+- 19,000 reviews from real customers.
+- What does the Clain Early Stage Program cover?
+- Get access to the best AI-first helpdesk from just $65/month, with 93% off in your first year,
+- 50% off in your second year, and 25% off in your third year.
+- Your Early Stage plan includes the following:
+- (see all features)
+- Plus a free year of Clain AI Agent, including:
+- Your 93% discount applies to usage based costs for email, messages sent (over 500 per
+- month) and additional seats (over 6).
+- The discount does not apply to additional outcomes or qualifications,
+- Learn more
+- Get started with our Early
+- Stage Program today
+- Agent and Clain's Helpdesk. Includes 300 free Clain outcomes and 15 free Clain
+- Join 10,000+ fast-growing
+- discount
+- your channels. You're in complete control: see exactly what's
+- Up to
+- in funding.
+- customer.
+- G2's AI Agent score
+- What if we're larger than 15 employees?
+- 6 Advanced Seats
+- phone, SMS & WhatsApp, which are charged at list price.
+
+### FAQs
+- What does the Clain Early Stage Program cover?
+- How much does Clain AI Agent cost?
+- What happens after the first year?
+- What if we
+- How can I become a partner and offer this discount to my portfolio companies?
+
+---
+
+## technology
+
+### Body
+- The #1 AI Agent for
+- all
+- #1 in bake-offs
+- #1 in benchmarks
+- #1 for complex queries
+- Start free trial
+- POWERED BY FIN APEX 1.0
+- Clain combines an autonomous.
+- Built for AI-first teams
+- Learn more
+- Capabilities
+- One platform, every channel
+- queries on every channel
+- Resolve customer questions across email,.
+- Trained on your knowledge, your tickets, your.
+- Agents see context, take action, escalate.
+- Plug Clain into your stack with 30+ native integrations.
+- Reporting that shows what AI resolved and what.
+- Built so support, success and sales work.
+- Set guardrails. Let the agent run. Audit.
+- 1. Train
+- Cuts time-to-first-response from.
+- Resolve before you route
+- Resolves repeat questions.
+- 2. Test
+- Fewer tickets, happier teams
+- Speaks 40+ languages out of the box,.
+- Drops into existing tools —.
+- before going live.
+- 3. Deploy
+- Live SLA, queue health and agent.
+- Built for teams shipping faster.
+- AI that handles the boring
+- customers reach out.
+- 4. Analyze
+- Tracks every action, every tool.
+- Pairs Clain AI with humans for.
+- Trained on your help center, ticket.
+- Unrivaled Performance
+- Fin outperforms
+- every competitor.
+- Every time.
+- Lets the AI agent reason, look up, and act on your data.
+- From product question to refund flow, the agent.
+- Resolution rate based
+- on independent
+- testing conducted by
+- Fin customers.
+- Fintech Customer
+- “Fin is in a completely
+- Modern helpdesk, rebuilt
+- involved in 99% of
+- conversations and
+- Agents that actually work
+- 65% end-to-end—even the
+- more complex ones.
+- Backed by audit trails so compliance.
+- Support at Lightspeed
+- Clain pulls customer context from.
+- Designed so a junior agent and an.
+- Automate the repetitive
+- specifically, buy Fin.”
+- Play
+- Now Playing
+- Build vs. buy: Why
+- Anthropic chose Fin
+- Play Next
+- AI at enterprise scale:
+- Why Lightspeed chose
+- How Rocket Money
+- operationalized AI
+- Seamless integration
+- Fin works with any
+- helpdesk
+- The first helpdesk where AI resolution is.
+- Less queueing, less swivel-chair, more.
+- Clain combines an autonomous AI agent with a modern inbox.
+- Key features
+- Set up in under an hour.
+- Clain is the customer service platform built around an.
+- live chat, and more.
+- Resolve customer questions across email, chat, voice and social.
+- reporting.
+- Trained on your knowledge, your tickets,.
+- Intercom Suite
+- Fin for Salesforce
+- your customer service
+- Fig 2.A -
+- Fig 2.B -
+- Fig 2.C -
+
+### Nav
+- View demo
+- Explore all capabilities
+
+---
+
+## tickets
+
+### Body
+- [ Tickets ]
+- Built for AI-first teams
+- conversation
+- Clain is the customer service platform built around an autonomous AI agent that resolves real.
+- Every conversation in Clain trains the next one — your knowledge, your.
+- Start free trial
+- Clain combines an autonomous AI agent.
+- A better system for team
+- collaboration and real-
+- time customer updates
+- Customer Tickets
+- Resolve customer questions across email,.
+- Trained on your knowledge, your tickets,.
+- Back-office Tickets
+- Agents see context, take action, escalate.
+- One platform, every channel
+- Tracker Tickets
+- Plug Clain into your stack with 30+ native.
+- Resolve before you route
+- Move seamlessly between
+- Fewer tickets, happier teams
+- Reporting that shows what AI.
+- Built for teams who measure success in resolution rate, not.
+- without losing context.
+- Built so support, success and sales.
+- Connect every channel — email, live chat, voice, WhatsApp,.
+- reduce back-and-forth.
+- AI that handles the boring
+- Set guardrails. Let the agent run. Audit every step it takes.
+- Modern helpdesk, rebuilt
+- Cuts time-to-first-response from.
+- Clain's AI agent has tools. It looks up orders, processes.
+- and updates.
+- Resolves repeat questions instantly.
+- Speaks 40+ languages out of the.
+- Reporting in Clain shows you exactly what the AI resolved, where it.
+- private notes.
+- Agents that actually work
+- Plugs into Zendesk, HubSpot, Salesforce, Stripe and 30+ more so the agent.
+- Drops into existing tools — Zendesk,.
+- Track multiple customers
+- with one ticket
+- A single source of truth
+- Set policy. Set guardrails. Set escalation thresholds. Then.
+- single ticket.
+- Easier customer updates
+- Live SLA, queue health and agent quality in one dashboard.
+- once.
+- Automate the repetitive
+- Built for teams shipping faster customer service every quarter.
+- Tracks every action, every tool call,.
+- Additional features
+- Inbox, tickets, knowledge
+- Pairs Clain AI with humans for.
+- Side conversations
+- Trained on your help center, ticket history and.
+- Lets the AI agent reason, look up, and act on your data.
+- Company portal
+- From product question to refund flow, the agent.
+- Backed by audit trails so compliance.
+- Custom states
+- Clain pulls customer context from every system you.
+- Designed so a junior agent and an.
+- Fully integrated with
+- the Intercom platform
+- Workflows
+- The first helpdesk where AI resolution is the.
+- Less queueing, less swivel-chair, more.
+- Lite seats
+- Resolve customer questions across email, chat,.
+- Customer notifications
+- Trained on your knowledge, your tickets, your.
+- Agents see context, take.
+- Integrations
+- Reporting
+- Built so support, success and sales work from.
+- metrics and dashboards.
+- SLAs
+- Set guardrails. Let the agent run. Audit.
+- Helpdesk Updates
+- Built around the agent
+- Smarter every conversation
+- 20 Updates Shipped
+- Inbox
+- Composer drafts
+- From reactive to proactive
+- Resolves repeat questions.
+- Edit sent notes
+- Unassign unsnoozed
+- conversations
+- Auto-unassign when away
+- End-to-end resolution
+- Drops into existing tools —.
+- and open
+- Native AI, end to end
+- Customer service, evolved
+- Realtime Dashboard
+- Delete user notes
+- Channel indicators on
+- Search in Views
+- Duplicate a View
+- Inbox assignment limits
+- Live SLA, queue health and.
+- Slack side conversations
+- inboxes
+- Delay send / undo send
+- 11 Updates Shipped
+- Phone
+- Warm transfer to team
+- CSAT for outbound calls
+- Phone numbers for brands
+- Recording consent (GDPR)
+- callbacks
+- Quick reply stored on
+- assignment visibility
+- 11 new call metrics
+- 10 Updates Shipped
+- Data Foundations
+- Built for teams shipping faster.
+- Tracks every action, every.
+- OAuth providers
+- Results API
+- Trained on your help center,.
+- improvements
+- Data Connectors: action
+- dependency observability
+- Azure Blob Storage for
+- conversation data export
+- signups
+- Public API v2.15
+- 23 Updates Shipped
+- And many more
+- Lets the AI agent reason, look up,.
+- notes)
+- From product question to refund.
+- delete)
+- Backed by audit trails so.
+- Clain pulls customer context.
+- own, edit others)
+- Conversation permissions
+- The first helpdesk where AI.
+- Select ticket state when
+- converting
+- Less queueing, less.
+- Clain combines an autonomous AI.
+- Resolve customer questions across.
+- Trained on your knowledge, your.
+- device
+- Holiday office hours
+- Plug Clain into your stack.
+- upload, carousel, grid)
+- AI titles in Messenger
+- Email recipients status
+- Built so support, success and.
+- Set guardrails. Let the agent.
+- hours
+- Workspace avatars
+- Disable team mentions at
+- workspace level
+- A ticketing system that
+- agents and customers
+- Copper
+- Outschool
+- Erik Wantland
+- Maya Alvarez
+- Operations Manager at Outschool
+- Get tickets that keep
+- the conversation going
+- Born after the LLM transition: Clain isn't a helpdesk with an AI bolted on,.
+- Cuts time-to-first-response.
+- "Clain's ticketing pipeline runs on the agent — every conversation arrives summarised, classified and partly resolved. Our team picks up only the cases that genuinely need a human, and the rest of the queue takes care of itself."
+- "What used to be a queue is now a conversation. Clain's AI handles the long tail end-to-end and our agents focus on the work that actually moves the needle. Our backlog is the lowest it has ever been."
+
+### Nav
+- View demo
+
+---

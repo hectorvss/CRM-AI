@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'billing' | 'messenger' | 'email' | 'phone' | 'fin' | 'knowledge' | 'reports' | 'outbound';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'fin' | 'knowledge' | 'reports' | 'outbound';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -29,9 +29,17 @@ const IMG_APP_STRIPE       = "http://localhost:3845/assets/fe71d140eb03f8f8f8d7d
 // PeopleView previews (1-37921, 1-34193 main group SVG)
 const IMG_QUALIFICATION    = "http://localhost:3845/assets/87ca775140e54d5c3863f89d37ef855026b40c28.svg";
 const IMG_USERDATA_BANNER  = "http://localhost:3845/assets/ab0de40d6c4bdf7484aba9ff89ed27f73d76959e.svg";
-// Channels banners (1:53419, 1:56342)
+// Channels banners (1:53419, 1:56342, 1:57727, 1:57822, 1:67142)
 const IMG_EMAIL_BANNER     = "http://localhost:3845/assets/6e214d9080a16f54d442f6685aad025362ad2816.png";
 const IMG_PHONE_VIDEO      = "http://localhost:3845/assets/0150575beef6c4a589bf4bc41825691e96238efd.png";
+const IMG_WHATSAPP_BANNER  = "http://localhost:3845/assets/810cd6bad6138197c597db529f478a647af516bb.png";
+const IMG_WHATSAPP_TRANS   = "http://localhost:3845/assets/d14c53a1a462ec4a3e702dc5235b771e2767ca95.png";
+const IMG_CHANNELS_ALL     = "http://localhost:3845/assets/1db4722d06d0ece26352d1f6607f6edf10ffe166.png";
+const IMG_DISCORD_ILLO     = "http://localhost:3845/assets/e25c01bf4ae888185fc2c494120173b16fb88dc8.png";
+const IMG_FACEBOOK_BANNER  = "http://localhost:3845/assets/ff55606a7cb338b7b3782780552d97213eeffd34.png";
+const IMG_INSTAGRAM_BANNER = "http://localhost:3845/assets/adf19f0a72d29719d45fcf27040a591f21c327b1.png";
+// Chat support floating icon (1:55751 mask, used in all settings screens)
+const IMG_CHAT_SUPPORT_MASK = "http://localhost:3845/assets/7d6b74634c1449d020cbc1db43f39966f662badb.svg";
 // Connector icons (SVG, 1-31284…1-31315)
 const SVG_CONN_CREATE      = "http://localhost:3845/assets/9547459195af209d7fc7a8266b21ba259e45d7b3.svg";
 const SVG_CONN_MCP         = "http://localhost:3845/assets/b76967aa85b0e0a5adba750c204f52d62caa1075.svg";
@@ -106,7 +114,7 @@ const ICON_EMPTY_STATE       = "https://www.figma.com/api/mcp/asset/29703bc6-2e1
 // ── Shared: Left Nav ──────────────────────────────────────────────────────────
 function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const isContacts = view === 'contacts' || view === 'allLeads';
-  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'billing' || view === 'messenger' || view === 'email' || view === 'phone';
+  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'billing' || view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
   const isActive = (v: View) => view === v;
 
   function NavBtn({ nav, icon, label, badge }: { nav: View; icon: string; label: string; badge?: number }) {
@@ -1148,13 +1156,13 @@ const CANALES_SUB: { label: string; nav: View | null }[] = [
   { label: "Messenger",                 nav: 'messenger' },
   { label: "Correo electrónico",        nav: 'email' },
   { label: "Teléfono",                  nav: 'phone' },
-  { label: "WhatsApp",                  nav: null },
+  { label: "WhatsApp",                  nav: 'whatsapp' },
   { label: "Switch",                    nav: null },
   { label: "Slack",                     nav: null },
-  { label: "Discord",                   nav: null },
-  { label: "SMS",                       nav: null },
-  { label: "Canales de redes sociales", nav: null },
-  { label: "Todos los canales",         nav: null },
+  { label: "Discord",                   nav: 'discord' },
+  { label: "SMS",                       nav: 'sms' },
+  { label: "Canales de redes sociales", nav: 'social' },
+  { label: "Todos los canales",         nav: 'allChannels' },
 ];
 const SETTINGS_NAV_BOTTOM = [
   { label: "Centro de ayuda",   hasChevron: true },
@@ -1189,7 +1197,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const isIntegSection = view === 'appStore' || view === 'connectors';
   const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual';
   const isSuscripcionSection = view === 'billing';
-  const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone';
+  const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
 
   function SubItems({ items }: { items: typeof DATOS_SUB }) {
@@ -4170,6 +4178,405 @@ function PhoneView({ view, onNavigate }: { view: View; onNavigate: (v: View) => 
   );
 }
 
+// ── Shared Channel Promo Card ─────────────────────────────────────────────────
+
+function ChannelPromoCard({ title, description, links, banner, dataNodeId }: {
+  title: string; description: string; links: { label: string; icon?: string }[]; banner?: string; dataNodeId?: string;
+}) {
+  return (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+      <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+      </button>
+      <div className="flex-1 max-w-[500px]">
+        <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2 leading-[20px]">{title}</h2>
+        <p className="text-[13px] text-[#646462] mb-4">{description}</p>
+        <div className="flex items-center gap-4 flex-wrap">
+          {links.map(l => (
+            <button key={l.label} className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">
+              {l.icon && <span>{l.icon}</span>}{l.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {banner && <img src={banner} alt={title} className="w-[458px] h-[213px] flex-shrink-0 rounded-[8px] object-cover" data-node-id={dataNodeId} />}
+    </div>
+  );
+}
+
+// ── WhatsAppView (1-57872) ────────────────────────────────────────────────────
+
+function WhatsAppView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [transition, setTransition] = useState(true);
+  const [identify, setIdentify] = useState<'new' | 'existing'>('new');
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">WhatsApp</h1>
+            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg></button>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            <ChannelPromoCard
+              title="Incorpora WhatsApp a tu buzón para agilizar la asistencia"
+              description="Gestiona las conversaciones de WhatsApp en tu buzón y despliega Fin AI Agent para ayudar a responder automáticamente a las preguntas más comunes. Solo se te cobrará con base en el uso."
+              links={[{ icon: '📖', label: 'Conéctate a WhatsApp' }, { icon: '🤖', label: 'Implementa Fin AI Agent por chat' }]}
+              banner={IMG_WHATSAPP_BANNER}
+              dataNodeId="1:57727"
+            />
+            {/* Numbers */}
+            <div className="border border-[#e9eae6] rounded-[12px] px-8 py-7 mb-4">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Números de WhatsApp Business conectados</h3>
+              <p className="text-[13px] text-[#646462] mb-4">Puedes conectarte a varios números de WhatsApp Business. La facturación se basa en el uso. <a href="#" className="text-[#3b59f6] underline">Más información sobre números de WhatsApp Business</a></p>
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Conectar a un número de WhatsApp Business</button>
+            </div>
+            {/* 2-col sections */}
+            {[
+              { title: 'Fin AI Agent', desc: 'Permite que Fin responda al instante las preguntas de los clientes en WhatsApp, reduce la carga de trabajo manual y mejora los tiempos de respuesta.', cta: 'Administrar Fin AI Agent' },
+              { title: 'Perfil de empresa', desc: 'Agrega los detalles que tus clientes verán en tu perfil de WhatsApp Business, como foto de perfil, estado, correo electrónico, dirección y sitio web.', cta: 'Establece el perfil de tu empresa' },
+            ].map(s => (
+              <div key={s.title} className="border border-[#e9eae6] rounded-[12px] flex items-start gap-6 px-7 py-6 mb-4">
+                <div className="flex-1"><h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">{s.title}</h3><p className="text-[13px] text-[#646462]">{s.desc}</p></div>
+                <button className="border border-[#e9eae6] rounded-[6px] px-4 py-2 text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] flex-shrink-0">{s.cta}</button>
+              </div>
+            ))}
+            {/* Templates */}
+            <div className="border border-[#e9eae6] rounded-[12px] flex items-start gap-6 px-7 py-6 mb-4">
+              <div className="flex-1">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Plantillas de mensajes</h3>
+                <p className="text-[13px] text-[#646462] mb-2">Las plantillas de mensajes son requeridas por WhatsApp para iniciar o continuar conversaciones 24 horas después de la última respuesta del usuario. <a href="#" className="text-[#3b59f6] underline">Más información</a></p>
+                <div className="bg-[#fef3c7] border border-[#fde68a] rounded-[8px] px-3 py-2 mt-3 text-[12px] text-[#1a1a1a] flex items-start gap-2"><span>⚠</span>Las plantillas de marketing no son compatibles. Solo se pueden usar plantillas de utilidad y autenticación en Intercom. Las plantillas de marketing no aparecerán en tu lista de plantillas. <a href="#" className="text-[#3b59f6] underline">Más información sobre las categorías de plantillas.</a></div>
+              </div>
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444] flex-shrink-0">Administrar plantillas de mensajes</button>
+            </div>
+            {/* Switch transition */}
+            <div className="border border-[#e9eae6] rounded-[12px] flex items-start gap-6 px-7 py-6 mb-4">
+              <div className="flex-1">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Cambiar de Messenger a WhatsApp</h3>
+                <p className="text-[13px] text-[#646462] mb-3">Cuando los leads o los usuarios inicien una conversación en Messenger, ofréceles continuarla en WhatsApp en su idioma preferido (solo disponible en la web). <a href="#" className="text-[#3b59f6] underline">Explicación sobre leads y usuarios</a>.</p>
+              </div>
+              <div className="w-[440px] flex-shrink-0">
+                <div className="flex items-center gap-3 mb-3">
+                  <button onClick={() => setTransition(v => !v)} className={`w-8 h-[18px] rounded-full relative ${transition ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}>
+                    <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${transition ? 'right-0.5' : 'left-0.5'}`}/>
+                  </button>
+                  <span className="text-[13px] text-[#1a1a1a]">Ofrece la opción de cambiar a WhatsApp</span>
+                </div>
+                <img src={IMG_WHATSAPP_TRANS} alt="WhatsApp transition" className="w-full rounded-[8px] border border-[#e9eae6]" data-node-id="1:57822" />
+              </div>
+            </div>
+            {/* New conversations */}
+            <div className="border border-[#e9eae6] rounded-[12px] flex items-start gap-6 px-7 py-6 mb-4">
+              <div className="flex-1">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">nuevas conversaciones</h3>
+                <p className="text-[13px] text-[#646462]">Una vez cerrada la conversación, los mensajes nuevos que se reciban después de este período de tiempo establecido se tratarán como una nueva conversación.</p>
+              </div>
+              <select className="w-[440px] border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white flex-shrink-0"><option>30 días</option></select>
+            </div>
+            {/* Existing users */}
+            <div className="border border-[#e9eae6] rounded-[12px] flex items-start gap-6 px-7 py-6 mb-4">
+              <div className="flex-1">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Usuarios existentes</h3>
+                <p className="text-[13px] text-[#646462]">Cuando se inicia una conversación en WhatsApp, crea un nuevo cliente potencial o intenta hacer coincidir el número de teléfono con un usuario existente. Si no se encuentra ninguna coincidencia, se creará un nuevo cliente potencial.</p>
+              </div>
+              <div className="w-[440px] flex flex-col gap-3 flex-shrink-0">
+                {[
+                  { id: 'new' as const, label: 'Crear siempre un nuevo cliente potencial' },
+                  { id: 'existing' as const, label: 'Identificar a los usuarios existentes por su número de teléfono' },
+                ].map(o => (
+                  <label key={o.id} onClick={() => setIdentify(o.id)} className="flex items-center gap-3 cursor-pointer">
+                    <div className={`w-4 h-4 rounded-full border-2 ${identify === o.id ? 'border-[#3b59f6]' : 'border-[#ccc]'} flex items-center justify-center`}>
+                      {identify === o.id && <div className="w-2 h-2 rounded-full bg-[#3b59f6]"/>}
+                    </div>
+                    <span className="text-[13px] text-[#1a1a1a]">{o.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── DiscordView (1-61787) ─────────────────────────────────────────────────────
+
+function DiscordView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Discord</h1>
+            <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Conectar servidor</button>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {/* Fin AI Agent banner */}
+            <div className="border border-[#e9eae6] rounded-[10px] px-5 py-4 mb-6 flex items-center justify-between">
+              <p className="text-[13px] text-[#1a1a1a] max-w-[700px]">Permita que Fin responda al instante las preguntas de los clientes en Discord, reduzca la carga de trabajo manual y mejore los tiempos de respuesta</p>
+              <div className="flex items-center gap-3">
+                <button className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">Administrar Fin AI Agent</button>
+                <button className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+              </div>
+            </div>
+            {/* Promo card */}
+            <div className="bg-white border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+              <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+              <div className="flex-1 max-w-[500px]">
+                <h2 className="text-[20px] font-bold text-[#1a1a1a] mb-2 leading-[26px]">Conecta Discord para empezar a administrar los mensajes de los clientes en Intercom</h2>
+                <p className="text-[13px] text-[#646462] mb-4">Configura un servidor de Discord para crear, responder y resolver conversaciones desde tu buzón de Intercom. También puedes habilitar Fin para que responda en Discord.</p>
+                <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Canal de Discord</button>
+              </div>
+              <img src={IMG_DISCORD_ILLO} alt="Discord settings illustration" className="w-[298px] h-[142px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:61730" />
+            </div>
+            {/* Empty state */}
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <svg viewBox="0 0 24 24" className="w-10 h-10" fill="#5865F2"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 00-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 00-4.8 0c-.14-.33-.36-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05a18.46 18.46 0 005.59 2.83.07.07 0 00.08-.03c.43-.59.81-1.21 1.14-1.87.02-.04 0-.08-.04-.09-.61-.23-1.19-.51-1.75-.83-.04-.02-.04-.08-.01-.11.12-.09.23-.18.34-.27a.07.07 0 01.07-.01c3.66 1.67 7.61 1.67 11.23 0a.07.07 0 01.07.01c.11.09.23.18.34.27.04.03.04.09-.01.11-.56.33-1.14.6-1.75.83a.07.07 0 00-.04.09c.34.66.72 1.28 1.14 1.87.02.02.06.04.08.03 1.79-.55 3.65-1.39 5.59-2.83.02-.01.03-.03.03-.05.45-4.53-.75-8.46-3.18-11.95-.01-.01-.02-.02-.03-.02zM8.52 14.42c-1.06 0-1.93-.97-1.93-2.16 0-1.19.85-2.16 1.93-2.16 1.09 0 1.95.98 1.93 2.16 0 1.19-.85 2.16-1.93 2.16zm6.97 0c-1.06 0-1.93-.97-1.93-2.16 0-1.19.85-2.16 1.93-2.16 1.09 0 1.95.98 1.93 2.16 0 1.19-.84 2.16-1.93 2.16z"/></svg>
+              <p className="text-[14px] font-semibold text-[#1a1a1a]">Aún no hay servidores conectados.</p>
+              <p className="text-[13px] text-[#646462] text-center max-w-[500px]">Conecte su servidor de Discord para comenzar a sincronizar conversaciones con Intercom. Una vez conectado, verá sus servidores listados aquí.</p>
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444] mt-2">+ Conectar el servidor de Discord</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SmsView (1-63243) ─────────────────────────────────────────────────────────
+
+function SmsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">SMS</h1>
+            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg></button>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            <h2 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Gestión de respuestas SMS</h2>
+            <div className="border border-[#e9eae6] rounded-[12px] mb-3 overflow-hidden">
+              <div className="px-5 py-4 flex items-start gap-4">
+                <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">💬</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2"><p className="text-[14px] font-semibold text-[#1a1a1a]">SMS de dos vías</p><span className="bg-[#dcfce7] text-[#166534] rounded-full px-2 py-0.5 text-[11px] font-medium">Activado</span></div>
+                  <p className="text-[12px] text-[#646462] mt-0.5">Apoya a tus clientes al instante con conversaciones por SMS</p>
+                </div>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] mt-2"><path d="M4 10l4-4 4 4"/></svg>
+              </div>
+              <div className="px-5 pb-5 ml-14">
+                <p className="text-[13px] text-[#646462] mb-3">Cuando recibas una respuesta de palabra clave no reconocida, inicia una conversación en Inbox por SMS.</p>
+                <button className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]">Activar esta función Desactivado</button>
+              </div>
+            </div>
+            <div className="border border-[#e9eae6] rounded-[12px] mb-6 px-5 py-4 flex items-start gap-4 hover:bg-[#fafaf9]">
+              <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">💬</div>
+              <div className="flex-1"><p className="text-[14px] font-semibold text-[#1a1a1a]">Respuestas automáticas a palabras clave</p><p className="text-[12px] text-[#646462] mt-0.5">Administra las respuestas automatizadas que se enviarán a tus clientes.</p></div>
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] mt-2"><path d="M6 4l4 4-4 4"/></svg>
+            </div>
+            <h2 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Configuración avanzada de SMS</h2>
+            <div className="flex flex-col gap-3">
+              {[
+                { icon: '📱', title: 'Países y números de teléfono', desc: 'Activar nuevos países, editar y previsualizar los números de teléfono activos' },
+                { icon: '⏰', title: 'Horarios tranquilos por zona horaria', desc: 'Cuando se activan para mensajes individuales, las horas tranquilas retrasan el envío del mensaje SMS para garantizar que solo se reciban cuan...' },
+                { icon: '🏢', title: 'Prefijo de identificación de la empresa', desc: 'Identifica tu empresa cuando envíes SMS salientes.' },
+              ].map(s => (
+                <button key={s.title} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-start gap-4 hover:bg-[#fafaf9] text-left">
+                  <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">{s.icon}</div>
+                  <div className="flex-1"><p className="text-[14px] font-semibold text-[#1a1a1a]">{s.title}</p><p className="text-[12px] text-[#646462] mt-0.5">{s.desc}</p></div>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] mt-2"><path d="M6 4l4 4-4 4"/></svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SocialChannelsView (1-64525 + 1-65820) ────────────────────────────────────
+
+function SocialChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'facebook' | 'instagram'>('facebook');
+  const [respHistorias, setRespHistorias] = useState(true);
+  const [mencionesHistorias, setMencionesHistorias] = useState(true);
+  const [compartirTiempo, setCompartirTiempo] = useState(false);
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Canales de redes sociales</h1>
+            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg></button>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+            {(['facebook', 'instagram'] as const).map(id => (
+              <button key={id} onClick={() => setTab(id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors capitalize ${
+                  tab === id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {id === 'facebook' ? 'Facebook' : 'Instagram'}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {tab === 'facebook' && <>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+                <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+                <div className="flex-1 max-w-[500px]">
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Conéctate con los clientes en Facebook</h2>
+                  <p className="text-[13px] text-[#646462] mb-4">Administra todas tus conversaciones de Facebook Messenger en tu buzón de Intercom. Asigna mensajes automáticamente a tu equipo, realiza un seguimiento de todas las interacciones como clientes potenciales o usuarios y responde más rápido a los clientes, todo en un solo lugar.</p>
+                  <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Canal de Facebook</button>
+                </div>
+                <img src={IMG_FACEBOOK_BANNER} alt="Facebook preview" className="w-[458px] h-[213px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:64496" />
+              </div>
+              <div className="border border-[#e9eae6] rounded-[12px] px-7 py-6">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Páginas de empresas de Facebook conectadas</h3>
+                <p className="text-[13px] text-[#646462] mb-4">Te puedes conectar a varias páginas comerciales de Facebook. El uso de Facebook es gratuito en tu plan de precios.</p>
+                <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Conectar página de empresa de Facebook</button>
+              </div>
+            </>}
+            {tab === 'instagram' && <>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+                <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+                <div className="flex-1 max-w-[500px]">
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Conéctate con los clientes en Instagram</h2>
+                  <p className="text-[13px] text-[#646462] mb-4">Administra fácilmente los mensajes directos (DM) y las respuestas a Historias en tu buzón de Intercom. Asigna conversaciones automáticamente, convierte todas las interacciones en clientes potenciales o usuarios y responde a cada cliente más rápido.</p>
+                  <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Canal de Instagram</button>
+                </div>
+                <img src={IMG_INSTAGRAM_BANNER} alt="Instagram preview" className="w-[458px] h-[213px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:65752" />
+              </div>
+              <div className="border border-[#e9eae6] rounded-[12px] px-7 py-6 mb-4">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Cuentas comerciales de Instagram conectadas</h3>
+                <p className="text-[13px] text-[#646462] mb-4">Puedes conectarte a varias cuentas comerciales de Instagram. El uso de Instagram es gratuito en tu plan de precios.</p>
+                <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Conectar cuenta comercial de Instagram</button>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[12px] flex items-start gap-6 px-7 py-6 mb-4">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Mensajes de Instagram en tu buzón</h3>
+                  <p className="text-[13px] text-[#646462]">Elige qué mensajes de Instagram se entregarán directamente en tu buzón de Intercom.</p>
+                </div>
+                <div className="w-[280px] flex flex-col gap-3 flex-shrink-0">
+                  {[
+                    { state: respHistorias, set: setRespHistorias, label: 'Respuestas a tus historias' },
+                    { state: mencionesHistorias, set: setMencionesHistorias, label: 'Menciones en historias de otros usuarios' },
+                  ].map(t => (
+                    <div key={t.label} className="flex items-center gap-2">
+                      <button onClick={() => t.set(v => !v)} className={`w-8 h-[18px] rounded-full relative ${t.state ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}>
+                        <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${t.state ? 'right-0.5' : 'left-0.5'}`}/>
+                      </button>
+                      <span className="text-[13px] text-[#1a1a1a]">{t.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border border-[#e9eae6] rounded-[12px] flex items-start gap-6 px-7 py-6">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Compartir el tiempo de respuesta</h3>
+                  <p className="text-[13px] text-[#646462]">Comparte tu tiempo de respuesta habitual cuando los clientes te envían mensajes en Instagram. <a href="#" className="text-[#3b59f6] underline">Más información sobre el horario de atención y los tiempos de respuesta</a>.</p>
+                </div>
+                <div className="w-[280px] flex items-center gap-2 flex-shrink-0">
+                  <button onClick={() => setCompartirTiempo(v => !v)} className={`w-8 h-[18px] rounded-full relative ${compartirTiempo ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}>
+                    <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${compartirTiempo ? 'right-0.5' : 'left-0.5'}`}/>
+                  </button>
+                  <span className="text-[13px] text-[#1a1a1a]">Comparte tu tiempo de respuesta</span>
+                </div>
+              </div>
+            </>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AllChannelsView (1-67348) ─────────────────────────────────────────────────
+
+const ALL_CHANNELS_RECOMMENDED: { name: string; subtitle: string; desc: string; bg: string; emoji: string; nav: View | null }[] = [
+  { name: 'Messenger',         subtitle: 'Incluido en tu plan', desc: 'Brinda ayuda proactiva, autoservicio y asistencia personal a través del chat en tu sitio web.', bg: '#3b59f6', emoji: '💬', nav: 'messenger' },
+  { name: 'Correo electrónico',subtitle: 'Incluido en tu plan', desc: 'Responde a las consultas de los clientes e inicia conversaciones por correo electrónico.', bg: '#fa7938', emoji: '✉', nav: 'email' },
+  { name: 'Teléfono',          subtitle: 'Facturado por uso',   desc: 'Inicia llamadas telefónicas, videollamadas y pantalla compartida para ayudar rápidamente a tus clientes.', bg: '#22c55e', emoji: '📞', nav: 'phone' },
+];
+const ALL_CHANNELS_OTHER: { name: string; subtitle: string; desc: string; bg: string; emoji: string; nav: View | null; badge?: string }[] = [
+  { name: 'WhatsApp',  subtitle: 'Facturado por uso',   desc: 'Responde a los mensajes de WhatsApp e interactúa con los clientes directamente desde tu Inbox.', bg: '#25D366', emoji: '💚', nav: 'whatsapp' },
+  { name: 'Instagram', subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Instagram e interactúa con los clientes directamente desde tu Inbox.', bg: '#E1306C', emoji: '📷', nav: 'social' },
+  { name: 'Facebook',  subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Facebook e interactúa con los clientes directamente desde tu Inbox.', bg: '#1877F2', emoji: 'f', nav: 'social' },
+  { name: 'Slack',     subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Slack e interactúa con los clientes directamente desde tu Inbox.', bg: '#4A154B', emoji: '#', nav: null },
+  { name: 'SMS',       subtitle: 'Facturado por uso',   desc: 'Responde a las consultas de los clientes e inicia conversaciones con mensajes SMS.', bg: '#22c55e', emoji: '📱', nav: 'sms' },
+  { name: 'Switch',    subtitle: 'Disponible con cambio a un plan de mayor categoría', desc: 'Permite que los clientes pasen de una cola telefónica a una experiencia de chat en Messenger.', bg: '#6366f1', emoji: '⇄', nav: null, badge: 'Obtener funcionalidad' },
+];
+
+function AllChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Todos los canales</h1>
+            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg></button>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {/* Hub banner */}
+            <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+              <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+              <div className="flex-1 max-w-[500px]">
+                <h2 className="text-[20px] font-bold text-[#1a1a1a] mb-2">Todos los canales en un buzón</h2>
+                <p className="text-[13px] text-[#646462] mb-4">Atiende a tus clientes donde están, desde chat en vivo y correo electrónico hasta teléfono y redes sociales. Todas las conversaciones se canalizan directamente a tu buzón, para que puedas priorizar los problemas y resolverlos más rápido.</p>
+                <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Canales</button>
+              </div>
+              <img src={IMG_CHANNELS_ALL} alt="Hub" className="w-[442px] h-[206px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:67142" />
+            </div>
+            {/* Recomendado */}
+            <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">Recomendado</h3>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              {ALL_CHANNELS_RECOMMENDED.map(c => (
+                <button key={c.name} onClick={() => c.nav && onNavigate(c.nav)} className="border border-[#e9eae6] rounded-[10px] p-6 flex flex-col text-left hover:border-[#c8c9c4] hover:shadow-sm">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-[20px] flex-shrink-0" style={{background: c.bg}}>{c.emoji}</div>
+                    <div><p className="text-[15px] font-semibold text-[#1a1a1a]">{c.name}</p><p className="text-[12px] text-[#646462]">{c.subtitle}</p></div>
+                  </div>
+                  <p className="text-[13px] text-[#646462]">{c.desc}</p>
+                </button>
+              ))}
+            </div>
+            {/* Otros canales */}
+            <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">Otros canales</h3>
+            <div className="grid grid-cols-2 gap-4">
+              {ALL_CHANNELS_OTHER.map(c => (
+                <button key={c.name} onClick={() => c.nav && onNavigate(c.nav)} className="border border-[#e9eae6] rounded-[10px] p-6 flex flex-col text-left hover:border-[#c8c9c4] hover:shadow-sm">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-[20px] flex-shrink-0" style={{background: c.bg}}>{c.emoji}</div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2"><p className="text-[15px] font-semibold text-[#1a1a1a]">{c.name}</p>{c.badge && <span className="bg-[#7c3aed] text-white text-[11px] px-2 py-0.5 rounded-full font-medium">{c.badge}</span>}</div>
+                      <p className="text-[12px] text-[#646462]">{c.subtitle}</p>
+                    </div>
+                  </div>
+                  <p className="text-[13px] text-[#646462]">{c.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4208,6 +4615,11 @@ export default function Prototype() {
       case 'messenger':      return <MessengerView view={view} onNavigate={setView} />;
       case 'email':          return <EmailView view={view} onNavigate={setView} />;
       case 'phone':          return <PhoneView view={view} onNavigate={setView} />;
+      case 'whatsapp':       return <WhatsAppView view={view} onNavigate={setView} />;
+      case 'discord':        return <DiscordView view={view} onNavigate={setView} />;
+      case 'sms':            return <SmsView view={view} onNavigate={setView} />;
+      case 'social':         return <SocialChannelsView view={view} onNavigate={setView} />;
+      case 'allChannels':    return <AllChannelsView view={view} onNavigate={setView} />;
       case 'fin':            return <WIPView label="Fin AI" />;
       case 'knowledge':return <WIPView label="Knowledge Base" />;
       case 'reports':  return <WIPView label="Reports" />;
