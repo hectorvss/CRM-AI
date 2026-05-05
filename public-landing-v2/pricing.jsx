@@ -62,33 +62,33 @@
           <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.name}</h3>
           <p className="m-0 mt-[10px] text-[13px] leading-[19.6px] min-h-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle || ' '}</p>
           <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.description}</p>
-          {/* price block — two columns:
-                LEFT  → "From" on top, strikethrough MSRP below
-                RIGHT → big current price on top, "per team/mo" below */}
-          <div className="mt-auto flex items-start justify-between" style={{ height: 60 }}>
+          {/* price block — two columns, larger & tighter:
+                LEFT  → "From" (15 px, prominent, on top), strikethrough MSRP (15 px) below
+                RIGHT → big current price (32 px) on top, "per team/mo" (13 px) below */}
+          <div className="mt-auto flex items-start justify-between" style={{ height: 56 }}>
             {plan.seatPrice && (
               <>
-                <div className="flex flex-col gap-[4px]">
-                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>From</span>
+                <div className="flex flex-col gap-[2px]">
+                  <span className="text-[15px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>From</span>
                   {plan.originalPrice && (
-                    <span className="text-[13px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through', textDecorationThickness: '1px' }}>{plan.originalPrice}/mo</span>
+                    <span className="text-[15px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through', textDecorationThickness: '1px' }}>{plan.originalPrice}/mo</span>
                   )}
                 </div>
-                <div className="flex flex-col items-end gap-[4px]">
-                  <span className="text-[28px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
-                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+                <div className="flex flex-col items-end gap-[2px]">
+                  <span className="text-[32px] leading-[34px] tracking-[-0.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
+                  <span className="text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
                 </div>
               </>
             )}
             {plan.isBusiness && (
               <>
-                <div className="flex flex-col gap-[4px]">
-                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Pricing</span>
-                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>by contract</span>
+                <div className="flex flex-col gap-[2px]">
+                  <span className="text-[15px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>Pricing</span>
+                  <span className="text-[15px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>by contract</span>
                 </div>
-                <div className="flex flex-col items-end gap-[4px]">
-                  <span className="text-[28px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
-                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>negotiated</span>
+                <div className="flex flex-col items-end gap-[2px]">
+                  <span className="text-[32px] leading-[34px] tracking-[-0.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
+                  <span className="text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>negotiated</span>
                 </div>
               </>
             )}
