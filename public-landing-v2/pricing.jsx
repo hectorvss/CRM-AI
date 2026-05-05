@@ -62,32 +62,27 @@
           <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.name}</h3>
           <p className="m-0 mt-[10px] text-[13px] leading-[19.6px] min-h-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle || ' '}</p>
           <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.description}</p>
-          {/* price block — single horizontal row: strikethrough MSRP on the left, current price on the right */}
+          {/* price block — strikethrough MSRP small on top, then "From €42 per team/mo" as one cohesive line. Sits at the bottom of the fixed top-area so all CTAs align across columns. */}
           <div className="mt-auto" style={{ height: 60 }}>
             {plan.seatPrice && (
-              <div className="flex flex-col gap-[4px]">
-                <div className="flex items-baseline justify-between">
-                  {plan.originalPrice ? (
-                    <span className="text-[14px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through' }}>{plan.originalPrice}/mo</span>
-                  ) : <span />}
-                  <div className="flex items-baseline gap-[4px]">
-                    <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>From</span>
-                    <span className="text-[26px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+              <div className="flex flex-col gap-[6px]">
+                {plan.originalPrice && (
+                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through', textDecorationThickness: '1px' }}>{plan.originalPrice}/mo</span>
+                )}
+                <div className="flex items-baseline gap-[6px] flex-wrap">
+                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>From</span>
+                  <span className="text-[28px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
+                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
                 </div>
               </div>
             )}
             {plan.isBusiness && (
-              <div className="flex flex-col gap-[4px]">
-                <div className="flex items-baseline justify-end">
-                  <span className="text-[26px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
+              <div className="flex flex-col gap-[6px]">
+                <div className="flex items-baseline gap-[6px]">
+                  <span className="text-[28px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
+                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>pricing</span>
                 </div>
-                <div className="flex justify-end">
-                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>Volume-based pricing</span>
-                </div>
+                <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Negotiated by contract</span>
               </div>
             )}
             {plan.noSeats && !plan.isBusiness && (
@@ -338,9 +333,11 @@
                       <Bullet>Scale — 60,000 credits / month</Bullet>
                       <Bullet>Top-ups available; consumed after monthly allowance</Bullet>
                     </ul>
-                    <button onClick={() => ClainV2.navigate('/all-features#credits')} className="mt-auto pt-[40px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
-                      <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Buy credit packs</span>
-                    </button>
+                    <div className="mt-auto pt-[64px]">
+                      <button onClick={() => ClainV2.navigate('/all-features#credits')} className="cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
+                        <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Buy credit packs</span>
+                      </button>
+                    </div>
                   </div>
                   {/* Seats column */}
                   <div className="flex-1 p-[24px] flex flex-col">
@@ -356,9 +353,11 @@
                       <Bullet>Scale — 20 seats included (€19 / extra seat)</Bullet>
                       <Bullet>Lite collaborators — unlimited, free</Bullet>
                     </ul>
-                    <button onClick={() => ClainV2.navigate('/all-features#seats')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
-                      <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Manage seats</span>
-                    </button>
+                    <div className="mt-auto pt-[64px]">
+                      <button onClick={() => ClainV2.navigate('/all-features#seats')} className="cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
+                        <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Manage seats</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

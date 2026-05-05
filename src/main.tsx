@@ -139,6 +139,10 @@ function PrototypeShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+// LOCAL-ONLY: render the in-progress Inbox/Settings prototype.
+// IMPORTANT: do NOT commit or push this change — the production SaaS
+// (`<Root />`) must remain the default in the repo. This file is being
+// kept dirty in the working tree on purpose during prototype design.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PrototypeShell><Prototype /></PrototypeShell>
