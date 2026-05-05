@@ -338,6 +338,17 @@ h1, h2, h3, h4, h5 {
   transition: opacity 220ms ease;
   cursor: pointer;
 }
+/* Figma exports decorative corner-bracket overlays as `div.text-clay` with
+   `absolute inset-[16px]` — these sit ON TOP of the entire section and
+   silently swallow clicks, blocking the tab carousel. The overlay only
+   contains four <span> corner squares which have their own absolute
+   positioning, so making the overlay click-through is safe. */
+.figma-page [data-name="div.text-clay"] {
+  pointer-events: none;
+}
+.figma-page [data-name="div.text-clay"] > * {
+  pointer-events: auto;
+}
 .figma-page [data-clain-tab].clain-tab-inactive {
   opacity: 0.6 !important;
 }

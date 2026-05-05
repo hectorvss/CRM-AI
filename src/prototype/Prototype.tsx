@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'billing' | 'fin' | 'knowledge' | 'reports' | 'outbound';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'billing' | 'messenger' | 'email' | 'phone' | 'fin' | 'knowledge' | 'reports' | 'outbound';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -29,6 +29,9 @@ const IMG_APP_STRIPE       = "http://localhost:3845/assets/fe71d140eb03f8f8f8d7d
 // PeopleView previews (1-37921, 1-34193 main group SVG)
 const IMG_QUALIFICATION    = "http://localhost:3845/assets/87ca775140e54d5c3863f89d37ef855026b40c28.svg";
 const IMG_USERDATA_BANNER  = "http://localhost:3845/assets/ab0de40d6c4bdf7484aba9ff89ed27f73d76959e.svg";
+// Channels banners (1:53419, 1:56342)
+const IMG_EMAIL_BANNER     = "http://localhost:3845/assets/6e214d9080a16f54d442f6685aad025362ad2816.png";
+const IMG_PHONE_VIDEO      = "http://localhost:3845/assets/0150575beef6c4a589bf4bc41825691e96238efd.png";
 // Connector icons (SVG, 1-31284…1-31315)
 const SVG_CONN_CREATE      = "http://localhost:3845/assets/9547459195af209d7fc7a8266b21ba259e45d7b3.svg";
 const SVG_CONN_MCP         = "http://localhost:3845/assets/b76967aa85b0e0a5adba750c204f52d62caa1075.svg";
@@ -103,7 +106,7 @@ const ICON_EMPTY_STATE       = "https://www.figma.com/api/mcp/asset/29703bc6-2e1
 // ── Shared: Left Nav ──────────────────────────────────────────────────────────
 function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const isContacts = view === 'contacts' || view === 'allLeads';
-  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'billing';
+  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'billing' || view === 'messenger' || view === 'email' || view === 'phone';
   const isActive = (v: View) => view === v;
 
   function NavBtn({ nav, icon, label, badge }: { nav: View; icon: string; label: string; badge?: number }) {
@@ -1140,6 +1143,19 @@ const WORKSPACE_SUB: { label: string; nav: View | null; warn?: boolean }[] = [
 const SUSCRIPCION_SUB: { label: string; nav: View | null }[] = [
   { label: "Facturación", nav: 'billing' },
 ];
+
+const CANALES_SUB: { label: string; nav: View | null }[] = [
+  { label: "Messenger",                 nav: 'messenger' },
+  { label: "Correo electrónico",        nav: 'email' },
+  { label: "Teléfono",                  nav: 'phone' },
+  { label: "WhatsApp",                  nav: null },
+  { label: "Switch",                    nav: null },
+  { label: "Slack",                     nav: null },
+  { label: "Discord",                   nav: null },
+  { label: "SMS",                       nav: null },
+  { label: "Canales de redes sociales", nav: null },
+  { label: "Todos los canales",         nav: null },
+];
 const SETTINGS_NAV_BOTTOM = [
   { label: "Centro de ayuda",   hasChevron: true },
   { label: "Canales salientes", hasChevron: true },
@@ -1173,6 +1189,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const isIntegSection = view === 'appStore' || view === 'connectors';
   const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual';
   const isSuscripcionSection = view === 'billing';
+  const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
 
   function SubItems({ items }: { items: typeof DATOS_SUB }) {
@@ -1250,11 +1267,15 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
         </button>
         {isSuscripcionSection && <SubItems items={SUSCRIPCION_SUB} />}
 
-        {/* Canales (placeholder) */}
-        <button className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+        {/* Canales section */}
+        <button
+          onClick={() => onNavigate('messenger')}
+          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
+        >
           <span>Canales</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className="w-3.5 h-3.5 opacity-40" />
+          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isCanalesSection ? 'rotate-90' : ''}`} />
         </button>
+        {isCanalesSection && <SubItems items={CANALES_SUB} />}
 
         {/* Inbox section */}
         <button
@@ -3735,6 +3756,420 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
   );
 }
 
+// ── MessengerView (1-48766 + 1-50442 + 1-52109) ───────────────────────────────
+
+function MessengerView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'widget' | 'destacado' | 'sdk' | 'conversaciones' | 'general' | 'instalar' | 'seguridad'>('widget');
+  const [subTab, setSubTab] = useState<'contenido' | 'apariencia'>('contenido');
+  const [audience, setAudience] = useState<'visitantes' | 'todos' | 'audiencia' | 'nadie'>('nadie');
+  const tabs = [
+    { id: 'widget'         as const, label: 'Widget' },
+    { id: 'destacado'      as const, label: 'Destacado' },
+    { id: 'sdk'            as const, label: 'SDK de dispositivo móvil' },
+    { id: 'conversaciones' as const, label: 'Conversaciones' },
+    { id: 'general'        as const, label: 'General' },
+    { id: 'instalar'       as const, label: 'Instalar' },
+    { id: 'seguridad'      as const, label: 'Seguridad' },
+  ];
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Messenger</h1>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              <button className="bg-[#157c3c] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#0f5e2d] flex items-center gap-1.5">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M3 2l11 6-11 6V2z"/></svg>
+                Guardar y establecer en vivo
+              </button>
+            </div>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0 overflow-x-auto">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+            {/* Left configuration panel */}
+            <div className="flex-1 overflow-y-auto p-6 border-r border-[#e9eae6]">
+              {(tab === 'widget' || tab === 'sdk') && (
+                <div className="bg-[#f3f3f1] rounded-full p-1 inline-flex mb-4">
+                  {(['contenido', 'apariencia'] as const).map(id => (
+                    <button key={id} onClick={() => setSubTab(id)}
+                      className={`px-6 py-1.5 rounded-full text-[13px] font-medium ${
+                        subTab === id ? 'bg-white shadow-sm text-[#1a1a1a]' : 'text-[#646462]'
+                      }`}>
+                      {id === 'contenido' ? 'Contenido' : 'Apariencia'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {tab === 'widget' && (
+                <div className="flex flex-col gap-2">
+                  {['Espacios de trabajo', 'Iniciar directamente en la conversación', 'Mostrar el lanzador de Messenger'].map(s => (
+                    <button key={s} className="flex items-center justify-between w-full border border-[#e9eae6] rounded-[10px] px-5 py-4 hover:bg-[#fafaf9]">
+                      <span className="text-[14px] font-medium text-[#1a1a1a]">{s}</span>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4"/></svg>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {tab === 'destacado' && (
+                <div className="flex flex-col gap-2 -mt-4">
+                  {/* Audiencia (open) */}
+                  <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-[#e9eae6]">
+                      <span className="text-[14px] font-semibold text-[#1a1a1a]">Audiencia</span>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                    </div>
+                    <div className="p-5">
+                      <p className="text-[13px] text-[#646462] mb-4">Elija quién puede ver Spotlight Messenger. Para esa audiencia, reemplaza al Messenger clásico. Por defecto, se vuelve visible para todos los visitantes y clientes potenciales una vez que se implemente Fin for Sales.</p>
+                      <div className="flex flex-col gap-2">
+                        {[
+                          { id: 'visitantes', label: 'Visitantes y leads', desc: 'Todos los visitantes y clientes potenciales de su sitio web, una vez que Fin for Sales esté implementado.', badge: 'Predeterminado' },
+                          { id: 'todos', label: 'Todos', desc: 'Todos los visitantes, prospectos y usuarios registrados.' },
+                          { id: 'audiencia', label: 'Audiencia específica', desc: 'Defina su propia segmentación.' },
+                          { id: 'nadie', label: 'Nadie', desc: 'Desactive Spotlight Messenger.' },
+                        ].map(opt => (
+                          <button key={opt.id} onClick={() => setAudience(opt.id as typeof audience)}
+                            className={`flex items-start gap-3 px-4 py-3 rounded-[8px] border text-left ${
+                              audience === opt.id ? 'border-[#3b59f6] bg-[#f5f7ff]' : 'border-[#e9eae6] hover:bg-[#fafaf9]'
+                            }`}>
+                            <div className={`w-4 h-4 rounded-full border-2 mt-0.5 flex-shrink-0 ${
+                              audience === opt.id ? 'border-[#3b59f6]' : 'border-[#ccc]'
+                            }`}>
+                              {audience === opt.id && <div className="w-2 h-2 rounded-full bg-[#3b59f6] m-0.5"/>}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-[13px] font-medium text-[#1a1a1a]">{opt.label}</p>
+                                {opt.badge && <span className="bg-[#e0e7ff] text-[#4338ca] rounded-full px-2 py-0.5 text-[11px] font-medium">{opt.badge}</span>}
+                              </div>
+                              <p className="text-[12px] text-[#646462] mt-0.5">{opt.desc}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  {['Apariencia', 'Sugerencias inteligentes'].map(s => (
+                    <button key={s} className="flex items-center justify-between w-full border border-[#e9eae6] rounded-[10px] px-5 py-4 hover:bg-[#fafaf9]">
+                      <span className="text-[14px] font-semibold text-[#1a1a1a]">{s}{s === 'Sugerencias inteligentes' && <span className="ml-2 bg-[#e0e7ff] text-[#4338ca] rounded-full px-2 py-0.5 text-[11px]">Beta</span>}</span>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4 4-4"/></svg>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {tab === 'sdk' && (
+                <div className="flex flex-col gap-2">
+                  <div className="border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-[#e9eae6]">
+                      <span className="text-[14px] font-semibold text-[#1a1a1a]">Espacios de trabajo</span>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+                    </div>
+                    <div className="p-5">
+                      <p className="text-[13px] font-medium text-[#1a1a1a] mb-3">Espacios de trabajo</p>
+                      <div className="border border-[#e9eae6] rounded-[8px] px-4 py-3 flex items-center gap-3 mb-3">
+                        <div className="w-8 h-8 bg-[#1a1a1a] rounded-[6px] flex items-center justify-center">💬</div>
+                        <div><p className="text-[13px] font-medium text-[#1a1a1a]">Mensajes</p><p className="text-[11px] text-[#646462]">Un Inbox para conversaciones y tickets</p></div>
+                      </div>
+                      <button className="text-[13px] text-[#fa7938] font-medium">+ Añadir espacio</button>
+                    </div>
+                  </div>
+                  {['Iniciar directamente en la conversación', 'Configura tu mensaje de bienvenida', 'Personaliza Inicio con aplicaciones'].map(s => (
+                    <button key={s} className="flex items-center justify-between w-full border border-[#e9eae6] rounded-[10px] px-5 py-4 hover:bg-[#fafaf9]">
+                      <span className="text-[14px] font-medium text-[#1a1a1a]">{s}</span>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4 4-4"/></svg>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {(tab === 'conversaciones' || tab === 'general' || tab === 'instalar' || tab === 'seguridad') && (
+                <p className="text-[13px] text-[#646462]">Configuración de {tabs.find(t => t.id === tab)?.label.toLowerCase()} (próximamente).</p>
+              )}
+            </div>
+
+            {/* Right preview panel */}
+            <div className="w-[400px] flex-shrink-0 flex flex-col bg-[#fafaf9] overflow-y-auto">
+              {/* Top toolbar */}
+              <div className="px-4 py-3 flex items-center justify-between border-b border-[#e9eae6]">
+                <button className="flex items-center gap-1 text-[13px] text-[#1a1a1a]">
+                  {tab === 'destacado' ? '— Predeterminado' : <>▶ Conversación <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg></>}
+                </button>
+                <div className="flex items-center gap-1">
+                  {tab === 'destacado' ? (
+                    <>
+                      <button className="px-2 py-1 text-[12px] text-[#646462] flex items-center gap-1">⛶ Participó</button>
+                      <button className="px-2 py-1 text-[12px] text-[#646462] flex items-center gap-1">▦ Conversación</button>
+                    </>
+                  ) : (
+                    <>
+                      {tab === 'sdk' ? (
+                        <>
+                          <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M8 0L2 4v8l6 4 6-4V4L8 0z"/></svg></button>
+                          <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="8" cy="8" r="3"/></svg></button>
+                        </>
+                      ) : (
+                        <>
+                          <button className="px-2 py-1 text-[12px] text-[#646462] rounded hover:bg-[#f3f3f1]">Visitantes</button>
+                          <button className="px-2 py-1 text-[12px] text-[#646462] rounded hover:bg-[#f3f3f1]">Usuarios</button>
+                        </>
+                      )}
+                      <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#f3f3f1]">☀</button>
+                      <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#f3f3f1]">🌙</button>
+                    </>
+                  )}
+                </div>
+              </div>
+              {/* Warning install card */}
+              <div className="m-4 bg-[#fef3c7] border border-[#fde68a] rounded-[10px] p-4">
+                <div className="flex items-start gap-2 mb-2">
+                  <span className="text-[#000]">⚠</span>
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#1a1a1a]">{tab === 'sdk' ? 'No has instalado el SDK de Intercom para iOS' : 'Aún no has instalado el Messenger para visitantes'}</p>
+                    <p className="text-[12px] text-[#646462] mt-1">Con nuestros ejemplos e integraciones sin código, solo te tomará unos minutos</p>
+                  </div>
+                </div>
+                <button className="bg-[#1a1a1a] text-white rounded-full px-3 py-1.5 text-[12px] font-medium mt-2">{tab === 'sdk' ? 'Instalar el SDK de Intercom' : 'Instalar Messenger'}</button>
+              </div>
+              {/* Mini preview */}
+              {tab !== 'destacado' && tab !== 'sdk' && (
+                <div className="m-4 bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden shadow-sm">
+                  <div className="px-3 py-2 border-b border-[#e9eae6] flex items-center gap-2">
+                    <button className="w-6 h-6 flex items-center justify-center hover:bg-[#f3f3f1] rounded">‹</button>
+                    <div className="w-7 h-7 bg-[#1a1a1a] rounded-full flex items-center justify-center text-white text-[11px]">H</div>
+                    <div className="flex-1"><p className="text-[12px] font-semibold text-[#1a1a1a]">Acme</p><p className="text-[10px] text-[#646462]">⏱ As soon as we can</p></div>
+                  </div>
+                  <div className="px-3 py-3 text-[11px] text-[#1a1a1a]">Ask us anything, or share your feedback.</div>
+                </div>
+              )}
+              {tab === 'destacado' && (
+                <div className="mx-4 mt-auto mb-4">
+                  <div className="border border-[#e9eae6] rounded-full px-4 py-2 flex items-center bg-white">
+                    <input className="flex-1 text-[12px] outline-none" placeholder="Escribe un mensaje..." />
+                    <button>↑</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── EmailView (1-53459) ───────────────────────────────────────────────────────
+
+function EmailView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'dominios' | 'ajustes'>('dominios');
+  const tabs = [
+    { id: 'dominios' as const, label: 'Dominios y direcciones' },
+    { id: 'ajustes'  as const, label: 'Ajustes de correo electrónico' },
+  ];
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Correo electrónico</h1>
+            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+              Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {tab === 'dominios' && <>
+              {/* Promo card with banner */}
+              <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+                <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+                </button>
+                <div className="flex-1 max-w-[500px]">
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2 leading-[20px]">Brinda asistencia a los clientes por correo electrónico, directamente desde tu Inbox</h2>
+                  <p className="text-[13px] text-[#646462] mb-4">Usa el correo electrónico para administrar las conversaciones de los clientes junto con otros canales en el Inbox. Configura respuestas automáticas con Fin AI Agent y usa canales salientes para programar mensajes por segmento.</p>
+                  <div className="flex items-center gap-4">
+                    <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/></svg>Conectar al correo</button>
+                    <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 2L2 6l6 4 6-4-6-4z"/></svg>Implementa Fin AI Agent por correo electrónico</button>
+                  </div>
+                </div>
+                <img src={IMG_EMAIL_BANNER} alt="Email preview" className="w-[458px] h-[213px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:53419" />
+              </div>
+              {/* Setup card */}
+              <div className="border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Comenzar la configuración del correo electrónico</h3>
+                <p className="text-[13px] text-[#646462] mb-4">Agrega la dirección de correo electrónico que deseas usar con Intercom. Generalmente es el correo electrónico que utilizas para comunicarte con tus clientes. Después de agregar tu dirección de correo electrónico, te guiaremos a través del resto de la configuración. <a href="#" className="text-[#3b59f6] underline">Más información sobre dominios y direcciones de correo electrónico</a>.</p>
+                <input placeholder="Dirección de correo electrónico" className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] w-[300px] focus:outline-none focus:border-[#3b59f6]" />
+              </div>
+            </>}
+            {tab === 'ajustes' && (
+              <div className="flex flex-col gap-6">
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Dirección de correo electrónico del espacio de trabajo</h3>
+                  <p className="text-[13px] text-[#646462] mb-3">Esta es la dirección de trabajo que se utiliza desde el espacio de trabajo. Las respuestas a los correos automáticos enviados desde tus aplicaciones de mensajería se desviarán hacia ella, junto con las solicitudes de los clientes que no estén dirigidas a una dirección específica.</p>
+                  <div className="flex items-center gap-2">
+                    <input readOnly value="b6gvpvyn-d8d7e93dd9ab@incoming.intercom-mail.com" className="flex-1 max-w-[500px] border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-[#fafaf9] text-[#646462]" />
+                    <button className="border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] hover:bg-[#f3f3f1]">📋</button>
+                  </div>
+                </div>
+                <div>
+                  <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">Respuestas</h2>
+                  <div className="border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
+                    {[
+                      { title: 'Detectar clientes en correos electrónicos', desc: 'Cuando un compañero de equipo escribe directamente al correo electrónico de un cliente, lo conectamos automáticamente con el perfil de ese cliente para que toda su comunicación quede registrada en un solo lugar.' },
+                      { title: 'Conversaciones divididas entre contactos', desc: 'Cuando dos clientes están conectados a la misma conversación, el correo electrónico se redirige automáticamente al cliente activo para mantener la comunicación organizada.' },
+                      { title: 'Direcciones generales', desc: 'Permite crear direcciones de correo electrónico genéricas para tu espacio de trabajo y enrutar las conversaciones recibidas en ellas como conversaciones nuevas.' },
+                      { title: 'Notificaciones de contacto', desc: 'Las notificaciones permiten recibir actualizaciones sobre eventos relevantes en tu cuenta de Intercom.' },
+                    ].map(item => (
+                      <div key={item.title} className="px-5 py-4">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">{item.title}</p>
+                        <p className="text-[12px] text-[#646462]">{item.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">Firmas y plantillas</h2>
+                  <div className="border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
+                    {[
+                      { title: 'Firmas de correo electrónico', desc: 'Crea y administra firmas de correo electrónico para los compañeros de equipo y para todo el espacio de trabajo.' },
+                      { title: 'Plantillas de correo electrónico para notificaciones', desc: 'Personaliza las plantillas de correo electrónico que reciben los clientes y compañeros de equipo cuando se envían notificaciones.' },
+                    ].map(item => (
+                      <div key={item.title} className="px-5 py-4">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">{item.title}</p>
+                        <p className="text-[12px] text-[#646462]">{item.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">Notificaciones</h2>
+                  <div className="border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
+                    {[
+                      { title: 'Notificaciones de seguridad de entrega', desc: 'Comunica con los compañeros de equipo cuando hay entregas de correos electrónicos rebotados o no entregados.' },
+                      { title: 'Notificaciones por correo electrónico', desc: 'Cambia cuántos correos electrónicos se le envían a los clientes desde Intercom.' },
+                    ].map(item => (
+                      <div key={item.title} className="px-5 py-4">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">{item.title}</p>
+                        <p className="text-[12px] text-[#646462]">{item.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">Medios, enlaces y documentos</h2>
+                  <div className="border border-[#e9eae6] rounded-[12px] divide-y divide-[#e9eae6]">
+                    {[
+                      { title: 'Enviando archivos', desc: 'Los correos electrónicos enviados y recibidos por los compañeros de equipo a los clientes pueden contener archivos adjuntos.' },
+                      { title: 'Marca del enlace', desc: 'Cambia el dominio de los enlaces y compártelos en correos electrónicos.' },
+                      { title: 'Mostrar enlaces de correo electrónico', desc: 'Si está habilitado, los correos electrónicos enviados a los clientes serán visibles en los hilos de discusión.' },
+                    ].map(item => (
+                      <div key={item.title} className="px-5 py-4">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] mb-1">{item.title}</p>
+                        <p className="text-[12px] text-[#646462]">{item.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PhoneView (1-56416) ───────────────────────────────────────────────────────
+
+function PhoneView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Teléfono</h1>
+            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+              Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {/* Promo card with phone-video banner */}
+            <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+              <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+              </button>
+              <div className="flex-1 max-w-[440px]">
+                <h2 className="text-[20px] font-bold text-[#1a1a1a] mb-2 leading-[26px]">Llamadas y conversaciones en un solo lugar</h2>
+                <p className="text-[13px] text-[#646462] mb-4">Aprovecha llamadas telefónicas, videollamadas y pantalla compartida para solucionar los problemas de los clientes más rápido con asistencia telefónica nativa, creada en Intercom.</p>
+                <div className="flex items-center gap-4">
+                  <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Cómo configurar</button>
+                  <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">▦ Flujos de trabajo de IVR</button>
+                  <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📅 Precios</button>
+                </div>
+              </div>
+              <img src={IMG_PHONE_VIDEO} alt="Phone preview" className="w-[444px] h-[250px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:56342" />
+            </div>
+            {/* Usage warning */}
+            <div className="bg-[#fef3c7] border border-[#fde68a] rounded-[10px] px-5 py-3 mb-4 flex items-center gap-2">
+              <span className="text-[#f59e0b]">⚠</span>
+              <p className="text-[13px] text-[#1a1a1a]">Alcanzó el límite de uso de su teléfono. Comuníquese con asistencia para modificar su límite.</p>
+            </div>
+            {/* Accordion sections */}
+            <div className="flex flex-col gap-3">
+              {[
+                { title: 'Llamadas telefónicas', desc: 'Llamadas telefónicas entrantes y salientes' },
+                { title: 'Llamadas por Messenger', desc: 'Comparte voz, video y pantalla en Messenger' },
+                { title: 'Grabación y transcripción', desc: 'Configurar grabaciones y transcripciones para todas las llamadas' },
+              ].map(item => (
+                <button key={item.title} className="w-full border border-[#e9eae6] rounded-[10px] px-5 py-4 flex items-center justify-between hover:bg-[#fafaf9]">
+                  <div className="text-left">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[14px] font-semibold text-[#1a1a1a]">{item.title}</p>
+                      <span className="bg-[#f3f3f1] text-[#646462] rounded-full px-2 py-0.5 text-[11px]">Off</span>
+                    </div>
+                    <p className="text-[12px] text-[#646462] mt-1">{item.desc}</p>
+                  </div>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4"/></svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3770,6 +4205,9 @@ export default function Prototype() {
       case 'workspaceSecurity':     return <WorkspaceSecurityView view={view} onNavigate={setView} />;
       case 'workspaceMultilingual': return <WorkspaceMultilingualView view={view} onNavigate={setView} />;
       case 'billing':        return <BillingView view={view} onNavigate={setView} />;
+      case 'messenger':      return <MessengerView view={view} onNavigate={setView} />;
+      case 'email':          return <EmailView view={view} onNavigate={setView} />;
+      case 'phone':          return <PhoneView view={view} onNavigate={setView} />;
       case 'fin':            return <WIPView label="Fin AI" />;
       case 'knowledge':return <WIPView label="Knowledge Base" />;
       case 'reports':  return <WIPView label="Reports" />;
