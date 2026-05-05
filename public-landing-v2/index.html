@@ -11,15 +11,14 @@
 <link rel="stylesheet" href="/v2/tokens.css" />
 <link rel="stylesheet" href="/v2/styles.css" />
 <!-- Tailwind v4 browser bundle — required for arbitrary value classes from Figma extraction -->
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" defer></script>
 </head>
 <body>
 <div id="root"></div>
 
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous" defer></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
 
 <!-- Bootstrap Supabase client from /api/public/config (same as landing v1) -->
 <script>
@@ -51,25 +50,27 @@
   })();
 </script>
 
-<script type="text/babel" src="/v2/shared.jsx"></script>
-<script type="text/babel" src="/v2/home.jsx"></script>
-<script type="text/babel" src="/v2/ai-agent.jsx"></script>
-<script type="text/babel" src="/v2/ai-agent-slack.jsx"></script>
-<script type="text/babel" src="/v2/inbox.jsx"></script>
-<script type="text/babel" src="/v2/omnichannel.jsx"></script>
-<script type="text/babel" src="/v2/how-it-works.jsx"></script>
-<script type="text/babel" src="/v2/tickets.jsx"></script>
-<script type="text/babel" src="/v2/reporting.jsx"></script>
-<script type="text/babel" src="/v2/startups.jsx"></script>
-<script type="text/babel" src="/v2/knowledge.jsx"></script>
-<script type="text/babel" src="/v2/pricing.jsx"></script>
-<script type="text/babel" src="/v2/agent-customer.jsx"></script>
-<script type="text/babel" src="/v2/copilot.jsx"></script>
-<script type="text/babel" src="/v2/agent-trust.jsx"></script>
-<script type="text/babel" src="/v2/technology.jsx"></script>
-<script type="text/babel" src="/v2/how-agent-works.jsx"></script>
-<script type="text/babel" src="/v2/paywall.jsx"></script>
-<script type="text/babel" src="/v2/auth.jsx"></script>
-<script type="text/babel" src="/v2/app.jsx"></script>
+<!-- Pre-transpiled landing pages (esbuild). Source-of-truth is the matching .jsx file. -->
+<!-- Run `node scripts/build-landing-jsx.cjs` to regenerate. -->
+<script src="/v2/shared.js" defer></script>
+<script src="/v2/home.js" defer></script>
+<script src="/v2/ai-agent.js" defer></script>
+<script src="/v2/ai-agent-slack.js" defer></script>
+<script src="/v2/inbox.js" defer></script>
+<script src="/v2/omnichannel.js" defer></script>
+<script src="/v2/how-it-works.js" defer></script>
+<script src="/v2/tickets.js" defer></script>
+<script src="/v2/reporting.js" defer></script>
+<script src="/v2/startups.js" defer></script>
+<script src="/v2/knowledge.js" defer></script>
+<script src="/v2/pricing.js" defer></script>
+<script src="/v2/agent-customer.js" defer></script>
+<script src="/v2/copilot.js" defer></script>
+<script src="/v2/agent-trust.js" defer></script>
+<script src="/v2/technology.js" defer></script>
+<script src="/v2/how-agent-works.js" defer></script>
+<script src="/v2/paywall.js" defer></script>
+<script src="/v2/auth.js" defer></script>
+<script src="/v2/app.js" defer></script>
 </body>
 </html>
