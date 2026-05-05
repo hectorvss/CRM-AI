@@ -56,42 +56,44 @@
   function PlanColumn({ plan, isAnnual, width, showDemoBtn }) {
     const price = isAnnual ? plan.priceAnnual : plan.priceMonthly;
     return (
-      <div className="flex flex-col p-[24px] h-full" style={{ width, minHeight: 640 }}>
+      <div className="flex flex-col p-[24px] h-full" style={{ width, minHeight: 608 }}>
         {/* TOP: title, subtitle, description, price — fixed-height block so all columns align */}
-        <div className="flex flex-col" style={{ height: 302 }}>
+        <div className="flex flex-col" style={{ height: 270 }}>
           <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.name}</h3>
           <p className="m-0 mt-[10px] text-[13px] leading-[19.6px] min-h-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle || ' '}</p>
           <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.description}</p>
-          {/* price block — pinned to bottom of fixed top-area, indented to break the visual rhythm and give the price its own moment */}
-          <div className="mt-auto pl-[8px]" style={{ height: 100 }}>
+          {/* price block — single horizontal row: strikethrough MSRP on the left, current price on the right */}
+          <div className="mt-auto" style={{ height: 60 }}>
             {plan.seatPrice && (
-              <div className="flex flex-col">
-                {plan.originalPrice && (
-                  <div className="flex items-center gap-[8px]" style={{ height: 20 }}>
+              <div className="flex flex-col gap-[4px]">
+                <div className="flex items-baseline justify-between">
+                  {plan.originalPrice ? (
                     <span className="text-[14px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through' }}>{plan.originalPrice}/mo</span>
-                    <span className="text-[10px] leading-[14px] uppercase tracking-[0.6px] px-[6px] py-[2px] rounded-[3px]" style={{ fontFamily: FONT, color: '#11643d', background: '#dff0e3', fontWeight: 600 }}>Save {savePercent(plan.originalPrice, price)}%</span>
+                  ) : <span />}
+                  <div className="flex items-baseline gap-[4px]">
+                    <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>From</span>
+                    <span className="text-[26px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
                   </div>
-                )}
-                <div className="flex items-baseline gap-[8px] mt-[6px]">
-                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>From</span>
-                  <span className="text-[44px] leading-[44px] tracking-[-1.2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
                 </div>
-                <span className="text-[13px] leading-[18px] mt-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+                <div className="flex justify-end">
+                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+                </div>
               </div>
             )}
             {plan.isBusiness && (
-              <div className="flex flex-col">
-                <div className="flex items-baseline gap-[8px]">
-                  <span className="text-[36px] leading-[36px] tracking-[-1px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
+              <div className="flex flex-col gap-[4px]">
+                <div className="flex items-baseline justify-end">
+                  <span className="text-[26px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
                 </div>
-                <span className="text-[13px] leading-[18px] mt-[6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>Volume-based pricing</span>
-                <span className="text-[13px] leading-[18px] mt-[2px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Custom contract terms</span>
+                <div className="flex justify-end">
+                  <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>Volume-based pricing</span>
+                </div>
               </div>
             )}
             {plan.noSeats && !plan.isBusiness && (
-              <div className="flex flex-col h-full justify-end">
+              <div className="flex flex-col gap-[2px]">
                 <p className="m-0 text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>Pay as you go</p>
-                <p className="m-0 text-[13px] leading-[18px] mt-[2px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>No seats required</p>
+                <p className="m-0 text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>No seats required</p>
               </div>
             )}
           </div>
@@ -272,10 +274,18 @@
                 Get Clain AI Agent and the full platform for a single, integrated experience
               </h1>
 
-              {/* Billing toggle — sits where the guarantee link used to be, with breathing room */}
-              <div className="mt-[40px] inline-flex items-center gap-[10px] px-[6px] py-[6px] bg-white" style={{ border: '1px solid #dedbd6' }}>
-                <button onClick={() => setIsAnnual(true)} className="cursor-pointer border-0 px-[12px] py-[6px] text-[13px] leading-[19.6px] rounded-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: isAnnual ? '#e7e3db' : 'transparent', fontWeight: isAnnual ? 600 : 400 }}>Billed annually</button>
-                <button onClick={() => setIsAnnual(false)} className="cursor-pointer border-0 px-[12px] py-[6px] text-[13px] leading-[19.6px] rounded-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: !isAnnual ? '#e7e3db' : 'transparent', fontWeight: !isAnnual ? 600 : 400 }}>Billed monthly</button>
+              {/* Toggle + special-promotion banner */}
+              <div className="mt-[40px] flex items-center gap-[16px] flex-wrap">
+                <div className="inline-flex items-center gap-[10px] px-[6px] py-[6px] bg-white" style={{ border: '1px solid #dedbd6' }}>
+                  <button onClick={() => setIsAnnual(true)} className="cursor-pointer border-0 px-[12px] py-[6px] text-[13px] leading-[19.6px] rounded-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: isAnnual ? '#e7e3db' : 'transparent', fontWeight: isAnnual ? 600 : 400 }}>Billed annually</button>
+                  <button onClick={() => setIsAnnual(false)} className="cursor-pointer border-0 px-[12px] py-[6px] text-[13px] leading-[19.6px] rounded-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: !isAnnual ? '#e7e3db' : 'transparent', fontWeight: !isAnnual ? 600 : 400 }}>Billed monthly</button>
+                </div>
+                {/* Special promotion banner — anchors the savings story away from the per-card price */}
+                <div className="inline-flex items-center gap-[10px] px-[14px] py-[10px] rounded-[8px]" style={{ background: '#dff0e3', border: '1px solid #b9dfc3' }}>
+                  <span className="text-[10px] uppercase tracking-[0.6px]" style={{ fontFamily: FONT, color: '#11643d', fontWeight: 700 }}>Special promotion</span>
+                  <span className="size-[3px] rounded-full" style={{ background: '#11643d' }} />
+                  <span className="text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: '#11643d', fontWeight: 600 }}>Save up to 73% on every plan</span>
+                </div>
               </div>
 
               {/* Plans row */}
@@ -328,7 +338,7 @@
                       <Bullet>Scale — 60,000 credits / month</Bullet>
                       <Bullet>Top-ups available; consumed after monthly allowance</Bullet>
                     </ul>
-                    <button onClick={() => ClainV2.navigate('/all-features#credits')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
+                    <button onClick={() => ClainV2.navigate('/all-features#credits')} className="mt-auto pt-[40px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
                       <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Buy credit packs</span>
                     </button>
                   </div>

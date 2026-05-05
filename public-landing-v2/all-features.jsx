@@ -207,24 +207,17 @@
     const price = isAnnual ? plan.priceAnnual : plan.priceMonthly;
     return (
       <div className="flex flex-col gap-[6px] px-[16px] py-[20px]">
-        <span className="text-[14px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>{plan.name}</span>
+        <span className="text-[18px] leading-[24px] tracking-[-0.2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{plan.name}</span>
         <span className="text-[12px] leading-[16px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.tagline}</span>
-        <div className="mt-[4px]">
+        <div className="mt-[6px]">
           {plan.originalPrice && price !== 'Custom' && (
             <span className="text-[11px] leading-[14px] mr-[6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through' }}>{plan.originalPrice}</span>
           )}
-          <span className="text-[20px] leading-[24px] tracking-[-0.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
+          <span className="text-[22px] leading-[26px] tracking-[-0.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
           {price !== 'Custom' && (
             <span className="text-[11px] leading-[14px] ml-[2px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}> /team/mo</span>
           )}
         </div>
-        <button
-          onClick={() => ClainV2.navigate(plan.ctaTo)}
-          className="mt-[8px] cursor-pointer rounded-[8px] h-[36px] w-full px-[12px] flex items-center justify-center text-[12px] leading-[16px] border-0 transition-opacity hover:opacity-90"
-          style={{ fontFamily: FONT, background: COLOR_TEXT, color: 'white', fontWeight: 600 }}
-        >
-          {plan.cta}
-        </button>
       </div>
     );
   }
@@ -260,13 +253,20 @@
           <div className="max-w-[1440px] mx-auto px-[16px] pt-[128px] pb-[40px] relative">
             <CornerDots />
             <div className="max-w-[1170px] mx-auto px-[16px]">
-              <p className="m-0 text-[10px] uppercase tracking-[0.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Pricing · All features</p>
-              <h1 className="m-0 mt-[16px] text-[50px] leading-[54px] tracking-[-1.6px] max-w-[896px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 400 }}>
+              <p className="m-0 text-[12px] uppercase tracking-[0.8px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, fontWeight: 600 }}>Pricing · All features</p>
+              <h1 className="m-0 mt-[20px] text-[72px] leading-[76px] tracking-[-2.5px] max-w-[1100px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>
                 Compare every plan, side&nbsp;by&nbsp;side
               </h1>
-              <p className="m-0 mt-[16px] max-w-[640px] text-[15px] leading-[22px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
+              <p className="m-0 mt-[24px] max-w-[700px] text-[17px] leading-[26px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
                 Every plan includes the full helpdesk and the autonomous AI Agent. What changes is AI capacity, seat capacity, models, integrations, and security depth. Toggle billing below; everything updates in place.
               </p>
+              {/* Back-to-subscriptions navigator — keeps users one click from /pricing */}
+              <div className="mt-[24px]">
+                <button onClick={() => ClainV2.navigate('/pricing')} className="cursor-pointer rounded-[8px] h-[40px] px-[16px] flex items-center gap-[8px] text-[13px] leading-[20px] bg-white transition-opacity hover:opacity-80" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600, border: `1px solid ${BORDER_CLAY}` }}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7L9 11" stroke={COLOR_TEXT} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  Back to subscriptions
+                </button>
+              </div>
 
               {/* Toggle */}
               <div className="mt-[40px] inline-flex items-center gap-[10px] px-[6px] py-[6px] bg-white" style={{ border: '1px solid #dedbd6' }}>
@@ -288,16 +288,16 @@
                   ))}
                 </div>
 
-                {/* Table body — group by category */}
+                {/* Table body — group by category. Group headers are oversized for prominence. */}
                 {FEATURE_GROUPS.map((group, gi) => (
                   <div key={group.title}>
-                    <div className="px-[24px] py-[12px]" style={{ background: BG_OFF_WHITE_2, borderBottom: `1px solid ${BORDER_CLAY}`, borderTop: gi > 0 ? `1px solid ${BORDER_CLAY}` : 'none' }}>
-                      <span className="text-[11px] uppercase tracking-[0.8px] leading-[14px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{group.title}</span>
+                    <div className="px-[24px] py-[20px]" style={{ background: BG_OFF_WHITE_2, borderBottom: `1px solid ${BORDER_CLAY}`, borderTop: gi > 0 ? `1px solid ${BORDER_CLAY}` : 'none' }}>
+                      <span className="text-[24px] leading-[28px] tracking-[-0.5px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>{group.title}</span>
                     </div>
                     {group.rows.map((row, ri) => (
                       <div key={ri} className="grid items-center" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', borderBottom: ri < group.rows.length - 1 ? `1px solid ${BORDER_CLAY}` : 'none' }}>
                         <div className="px-[24px] py-[14px]">
-                          <span className="text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{row.label}</span>
+                          <span className="text-[14px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{row.label}</span>
                         </div>
                         {row.values.map((v, vi) => (
                           <div key={vi} className="px-[12px] py-[14px]" style={{ borderLeft: `1px solid ${BORDER_CLAY}` }}>
@@ -308,24 +308,15 @@
                     ))}
                   </div>
                 ))}
+              </div>
 
-                {/* Footer CTAs row */}
-                <div className="grid" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', borderTop: `1px solid ${BORDER_CLAY}`, background: BG_OFF_WHITE }}>
-                  <div className="px-[24px] py-[20px]">
-                    <span className="text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>14-day free trial on every plan. No card required.</span>
-                  </div>
-                  {PLAN_SUMMARY.map((p, i) => (
-                    <div key={p.key} className="px-[12px] py-[16px]" style={{ borderLeft: `1px solid ${BORDER_CLAY}` }}>
-                      <button
-                        onClick={() => ClainV2.navigate(p.ctaTo)}
-                        className="cursor-pointer rounded-[8px] h-[36px] w-full px-[8px] flex items-center justify-center text-[12px] leading-[16px] border-0 transition-opacity hover:opacity-90"
-                        style={{ fontFamily: FONT, background: COLOR_TEXT, color: 'white', fontWeight: 600 }}
-                      >
-                        {p.cta}
-                      </button>
-                    </div>
-                  ))}
-                </div>
+              {/* Trial note + back-to-pricing — replaces the per-plan CTA strip the user removed */}
+              <div className="mt-[20px] flex items-center justify-between gap-[16px] flex-wrap">
+                <span className="text-[13px] leading-[19px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>14-day free trial on every plan. No card required.</span>
+                <button onClick={() => ClainV2.navigate('/pricing')} className="cursor-pointer rounded-[8px] h-[40px] px-[16px] flex items-center gap-[8px] text-[13px] leading-[20px] bg-white transition-opacity hover:opacity-80" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600, border: `1px solid ${BORDER_CLAY}` }}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7L9 11" stroke={COLOR_TEXT} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  Back to subscriptions
+                </button>
               </div>
 
             </div>
@@ -337,8 +328,8 @@
           <div className="max-w-[1440px] mx-auto px-[16px] pt-[80px] pb-[80px] relative">
             <CornerDots color="rgba(17,17,17,0.1)" />
             <div className="max-w-[1170px] mx-auto px-[16px]">
-              <p className="m-0 text-[10px] uppercase tracking-[0.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Buy more capacity</p>
-              <h2 className="m-0 mt-[16px] text-[44px] leading-[48px] tracking-[-1.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 400 }}>AI credit packs</h2>
+              <p className="m-0 text-[12px] uppercase tracking-[0.8px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, fontWeight: 600 }}>Buy more capacity</p>
+              <h2 className="m-0 mt-[20px] text-[60px] leading-[64px] tracking-[-2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>AI credit packs</h2>
               <p className="m-0 mt-[16px] max-w-[640px] text-[15px] leading-[22px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
                 Top-up packs are available to any plan and are consumed only after your monthly included credits are used. They remain available as long as your subscription is active. Credits are workspace-wide — adding seats does not add credits.
               </p>
@@ -384,8 +375,8 @@
           <div className="max-w-[1440px] mx-auto px-[16px] pt-[80px] pb-[80px] relative">
             <CornerDots color="rgba(17,17,17,0.1)" />
             <div className="max-w-[1170px] mx-auto px-[16px]">
-              <p className="m-0 text-[10px] uppercase tracking-[0.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Grow your team</p>
-              <h2 className="m-0 mt-[16px] text-[44px] leading-[48px] tracking-[-1.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 400 }}>Seats &amp; team scaling</h2>
+              <p className="m-0 text-[12px] uppercase tracking-[0.8px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, fontWeight: 600 }}>Grow your team</p>
+              <h2 className="m-0 mt-[20px] text-[60px] leading-[64px] tracking-[-2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>Seats &amp; team scaling</h2>
               <p className="m-0 mt-[16px] max-w-[640px] text-[15px] leading-[22px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
                 Each plan ships with a base number of seats. You can add more anytime — billing prorates automatically. Lite collaborator seats (read-only) are unlimited and free on every plan. <strong style={{ color: COLOR_TEXT, fontWeight: 600 }}>Adding a seat does not change your AI credits allowance</strong> — credits remain a workspace-wide pool that any teammate can spend.
               </p>
@@ -420,8 +411,8 @@
             <div className="max-w-[1170px] mx-auto px-[16px]">
               <div className="grid grid-cols-2 gap-[40px] items-center">
                 <div>
-                  <p className="m-0 text-[10px] uppercase tracking-[0.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>For startups</p>
-                  <h2 className="m-0 mt-[16px] text-[44px] leading-[48px] tracking-[-1.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 400 }}>Early Stage Program</h2>
+                  <p className="m-0 text-[12px] uppercase tracking-[0.8px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, fontWeight: 600 }}>For startups</p>
+                  <h2 className="m-0 mt-[20px] text-[60px] leading-[64px] tracking-[-2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>Early Stage Program</h2>
                   <p className="m-0 mt-[16px] text-[15px] leading-[22px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>
                     Eligible companies — under 2 years old, fewer than 25 employees, raised under $5M — get <strong style={{ color: COLOR_TEXT, fontWeight: 600 }}>50% off year one</strong> on any plan, plus access to exclusive deals on startup tools, the Early Stage Academy, and our community of founders building with Clain.
                   </p>
@@ -491,7 +482,7 @@
         <div className="max-w-[1440px] mx-auto px-[16px] pt-[80px] pb-[80px] relative">
           <CornerDots color="rgba(17,17,17,0.1)" />
           <div className="max-w-[896px] mx-auto px-[16px]">
-            <h2 className="m-0 text-[44px] leading-[48px] tracking-[-1.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 400 }}>Frequently asked questions</h2>
+            <h2 className="m-0 text-[60px] leading-[64px] tracking-[-2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>Frequently asked questions</h2>
             <div className="mt-[32px]">
               {faqs.map((f, i) => (
                 <FAQItem key={i} q={f.q} a={f.a} isOpen={openFaq === i} onToggle={() => setOpenFaq(openFaq === i ? null : i)} />

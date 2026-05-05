@@ -9,8 +9,23 @@ type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'person
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
-const IMG_SLA_BANNER     = "http://localhost:3845/assets/b19e591362b8c4de77f19587d881d94b1042678b.png";
-const IMG_TICKETS_PORTAL = "http://localhost:3845/assets/6971188673fd3013af5484de1fa365316c0b94cc.png";
+const IMG_SLA_BANNER       = "http://localhost:3845/assets/b19e591362b8c4de77f19587d881d94b1042678b.png";
+const IMG_TICKETS_PORTAL   = "http://localhost:3845/assets/6971188673fd3013af5484de1fa365316c0b94cc.png";
+// AppStore banners (1-30005, 1-30014)
+const IMG_APPSTORE_BUILT   = "http://localhost:3845/assets/ad347ce8da225bd35f5b32fe6b12f1e0c920c359.png";
+const IMG_APPSTORE_MEETING = "http://localhost:3845/assets/47092718aa85d977f81b82ebb8e30be7d57c735d.png";
+// AppStore Popular apps (1-30033, 1-30045, 1-30057, 1-30069)
+const IMG_APP_SALESFORCE   = "http://localhost:3845/assets/3bdcbcb8a69c1ab5dcd0f726121a4b1a1fd7639f.png";
+const IMG_APP_INSTAGRAM    = "http://localhost:3845/assets/5f4fa567fe2eaa00f674696aab535d70118387b9.png";
+const IMG_APP_GA           = "http://localhost:3845/assets/f2498aefe57b15048759bd0c7d413343f479d4c7.png";
+const IMG_APP_JIRA         = "http://localhost:3845/assets/568c5d9e60a43fc756b02a5671654a0b4ff4ae53.png";
+// Connector icons (SVG, 1-31284…1-31315)
+const SVG_CONN_CREATE      = "http://localhost:3845/assets/9547459195af209d7fc7a8266b21ba259e45d7b3.svg";
+const SVG_CONN_MCP         = "http://localhost:3845/assets/b76967aa85b0e0a5adba750c204f52d62caa1075.svg";
+const SVG_CONN_STRIPE      = "http://localhost:3845/assets/1ec21e44bf4a7010e4ff49d910b87634243adfb7.svg";
+const SVG_CONN_LINEAR      = "http://localhost:3845/assets/ca75e281bbd6e32675df99f63256ec87f3236597.svg";
+const SVG_CONN_SHOPIFY     = "http://localhost:3845/assets/8536a444ce92ea293aedfcb5be0df93a17a90a2e.svg";
+const SVG_CONN_USAGE       = "http://localhost:3845/assets/c6a7642954882aa9ac8f79803b287640af9ec4cb.svg";
 
 const ICON_INBOX      = "https://www.figma.com/api/mcp/asset/210fe23a-321b-4e1f-8a00-dce6a7ba2224";
 const ICON_FIN        = "https://www.figma.com/api/mcp/asset/570eff6a-8bff-4de1-8840-e6b108abdaef";
@@ -2845,19 +2860,19 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
 
 // ── AppStoreView ──────────────────────────────────────────────────────────────
 
-const APP_STORE_APPS = [
-  { name: 'Salesforce', color: '#00A1E0', icon: '☁️', desc: 'Sync data and streamline workflows for sales, marketing…' },
-  { name: 'Instagram',  color: '#E1306C', icon: '📷', desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Google Analytics', color: '#F4B400', icon: '📊', desc: 'Measure the impact of your Messenger on website…' },
-  { name: 'Jira for Tickets',  color: '#0052CC', icon: '◆', desc: 'Create Jira issues from Intercom and automate with…' },
+const APP_STORE_APPS: { name: string; img: string; desc: string }[] = [
+  { name: 'Salesforce',        img: IMG_APP_SALESFORCE, desc: 'Sync data and streamline workflows for sales, marketing…' },
+  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
+  { name: 'Google Analytics',  img: IMG_APP_GA,         desc: 'Measure the impact of your Messenger on website…' },
+  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
 ];
 
-function AppCard({ name, icon, desc }: { name: string; icon: string; desc: string }) {
+function AppCard({ name, img, desc }: { name: string; img: string; desc: string }) {
   return (
-    <div className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col gap-2 hover:border-[#c8c9c4] cursor-pointer">
-      <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center text-xl">{icon}</div>
-      <p className="text-[13px] font-semibold text-[#1a1a1a]">{name}</p>
-      <p className="text-[12px] text-[#646462]">{desc}</p>
+    <div className="bg-white border border-[#e9eae6] rounded-[6px] px-[21px] pt-[21px] pb-[21px] flex flex-col gap-[15px] hover:border-[#c8c9c4] cursor-pointer">
+      <img src={img} alt="" className="w-12 h-12 rounded-[8px]" />
+      <p className="text-[16px] font-medium text-[#1a1a1a] leading-[24px]">{name}</p>
+      <p className="text-[14px] text-[#646462] leading-[20px] line-clamp-3">{desc}</p>
     </div>
   );
 }
@@ -2908,9 +2923,25 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
             {/* Main content */}
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8">
               {/* Banner cards */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="h-[130px] rounded-[12px] bg-[#0d9488] flex items-center justify-center text-white font-bold text-[18px]">Built by Intercom</div>
-                <div className="h-[130px] rounded-[12px] bg-[#dc2626] flex items-center justify-center text-white font-bold text-[18px]">Seamlessly schedule meetings</div>
+              <div className="grid grid-cols-2 gap-0">
+                <a href="#" className="relative h-[300px] rounded-[16px] overflow-hidden bg-[#f0f1ef] flex flex-col items-center pb-[51px] pt-[55px] px-[40px]" data-node-id="1:30005">
+                  <img src={IMG_APPSTORE_BUILT} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="relative flex-1 flex items-start w-full max-w-[324px]">
+                    <p className="text-[36px] font-bold leading-[46.8px] text-black" style={{ textShadow: '0px 0px 5px white' }}>Built by Intercom</p>
+                  </div>
+                  <div className="relative self-start">
+                    <span className="inline-block border border-black rounded-[6px] px-[17px] py-[11px] text-[14px] text-black bg-white/30 backdrop-blur-sm">View collection →</span>
+                  </div>
+                </a>
+                <a href="#" className="relative h-[300px] rounded-[16px] overflow-hidden bg-[#f0f1ef] flex flex-col items-center pb-[51px] pt-[55px] px-[40px]" data-node-id="1:30014">
+                  <img src={IMG_APPSTORE_MEETING} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="relative flex-1 flex items-start w-full max-w-[324px]">
+                    <p className="text-[36px] font-bold leading-[46.8px] text-white" style={{ textShadow: '0px 0px 5px black' }}>Seamlessly<br/>schedule meetings</p>
+                  </div>
+                  <div className="relative self-start">
+                    <span className="inline-block border border-white rounded-[6px] px-[17px] py-[11px] text-[14px] text-white">View collection →</span>
+                  </div>
+                </a>
               </div>
               {/* Popular */}
               <div>
@@ -2918,7 +2949,7 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   <p className="text-[15px] font-semibold text-[#1a1a1a]">Popular</p>
                   <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
                 </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_APPS.map(a => <AppCard key={a.name} name={a.name} icon={a.icon} desc={a.desc} />)}</div>
+                <div className="grid grid-cols-4 gap-3">{APP_STORE_APPS.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
               </div>
               {/* New & noteworthy */}
               <div>
@@ -2926,7 +2957,7 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   <p className="text-[15px] font-semibold text-[#1a1a1a]">New & noteworthy</p>
                   <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
                 </div>
-                <div className="grid grid-cols-4 gap-3">{[...APP_STORE_APPS].reverse().map(a => <AppCard key={a.name} name={a.name} icon={a.icon} desc={a.desc} />)}</div>
+                <div className="grid grid-cols-4 gap-3">{[...APP_STORE_APPS].reverse().map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
               </div>
               {/* Free apps */}
               <div>
@@ -2934,7 +2965,7 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   <p className="text-[15px] font-semibold text-[#1a1a1a]">Free apps to install</p>
                   <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
                 </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_APPS.map(a => <AppCard key={a.name} name={a.name} icon={a.icon} desc={a.desc} />)}</div>
+                <div className="grid grid-cols-4 gap-3">{APP_STORE_APPS.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
               </div>
             </div>
           </div>
@@ -2946,13 +2977,13 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
 
 // ── ConnectorsView ────────────────────────────────────────────────────────────
 
-const CONNECTOR_CARDS = [
-  { icon: '+', label: 'Crear desde cero', bg: '#f3f3f1', textColor: '#646462' },
-  { icon: '⚡', label: 'MCP personalizado', bg: '#fef3c7', textColor: '#92400e' },
-  { icon: '$', label: 'Stripe', bg: '#dbeafe', textColor: '#1e40af' },
-  { icon: '◐', label: 'Linear', bg: '#e0e7ff', textColor: '#4338ca' },
-  { icon: '🛍', label: 'Shopify Storefront', bg: '#dcfce7', textColor: '#166534' },
-  { icon: '📖', label: 'Uso de conectores de datos para la automatización', bg: '#f5f3ff', textColor: '#6d28d9' },
+const CONNECTOR_CARDS: { svg: string; label: string; bg: string }[] = [
+  { svg: SVG_CONN_CREATE,  label: 'Crear desde cero',     bg: '#f8f8f7' },
+  { svg: SVG_CONN_MCP,     label: 'MCP personalizado',    bg: '#f8f8f7' },
+  { svg: SVG_CONN_STRIPE,  label: 'Stripe',               bg: '#d1e0fa' },
+  { svg: SVG_CONN_LINEAR,  label: 'Linear',               bg: '#d9dbf2' },
+  { svg: SVG_CONN_SHOPIFY, label: 'Shopify Storefront',   bg: '#e2f0db' },
+  { svg: SVG_CONN_USAGE,   label: 'Uso de conectores de datos\npara la automatización', bg: '#f8f8f7' },
 ];
 
 function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
@@ -2976,9 +3007,11 @@ function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View
             <p className="text-[14px] text-[#646462] text-center mb-10 max-w-[600px]">Conéctese a cualquier sistema externo o API personalizada con Conectores de datos sin código. Impulse Fin y el servicio de asistencia con datos en tiempo real para ofrecer asistencia más personalizada.</p>
             <div className="grid grid-cols-3 gap-4 w-full max-w-[800px]">
               {CONNECTOR_CARDS.map(card => (
-                <button key={card.label} className="border border-[#e9eae6] rounded-[12px] p-5 flex flex-col items-start gap-4 text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all">
-                  <div className="w-10 h-10 rounded-[8px] flex items-center justify-center text-[18px] font-bold" style={{ background: card.bg, color: card.textColor }}>{card.icon}</div>
-                  <p className="text-[13px] font-semibold text-[#1a1a1a]">{card.label}</p>
+                <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
+                  <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
+                    <img src={card.svg} alt="" className="w-4 h-4" />
+                  </div>
+                  <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
                 </button>
               ))}
             </div>
