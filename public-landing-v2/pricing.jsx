@@ -236,12 +236,6 @@
       ],
     };
 
-    const addons = [
-      { name: 'Pro', price: '€99/mo', desc: 'AI features for visibility and control across every conversation. Includes CX Score, Topics, Recommendations, Monitors, and Custom Scorecards.', extra: 'Includes analysis of 1,000 conversations/mo' },
-      { name: 'Copilot', price: '€29/agent/mo', desc: 'Increase agent efficiency with a personal AI assistant in the inbox. Free to use in 10 Copilot and 10 AI Auto-translation conversations per agent/mo.', extra: 'Unlimited usage' },
-      { name: 'Proactive Support Plus', price: '€99/mo', desc: 'Advanced in-app and outbound support features including Posts, Checklists, Product Tours, Surveys, and Series campaign builder.', extra: 'Includes 500 messages sent/mo' },
-    ];
-
     const testimonials = [
       { tab: 'LINKTREE', logo: 'Linktree', quote: '"Within six days, Clain is successfully resolving 42% of conversations. It’s truly surpassed my expectations."', author: 'Dane Burgess', role: 'Customer Support Director at Linktree' },
       { tab: 'ROBIN', logo: 'Robin', quote: '"Clain’s agent handles the repetitive queries our team used to dread. We redirected 20 hours a week."', author: 'Camila Vives', role: 'Lead CX at Robin' },
@@ -255,7 +249,6 @@
       { q: 'What plans does Clain offer?', a: 'Starter, Growth, Scale self-serve + Business enterprise. All include AI agent and unlimited integrations.' },
       { q: 'What is a seat (Full vs Lite)?', a: 'A Full seat is a human teammate with full login access. Lite seats are read-only collaborators included free with each plan.' },
       { q: 'Are there additional usage charges?', a: 'Only if you exceed monthly credit allowance with flexible usage enabled.' },
-      { q: 'What is Proactive Support Plus?', a: 'Add-on (€99/mo) for outbound AI nudges — onboarding, cart-recovery, renewals.' },
       { q: 'Do I need a contract?', a: 'No. Self-serve monthly/annual, no commitment. Business uses MSA + DPA.' },
       { q: 'What’s the minimum to get started?', a: 'Free 14-day trial, no card required.' },
       { q: 'Is there a free trial?', a: 'Yes — 14 days, full access, no card.' },
@@ -372,33 +365,7 @@
           </div>
         </div>
 
-        {/* ═══════ Section 2 — Add-ons ═══════ */}
-        <div className="relative w-full" style={{ background: BG_OFF_WHITE }}>
-          <div className="max-w-[1440px] mx-auto px-[16px] pt-[80px] pb-[80px] relative">
-            <CornerDots color="rgba(17,17,17,0.1)" />
-            <div className="max-w-[1170px] mx-auto px-[16px]">
-              <h2 className="m-0 text-[50px] leading-[54px] tracking-[-1.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 400 }}>Add-ons</h2>
-              <p className="m-0 mt-[8px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Included in your free trial. Add or remove anytime.</p>
-              <div className="grid grid-cols-3 gap-[24px] mt-[40px]">
-                {addons.map((addon) => (
-                  <div key={addon.name} className="relative p-[40px]" style={{ background: BG_OFF_WHITE_2 }}>
-                    <CornerDots color="rgba(17,17,17,0.15)" />
-                    <h3 className="m-0 text-[19px] leading-[24px] tracking-[-0.2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{addon.name}</h3>
-                    <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{addon.desc}</p>
-                    <div className="mt-[16px] flex items-baseline gap-[4px]">
-                      <span className="text-[19px] leading-[19px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{addon.price.split('/')[0]}</span>
-                      <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>/{addon.price.split('/').slice(1).join('/')}</span>
-                    </div>
-                    <p className="m-0 mt-[8px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{addon.extra}</p>
-                    <div className="mt-[24px]">
-                      <button onClick={() => ClainV2.navigate('/demo')} className="cursor-pointer border-0 rounded-[4px] h-[40px] px-[14px] text-[13px] leading-[20px]" style={{ fontFamily: FONT, background: COLOR_TEXT, color: 'white' }}>Learn more</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+
 
         {/* ═══════ Section 3 — Get an estimate ═══════ */}
         <div className="relative w-full bg-white">

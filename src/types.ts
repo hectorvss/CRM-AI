@@ -2,7 +2,7 @@
 // Components consume these types directly; no defensive `field || field_other`
 // fallbacks should remain anywhere in the UI layer.
 
-export type Page = 'inbox' | 'contacts' | 'super_agent' | 'home' | 'ai_studio' | 'workflows' | 'approvals' | 'knowledge' | 'customers' | 'tools_integrations' | 'reports' | 'settings' | 'orders' | 'returns' | 'payments' | 'case_graph' | 'upgrade' | 'profile';
+export type Page = 'inbox' | 'super_agent' | 'home' | 'ai_studio' | 'workflows' | 'approvals' | 'knowledge' | 'customers' | 'tools_integrations' | 'reports' | 'settings' | 'orders' | 'returns' | 'payments' | 'case_graph' | 'upgrade' | 'profile';
 
 export type NavigationEntityType =
   | 'workspace'
