@@ -45,31 +45,45 @@
     );
   }
 
+  // Compute "Save XX%" — both args are euro strings ("€149", "€42").
+  function savePercent(originalStr, currentStr) {
+    const a = parseFloat(String(originalStr).replace(/[^0-9.]/g, ''));
+    const b = parseFloat(String(currentStr).replace(/[^0-9.]/g, ''));
+    if (!a || !b || b >= a) return 0;
+    return Math.round((1 - b / a) * 100);
+  }
+
   function PlanColumn({ plan, isAnnual, width, showDemoBtn }) {
     const price = isAnnual ? plan.priceAnnual : plan.priceMonthly;
     return (
-      <div className="flex flex-col p-[24px] h-full" style={{ width, minHeight: 608 }}>
-        {/* TOP: title, subtitle, description, price, buttons — fixed-height block so all columns align */}
-        <div className="flex flex-col" style={{ height: 270 }}>
+      <div className="flex flex-col p-[24px] h-full" style={{ width, minHeight: 640 }}>
+        {/* TOP: title, subtitle, description, price — fixed-height block so all columns align */}
+        <div className="flex flex-col" style={{ height: 302 }}>
           <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.name}</h3>
           <p className="m-0 mt-[10px] text-[13px] leading-[19.6px] min-h-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle || ' '}</p>
           <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.description}</p>
-          {/* price block — pinned to fixed slot so the CTA below sits at the same y across all columns */}
-          <div className="mt-auto" style={{ height: 60 }}>
+          {/* price block — three-line stack so nothing wraps and the MSRP gets its own line of breathing room. Pinned to a fixed height so all CTAs align. */}
+          <div className="mt-auto" style={{ height: 92 }}>
             {plan.seatPrice && (
-              <div className="flex flex-col gap-[2px]">
-                <div className="flex items-baseline gap-[6px]">
-                  <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>From</span>
-                  <span className="text-[28px] leading-[28px] tracking-[-0.4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>{price}</span>
-                  {plan.originalPrice && (
-                    <span className="text-[16px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through' }}>{plan.originalPrice}</span>
-                  )}
-                  <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+              <div className="flex flex-col">
+                {plan.originalPrice && (
+                  <div className="flex items-center gap-[8px]" style={{ height: 18 }}>
+                    <span className="text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through' }}>{plan.originalPrice}/mo</span>
+                    <span className="text-[10px] leading-[14px] uppercase tracking-[0.6px] px-[6px] py-[2px] rounded-[3px]" style={{ fontFamily: FONT, color: '#11643d', background: '#dff0e3', fontWeight: 600 }}>Save {savePercent(plan.originalPrice, price)}%</span>
+                  </div>
+                )}
+                <div className="flex items-baseline gap-[6px] mt-[4px]">
+                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>From</span>
+                  <span className="text-[36px] leading-[36px] tracking-[-0.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>{price}</span>
                 </div>
+                <span className="text-[13px] leading-[18px] mt-[2px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
               </div>
             )}
             {plan.noSeats && (
-              <p className="m-0 text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>No seats required</p>
+              <div className="flex flex-col h-full justify-end">
+                <p className="m-0 text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>Pay as you go</p>
+                <p className="m-0 text-[13px] leading-[18px] mt-[2px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>No seats required</p>
+              </div>
             )}
           </div>
         </div>
@@ -136,7 +150,7 @@
         priceAnnual: '€42',
         priceMonthly: '€49',
         seatPrice: true,
-        seatLabel: 'per seat/mo',
+        seatLabel: 'per team/mo',
         cta: 'Upgrade to Starter',
         featuresLabel: 'KEY FEATURES INCLUDE',
         features: [
@@ -155,7 +169,7 @@
         priceAnnual: '€109',
         priceMonthly: '€129',
         seatPrice: true,
-        seatLabel: 'per seat/mo',
+        seatLabel: 'per team/mo',
         cta: 'Upgrade to Growth',
         featuresLabel: 'EVERY STARTER FEATURE, PLUS',
         features: [
@@ -175,7 +189,7 @@
         priceAnnual: '€254',
         priceMonthly: '€299',
         seatPrice: true,
-        seatLabel: 'per seat/mo',
+        seatLabel: 'per team/mo',
         cta: 'Upgrade to Scale',
         featuresLabel: 'EVERY GROWTH FEATURE, PLUS',
         features: [
