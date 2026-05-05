@@ -581,15 +581,18 @@ h1, h2, h3, h4, h5 {
   background: rgba(255, 255, 255, 0.10);
 }
 
+/* Match the /pricing aesthetic: square box, monochrome, subtle offset.
+   Same border colour (#d3cec6) and off-white hover (#faf9f6) used by
+   plan cards and the Billed annually/monthly + Special promotion pills. */
 .nav-dd {
   position: absolute;
   top: calc(100% + 14px);
   left: -24px;
-  background: var(--bg-white);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 48px rgba(2, 9, 23, 0.12), 0 4px 12px rgba(2, 9, 23, 0.04);
-  padding: 28px;
+  background: #ffffff;
+  border: 1px solid #d3cec6;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 32px;
   min-width: 720px;
   z-index: 60;
   animation: nav-dd-in 180ms ease-out;
@@ -618,11 +621,11 @@ h1, h2, h3, h4, h5 {
 
 .nav-dd-eyebrow {
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 18px;
+  color: rgba(17, 17, 17, 0.6);
+  margin-bottom: 20px;
 }
 
 .nav-dd-list {
@@ -631,59 +634,61 @@ h1, h2, h3, h4, h5 {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .nav-dd-list-icons {
-  gap: 6px;
+  gap: 4px;
 }
 
 .nav-dd-item {
   display: block;
-  padding: 8px 10px;
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 14.5px;
+  padding: 10px 12px;
+  border-radius: 0;
+  color: #111;
+  font-size: 14px;
   font-weight: 500;
   transition: background 120ms ease;
 }
-.nav-dd-item:hover { background: var(--bg-cream-soft); }
+.nav-dd-item:hover { background: #faf9f6; }
 
 .nav-dd-item-icon {
   display: flex;
   gap: 14px;
-  padding: 10px;
-  border-radius: 10px;
+  padding: 12px;
+  border-radius: 0;
   align-items: flex-start;
   transition: background 120ms ease;
-  color: var(--text-primary);
+  color: #111;
 }
-.nav-dd-item-icon:hover { background: var(--bg-cream-soft); }
+.nav-dd-item-icon:hover { background: #faf9f6; }
 
 .nav-dd-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
-  background: var(--bg-cream-soft);
+  border-radius: 0;
+  border: 1px solid #d3cec6;
+  background: #ffffff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
-  color: var(--text-primary);
+  color: #111;
   flex-shrink: 0;
 }
 
 .nav-dd-item-icon strong {
   display: block;
   font-weight: 600;
-  font-size: 14.5px;
+  font-size: 14px;
   letter-spacing: -0.01em;
+  color: #111;
 }
 .nav-dd-item-icon em {
   display: block;
   font-style: normal;
-  font-size: 13px;
-  color: var(--text-secondary);
+  font-size: 12.5px;
+  color: rgba(17, 17, 17, 0.6);
   margin-top: 2px;
 }
 
