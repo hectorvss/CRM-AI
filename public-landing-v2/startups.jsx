@@ -121,10 +121,10 @@
         </div>
 
         {/* Marquee row */}
-        <div className="content-stretch flex flex-col items-start max-w-[1080px] pt-[48px] relative shrink-0 w-[1080px]">
+        <div className="content-stretch flex flex-col items-start max-w-[1080px] pt-[48px] relative shrink-0 w-full max-w-[1080px]">
           <div className="h-[47px] relative shrink-0 w-full">
             <div className="absolute content-stretch flex h-[47px] items-start justify-center left-0 right-0 top-0" style={{ maskImage: `url('${featLogosImgMask}')`, WebkitMaskImage: `url('${featLogosImgMask}')`, maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat', maskSize: '100% 47px', WebkitMaskSize: '100% 47px', maskPosition: '0% 0px', WebkitMaskPosition: '0% 0px' }}>
-              <div className="flex-1 h-full min-w-px relative">
+              <div className="flex-1 h-full min-w-px relative overflow-hidden">
                 <div className="absolute bottom-0 left-0 top-0 w-[1379.19px]">
                   {FEATURES_CUSTOMER_LOGOS.map((logo) => (
                     <div key={logo.name} className="absolute content-stretch flex flex-col items-center px-[8px]" style={{ left: logo.left, top: logo.top, padding: logo.name === 'ChatPRD' ? '3px 8px' : '0px 8px' }}>
@@ -166,8 +166,8 @@
       { year: 'Year 3', pct: '25%', body: ['for the 3rd year—with 75 free Clain outcomes',  'and 15 free Clain qualifications per month.', 'Phone, SMS, and WhatsApp are charged at', 'list price.'] },
     ];
     return (
-      <div className="content-stretch flex flex-col items-start px-[120px] relative w-full" data-node-id="2:6751">
-        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-[1200px]">
+      <div className="content-stretch flex flex-col items-center px-[120px] relative w-full" data-node-id="2:6751">
+        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-full max-w-[1200px]">
           <div className="content-stretch flex flex-col gap-[32px] items-start relative shrink-0 w-full">
             {/* Heading */}
             <div className="content-stretch flex flex-col items-center justify-center relative shrink-0 w-full">
@@ -232,7 +232,7 @@
     return (
       <div className="content-stretch flex flex-col gap-[48px] items-center relative w-full" data-node-id="2:6889">
         {/* Heading */}
-        <div className="grid grid-cols-1 grid-rows-[138.52px] h-[138.52px] max-w-[1540px] relative shrink-0 w-[960px]">
+        <div className="grid grid-cols-1 grid-rows-[138.52px] h-[138.52px] max-w-[1540px] relative shrink-0 w-full max-w-[960px]">
           <div className="content-stretch flex flex-col items-center justify-center justify-self-stretch relative row-1 self-start shrink-0">
             <div className="content-stretch flex flex-col items-center max-w-[698.64px] px-[81.33px] relative shrink-0">
               <p className="m-0 text-[46px] text-black text-center tracking-[-2.309px] whitespace-nowrap" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300, lineHeight: '46.17px' }}>
@@ -245,7 +245,7 @@
         </div>
 
         {/* Product card layout */}
-        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-[1200px]">
+        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-full max-w-[1200px]">
           <div className="grid grid-cols-[1.26fr_1fr] gap-x-[120px] gap-y-[120px] grid-rows-1 h-[719.19px] relative rounded-[8px] shrink-0 w-full">
             {/* Right column — 2 trigger items */}
             <div className="col-2 grid grid-cols-1 grid-rows-[719.19px] h-[719.19px] justify-self-stretch relative row-1 shrink-0">
@@ -320,8 +320,8 @@
       backgroundImage: "linear-gradient(0deg, rgba(246,244,49,0) 9%, rgb(246,244,49) 9%, rgb(246,244,49) 85%, rgba(246,244,49,0) 85%)",
     };
     return (
-      <div className="content-stretch flex flex-col items-start px-[120px] relative w-full" data-node-id="2:6837">
-        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-[1200px]">
+      <div className="content-stretch flex flex-col items-center px-[120px] relative w-full" data-node-id="2:6837">
+        <div className="content-stretch flex flex-col items-start max-w-[1540px] px-[24px] relative shrink-0 w-full max-w-[1200px]">
           <div className="content-stretch flex flex-col gap-[32px] items-start relative shrink-0 w-full">
             {/* Heading */}
             <div className="content-stretch flex flex-col items-center justify-center relative shrink-0 w-full">
@@ -408,7 +408,7 @@
     ];
     return (
       <div className="bg-[#f4f3ec] content-stretch flex items-center justify-center px-[40px] relative w-full" data-node-id="2:7111">
-        <div className="bg-white border-[1px] border-[rgba(23,16,14,0.4)] border-solid content-stretch flex gap-[32px] items-start justify-center max-w-[1200px] p-[33px] relative rounded-[8px] shrink-0 w-[1200px]">
+        <div className="bg-white border-[1px] border-[rgba(23,16,14,0.4)] border-solid content-stretch flex gap-[32px] items-start justify-center max-w-[1200px] p-[33px] relative rounded-[8px] shrink-0 w-full max-w-[1200px]">
 
           {/* Left content */}
           <div className="flex-1 min-w-px relative self-stretch">
@@ -646,8 +646,8 @@
     return (
       <div className="content-stretch flex flex-col gap-[48px] items-center justify-center px-[12px] relative w-full" data-node-id="2:7302">
         {/* Heading */}
-        <div className="content-stretch flex flex-col items-start px-[118px] relative shrink-0 w-[1416px]">
-          <div className="grid grid-cols-1 grid-rows-[46.17px] h-[46.17px] max-w-[1540px] relative shrink-0 w-[1180px]">
+        <div className="content-stretch flex flex-col items-start px-[118px] relative shrink-0 w-full max-w-[1416px]">
+          <div className="grid grid-cols-1 grid-rows-[46.17px] h-[46.17px] max-w-[1540px] relative shrink-0 w-full max-w-[1180px]">
             <div className="content-stretch flex flex-col items-center justify-center justify-self-stretch relative row-1 self-start shrink-0">
               <div className="content-stretch flex flex-col items-center max-w-[698.64px] relative shrink-0">
                 <p className="m-0 text-[46.2px] text-black text-center tracking-[-2.309px] whitespace-nowrap leading-[46.17px]" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 300 }}>Other helpful resources</p>
@@ -700,7 +700,7 @@
 
   function FeaturesBannerCtaSection() {
     return (
-      <div className="bg-[#f4f3ec] content-stretch flex flex-col items-start p-[16px] relative w-full" data-node-id="2:7395">
+      <div className="bg-[#f4f3ec] content-stretch flex flex-col items-center p-[16px] relative w-full" data-node-id="2:7395">
         <div className="h-[844.8px] max-w-[1920px] overflow-clip relative shrink-0 w-full">
           {/* BG image */}
           <div className="absolute aspect-[1408/844.8] content-stretch flex flex-col items-start justify-center left-0 overflow-clip right-0 top-0">
@@ -740,16 +740,22 @@
   function StartupsPage() {
     return (
       <PageShell>
-        <div className="bg-[#f4f3ec]">
-          <FeaturesHero />
-          <FeaturesCustomerLogosSection />
-          <FeaturesSaveYearSection />
-          <FeaturesHighestPerformingSection />
-          <FeaturesEligibilitySection />
-          <FeaturesG2ChartSection />
-          <FeaturesFaqsSection />
-          <FeaturesResourcesSection />
-          <FeaturesBannerCtaSection />
+        {/* Outer full-width wrapper provides bg color edge-to-edge */}
+        <div className="bg-[#f4f3ec] w-full">
+          {/* Inner wrapper constrains to Figma's 1440px frame width and centers it.
+              Each section was extracted using exact pixel coords for a 1440px parent.
+              Spacing between sections matches Figma y-position gaps. */}
+          <div className="max-w-[1440px] mx-auto" style={{ paddingTop: 121 }}>
+            <FeaturesHero />
+            <div style={{ marginTop: 80 }}><FeaturesCustomerLogosSection /></div>
+            <div style={{ marginTop: 173 }}><FeaturesSaveYearSection /></div>
+            <div style={{ marginTop: 174 }}><FeaturesHighestPerformingSection /></div>
+            <div style={{ marginTop: 174 }}><FeaturesEligibilitySection /></div>
+            <div style={{ marginTop: 96 }}><FeaturesG2ChartSection /></div>
+            <div style={{ marginTop: 84 }}><FeaturesFaqsSection /></div>
+            <div style={{ marginTop: 84 }}><FeaturesResourcesSection /></div>
+            <div style={{ marginTop: 80 }}><FeaturesBannerCtaSection /></div>
+          </div>
         </div>
       </PageShell>
     );

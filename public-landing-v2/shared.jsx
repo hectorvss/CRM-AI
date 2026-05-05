@@ -105,7 +105,9 @@
       { slug: '/copilot',         name: 'Copilot' },
       { slug: '/pricing',         name: 'Pricing' },
       { slug: '/ai-agent/slack',  name: 'AI Agent for Slack' },
-      { slug: '/startups',        name: 'Features' },
+      { slug: '/startups',        name: 'Startups' },
+      { slug: '/agent-trust',     name: 'Trust & safety' },
+      { slug: '/agent-customer',  name: 'Customer Agent' },
     ],
   };
 
@@ -251,7 +253,7 @@
           <div className="nav-actions" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <a href="/signin" className="btn btn-secondary hide-mobile">Log in</a>
             <a href="/signup" className="btn btn-primary">Start free trial</a>
-            <a data-spa href="/ai-agent" className="btn btn-secondary hide-mobile nav-cta-arrow">Clain AI <span aria-hidden="true">→</span></a>
+            <a data-spa href="/how-agent-works" className="btn btn-secondary hide-mobile nav-cta-arrow">Clain AI <span aria-hidden="true">→</span></a>
           </div>
         </div>
       </header>
