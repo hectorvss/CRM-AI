@@ -881,11 +881,10 @@
                     <div className="h-[134.34px] max-w-[405.760009765625px] relative shrink-0 w-[292.69px]" data-node-id="2:33381" data-name="p.text-body-lg">
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[68px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[14.6px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[32.89px] tracking-[-0.16px] w-[268.61px]" data-node-id="2:33382">
                         <p className="leading-[22.4px] mb-0">Plugs into your stack with 30+ integrations.</p>
-                        <p className="leading-[22.4px] mb-0">Reporting that shows what AI.</p>
-                        <p className="leading-[22.4px]">Built so support, success and sales.</p>
+                        <p className="leading-[22.4px]">Reports show what AI resolved.</p>
                       </div>
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%-68.62px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[118.45px]" data-node-id="2:33383">
-                        <p className="leading-[22.4px]">{`attributes, giving `}</p>
+                        <p className="leading-[22.4px]">{`Built for both `}</p>
                       </div>
                       <div className="-translate-x-1/2 absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-[calc(50%+0.81px)] top-[68.17px] w-[20.81px]" data-node-id="2:33384" data-name="Component 1">
                         <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:33384;2:32247">
@@ -893,11 +892,11 @@
                         </div>
                       </div>
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+71.31px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[113.43px]" data-node-id="2:33386">
-                        <p className="leading-[22.4px]">and your human</p>
+                        <p className="leading-[22.4px]">and your team.</p>
                       </div>
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[45px] justify-center leading-[0] left-[calc(50%+0.09px)] not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[111.26px] tracking-[-0.16px] w-[252.03px]" data-node-id="2:33387">
                         <p className="leading-[22.4px] mb-0">Set guardrails. Let the agent run.</p>
-                        <p className="leading-[22.4px]">Modern helpdesk, rebuilt</p>
+                        <p className="leading-[22.4px]">Modern helpdesk, reborn.</p>
                       </div>
                     </div>
                   </div>
@@ -1593,11 +1592,10 @@
                     <div className="h-[134.34px] max-w-[405.760009765625px] relative shrink-0 w-[292.69px]" data-node-id="2:33381" data-name="p.text-body-lg">
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[68px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[14.6px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[32.89px] tracking-[-0.16px] w-[268.61px]" data-node-id="2:33382">
                         <p className="leading-[22.4px] mb-0">Clain AI plus humans, end-to-end resolution.</p>
-                        <p className="leading-[22.4px] mb-0">Trained on your help center and policies.</p>
-                        <p className="leading-[22.4px]">The agent reasons, looks up and acts on your data.</p>
+                        <p className="leading-[22.4px]">Trained on your help center and policies.</p>
                       </div>
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%-68.62px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[118.45px]" data-node-id="2:33383">
-                        <p className="leading-[22.4px]">{`attributes, giving `}</p>
+                        <p className="leading-[22.4px]">{`Connects `}</p>
                       </div>
                       <div className="-translate-x-1/2 absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-[calc(50%+0.81px)] top-[68.17px] w-[20.81px]" data-node-id="2:33384" data-name="Component 1">
                         <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:33384;2:32247">
@@ -1605,7 +1603,7 @@
                         </div>
                       </div>
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+71.31px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[77.67px] tracking-[-0.16px] w-[113.43px]" data-node-id="2:33386">
-                        <p className="leading-[22.4px]">and your human</p>
+                        <p className="leading-[22.4px]">to your data.</p>
                       </div>
                       <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[45px] justify-center leading-[0] left-[calc(50%+0.09px)] not-italic text-[14.8px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[111.26px] tracking-[-0.16px] w-[252.03px]" data-node-id="2:33387">
                         <p className="leading-[22.4px] mb-0">From product question to refund.</p>
@@ -2198,18 +2196,15 @@
             <div className="content-stretch flex flex-col items-start max-w-[355.0400085449219px] pb-[20px] relative shrink-0" data-node-id="2:33654" data-name="p.text-body-lg:margin">
               <div className="h-[44.78px] max-w-[355.0400085449219px] relative shrink-0 w-[355.03px]" data-node-id="2:33656" data-name="p.text-body-lg">
                 <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%-66.43px)] not-italic text-[15.4px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[10.5px] tracking-[-0.16px] w-[166.73px]" data-node-id="2:33657">
-                  <p className="leading-[22.4px]">{`Combine Clain Helpdesk with `}</p>
+                  <p className="leading-[22.4px]">{`Powered end-to-end by `}</p>
                 </div>
                 <div className="-translate-x-1/2 absolute bg-[rgba(17,17,17,0.8)] h-[19px] left-[calc(50%+27.14px)] top-px w-[20.81px]" data-node-id="2:33658" data-name="Component 1">
                   <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[15.1px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[9.5px] tracking-[-0.16px] w-[21.01px]" data-node-id="I2:33658;2:32247">
-                    <p className="leading-[22.4px]">AI Agent</p>
+                    <p className="leading-[22.4px]">Clain</p>
                   </div>
                 </div>
-                <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+95.33px)] not-italic text-[14.4px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[10.5px] tracking-[-0.16px] w-[109.31px]" data-node-id="2:33660">
-                  <p className="leading-[22.4px]">for a single, fully</p>
-                </div>
                 <div className="-translate-x-1/2 -translate-y-1/2 absolute flex flex-col font-['Inter:Regular',sans-serif] font-normal h-[23px] justify-center leading-[0] left-[calc(50%+0.1px)] not-italic text-[14.9px] text-[color:var(--color\/grey\/7-80\%,rgba(17,17,17,0.8))] text-center top-[32.89px] tracking-[-0.16px] w-[260.51px]" data-node-id="2:33661">
-                  <p className="leading-[22.4px]">Agents see context and act when it matters.</p>
+                  <p className="leading-[22.4px]">Agents see context, act, escalate.</p>
                 </div>
               </div>
             </div>
