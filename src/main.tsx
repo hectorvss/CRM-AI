@@ -133,7 +133,7 @@ const protoParam = typeof window !== 'undefined'
 
 function PrototypeShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#f3f3f1] flex items-start justify-start overflow-auto">
+    <div className="h-screen w-screen bg-[#f3f3f1] overflow-hidden">
       {children}
     </div>
   );

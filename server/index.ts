@@ -368,7 +368,7 @@ app.use('/', express.static(LANDING_V2_DIR, { index: false, fallthrough: true, s
 const V2_SPA_ROUTES = [
   '/', '/v2', '/v2/',
   '/ai-agent', '/ai-agent/slack', '/inbox', '/omnichannel', '/how-it-works',
-  '/tickets', '/reporting', '/startups', '/knowledge', '/pricing', '/copilot',
+  '/tickets', '/reporting', '/startups', '/knowledge', '/pricing', '/all-features', '/copilot',
   '/agent-customer', '/agent-trust', '/how-agent-works', '/technology', '/upgrade',
   '/signin', '/signup', '/reset-password', '/demo', '/super-agent', '/integrations',
 ];

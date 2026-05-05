@@ -62,24 +62,33 @@
           <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.name}</h3>
           <p className="m-0 mt-[10px] text-[13px] leading-[19.6px] min-h-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle || ' '}</p>
           <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.description}</p>
-          {/* price block — three-line stack so nothing wraps and the MSRP gets its own line of breathing room. Pinned to a fixed height so all CTAs align. */}
-          <div className="mt-auto" style={{ height: 92 }}>
+          {/* price block — pinned to bottom of fixed top-area, indented to break the visual rhythm and give the price its own moment */}
+          <div className="mt-auto pl-[8px]" style={{ height: 100 }}>
             {plan.seatPrice && (
               <div className="flex flex-col">
                 {plan.originalPrice && (
-                  <div className="flex items-center gap-[8px]" style={{ height: 18 }}>
-                    <span className="text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through' }}>{plan.originalPrice}/mo</span>
+                  <div className="flex items-center gap-[8px]" style={{ height: 20 }}>
+                    <span className="text-[14px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60, textDecoration: 'line-through' }}>{plan.originalPrice}/mo</span>
                     <span className="text-[10px] leading-[14px] uppercase tracking-[0.6px] px-[6px] py-[2px] rounded-[3px]" style={{ fontFamily: FONT, color: '#11643d', background: '#dff0e3', fontWeight: 600 }}>Save {savePercent(plan.originalPrice, price)}%</span>
                   </div>
                 )}
-                <div className="flex items-baseline gap-[6px] mt-[4px]">
-                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>From</span>
-                  <span className="text-[36px] leading-[36px] tracking-[-0.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 600 }}>{price}</span>
+                <div className="flex items-baseline gap-[8px] mt-[6px]">
+                  <span className="text-[13px] leading-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>From</span>
+                  <span className="text-[44px] leading-[44px] tracking-[-1.2px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>{price}</span>
                 </div>
-                <span className="text-[13px] leading-[18px] mt-[2px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
+                <span className="text-[13px] leading-[18px] mt-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>{plan.seatLabel}</span>
               </div>
             )}
-            {plan.noSeats && (
+            {plan.isBusiness && (
+              <div className="flex flex-col">
+                <div className="flex items-baseline gap-[8px]">
+                  <span className="text-[36px] leading-[36px] tracking-[-1px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Custom</span>
+                </div>
+                <span className="text-[13px] leading-[18px] mt-[6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>Volume-based pricing</span>
+                <span className="text-[13px] leading-[18px] mt-[2px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>Custom contract terms</span>
+              </div>
+            )}
+            {plan.noSeats && !plan.isBusiness && (
               <div className="flex flex-col h-full justify-end">
                 <p className="m-0 text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: COLOR_TEXT_80 }}>Pay as you go</p>
                 <p className="m-0 text-[13px] leading-[18px] mt-[2px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>No seats required</p>
@@ -90,7 +99,7 @@
         {/* CTA: full-width subscribe-style button — sits below the fixed top block so all CTAs line up horizontally */}
         <div className="mt-[16px]">
           <button
-            onClick={() => ClainV2.navigate('/signup')}
+            onClick={() => ClainV2.navigate(plan.ctaTarget || '/signup')}
             className="cursor-pointer rounded-[8px] h-[44px] w-full px-[16px] flex items-center justify-center text-[14px] leading-[20px] border-0 transition-opacity hover:opacity-90"
             style={{ fontFamily: FONT, background: COLOR_TEXT, color: 'white', fontWeight: 600 }}
           >
@@ -107,7 +116,7 @@
           <ul className="list-none p-0 m-0 mt-[26px] flex flex-col gap-[16px]">
             {plan.features.map((f, i) => <Bullet key={i}>{f}</Bullet>)}
           </ul>
-          <button onClick={() => ClainV2.navigate('/pricing/all-features')} className="mt-auto pt-[26px] self-start bg-transparent border-0 p-0 cursor-pointer text-[13px] leading-[19.6px] underline" style={{ fontFamily: FONT, color: COLOR_TEXT }}>View all features</button>
+          <button onClick={() => ClainV2.navigate('/all-features')} className="mt-auto pt-[26px] self-start bg-transparent border-0 p-0 cursor-pointer text-[13px] leading-[19.6px] underline" style={{ fontFamily: FONT, color: COLOR_TEXT }}>View all features</button>
         </div>
       </div>
     );
@@ -203,19 +212,23 @@
       },
     ];
 
+    // Business / Enterprise plan — matches the SaaS Plans tab "Business" row.
+    // No fixed price; bespoke contract negotiated with sales.
     const standalonePlan = {
-      name: 'Clain AI Agent',
-      subtitle: '',
-      description: 'Use Clain AI with your current helpdesk including Salesforce and more.',
-      noSeats: true,
-      cta: 'Get Clain AI Agent',
-      featuresLabel: 'FEATURES INCLUDE',
+      name: 'Business',
+      subtitle: 'Custom plan, talk to sales',
+      description: 'For organisations with custom capacity, governance, security, and compliance needs.',
+      isBusiness: true,
+      cta: 'Talk to sales',
+      ctaTarget: '/demo',
+      featuresLabel: 'EVERYTHING IN SCALE, PLUS',
       features: [
-        'Set up in under an hour on your current helpdesk',
-        'Answers email, live chat, phone and more',
-        'Customizable tone & answer length',
-        'Takes action on external systems',
-        'Hands off to agents in preferred Inbox',
+        'Custom AI credit allocation',
+        'Custom seat allocation',
+        'Enterprise-grade security & compliance',
+        'Bring Your Own Model (BYOM)',
+        'Custom SLA & uptime guarantees',
+        'Tailored onboarding & dedicated success manager',
       ],
     };
 
@@ -281,10 +294,10 @@
                   </div>
                 </div>
 
-                {/* RIGHT — standalone Clain AI Agent card */}
+                {/* RIGHT — Business / contact-sales card (mirrors SaaS Business plan) */}
                 <div className="flex flex-col" style={{ width: 288, border: `1px solid ${BORDER_CLAY}` }}>
                   <div className="px-[24px] py-[10px]" style={{ background: BG_OFF_WHITE, borderBottom: `1px solid ${BORDER_CLAY}` }}>
-                    <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>Already have a helpdesk?</span>
+                    <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>Need more? Talk to sales</span>
                   </div>
                   <PlanColumn plan={standalonePlan} isAnnual={isAnnual} showDemoBtn={true} />
                 </div>
@@ -315,7 +328,7 @@
                       <Bullet>Scale — 60,000 credits / month</Bullet>
                       <Bullet>Top-ups available; consumed after monthly allowance</Bullet>
                     </ul>
-                    <button onClick={() => ClainV2.navigate('/upgrade')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
+                    <button onClick={() => ClainV2.navigate('/all-features#credits')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
                       <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Buy credit packs</span>
                     </button>
                   </div>
@@ -333,7 +346,7 @@
                       <Bullet>Scale — 20 seats included (€19 / extra seat)</Bullet>
                       <Bullet>Lite collaborators — unlimited, free</Bullet>
                     </ul>
-                    <button onClick={() => ClainV2.navigate('/upgrade')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
+                    <button onClick={() => ClainV2.navigate('/all-features#seats')} className="mt-auto pt-[24px] self-start cursor-pointer transition-opacity hover:opacity-90" style={{ fontFamily: FONT, background: 'transparent', color: COLOR_TEXT, fontWeight: 600, border: 'none', padding: 0 }}>
                       <span className="rounded-[8px] inline-flex items-center justify-center text-[13px] leading-[20px] h-[40px] px-[16px]" style={{ background: COLOR_TEXT, color: 'white', fontWeight: 600 }}>Manage seats</span>
                     </button>
                   </div>

@@ -27,6 +27,7 @@
     StartupsPage:       '/v2/startups.js',
     KnowledgePage:      '/v2/knowledge.js',
     PricingPage:        '/v2/pricing.js',
+    AllFeaturesPage:    '/v2/all-features.js',
     CopilotPage:        '/v2/copilot.js',
     AgentCustomerPage:  '/v2/agent-customer.js',
     AgentTrustPage:     '/v2/agent-trust.js',

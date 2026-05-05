@@ -32,6 +32,7 @@
     { "source": "/startups",          "destination": "/landing-v2/index.html" },
     { "source": "/knowledge",         "destination": "/landing-v2/index.html" },
     { "source": "/pricing",           "destination": "/landing-v2/index.html" },
+    { "source": "/all-features",      "destination": "/landing-v2/index.html" },
     { "source": "/copilot",           "destination": "/landing-v2/index.html" },
     { "source": "/agent-customer",    "destination": "/landing-v2/index.html" },
     { "source": "/agent-trust",       "destination": "/landing-v2/index.html" },

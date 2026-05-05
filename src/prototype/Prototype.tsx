@@ -5,9 +5,13 @@
 
 import { useState } from 'react';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'fin' | 'knowledge' | 'reports' | 'outbound';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'fin' | 'knowledge' | 'reports' | 'outbound';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
+// Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
+const IMG_SLA_BANNER     = "http://localhost:3845/assets/b19e591362b8c4de77f19587d881d94b1042678b.png";
+const IMG_TICKETS_PORTAL = "http://localhost:3845/assets/6971188673fd3013af5484de1fa365316c0b94cc.png";
+
 const ICON_INBOX      = "https://www.figma.com/api/mcp/asset/210fe23a-321b-4e1f-8a00-dce6a7ba2224";
 const ICON_FIN        = "https://www.figma.com/api/mcp/asset/570eff6a-8bff-4de1-8840-e6b108abdaef";
 const ICON_KNOWLEDGE  = "https://www.figma.com/api/mcp/asset/39d9a7c0-cb9e-4d44-ab69-82d4a69df5ec";
@@ -74,7 +78,7 @@ const ICON_EMPTY_STATE       = "https://www.figma.com/api/mcp/asset/29703bc6-2e1
 // ── Shared: Left Nav ──────────────────────────────────────────────────────────
 function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const isContacts = view === 'contacts' || view === 'allLeads';
-  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore';
+  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people';
   const isActive = (v: View) => view === v;
 
   function NavBtn({ nav, icon, label, badge }: { nav: View; icon: string; label: string; badge?: number }) {
@@ -165,12 +169,13 @@ function TrialBanner() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SidebarNavItem({
-  icon, label, count, active = false,
-}: { icon: string; label: string; count?: number; active?: boolean }) {
+  icon, label, count, active = false, onClick,
+}: { icon: string; label: string; count?: number; active?: boolean; onClick?: () => void }) {
   return (
-    <a
-      href="#"
-      className={`relative flex items-center gap-2 h-8 pl-3 pr-3 py-1 rounded-lg cursor-pointer text-[13px] ${
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative flex items-center gap-2 h-8 pl-3 pr-3 py-1 rounded-lg cursor-pointer text-[13px] w-full text-left ${
         active
           ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]"
           : "hover:bg-[#e9eae6]/40 text-[#1a1a1a]"
@@ -183,11 +188,12 @@ function SidebarNavItem({
       {count !== undefined && (
         <span className="text-[#646462] text-[13px]">{count}</span>
       )}
-    </a>
+    </button>
   );
 }
 
 function InboxSidebar() {
+  const [active, setActive] = useState('inbox');
   return (
     <div className="flex flex-col h-full w-[236px] bg-[#f8f8f7] border-r border-[#e9eae6] flex-shrink-0 overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
@@ -199,14 +205,14 @@ function InboxSidebar() {
 
       <div className="flex-1 overflow-y-auto pl-3 pr-0 pb-4">
         <div className="flex flex-col gap-0.5">
-          <SidebarNavItem icon={ICON_SEARCH2} label="Buscar" />
-          <SidebarNavItem icon={AVATAR_ME} label="Tu bandeja de entrada" count={4} active />
-          <SidebarNavItem icon={ICON_MENTION} label="Menciones" count={0} />
-          <SidebarNavItem icon={ICON_CREATED} label="Creado por ti" count={0} />
-          <SidebarNavItem icon={ICON_ALL} label="Todo" count={4} />
-          <SidebarNavItem icon={ICON_UNASSIGNED} label="Sin asignar" count={0} />
-          <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" count={0} />
-          <SidebarNavItem icon={ICON_DASHBOARD} label="Tablero" />
+          <SidebarNavItem icon={ICON_SEARCH2} label="Buscar" active={active === 'search'} onClick={() => setActive('search')} />
+          <SidebarNavItem icon={AVATAR_ME} label="Tu bandeja de entrada" count={4} active={active === 'inbox'} onClick={() => setActive('inbox')} />
+          <SidebarNavItem icon={ICON_MENTION} label="Menciones" count={0} active={active === 'mentions'} onClick={() => setActive('mentions')} />
+          <SidebarNavItem icon={ICON_CREATED} label="Creado por ti" count={0} active={active === 'created'} onClick={() => setActive('created')} />
+          <SidebarNavItem icon={ICON_ALL} label="Todo" count={4} active={active === 'all'} onClick={() => setActive('all')} />
+          <SidebarNavItem icon={ICON_UNASSIGNED} label="Sin asignar" count={0} active={active === 'unassigned'} onClick={() => setActive('unassigned')} />
+          <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" count={0} active={active === 'spam'} onClick={() => setActive('spam')} />
+          <SidebarNavItem icon={ICON_DASHBOARD} label="Tablero" active={active === 'dashboard'} onClick={() => setActive('dashboard')} />
         </div>
 
         <div className="mt-3">
@@ -222,11 +228,11 @@ function InboxSidebar() {
             </div>
           </div>
           <div className="flex flex-col gap-0.5 pl-1">
-            <SidebarNavItem icon={ICON_FIN_SVC} label="Todas las conversaciones" />
-            <SidebarNavItem icon={ICON_RESOLVED} label="Resuelto" />
-            <SidebarNavItem icon={ICON_ESCALATED} label="Escalado y transferencia" />
-            <SidebarNavItem icon={ICON_PENDING} label="Pendiente" />
-            <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" />
+            <SidebarNavItem icon={ICON_FIN_SVC} label="Todas las conversaciones" active={active === 'fin-all'} onClick={() => setActive('fin-all')} />
+            <SidebarNavItem icon={ICON_RESOLVED} label="Resuelto" active={active === 'fin-resolved'} onClick={() => setActive('fin-resolved')} />
+            <SidebarNavItem icon={ICON_ESCALATED} label="Escalado y transferencia" active={active === 'fin-escalated'} onClick={() => setActive('fin-escalated')} />
+            <SidebarNavItem icon={ICON_PENDING} label="Pendiente" active={active === 'fin-pending'} onClick={() => setActive('fin-pending')} />
+            <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" active={active === 'fin-spam'} onClick={() => setActive('fin-spam')} />
           </div>
         </div>
 
@@ -266,11 +272,11 @@ function InboxSidebar() {
             </button>
           </div>
           <div className="flex flex-col gap-0.5 pl-1">
-            <SidebarNavItem icon={ICON_MESSENGER} label="Messenger" count={1} />
-            <SidebarNavItem icon={ICON_EMAIL2} label="Email" count={1} />
-            <SidebarNavItem icon={ICON_WHATSAPP2} label="WhatsApp & Social" count={1} />
-            <SidebarNavItem icon={ICON_PHONE2} label="Phone & SMS" count={1} />
-            <SidebarNavItem icon={ICON_TICKETS} label="Tickets" count={0} />
+            <SidebarNavItem icon={ICON_MESSENGER} label="Messenger" count={1} active={active === 'v-messenger'} onClick={() => setActive('v-messenger')} />
+            <SidebarNavItem icon={ICON_EMAIL2} label="Email" count={1} active={active === 'v-email'} onClick={() => setActive('v-email')} />
+            <SidebarNavItem icon={ICON_WHATSAPP2} label="WhatsApp & Social" count={1} active={active === 'v-whatsapp'} onClick={() => setActive('v-whatsapp')} />
+            <SidebarNavItem icon={ICON_PHONE2} label="Phone & SMS" count={1} active={active === 'v-phone'} onClick={() => setActive('v-phone')} />
+            <SidebarNavItem icon={ICON_TICKETS} label="Tickets" count={0} active={active === 'v-tickets'} onClick={() => setActive('v-tickets')} />
           </div>
         </div>
 
@@ -397,7 +403,7 @@ function ConversationPanel({ selectedConv }: { selectedConv: Conversation }) {
   const channelLabel = selectedConv.channel.split('·')[0].trim();
 
   return (
-    <div className="flex flex-col h-full min-w-[400px] w-[519px] bg-white rounded-2xl shadow-[0px_1px_2px_rgba(20,20,20,0.15)] flex-shrink-0 overflow-hidden">
+    <div className="flex flex-col h-full flex-1 min-w-[400px] bg-white rounded-2xl shadow-[0px_1px_2px_rgba(20,20,20,0.15)] overflow-hidden">
       <div className="flex flex-col gap-4 pt-4 flex-shrink-0">
         <div className="flex items-center px-6">
           <div className="flex-1 min-w-0">
@@ -1088,8 +1094,8 @@ const INBOX_SUB: { label: string; nav: View | null }[] = [
   { label: "SLA",                  nav: 'sla' },
 ];
 const DATOS_SUB: { label: string; nav: View | null }[] = [
-  { label: "Etiquetas",                    nav: null },
-  { label: "Personas",                     nav: null },
+  { label: "Etiquetas",                    nav: 'labels' },
+  { label: "Personas",                     nav: 'people' },
   { label: "Empresas",                     nav: null },
   { label: "Conversaciones",               nav: 'settings' },
   { label: "Objetos personalizados",       nav: null },
@@ -1108,7 +1114,7 @@ const IA_SUB: { label: string; nav: View | null }[] = [
 ];
 const INTEG_SUB: { label: string; nav: View | null }[] = [
   { label: "Tienda de aplicaciones",   nav: 'appStore' },
-  { label: "Conectores de datos",      nav: null },
+  { label: "Conectores de datos",      nav: 'connectors' },
   { label: "Autenticación",            nav: null },
   { label: "Centro para desarrolladores", nav: null },
 ];
@@ -1123,10 +1129,10 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 ];
 
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const isDatos = view === 'settings' || view === 'imports';
+  const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people';
   const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla';
   const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin';
-  const isIntegSection = view === 'appStore';
+  const isIntegSection = view === 'appStore' || view === 'connectors';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
 
   function SubItems({ items }: { items: typeof DATOS_SUB }) {
@@ -2609,7 +2615,7 @@ function TicketsView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
                 description="Ofrece a tus clientes una visión clara de sus solicitudes de asistencia para permitirles seguir el progreso, revisar las actualizaciones y mantenerse informados, todo en un mismo lugar, ya sea a través de Messenger o del centro de ayuda."
                 primaryBtn="Portal de folios de atención"
                 secondaryBtn=""
-                imageSlot={<div className="w-full h-[150px] rounded-[8px] bg-[#f5f3ff] flex items-center justify-center"><span className="text-[12px] text-[#7c3aed]">Portal preview</span></div>}
+                imageSlot={<img src={IMG_TICKETS_PORTAL} alt="Portal preview" className="w-full h-[206px] rounded-[8px] object-cover" data-node-id="1:24913" />}
               />
               <div className="px-6 pb-6 flex flex-col gap-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462]">REQUISITOS PREVIOS</p>
@@ -2688,15 +2694,7 @@ function SlaView({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
                   </button>
                 </div>
               </div>
-              <div className="w-[350px] h-[160px] rounded-[8px] bg-white border border-[#e9eae6] overflow-hidden flex-shrink-0">
-                <div className="flex h-full">
-                  <div className="w-1/2 border-r border-[#e9eae6] p-3">
-                    <div className="flex items-center gap-1 mb-2"><div className="w-2 h-2 rounded-full bg-[#22c55e]"/><span className="text-[10px] text-[#646462]">All</span></div>
-                    <div className="space-y-1">{['Hailey Deen','Whitney Hall'].map(n=><div key={n} className="text-[10px] bg-[#f3f3f1] rounded px-1.5 py-1">{n}</div>)}</div>
-                  </div>
-                  <div className="w-1/2 p-3"><p className="text-[10px] text-[#1a1a1a]">Hi, my credit card…</p><p className="text-[10px] text-[#1a1a1a] mt-1">I get an error whe…</p></div>
-                </div>
-              </div>
+              <img src={IMG_SLA_BANNER} alt="SLA preview" className="w-[458px] h-[213px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:26051" />
             </div>
             {/* Empty state */}
             <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -2946,6 +2944,257 @@ function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
   );
 }
 
+// ── ConnectorsView ────────────────────────────────────────────────────────────
+
+const CONNECTOR_CARDS = [
+  { icon: '+', label: 'Crear desde cero', bg: '#f3f3f1', textColor: '#646462' },
+  { icon: '⚡', label: 'MCP personalizado', bg: '#fef3c7', textColor: '#92400e' },
+  { icon: '$', label: 'Stripe', bg: '#dbeafe', textColor: '#1e40af' },
+  { icon: '◐', label: 'Linear', bg: '#e0e7ff', textColor: '#4338ca' },
+  { icon: '🛍', label: 'Shopify Storefront', bg: '#dcfce7', textColor: '#166534' },
+  { icon: '📖', label: 'Uso de conectores de datos para la automatización', bg: '#f5f3ff', textColor: '#6d28d9' },
+];
+
+function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Conectores de datos</h1>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nuevo</button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 px-12 py-12 flex flex-col items-center">
+            <h2 className="text-[28px] font-bold text-[#1a1a1a] text-center mb-3 leading-tight">Incorpore datos de sus clientes<br/>en tiempo real en Intercom</h2>
+            <p className="text-[14px] text-[#646462] text-center mb-10 max-w-[600px]">Conéctese a cualquier sistema externo o API personalizada con Conectores de datos sin código. Impulse Fin y el servicio de asistencia con datos en tiempo real para ofrecer asistencia más personalizada.</p>
+            <div className="grid grid-cols-3 gap-4 w-full max-w-[800px]">
+              {CONNECTOR_CARDS.map(card => (
+                <button key={card.label} className="border border-[#e9eae6] rounded-[12px] p-5 flex flex-col items-start gap-4 text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all">
+                  <div className="w-10 h-10 rounded-[8px] flex items-center justify-center text-[18px] font-bold" style={{ background: card.bg, color: card.textColor }}>{card.icon}</div>
+                  <p className="text-[13px] font-semibold text-[#1a1a1a]">{card.label}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── LabelsView ────────────────────────────────────────────────────────────────
+
+function LabelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [search, setSearch] = useState('');
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Etiquetas</h1>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nueva etiqueta</button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar etiquetas..." className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] mb-4 focus:outline-none focus:border-[#3b59f6]" />
+            <table className="w-full text-[13px]">
+              <thead><tr className="border-b border-[#e9eae6]">
+                {['Nombre de la etiqueta', 'Creado', 'Creado por', 'Personas:', 'Empresas', 'Conversaciones', 'Mensajes'].map(h => (
+                  <th key={h} className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">{h} <span className="text-[#ccc]">↕</span></th>
+                ))}
+              </tr></thead>
+              <tbody><tr className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                <td className="px-4 py-3"><span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 5l5-3 7 3-5 9-7-9z"/></svg>Feature Request</span></td>
+                <td className="px-4 py-3 text-[#646462]">1h ago</td>
+                <td className="px-4 py-3 text-[#646462]">—</td>
+                <td className="px-4 py-3 text-[#646462]">0</td>
+                <td className="px-4 py-3 text-[#646462]">0</td>
+                <td className="px-4 py-3 text-[#646462]">0</td>
+                <td className="px-4 py-3 text-[#646462]">0</td>
+              </tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PeopleView (with 6 tabs) ──────────────────────────────────────────────────
+
+function PeopleView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'atributos' | 'segmentos' | 'eventos' | 'bot' | 'eliminar' | 'bloqueado'>('atributos');
+  const tabs = [
+    { id: 'atributos'  as const, label: 'Atributos' },
+    { id: 'segmentos'  as const, label: 'Segmentos' },
+    { id: 'eventos'    as const, label: 'Eventos' },
+    { id: 'bot'        as const, label: 'Bot de clasificación de clientes potenciales' },
+    { id: 'eliminar'   as const, label: 'Eliminar datos' },
+    { id: 'bloqueado'  as const, label: 'Bloqueado' },
+  ];
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Personas:</h1>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+                Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+              {tab === 'atributos' && <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Crear atributo</button>}
+            </div>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0 overflow-x-auto">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {tab === 'atributos' && <>
+              <div className="m-6 bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-start gap-6 relative">
+                <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+                <div className="flex-1">
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Envíe datos de clientes para rastrear, segmentar y personalizar la experiencia de sus clientes</h2>
+                  <p className="text-[13px] text-[#646462] mb-3">Puedes usar estos datos como contexto en el buzón, como reglas para automatizaciones, audiencia para mensajes salientes y mucho más.</p>
+                  <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="4" width="12" height="9" rx="1.5"/></svg>Cómo enviar atributos de usuario personalizados</button>
+                </div>
+                <div className="w-[270px] bg-white border border-[#e9eae6] rounded-[8px] p-4 flex-shrink-0">
+                  <p className="text-[10px] font-semibold uppercase text-[#646462] tracking-wider mb-2">USER DATA</p>
+                  {[['Name','Luis Easton'],['Company','Acme'],['Location','London'],['Plan','Premium'],['Lifetime value','$40k'],['# of projects','234']].map(([k,v]) => (
+                    <div key={k} className="flex items-center justify-between py-1 text-[12px]"><span className="text-[#646462]">{k}</span><span className="text-[#1a1a1a] font-medium">{v}</span></div>
+                  ))}
+                </div>
+              </div>
+              <div className="px-6 pb-6">
+                <input placeholder="🔍  Nombre del campo..." className="w-full max-w-[380px] border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] mb-3 focus:outline-none focus:border-[#3b59f6]" />
+                <table className="w-full text-[13px]">
+                  <thead><tr className="border-b border-[#e9eae6]"><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Nombre del atributo</th><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Protecciones de atributos</th><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Formato</th><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Creado</th><th className="w-[40px]"></th></tr></thead>
+                  <tbody>
+                    {[
+                      { icon: '👥', name: 'Name', desc: "A person's full name", protect: 'Deshabilitado', format: 'Texto' },
+                      { icon: '🏢', name: 'Account', desc: 'The account that owns a lead or user in Intercom', protect: '', format: 'Cuenta' },
+                      { icon: '🏢', name: 'Account name', desc: 'The name of the account that owns a lead or user in Intercom', protect: '', format: 'Texto' },
+                      { icon: '👤', name: 'Owner', desc: 'The teammate that owns a lead or user in Intercom', protect: '', format: 'Compañero de equipo' },
+                    ].map(r => (
+                      <tr key={r.name} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                        <td className="px-4 py-3"><div className="flex items-start gap-2"><span>{r.icon}</span><div><p className="font-medium text-[#1a1a1a]">{r.name}</p><p className="text-[12px] text-[#646462]">{r.desc}</p></div></div></td>
+                        <td className="px-4 py-3">{r.protect && <span className="bg-[#fef3c7] text-[#92400e] text-[11px] px-2 py-0.5 rounded-full font-medium">{r.protect}</span>}</td>
+                        <td className="px-4 py-3 text-[#646462]">{r.format}</td>
+                        <td className="px-4 py-3 text-[#646462]">1 hora atrás</td>
+                        <td className="px-4 py-3"><button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M11 2l3 3-9 9-4 1 1-4 9-9z"/></svg></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>}
+
+            {tab === 'segmentos' && (
+              <div className="px-6 py-4">
+                <table className="w-full text-[13px]">
+                  <thead><tr className="border-b border-[#e9eae6]"><th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Nombre del segmento <span className="text-[#ccc]">↕</span></th><th className="text-right px-4 py-2 font-medium text-[#646462] text-[12px]">Usuarios <span className="text-[#ccc]">↕</span></th></tr></thead>
+                  <tbody>
+                    {[['Active', 4], ['All Leads', 0], ['All Users', 2], ['New', 0]].map(([name, count]) => (
+                      <tr key={name as string} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                        <td className="px-4 py-3"><span className="text-[#1a1a1a] font-medium">{name}</span> <span className="text-[#646462]">(Segmento predefinido)</span></td>
+                        <td className="px-4 py-3 text-right"><a href="#" className="text-[#3b59f6] hover:underline">Ver {count} usuarios</a></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {tab === 'eventos' && (
+              <div className="flex flex-col items-center justify-center py-24 gap-3">
+                <svg viewBox="0 0 40 40" className="w-10 h-10 fill-none stroke-[#ccc]" strokeWidth="1.5"><rect x="6" y="9" width="28" height="25" rx="2"/><path d="M6 16h28M14 5v8M26 5v8M14 23l4 4 8-8"/></svg>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Aún no hay eventos</p>
+                <a href="#" className="text-[13px] text-[#3b59f6] underline">Aprende a crear eventos con nuestra documentación</a>
+              </div>
+            )}
+
+            {tab === 'bot' && (
+              <div className="px-6 py-4 flex gap-6">
+                <div className="flex-1">
+                  <p className="text-[13px] text-[#646462] mb-2">Elige los datos que deseas usar para calificar a los clientes potenciales. Estos datos aparecerán en los perfiles de los clientes en Inbox, y también puedes recopilarlos con Automatización.</p>
+                  <a href="#" className="text-[13px] text-[#3b59f6] underline">Ver el Bot de Tareas de cualificación básica</a>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {[
+                      ['Name', "A person's full name"],
+                      ['Email', 'The email address assigned to a user or lead'],
+                      ['Phone', "A person's phone number"],
+                      ['Company name', 'The name of a company'],
+                      ['Company size', 'The number of people employed in this company, expressed as a single number'],
+                      ['Company website', "The web address for the company's primary marketing site"],
+                      ['Company industry', "The category or domain this company belongs to e.g. 'ecommerce' or 'SaaS'"],
+                    ].map(([name, desc]) => (
+                      <div key={name} className="flex items-center justify-between py-2 px-3 border-b border-[#f3f3f1] text-[13px]">
+                        <div className="flex items-center gap-3"><span className="font-medium text-[#1a1a1a] w-[120px]">{name}</span><span className="text-[#646462] flex-1">{desc}</span></div>
+                        <button className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#f3f3f1]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="mt-4 bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Agregar datos</button>
+                  <p className="text-[12px] text-[#646462] mt-3">Cambiar esta configuración modificará los datos de calificación visibles en todos los perfiles de usuarios y leads.</p>
+                </div>
+                <div className="w-[200px] flex-shrink-0">
+                  <div className="border border-[#e0e7ff] bg-[#f5f7ff] rounded-[12px] p-4">
+                    <div className="flex items-center justify-center w-12 h-12 bg-[#e0e7ff] rounded-full mb-3">👤</div>
+                    <p className="text-[12px] font-semibold text-[#1a1a1a] mb-3">Qualification</p>
+                    {[1,2,3].map(i => <div key={i} className="h-2 bg-[#dbeafe] rounded mb-2" />)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'eliminar' && (
+              <div className="px-6 py-6">
+                <p className="text-[13px] text-[#646462] mb-4">Elimina permanentemente a cualquier usuario o lead y su historial de conversaciones de Intercom para cumplir con las leyes europeas de protección de datos (RGPD). Puedes buscar usuarios activos, leads o personas archivadas de tu lista de personas.</p>
+                <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Encontrar un usuario o lead</p>
+                <p className="text-[12px] text-[#646462] mb-2">Ingresa tu ID de usuario o dirección de correo electrónico</p>
+                <div className="flex items-center gap-2">
+                  <input placeholder="P. ej.: 23452 o john@theircompany.com" className="flex-1 max-w-[400px] border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] focus:outline-none focus:border-[#3b59f6]" />
+                  <button className="border border-[#e9eae6] rounded-[8px] px-4 py-2 text-[13px] text-[#646462] cursor-not-allowed">Encontrar usuario o lead</button>
+                </div>
+              </div>
+            )}
+
+            {tab === 'bloqueado' && (
+              <div className="flex flex-col items-center justify-center py-24 gap-3">
+                <svg viewBox="0 0 40 40" className="w-12 h-12 fill-none stroke-[#ccc]" strokeWidth="1.5"><circle cx="14" cy="15" r="5"/><circle cx="26" cy="15" r="5"/><path d="M5 32c0-4 4-7 9-7s9 3 9 7M19 32c0-4 4-7 9-7s7 3 7 7"/></svg>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">No hay personas bloqueadas</p>
+                <p className="text-[13px] text-[#646462] max-w-[600px] text-center">Para impedir que una persona envíe mensajes, haz clic en el botón Bloquear en el menú desplegable junto al perfil de la persona.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2974,6 +3223,9 @@ export default function Prototype() {
       case 'aiInbox':        return <AiInboxView view={view} onNavigate={setView} />;
       case 'automation':     return <AutomationView view={view} onNavigate={setView} />;
       case 'appStore':       return <AppStoreView view={view} onNavigate={setView} />;
+      case 'connectors':     return <ConnectorsView view={view} onNavigate={setView} />;
+      case 'labels':         return <LabelsView view={view} onNavigate={setView} />;
+      case 'people':         return <PeopleView view={view} onNavigate={setView} />;
       case 'fin':            return <WIPView label="Fin AI" />;
       case 'knowledge':return <WIPView label="Knowledge Base" />;
       case 'reports':  return <WIPView label="Reports" />;
@@ -2983,8 +3235,8 @@ export default function Prototype() {
 
   return (
     <div
-      className="flex bg-[#f3f3f1] overflow-hidden"
-      style={{ width: 1440, height: 900, fontFamily: "'Inter', sans-serif" }}
+      className="flex bg-[#f3f3f1] overflow-hidden w-screen h-screen min-w-0"
+      style={{ fontFamily: "'Inter', sans-serif" }}
     >
       <LeftNav view={view} onNavigate={setView} />
       {renderView()}
