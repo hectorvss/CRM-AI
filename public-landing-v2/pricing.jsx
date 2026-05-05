@@ -56,9 +56,9 @@
   function PlanColumn({ plan, isAnnual, width, showDemoBtn }) {
     const price = isAnnual ? plan.priceAnnual : plan.priceMonthly;
     return (
-      <div className="flex flex-col p-[24px] h-full" style={{ width, minHeight: 608 }}>
+      <div className="flex flex-col p-[24px] h-full" style={{ width, minHeight: 568 }}>
         {/* TOP: title, subtitle, description, price — fixed-height block so all columns align */}
-        <div className="flex flex-col" style={{ height: 270 }}>
+        <div className="flex flex-col" style={{ height: 230 }}>
           <h3 className="m-0 text-[22px] tracking-[-0.48px] leading-[24px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>{plan.name}</h3>
           <p className="m-0 mt-[10px] text-[13px] leading-[19.6px] min-h-[20px]" style={{ fontFamily: FONT, color: COLOR_TEXT }}>{plan.subtitle || ' '}</p>
           <p className="m-0 mt-[16px] text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT_60 }}>{plan.description}</p>
@@ -112,7 +112,7 @@
         </div>
 
         {/* SPACER */}
-        <div style={{ height: 32 }} />
+        <div style={{ height: 16 }} />
 
         {/* FEATURES */}
         <div className="flex flex-col flex-1">
@@ -282,11 +282,11 @@
                   <button onClick={() => setIsAnnual(true)} className="cursor-pointer border-0 px-[12px] py-[6px] text-[13px] leading-[19.6px] rounded-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: isAnnual ? '#e7e3db' : 'transparent', fontWeight: isAnnual ? 600 : 400 }}>Billed annually</button>
                   <button onClick={() => setIsAnnual(false)} className="cursor-pointer border-0 px-[12px] py-[6px] text-[13px] leading-[19.6px] rounded-[4px]" style={{ fontFamily: FONT, color: COLOR_TEXT, background: !isAnnual ? '#e7e3db' : 'transparent', fontWeight: !isAnnual ? 600 : 400 }}>Billed monthly</button>
                 </div>
-                {/* Special promotion banner — anchors the savings story away from the per-card price */}
-                <div className="inline-flex items-center gap-[10px] px-[14px] py-[10px] rounded-[8px]" style={{ background: '#dff0e3', border: '1px solid #b9dfc3' }}>
-                  <span className="text-[10px] uppercase tracking-[0.6px]" style={{ fontFamily: FONT, color: '#11643d', fontWeight: 700 }}>Special promotion</span>
-                  <span className="size-[3px] rounded-full" style={{ background: '#11643d' }} />
-                  <span className="text-[13px] leading-[18px]" style={{ fontFamily: FONT, color: '#11643d', fontWeight: 600 }}>Save up to 73% on every plan</span>
+                {/* Special promotion banner — same square white box w/ #dedbd6 border as the toggle, monochrome */}
+                <div className="inline-flex items-center gap-[10px] px-[18px] py-[12px] bg-white" style={{ border: '1px solid #dedbd6' }}>
+                  <span className="text-[11px] uppercase tracking-[0.6px] leading-[14px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 700 }}>Special promotion</span>
+                  <span className="size-[3px]" style={{ background: COLOR_TEXT }} />
+                  <span className="text-[13px] leading-[19.6px]" style={{ fontFamily: FONT, color: COLOR_TEXT, fontWeight: 500 }}>Save up to 73% on every plan</span>
                 </div>
               </div>
 
