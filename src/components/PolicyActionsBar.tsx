@@ -120,7 +120,7 @@ export default function PolicyActionsBar({
   ] : undefined;
 
   const isCompact = layout === 'compact';
-  const baseBtn = 'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+  const baseBtn = 'inline-flex items-center justify-center gap-2 px-4 py-2 text-[13px] font-semibold rounded-[8px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 
   return (
     <>
@@ -129,7 +129,7 @@ export default function PolicyActionsBar({
           type="button"
           onClick={() => setActiveModal('reset')}
           disabled={!!resetting}
-          className={`${baseBtn} text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800`}
+          className={`${baseBtn} text-[#646462] dark:text-[#c4c4c2] hover:bg-[#f8f8f7]`}
         >
           Reset
         </button>
@@ -137,7 +137,7 @@ export default function PolicyActionsBar({
           type="button"
           onClick={() => setActiveModal('save')}
           disabled={!!saving}
-          className={`${baseBtn} text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm`}
+          className={`${baseBtn} text-[#1a1a1a] dark:text-[#a4a4a2] bg-white border border-[#e9eae6] dark:border-[#e9eae6] hover:bg-[#f8f8f7] dark:hover:bg-gray-700 shadow-[0px_1px_2px_rgba(20,20,20,0.04)]`}
         >
           Save draft
         </button>
@@ -145,7 +145,7 @@ export default function PolicyActionsBar({
           type="button"
           onClick={() => setActiveModal('publish')}
           disabled={!!publishing || !!saving}
-          className={`${baseBtn} text-white bg-gray-900 hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100 shadow-md`}
+          className={`${baseBtn} text-white bg-[#1a1a1a] hover:bg-gray-800 dark:bg-white dark:text-[#1a1a1a] dark:hover:bg-[#ededea] shadow-[0px_1px_4px_rgba(20,20,20,0.08)]`}
         >
           Publish changes
         </button>

@@ -4,7 +4,7 @@ export const connectionCategories = [
     agents: [
       {
         name: 'Supervisor',
-        icon: 'account_tree', iconColor: 'text-purple-600', locked: true, active: true,
+        icon: 'account_tree', iconColor: 'text-[#1a1a1a]', locked: true, active: true,
         role: 'Orchestrates the overall agent flow',
         summary: 'Reads from 3 sources · Reports to 5 agents · 4 steps',
         receivesFrom: ['Intent Router', 'Context Window', 'Tool execution results'],
@@ -22,7 +22,7 @@ export const connectionCategories = [
       },
       {
         name: 'Approval Gatekeeper',
-        icon: 'approval_delegation', iconColor: 'text-indigo-600', active: true,
+        icon: 'approval_delegation', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Handles human approval requirements for high-risk actions',
         summary: 'Reads from 3 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Case Resolution Planner', 'Resolution Executor', 'policy rules / thresholds'],
@@ -40,7 +40,7 @@ export const connectionCategories = [
       },
       {
         name: 'QA / Policy Check',
-        icon: 'security', iconColor: 'text-blue-600', active: true,
+        icon: 'security', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Performs pre-send / pre-execution safety, policy, and quality validation',
         summary: 'Reads from 3 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Composer + Translator', 'Resolution Executor', 'Customer Communication Agent'],
@@ -63,7 +63,7 @@ export const connectionCategories = [
     agents: [
       {
         name: 'Channel Ingest',
-        icon: 'mail', iconColor: 'text-orange-600', active: true,
+        icon: 'mail', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Receives inbound channel events and converts them into normalized intake events.',
         summary: 'Reads from 4 sources · Reports to 1 agent · 4 steps',
         receivesFrom: ['Email', 'Web Chat', 'WhatsApp if enabled', 'inbound support channel events'],
@@ -81,7 +81,7 @@ export const connectionCategories = [
       },
       {
         name: 'Canonicalizer',
-        icon: 'cleaning_services', iconColor: 'text-emerald-600', active: true,
+        icon: 'cleaning_services', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Normalizes entities, fields, and event structure.',
         summary: 'Reads from 4 sources · Reports to 2 agents · 4 steps',
         receivesFrom: ['Channel Ingest', 'tool results', 'system events', 'webhook payloads'],
@@ -99,7 +99,7 @@ export const connectionCategories = [
       },
       {
         name: 'Intent Router',
-        icon: 'split_scene', iconColor: 'text-cyan-600', active: true,
+        icon: 'split_scene', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Classifies the task and routes it to the correct next agent.',
         summary: 'Reads from 1 source · Reports to 5 agents · 4 steps',
         receivesFrom: ['Canonicalizer'],
@@ -117,7 +117,7 @@ export const connectionCategories = [
       },
       {
         name: 'Knowledge Retriever',
-        icon: 'menu_book', iconColor: 'text-amber-600', active: false,
+        icon: 'menu_book', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Fetches relevant policies, SOPs, and operational guidance.',
         summary: 'Reads from 4 sources · Reports to 4 agents · 4 steps',
         receivesFrom: ['Supervisor', 'Case Resolution Planner', 'QA / Policy Check', 'Customer Communication Agent'],
@@ -135,7 +135,7 @@ export const connectionCategories = [
       },
       {
         name: 'Composer + Translator',
-        icon: 'edit_note', iconColor: 'text-pink-600', active: true,
+        icon: 'edit_note', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Drafts and localizes internal and customer-facing messages.',
         summary: 'Reads from 3 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Customer Communication Agent', 'Helpdesk Agent', 'Knowledge Retriever'],
@@ -158,7 +158,7 @@ export const connectionCategories = [
     agents: [
       {
         name: 'Reconciliation Agent',
-        icon: 'compare_arrows', iconColor: 'text-rose-600', locked: true, active: true,
+        icon: 'compare_arrows', iconColor: 'text-[#1a1a1a]', locked: true, active: true,
         role: 'Detects contradictions across systems',
         summary: 'Reads from 9 sources · Reports to 3 agents · 5 steps',
         receivesFrom: ['Supervisor', 'Canonicalizer', 'Stripe Agent', 'Shopify Agent', 'OMS / ERP Agent', 'Returns Agent', 'CRM / Customer Identity Agent', 'Recharge / Subscription Agent', 'Logistics / Tracking Agent'],
@@ -177,7 +177,7 @@ export const connectionCategories = [
       },
       {
         name: 'Case Resolution Planner',
-        icon: 'schema', iconColor: 'text-fuchsia-600', active: true,
+        icon: 'schema', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Converts detected contradictions into resolution plans',
         summary: 'Reads from 5 sources · Reports to 4 agents · 5 steps',
         receivesFrom: ['Reconciliation Agent', 'Knowledge Retriever', 'Approval Gatekeeper rules', 'CRM / Customer Identity Agent', 'Identity Mapping Agent'],
@@ -196,7 +196,7 @@ export const connectionCategories = [
       },
       {
         name: 'Resolution Executor',
-        icon: 'play_circle', iconColor: 'text-lime-600', active: true,
+        icon: 'play_circle', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Executes the approved external/system-facing resolution steps',
         summary: 'Reads from 4 sources · Reports to 4 agents · 5 steps',
         receivesFrom: ['Case Resolution Planner', 'Approval Gatekeeper', 'QA / Policy Check', 'system-specific agents'],
@@ -215,7 +215,7 @@ export const connectionCategories = [
       },
       {
         name: 'Workflow Runtime Agent',
-        icon: 'account_tree', iconColor: 'text-indigo-600', active: true,
+        icon: 'account_tree', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Manages internal workflow progression after reconciliation and execution.',
         summary: 'Reads from 3 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Case Resolution Planner', 'Resolution Executor', 'Workflows module'],
@@ -238,7 +238,7 @@ export const connectionCategories = [
     agents: [
       {
         name: 'Identity Mapping Agent',
-        icon: 'fingerprint', iconColor: 'text-teal-600', active: true,
+        icon: 'fingerprint', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Resolves entity and identity links across systems',
         summary: 'Reads from 7 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Canonicalizer', 'CRM / Customer Identity Agent', 'Stripe Agent', 'Shopify Agent', 'OMS / ERP Agent', 'Helpdesk Agent', 'Returns Agent'],
@@ -256,7 +256,7 @@ export const connectionCategories = [
       },
       {
         name: 'CRM / Customer Identity Agent',
-        icon: 'contact_page', iconColor: 'text-slate-600', active: false,
+        icon: 'contact_page', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Provides canonical customer truth from CRM/identity source',
         summary: 'Reads from 3 sources · Reports to 4 agents · 4 steps',
         receivesFrom: ['Identity Mapping Agent', 'Reconciliation Agent', 'Customers module'],
@@ -279,7 +279,7 @@ export const connectionCategories = [
     agents: [
       {
         name: 'Helpdesk Agent',
-        icon: 'support_agent', iconColor: 'text-sky-600', active: false,
+        icon: 'support_agent', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Reads/writes tickets, tags, notes, and support metadata in the helpdesk system',
         summary: 'Reads from 4 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Supervisor', 'Customer Communication Agent', 'Composer + Translator', 'support platform events'],
@@ -297,7 +297,7 @@ export const connectionCategories = [
       },
       {
         name: 'Stripe Agent',
-        icon: 'credit_card', iconColor: 'text-indigo-600', active: false,
+        icon: 'credit_card', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Reads and updates payment, refund, dispute, and subscription state in Stripe.',
         summary: 'Reads from 3 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Reconciliation Agent', 'Resolution Executor', 'Recharge / Subscription Agent when relevant'],
@@ -315,7 +315,7 @@ export const connectionCategories = [
       },
       {
         name: 'Shopify Agent',
-        icon: 'shopping_bag', iconColor: 'text-emerald-600', active: false,
+        icon: 'shopping_bag', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Reads and updates order, customer, and commerce state in Shopify.',
         summary: 'Reads from 4 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Reconciliation Agent', 'Resolution Executor', 'Returns Agent', 'Identity Mapping Agent'],
@@ -333,7 +333,7 @@ export const connectionCategories = [
       },
       {
         name: 'OMS / ERP Agent',
-        icon: 'inventory', iconColor: 'text-stone-600', active: false,
+        icon: 'inventory', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Handles back-office order/refund/return records in OMS/ERP',
         summary: 'Reads from 4 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Reconciliation Agent', 'Resolution Executor', 'Identity Mapping Agent', 'Returns Agent'],
@@ -351,7 +351,7 @@ export const connectionCategories = [
       },
       {
         name: 'Returns Agent',
-        icon: 'assignment_return', iconColor: 'text-orange-600', active: false,
+        icon: 'assignment_return', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Handles return lifecycle state, block/unblock logic, label/inspection/restock progression',
         summary: 'Reads from 5 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Reconciliation Agent', 'Resolution Executor', 'Shopify Agent', 'OMS / ERP Agent', 'Logistics / Tracking Agent'],
@@ -369,7 +369,7 @@ export const connectionCategories = [
       },
       {
         name: 'Recharge / Subscription Agent',
-        icon: 'autorenew', iconColor: 'text-violet-600', active: false,
+        icon: 'autorenew', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Handles subscription/renewal/charge state for subscription commerce',
         summary: 'Reads from 4 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Reconciliation Agent', 'Resolution Executor', 'Stripe Agent', 'Shopify Agent'],
@@ -387,7 +387,7 @@ export const connectionCategories = [
       },
       {
         name: 'Logistics / Tracking Agent',
-        icon: 'local_shipping', iconColor: 'text-blue-600', active: false,
+        icon: 'local_shipping', iconColor: 'text-[#1a1a1a]', active: false,
         role: 'Handles shipment/tracking/address-related logistics signals',
         summary: 'Reads from 3 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Reconciliation Agent', 'Returns Agent', 'Shopify Agent'],
@@ -410,7 +410,7 @@ export const connectionCategories = [
     agents: [
       {
         name: 'SLA & Escalation Agent',
-        icon: 'warning', iconColor: 'text-red-600', active: true,
+        icon: 'warning', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Monitors aging cases, stalled resolutions, delayed approvals, and blocked flows',
         summary: 'Reads from 6 sources · Reports to 4 agents · 4 steps',
         receivesFrom: ['Reconciliation Agent', 'Case Resolution Planner', 'Resolution Executor', 'Workflow Runtime Agent', 'Helpdesk Agent', 'Audit & Observability Agent'],
@@ -428,7 +428,7 @@ export const connectionCategories = [
       },
       {
         name: 'Customer Communication Agent',
-        icon: 'chat', iconColor: 'text-blue-600', active: true,
+        icon: 'chat', iconColor: 'text-[#1a1a1a]', active: true,
         role: 'Decides when customer-facing communication should happen based on real reconciled operational state',
         summary: 'Reads from 5 sources · Reports to 3 agents · 4 steps',
         receivesFrom: ['Case Resolution Planner', 'Resolution Executor', 'Workflow Runtime Agent', 'CRM / Customer Identity Agent', 'Reconciliation Agent'],
@@ -446,7 +446,7 @@ export const connectionCategories = [
       },
       {
         name: 'Audit & Observability Agent',
-        icon: 'visibility', iconColor: 'text-gray-600', locked: true, active: true,
+        icon: 'visibility', iconColor: 'text-[#646462]', locked: true, active: true,
         role: 'Records executions, failures, retries, overrides, and recurring contradictions',
         summary: 'Reads from all execution agents · Reports to 4 agents · 4 steps',
         receivesFrom: ['all execution-related agents', 'all important runtime events', 'integration health signals'],

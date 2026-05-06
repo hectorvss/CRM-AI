@@ -84,7 +84,7 @@ function ArchitectureCard({
         <button
           type="button"
           onClick={() => setIsExpanded((current) => !current)}
-          className="inline-flex items-center gap-2 rounded-full border border-black/10 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-black/5 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
+          className="inline-flex items-center gap-2 rounded-full border border-[#e9eae6] px-3 py-1.5 text-[12px] font-semibold text-[#1a1a1a] transition-colors hover:bg-[#f8f8f7] dark:text-[#c4c4c2]"
         >
           <span>{isExpanded ? 'Hide flow' : 'Show flow'}</span>
           <span className={`material-symbols-outlined text-[18px] transition-transform ${isExpanded ? 'rotate-180' : ''}`}>expand_more</span>
@@ -93,17 +93,17 @@ function ArchitectureCard({
     >
       <div className="space-y-5">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Connected systems</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">{connectedCount}/{connectorCount || 0}</p>
+          <div className="rounded-[18px] border border-[#e9eae6] px-4 py-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[#a4a4a2]">Connected systems</p>
+            <p className="mt-2 text-[20px] font-bold text-[#1a1a1a]">{connectedCount}/{connectorCount || 0}</p>
           </div>
-          <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Always-on gates</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">Policy + Approval</p>
+          <div className="rounded-[18px] border border-[#e9eae6] px-4 py-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[#a4a4a2]">Always-on gates</p>
+            <p className="mt-2 text-[20px] font-bold text-[#1a1a1a]">Policy + Approval</p>
           </div>
-          <div className="rounded-[18px] border border-black/5 px-4 py-3 dark:border-white/10">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">Final outcome</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-950 dark:text-white">Writeback + Audit</p>
+          <div className="rounded-[18px] border border-[#e9eae6] px-4 py-3">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[#a4a4a2]">Final outcome</p>
+            <p className="mt-2 text-[20px] font-bold text-[#1a1a1a]">Writeback + Audit</p>
           </div>
         </div>
 
@@ -115,24 +115,24 @@ function ArchitectureCard({
               exit={{ opacity: 0, height: 0 }}
               className="overflow-hidden"
             >
-              <div className="space-y-4 rounded-[24px] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="space-y-4 rounded-[12px] border border-[#e9eae6] bg-[#f8f8f7] p-5">
                 {architectureLanes.map((lane, laneIndex) => (
                   <div key={lane.title} className="space-y-3">
                     <div className="flex items-center gap-3">
                       <MinimalPill tone="active">{lane.title}</MinimalPill>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">{lane.subtitle}</span>
+                      <span className="text-[12px] text-[#646462] dark:text-[#a4a4a2]">{lane.subtitle}</span>
                     </div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))] xl:grid-cols-[repeat(4,minmax(0,1fr))]">
                       {lane.nodes.map((node) => (
-                        <div key={node} className="rounded-[18px] border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#171717]">
-                          <p className="text-sm font-semibold text-gray-950 dark:text-white">{node}</p>
-                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Participates in the canonical flow.</p>
+                        <div key={node} className="rounded-[18px] border border-[#e9eae6] bg-white px-4 py-4">
+                          <p className="text-[13px] font-semibold text-[#1a1a1a]">{node}</p>
+                          <p className="mt-1 text-[12px] text-[#646462] dark:text-[#a4a4a2]">Participates in the canonical flow.</p>
                         </div>
                       ))}
                     </div>
                     {laneIndex < architectureLanes.length - 1 ? (
                       <div className="flex justify-center py-1">
-                        <span className="material-symbols-outlined text-[18px] text-gray-400">south</span>
+                        <span className="material-symbols-outlined text-[18px] text-[#a4a4a2]">south</span>
                       </div>
                     ) : null}
                   </div>
@@ -183,25 +183,25 @@ export default function ConnectionsView() {
       exit={{ opacity: 0, y: -10 }}
       className="flex gap-6 h-full"
     >
-      <div className="flex-1 space-y-8 pb-12 w-full">
+      <div className="flex-1 space-y-5 pb-12 w-full">
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-lg">search</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-[#a4a4a2] text-[14px]">search</span>
             <input
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search connections..."
-              className="w-full rounded-[18px] border border-black/5 bg-white py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-white/10 dark:bg-[#171717]"
+              className="w-full rounded-[18px] border border-[#e9eae6] bg-white py-2.5 pl-10 pr-4 text-[13px] focus:outline-none focus:ring-2 focus:ring-violet-500/20"
             />
           </div>
-          <div className="flex rounded-[18px] border border-black/5 bg-black/[0.02] p-1 dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="flex rounded-[18px] border border-[#e9eae6] bg-[#f8f8f7] p-1">
             {(['All', 'Needs setup', 'Enabled', 'Disabled'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => setFilter(option)}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filter === option ? 'bg-black text-white dark:bg-white dark:text-black' : 'text-gray-600 hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/5'}`}
+                className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${filter === option ? 'bg-black text-white dark:bg-white' : 'text-[#646462] hover:bg-[#f8f8f7] dark:text-[#c4c4c2]'}`}
               >
                 {option}
               </button>
@@ -213,7 +213,7 @@ export default function ConnectionsView() {
 
         {filteredCategories.map((category, catIdx) => (
           <div key={catIdx} className="space-y-4">
-            <h3 className="px-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">{category.category}</h3>
+            <h3 className="px-1 text-[10px] font-bold uppercase tracking-widest text-[#a4a4a2]">{category.category}</h3>
             <div className="space-y-3">
               {category.agents.map((agent, agentIdx) => {
                 const connector = findConnectorForAgent(agent.name, liveConnectors);
@@ -225,30 +225,30 @@ export default function ConnectionsView() {
                       setSelectedAgent(agent.name);
                       setExpandedAgent(expandedAgent === agent.name ? null : agent.name);
                     }}
-                    className={`cursor-pointer rounded-[24px] border bg-white transition-all dark:bg-[#171717] ${
+                    className={`cursor-pointer rounded-[12px] border bg-white transition-all ${
                       selectedAgent === agent.name
-                        ? 'border-violet-500/40 shadow-sm'
-                        : 'border-black/5 hover:border-black/10 dark:border-white/10 dark:hover:border-white/20'
+                        ? 'border-[#e9eae6]/40 shadow-[0px_1px_2px_rgba(20,20,20,0.04)]'
+                        : 'border-[#e9eae6] hover:border-[#e9eae6] dark:hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-4 p-4">
                       <div className="min-w-0">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/5 text-gray-700 dark:bg-white/5 dark:text-gray-200">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f8f8f7] text-[#1a1a1a] dark:text-[#a4a4a2]">
                             <span className="material-symbols-outlined text-[18px]">{agent.icon}</span>
                           </div>
                           <div className="min-w-0">
-                            <h4 className="truncate text-sm font-semibold text-gray-950 dark:text-white">{agent.name}</h4>
-                            <p className="truncate text-xs text-gray-500 dark:text-gray-400">{agent.role}</p>
+                            <h4 className="truncate text-[13px] font-semibold text-[#1a1a1a]">{agent.name}</h4>
+                            <p className="truncate text-[12px] text-[#646462] dark:text-[#a4a4a2]">{agent.role}</p>
                           </div>
                         </div>
-                        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{agent.summary}</p>
+                        <p className="mt-3 text-[12px] text-[#646462] dark:text-[#a4a4a2]">{agent.summary}</p>
                       </div>
                       <div className="flex items-center gap-3">
                         <MinimalPill tone={liveStatus === 'connected' ? 'active' : 'neutral'}>
                           {liveStatus === 'connected' ? 'Connected' : liveStatus === 'attention' ? 'Needs setup' : 'Disabled'}
                         </MinimalPill>
-                        <span className={`material-symbols-outlined text-gray-400 transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
+                        <span className={`material-symbols-outlined text-[#a4a4a2] transition-transform ${expandedAgent === agent.name ? 'rotate-180' : ''}`}>expand_more</span>
                       </div>
                     </div>
 
@@ -258,14 +258,14 @@ export default function ConnectionsView() {
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
-                          className="overflow-hidden border-t border-black/5 dark:border-white/10"
+                          className="overflow-hidden border-t border-[#e9eae6]"
                         >
-                          <div className="grid gap-6 bg-black/[0.02] p-5 dark:bg-white/[0.03] lg:grid-cols-[1.05fr_1fr]">
+                          <div className="grid gap-6 bg-[#f8f8f7] p-5 lg:grid-cols-[1.05fr_1fr]">
                             <div className="space-y-4">
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Operational Map</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#a4a4a2]">Operational Map</p>
                               <div className="space-y-3">
-                                <div className="rounded-[18px] border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#171717]">
-                                  <p className="text-xs uppercase tracking-[0.18em] text-gray-400">Receives from</p>
+                                <div className="rounded-[18px] border border-[#e9eae6] bg-white px-4 py-4">
+                                  <p className="text-[12px] uppercase tracking-[0.18em] text-[#a4a4a2]">Receives from</p>
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {(agent.receivesFrom || []).map((source, i) => (
                                       <span key={i}>
@@ -274,8 +274,8 @@ export default function ConnectionsView() {
                                     ))}
                                   </div>
                                 </div>
-                                <div className="rounded-[18px] border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#171717]">
-                                  <p className="text-xs uppercase tracking-[0.18em] text-gray-400">Reports to</p>
+                                <div className="rounded-[18px] border border-[#e9eae6] bg-white px-4 py-4">
+                                  <p className="text-[12px] uppercase tracking-[0.18em] text-[#a4a4a2]">Reports to</p>
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {(agent.reportsTo || []).map((target, i) => (
                                       <span key={i}>
@@ -288,15 +288,15 @@ export default function ConnectionsView() {
                             </div>
 
                             <div className="space-y-4">
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Execution Steps</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-[#a4a4a2]">Execution Steps</p>
                               <div className="space-y-3">
                                 {(agent.steps || []).map((step, i) => (
-                                  <div key={i} className="rounded-[18px] border border-black/5 bg-white px-4 py-4 dark:border-white/10 dark:bg-[#171717]">
+                                  <div key={i} className="rounded-[18px] border border-[#e9eae6] bg-white px-4 py-4">
                                     <div className="flex items-center justify-between gap-3">
-                                      <p className="text-sm font-semibold text-gray-950 dark:text-white">{step.title}</p>
+                                      <p className="text-[13px] font-semibold text-[#1a1a1a]">{step.title}</p>
                                       <MinimalPill tone="neutral">{step.mode}</MinimalPill>
                                     </div>
-                                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{step.desc}</p>
+                                    <p className="mt-2 text-[12px] text-[#646462] dark:text-[#a4a4a2]">{step.desc}</p>
                                   </div>
                                 ))}
                               </div>
