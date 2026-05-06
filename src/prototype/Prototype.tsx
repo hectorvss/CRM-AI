@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, workflowsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -11092,7 +11092,7 @@ function KhSection({
 }: {
   title: string;
   description?: string;
-  items: { provider: string; status: string; action: string; configured: boolean; icon?: ReactNode }[];
+  items: { provider: string; status: string; action: string; configured: boolean; icon?: ReactNode; onClick?: () => void }[];
   headerAction?: { label: string; onClick?: () => void };
 }) {
   const hasItems = items.length > 0;
@@ -11128,7 +11128,7 @@ function KhSection({
               {it.icon ?? <KhProviderIcon name={it.provider} />}
               <span className="flex-1 text-[13px] text-[#1a1a1a]">{it.provider}</span>
               <span className="text-[13px] text-[#646462]">{it.status}</span>
-              <button className="text-[13px] font-medium text-[#1a1a1a] hover:underline">{it.action}</button>
+              <button onClick={it.onClick} className="text-[13px] font-medium text-[#1a1a1a] hover:underline">{it.action}</button>
             </div>
           ))}
         </div>
@@ -11394,7 +11394,18 @@ function KhChecklist({ title, items }: { title: string; items: { label: string; 
   );
 }
 
-function KnowledgeFuentes() {
+function KnowledgeFuentes({
+  onCreate,
+  onNavigate,
+  onAction,
+  onOpenView,
+}: {
+  onCreate: (opts: { type?: string; visibility?: 'public' | 'internal' }) => void;
+  onNavigate: (sub: KnowledgeSubView) => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  // Top-level CRM views (e.g. 'fin', 'inbox', 'connectors') for "Configurar ahora" / "Ir a Inbox".
+  onOpenView?: (view: string) => void;
+}) {
   const [tab, setTab] = useState<KhTab>('all');
   // Real connector status. We don't replace the static catalog (it's the
   // canonical product list shown in Figma), we just enrich each row with
@@ -11410,20 +11421,37 @@ function KnowledgeFuentes() {
     });
     return map;
   }, [connectors]);
+  // Default per-action handler — keeps the "Agregar artículo / Sincronizar /
+  // Administrar" buttons clickable even when the row is the static catalog.
+  function actionHandler(action: string, _provider: string): (() => void) | undefined {
+    const a = String(action || '').toLowerCase();
+    if (a.includes('agregar artículo') || a.includes('agregar articulo')) return () => onCreate({ type: 'ARTICLE', visibility: 'public' });
+    if (a.includes('fragmento'))       return () => onCreate({ type: 'SNIPPET' });
+    if (a.includes('cargar documento')) return () => onCreate({ type: 'DOCUMENT' });
+    if (a.includes('sincronizar') || a.includes('importar')) return () => onAction('Sincronización / importación — próximamente. Crea o sube el contenido manualmente.', 'error');
+    if (a.includes('administrar') || a.includes('reconectar')) return () => onOpenView?.('connectors');
+    return undefined;
+  }
+  // Attach default click handlers to any item (for inline static lists).
+  function withHandlers<T extends { provider: string; action: string }>(items: T[]): (T & { onClick?: () => void })[] {
+    return items.map(it => ({ ...it, onClick: actionHandler(it.action, it.provider) }));
+  }
   function enrich(items: typeof KH_PUBLIC_ARTICLES) {
     return items.map(it => {
       const live = connectorsByProvider.get(it.provider.toLowerCase());
-      if (!live) return it;
-      const status = live.status === 'connected' || live.status === 'active'
-        ? `Conectado · ${live.last_synced_at ? `actualizado ${relativeTime(live.last_synced_at)}` : 'sin sincronizar todavía'}`
-        : live.status === 'error' ? `Error: ${live.last_error || 'revisar configuración'}`
-        : it.status;
-      return {
-        ...it,
-        configured: true,
-        status,
-        action: live.status === 'error' ? 'Reconectar' : 'Administrar',
-      };
+      const base = !live ? it : (() => {
+        const status = live.status === 'connected' || live.status === 'active'
+          ? `Conectado · ${live.last_synced_at ? `actualizado ${relativeTime(live.last_synced_at)}` : 'sin sincronizar todavía'}`
+          : live.status === 'error' ? `Error: ${live.last_error || 'revisar configuración'}`
+          : it.status;
+        return {
+          ...it,
+          configured: true,
+          status,
+          action: live.status === 'error' ? 'Reconectar' : 'Administrar',
+        };
+      })();
+      return { ...base, onClick: actionHandler(base.action, base.provider) };
     });
   }
   return (
@@ -11439,7 +11467,7 @@ function KnowledgeFuentes() {
             Aprender
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
-          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+          <button onClick={() => onCreate({ type: 'ARTICLE', visibility: 'public' })} className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
             Nuevo contenido
           </button>
@@ -11471,9 +11499,9 @@ function KnowledgeFuentes() {
           <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Optimiza tu contenido para Fin AI Agent, Copilot y el centro de ayuda</h3>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { name: 'Fin',     status: 'No establecido en vivo', desc: 'Fin utiliza tu conocimiento para generar respuestas precisas para los clientes.', cta: 'Configurar ahora', accent: '#ff5f3f' },
-              { name: 'Copilot', status: 'En vivo',                desc: 'Copilot utiliza tus conocimientos para dar a tus compañeros de equipo las respuestas que necesitan.', cta: 'Ir a Inbox',         accent: '#3b59f6' },
-              { name: 'Centro de ayuda', status: 'No establecido en vivo', desc: 'Los clientes utilizan tu conocimiento para encontrar respuestas precisas por sí mismos.', cta: 'Configurar ahora', accent: '#646462' },
+              { name: 'Fin',     status: 'No establecido en vivo', desc: 'Fin utiliza tu conocimiento para generar respuestas precisas para los clientes.', cta: 'Configurar ahora', accent: '#ff5f3f', onClick: () => onOpenView?.('fin') },
+              { name: 'Copilot', status: 'En vivo',                desc: 'Copilot utiliza tus conocimientos para dar a tus compañeros de equipo las respuestas que necesitan.', cta: 'Ir a Inbox',         accent: '#3b59f6', onClick: () => onOpenView?.('inbox') },
+              { name: 'Centro de ayuda', status: 'No establecido en vivo', desc: 'Los clientes utilizan tu conocimiento para encontrar respuestas precisas por sí mismos.', cta: 'Configurar ahora', accent: '#646462', onClick: () => onNavigate('centroAyuda') },
             ].map(c => (
               <div key={c.name} className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] overflow-hidden">
                 <div className="h-[100px] bg-gradient-to-br from-[#ededea] to-[#dcdcd8] flex items-center justify-center">
@@ -11487,7 +11515,7 @@ function KnowledgeFuentes() {
                     <span className={`text-[11px] px-2 py-0.5 rounded-full ${c.status === 'En vivo' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>{c.status}</span>
                   </div>
                   <p className="text-[12px] text-[#646462] leading-[16px]">{c.desc}</p>
-                  <a href="#" className="text-[12px] font-medium text-[#1a1a1a] hover:underline mt-1">{c.cta} ↗</a>
+                  <button onClick={c.onClick} className="text-left text-[12px] font-medium text-[#1a1a1a] hover:underline mt-1">{c.cta} ↗</button>
                 </div>
               </div>
             ))}
@@ -11512,18 +11540,18 @@ function KnowledgeFuentes() {
         <KhSection
           title="Macros"
           description="Copilot recomendará macros que estén disponibles para tus compañeros de equipo."
-          items={[{ provider: 'Intercom', status: '4 macros', action: 'Administrar', configured: true }]}
+          items={withHandlers([{ provider: 'Intercom', status: '4 macros', action: 'Administrar', configured: true }])}
         />
         <KhSection
           title="Sitios web"
           description="Permite que Fin AI Agent y Copilot utilicen cualquier sitio web público."
           items={[]}
-          headerAction={{ label: 'Sincronizar' }}
+          headerAction={{ label: 'Sincronizar', onClick: () => onAction('Sincronización de sitios web — próximamente.', 'error') }}
         />
         <KhSection
           title="Más fuentes de contenido"
           description="Proporcione a Fin AI Agent y a Copilot AI fuentes que tus clientes no puedan ver."
-          items={[
+          items={withHandlers([
             {
               provider: 'Fragmentos de texto',
               status: 'No hay fragmentos de texto',
@@ -11546,7 +11574,7 @@ function KnowledgeFuentes() {
                 </span>
               ),
             },
-          ]}
+          ])}
         />
         </>
         )}
@@ -11559,10 +11587,10 @@ function KnowledgeFuentes() {
                 <KhSection
                   title="Artículos públicos"
                   description="Permite que Fin AI Agent utilice artículos públicos de tu centro de ayuda."
-                  items={[
+                  items={withHandlers([
                     { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
                     { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
-                  ]}
+                  ])}
                 />
                 <KhSection
                   title="Sitios web"
@@ -11597,25 +11625,25 @@ function KnowledgeFuentes() {
                 <KhSection
                   title="Artículos internos"
                   description="Proporciona a Copilot conocimientos internos que solo están disponibles para ti y tu equipo."
-                  items={KH_INTERNAL_ARTICLES}
+                  items={withHandlers(KH_INTERNAL_ARTICLES as any)}
                 />
                 <KhSection
                   title="Conversaciones"
                   description="Deja que Copilot utilice las conversaciones de tu equipo y los folios de atención de los clientes de los últimos 4 meses."
-                  items={KH_CONVERSATIONS}
+                  items={withHandlers(KH_CONVERSATIONS as any)}
                 />
                 <KhSection
                   title="Macros"
                   description="Copilot recomendará macros que estén disponibles para tus compañeros de equipo."
-                  items={[{ provider: 'Intercom', status: '4 macros para Copilot', action: 'Administrar', configured: true }]}
+                  items={withHandlers([{ provider: 'Intercom', status: '4 macros para Copilot', action: 'Administrar', configured: true }])}
                 />
                 <KhSection
                   title="Artículos públicos"
                   description="Permite que Copilot utilice los artículos públicos del centro de ayuda."
-                  items={[
+                  items={withHandlers([
                     { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
                     { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
-                  ]}
+                  ])}
                 />
                 <KhSection
                   title="Sitios web"
@@ -11626,7 +11654,7 @@ function KnowledgeFuentes() {
                 <KhSection
                   title="Más fuentes de contenido"
                   description="Proporciona a Copilot fuentes que tus clientes no puedan ver."
-                  items={[
+                  items={withHandlers([
                     {
                       provider: 'Fragmentos de texto',
                       status: 'No hay…',
@@ -11649,7 +11677,7 @@ function KnowledgeFuentes() {
                         </span>
                       ),
                     },
-                  ]}
+                  ])}
                 />
               </div>
               <KhChecklist
@@ -11672,10 +11700,10 @@ function KnowledgeFuentes() {
                 <KhSection
                   title="Artículos públicos"
                   description="Comparte artículos públicos en tu Centro de ayuda donde los clientes puedan recibir ayuda por cuenta propia."
-                  items={[
+                  items={withHandlers([
                     { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
                     { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
-                  ]}
+                  ])}
                 />
               </div>
               <KhChecklist
@@ -11694,7 +11722,43 @@ function KnowledgeFuentes() {
   );
 }
 
-function KnowledgeContenido() {
+function KnowledgeContenido({
+  onCreate,
+  onNavigate,
+  onAction,
+}: {
+  onCreate: (opts: { type?: string; visibility?: 'public' | 'internal' }) => void;
+  onNavigate: (sub: KnowledgeSubView) => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  // Live data — counts feed both the cards (Recomendaciones) and the table.
+  const { data: articlesData } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const articles = Array.isArray(articlesData) ? articlesData : [];
+  const { data: gapsData } = useApi(() => knowledgeApi.gaps(), [], { gaps: [], alerts: [] });
+  const gaps = Array.isArray((gapsData as any)?.gaps) ? (gapsData as any).gaps : [];
+
+  const counts = useMemo(() => {
+    let pub = 0, internal = 0, snippet = 0, doc = 0, published = 0;
+    for (const a of articles) {
+      const visibility = String((a as any).visibility || 'public').toLowerCase();
+      const type = String((a as any).type || 'ARTICLE').toUpperCase();
+      const status = String((a as any).status || (a as any).state || '').toLowerCase();
+      if (status === 'published' || status === 'active' || status === 'live') published++;
+      if (type === 'SNIPPET') snippet++;
+      else if (type === 'DOCUMENT') doc++;
+      else if (visibility === 'internal') internal++;
+      else pub++;
+    }
+    return { pub, internal, snippet, doc, published, total: articles.length };
+  }, [articles]);
+
+  const [search, setSearch] = useState('');
+  function submitSearch() {
+    // Simple navigation: jump to Artículos. The search box there has its own
+    // filter; we keep this lightweight and just take the user there.
+    onNavigate('articulos');
+  }
+
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
@@ -11703,25 +11767,36 @@ function KnowledgeContenido() {
           <h1 className="text-[18px] font-bold text-[#1a1a1a]">Contenido</h1>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-            Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          <button onClick={() => onNavigate('pruebas')} className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            Probar <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
-          <button className="border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Vista previa</button>
+          <button onClick={() => onNavigate('articulos')} className="border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Vista previa</button>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-6">
         <div className="flex items-center gap-3">
           <div className="flex-1 flex items-center gap-2 border border-[#e9eae6] rounded-full px-4 py-[7px] bg-white">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-            <input type="text" placeholder="Buscar..." className="flex-1 outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]" />
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submitSearch(); }}
+              className="flex-1 outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} title="Limpiar">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+              </button>
+            )}
           </div>
-          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[7px] text-[13px] font-medium text-[#1a1a1a]">
+          <button onClick={() => onNavigate('articulos')} className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>
             Audiencia
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
-          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[7px] text-[13px] font-medium text-[#1a1a1a]">
+          <button onClick={() => onNavigate('articulos')} className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
             Filtros
           </button>
@@ -11731,13 +11806,13 @@ function KnowledgeContenido() {
           <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Agregar contenido</h3>
           <div className="grid grid-cols-5 gap-3">
             {[
-              { label: 'Artículo público',         icon: 'doc' },
-              { label: 'Artículo interno',         icon: 'lock' },
-              { label: 'Fragmento de texto',       icon: 'snippet' },
-              { label: 'Sincronización de sitio web', icon: 'web' },
-              { label: 'Ver todo',                 icon: 'more' },
+              { label: 'Artículo público',         icon: 'doc',     onClick: () => onCreate({ type: 'ARTICLE', visibility: 'public' }) },
+              { label: 'Artículo interno',         icon: 'lock',    onClick: () => onCreate({ type: 'ARTICLE', visibility: 'internal' }) },
+              { label: 'Fragmento de texto',       icon: 'snippet', onClick: () => onCreate({ type: 'SNIPPET' }) },
+              { label: 'Sincronización de sitio web', icon: 'web',  onClick: () => onAction('Sincronización web — próximamente. Crea un artículo manualmente por ahora.', 'error') },
+              { label: 'Ver todo',                 icon: 'more',    onClick: () => onNavigate('articulos') },
             ].map(c => (
-              <button key={c.label} className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col items-start gap-2 hover:border-[#c8c9c4] bg-white">
+              <button key={c.label} onClick={c.onClick} className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col items-start gap-2 hover:border-[#c8c9c4] bg-white text-left">
                 <div className="w-8 h-8 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center">
                   <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
                     {c.icon === 'doc' && <path d="M3.5 2h6l3 3v9a0.5 0.5 0 0 1-.5.5h-8.5A0.5 0.5 0 0 1 3 14V2.5z"/>}
@@ -11750,11 +11825,11 @@ function KnowledgeContenido() {
                 <span className="text-[13px] font-medium text-[#1a1a1a]">{c.label}</span>
               </button>
             ))}
-            <button className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col items-start gap-2 hover:border-[#c8c9c4] bg-white relative">
+            <button onClick={() => onNavigate('gaps')} className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col items-start gap-2 hover:border-[#c8c9c4] bg-white relative text-left">
               <div className="w-8 h-8 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center">
                 <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 8h10M8 3v10M5 5l1.5-2M11 5l-1.5-2M5 11l1.5 2M11 11l-1.5 2"/></svg>
               </div>
-              <span className="text-[13px] font-medium text-[#1a1a1a]">Recomendaciones <span className="ml-1 text-[#646462] font-normal">0</span></span>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Recomendaciones <span className="ml-1 text-[#646462] font-normal">{gaps.length}</span></span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] absolute top-3 right-3"><path d="M5 3h8v8h-2V6.4l-6.3 6.3-1.4-1.4L9.6 5H5z"/></svg>
             </button>
           </div>
@@ -11763,26 +11838,40 @@ function KnowledgeContenido() {
         <div>
           <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Fuente de contenido</h3>
           <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
-            <div className="grid grid-cols-[1fr_120px_140px_80px_80px_80px] px-5 py-3 border-b border-[#f1f1ee] text-[12px] font-medium text-[#646462]">
-              <div className="flex items-center gap-1">Título <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M5 6h6M5 10h6"/></svg></div>
-              <div>estado</div>
+            <div className="grid grid-cols-[1fr_140px_140px_80px_80px_80px] px-5 py-3 border-b border-[#f1f1ee] text-[12px] font-medium text-[#646462]">
+              <div className="flex items-center gap-1">Título</div>
+              <div>Estado</div>
               <div>Centro de ayuda</div>
               <div>Copilot</div>
               <div>Servicio</div>
               <div>Ventas</div>
             </div>
-            <div className="grid grid-cols-[1fr_120px_140px_80px_80px_80px] px-5 py-3 items-center">
-              <div className="flex items-center gap-2">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3.5 2h6l3 3v9a0.5 0.5 0 0 1-.5.5h-8.5A0.5 0.5 0 0 1 3 14V2.5z"/></svg>
-                <span className="text-[13px] text-[#1a1a1a] font-medium">Artículos</span>
-                <span className="text-[12px] text-[#646462]">· Fragmentos de código, públicos, internos, documentos</span>
-              </div>
-              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#22c55e]"/><span className="text-[12px] text-[#1a1a1a]">0 activos</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
-              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
-            </div>
+            {[
+              { label: 'Artículos públicos', desc: 'Visibles en el centro de ayuda', n: counts.pub,      sub: 'articulos' as const },
+              { label: 'Artículos internos', desc: 'Sólo para Copilot y el equipo',  n: counts.internal, sub: 'articulos' as const },
+              { label: 'Fragmentos de texto', desc: 'Bloques reutilizables',         n: counts.snippet,  sub: 'articulos' as const },
+              { label: 'Documentos',         desc: 'PDFs y archivos importados',     n: counts.doc,      sub: 'articulos' as const },
+            ].map((row, idx) => (
+              <button
+                key={row.label}
+                onClick={() => onNavigate(row.sub)}
+                className={`w-full text-left grid grid-cols-[1fr_140px_140px_80px_80px_80px] px-5 py-3 items-center hover:bg-[#fafaf9] ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><path d="M3.5 2h6l3 3v9a0.5 0.5 0 0 1-.5.5h-8.5A0.5 0.5 0 0 1 3 14V2.5z"/></svg>
+                  <span className="text-[13px] text-[#1a1a1a] font-medium">{row.label}</span>
+                  <span className="text-[12px] text-[#646462] truncate">· {row.desc}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${row.n > 0 ? 'bg-[#22c55e]' : 'bg-[#d4d4d2]'}`} />
+                  <span className="text-[12px] text-[#1a1a1a]">{row.n} {row.n === 1 ? 'activo' : 'activos'}</span>
+                </div>
+                <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.n > 0 ? 'bg-[#22c55e]' : 'bg-[#d4d4d2]'}`}/><span className="text-[12px] text-[#646462]">{row.n > 0 ? 'Activo' : '—'}</span></div>
+                <div className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${row.n > 0 ? 'bg-[#22c55e]' : 'bg-[#d4d4d2]'}`}/><span className="text-[12px] text-[#646462]">{row.n > 0 ? 'Activo' : '—'}</span></div>
+                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
+                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -11935,6 +12024,26 @@ function KnowledgeArticleEditor({
     return hasContent ? sheet : null;
   }
 
+  // ── Advanced metadata (owner / review cycle / linked workflows + policies)
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [ownerUserId, setOwnerUserId] = useState<string>(initial?.owner_user_id || '');
+  const [reviewCycleDays, setReviewCycleDays] = useState<string>(String(initial?.review_cycle_days ?? 90));
+  const [linkedWorkflowIds, setLinkedWorkflowIds] = useState<string[]>(
+    Array.isArray(initial?.linked_workflow_ids) ? initial.linked_workflow_ids : [],
+  );
+  const [linkedApprovalPolicyIds, setLinkedApprovalPolicyIds] = useState<string[]>(
+    Array.isArray(initial?.linked_approval_policy_ids) ? initial.linked_approval_policy_ids : [],
+  );
+  const { data: membersData } = useApi(() => iamApi.members(), [], []);
+  const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
+  const { data: policiesData } = useApi(() => knowledgeApi.listPolicies(), [], []);
+  const members   = Array.isArray(membersData)   ? membersData   : [];
+  const workflows = Array.isArray(workflowsData) ? workflowsData : [];
+  const policies  = Array.isArray(policiesData)  ? policiesData  : [];
+  function toggleId(arr: string[], setArr: (s: string[]) => void, id: string) {
+    setArr(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
+  }
+
   // Import a PDF / Markdown / text file and stuff its text into the body.
   async function handleImport(file: File) {
     setImporting(true);
@@ -11994,6 +12103,11 @@ function KnowledgeArticleEditor({
         visibility,
       };
       if (domainId) payload.domain_id = domainId;
+      if (ownerUserId) payload.owner_user_id = ownerUserId;
+      const cycleNum = Number(reviewCycleDays);
+      if (Number.isFinite(cycleNum) && cycleNum > 0) payload.review_cycle_days = cycleNum;
+      if (linkedWorkflowIds.length > 0) payload.linked_workflow_ids = linkedWorkflowIds;
+      if (linkedApprovalPolicyIds.length > 0) payload.linked_approval_policy_ids = linkedApprovalPolicyIds;
       const structured = buildContentStructured();
       if (structured) payload.content_structured = structured;
       let id = initial?.id;
@@ -12110,6 +12224,68 @@ function KnowledgeArticleEditor({
             </div>
           </div>
         )}
+        {/* Advanced metadata: owner, review cycle, linked workflows + policies. */}
+        <button
+          onClick={() => setShowAdvanced(s => !s)}
+          className="mt-3 self-start text-[12px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1"
+        >
+          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current transition-transform ${showAdvanced ? 'rotate-90' : ''}`}><path d="M5 4l5 4-5 4z"/></svg>
+          Más opciones (propietario, revisión, enlaces)
+        </button>
+        {showAdvanced && (
+          <div className="mt-2 grid grid-cols-2 gap-3 max-h-[260px] overflow-y-auto pr-1">
+            <div>
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Propietario</label>
+              <select value={ownerUserId} onChange={e => setOwnerUserId(e.target.value)} className="w-full h-8 rounded-lg border border-[#e9eae6] px-2 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]">
+                <option value="">Sin asignar</option>
+                {members.map((m: any) => (
+                  <option key={m.id || m.user_id || m.email} value={m.id || m.user_id || ''}>{m.name || m.full_name || m.email || 'Sin nombre'}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Ciclo de revisión (días)</label>
+              <input
+                type="number" min={7} max={365} step={7}
+                value={reviewCycleDays}
+                onChange={e => setReviewCycleDays(e.target.value)}
+                className="w-full h-8 rounded-lg border border-[#e9eae6] px-2 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Workflows vinculados ({linkedWorkflowIds.length})</label>
+              <div className="border border-[#e9eae6] rounded-lg p-2 max-h-[100px] overflow-y-auto flex flex-col gap-0.5">
+                {workflows.length === 0 && <p className="text-[11.5px] text-[#646462] italic px-1">No hay workflows todavía.</p>}
+                {workflows.map((w: any) => (
+                  <label key={w.id} className="flex items-center gap-2 px-1 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
+                    <input type="checkbox" checked={linkedWorkflowIds.includes(w.id)} onChange={() => toggleId(linkedWorkflowIds, setLinkedWorkflowIds, w.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
+                    <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{w.name || w.id}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Políticas de aprobación vinculadas ({linkedApprovalPolicyIds.length})</label>
+              <div className="border border-[#e9eae6] rounded-lg p-2 max-h-[100px] overflow-y-auto flex flex-col gap-0.5">
+                {policies.length === 0 && <p className="text-[11.5px] text-[#646462] italic px-1">No hay políticas creadas todavía.</p>}
+                {policies.map((p: any) => (
+                  <label key={p.id} className="flex items-center gap-2 px-1 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
+                    <input type="checkbox" checked={linkedApprovalPolicyIds.includes(p.id)} onChange={() => toggleId(linkedApprovalPolicyIds, setLinkedApprovalPolicyIds, p.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
+                    <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{p.title || p.name || p.id}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {/* Read-only metadata when editing an existing article */}
+            {initial?.id && (
+              <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#646462] pt-1 border-t border-[#f1f1ee] mt-1">
+                {initial?.version != null && <span>Versión: <strong className="text-[#1a1a1a]">{initial.version}</strong></span>}
+                {initial?.last_reviewed_at && <span>Revisado: <strong className="text-[#1a1a1a]">{relativeTime(initial.last_reviewed_at)}</strong></span>}
+                {initial?.next_review_at && <span>Próxima revisión: <strong className="text-[#1a1a1a]">{relativeTime(initial.next_review_at)}</strong></span>}
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-[#e9eae6]">
           <div>
             <button
@@ -12174,6 +12350,7 @@ function KnowledgeArticulos({
         title: externalDraft.title,
         content: externalDraft.content,
         type: externalDraft.type || 'ARTICLE',
+        visibility: (externalDraft as any).visibility || 'public',
         domain_id: domainFilter || '',
       });
       onConsumeDraft?.();
@@ -12412,6 +12589,7 @@ function KnowledgeGaps({ onAction, onDraftFromGap }: {
   const stats = gapsData?.stats || {};
   const gaps: any[] = Array.isArray(gapsData?.gaps) ? gapsData.gaps : [];
   const problems: any[] = Array.isArray(gapsData?.problemArticles) ? gapsData.problemArticles : [];
+  const alerts: any[] = Array.isArray(gapsData?.alerts) ? gapsData.alerts : [];
 
   return (
     <>
@@ -12448,6 +12626,23 @@ function KnowledgeGaps({ onAction, onDraftFromGap }: {
                 <p className="text-[20px] font-semibold text-[#1a1a1a] mt-1">{stats.coverageScore ?? '—'}</p>
               </div>
             </div>
+
+            {alerts.length > 0 && (
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-2">Alertas de cobertura ({alerts.length})</h3>
+                <div className="flex flex-col gap-2">
+                  {alerts.map((a: any) => (
+                    <div key={a.id} className="bg-[#fef7f7] border border-[#fde2e2] rounded-[10px] p-3 flex items-start gap-2">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#b91c1c] flex-shrink-0 mt-0.5"><path d="M8 1.5l7 13H1z"/><path d="M8 6v3" stroke="white" strokeWidth="1.4"/><circle cx="8" cy="11.5" r="0.6" fill="white"/></svg>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">{a.title}</p>
+                        {a.detail && <p className="text-[12px] text-[#646462] leading-[18px] mt-0.5">{a.detail}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-2">Vacíos detectados ({gaps.length})</h3>
@@ -12732,11 +12927,23 @@ function KnowledgeView() {
     }
   }
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  // Pre-filled draft handed from Vacíos → Articulos via "Crear borrador desde vacío".
-  const [pendingDraft, setPendingDraft] = useState<{ title: string; content: string; type?: string } | null>(null);
+  // Pre-filled draft handed from Vacíos / Resumen / Fuentes → Articulos.
+  // Optional visibility lets the Resumen "Artículo público / interno" cards
+  // open the editor with the right field already set.
+  const [pendingDraft, setPendingDraft] = useState<{ title: string; content: string; type?: string; visibility?: string } | null>(null);
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
     window.setTimeout(() => setToast(null), 2500);
+  }
+  // Open the editor in create mode from outside the Articulos view.
+  function startCreate(opts: { type?: string; visibility?: 'public' | 'internal' } = {}) {
+    setPendingDraft({
+      title: '',
+      content: '',
+      type: opts.type || 'ARTICLE',
+      visibility: opts.visibility || 'public',
+    });
+    setSub('articulos');
   }
   function draftFromGap(g: any) {
     const title = String(g?.topic || 'Nuevo artículo').trim();
@@ -12762,10 +12969,19 @@ function KnowledgeView() {
     setSub('articulos');
     showToast('Borrador preparado, revísalo antes de publicar');
   }
+  function openCrmView(v: string) {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', v);
+      // Full reload — top-level view switching lives in PrototypeApp, which is
+      // outside this component's tree, so a navigation is the simplest path.
+      window.location.href = url.toString();
+    }
+  }
   function renderSub() {
     switch (sub) {
-      case 'fuentes':     return <KnowledgeFuentes />;
-      case 'contenido':   return <KnowledgeContenido />;
+      case 'fuentes':     return <KnowledgeFuentes onCreate={startCreate} onNavigate={setSub} onAction={showToast} onOpenView={openCrmView} />;
+      case 'contenido':   return <KnowledgeContenido onCreate={startCreate} onNavigate={setSub} onAction={showToast} />;
       case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
       case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
       case 'gaps':        return <KnowledgeGaps    onAction={showToast} onDraftFromGap={draftFromGap} />;
