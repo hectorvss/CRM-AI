@@ -4149,10 +4149,88 @@ function InboxView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONTACTS VIEW
+// CONTACTS VIEW — connected to customersApi (live data, no mocks)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ContactsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+// Canonical contact shape used by every Contacts-side component below.
+type ContactRow = {
+  id: string;
+  name: string;
+  email: string;
+  initial: string;
+  color: string;
+  channel: string;
+  city: string;
+  type: 'Usuario' | 'Lead';
+  openCases: number;
+  segment: 'vip' | 'standard' | 'regular';
+  createdAt: string | null;
+  lastSeenAt: string | null;
+  webSessions: number;
+};
+
+const CONTACT_AVATAR_COLORS = ['#61d65c', '#85e0d9', '#b09efa', '#fa7938', '#f5b769', '#7c89ff'];
+function pickContactColor(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) & 0xffff;
+  return CONTACT_AVATAR_COLORS[h % CONTACT_AVATAR_COLORS.length];
+}
+
+function formatContactWhen(value: string | null): string {
+  if (!value) return '—';
+  const t = new Date(value).getTime();
+  if (!Number.isFinite(t)) return '—';
+  const min = Math.round((Date.now() - t) / 60000);
+  if (min < 1)   return 'hace un momento';
+  if (min < 60)  return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24)    return `hace ${h} h`;
+  const d = Math.round(h / 24);
+  if (d < 30)    return `hace ${d} d`;
+  return new Date(value).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function mapContactRow(c: any): ContactRow {
+  const name  = c.canonicalName || c.name || c.canonicalEmail || c.email || 'Contacto';
+  const email = c.canonicalEmail || c.email || '';
+  const initial = (name.trim()[0] || '?').toUpperCase();
+  const isLead = (c.kind === 'lead') || (Number(c.openCases ?? 0) === 0 && Number(c.problemsResolved ?? 0) === 0);
+  return {
+    id:        c.id,
+    name,
+    email,
+    initial,
+    color:     pickContactColor(c.id || name),
+    channel:   c.preferredChannel || c.role || c.company || (email ? `en ${email.split('@')[1] || 'web'}` : 'en web'),
+    city:      c.location || c.city || 'Desconocido',
+    type:      isLead ? 'Lead' : 'Usuario',
+    openCases: Number(c.openCases ?? 0),
+    segment:   (c.segment === 'vip' ? 'vip' : c.segment === 'standard' ? 'standard' : 'regular'),
+    createdAt: c.createdAt || null,
+    lastSeenAt: c.lastInteractionAt || c.lastSeenAt || c.updatedAt || c.createdAt || null,
+    webSessions: Number(c.webSessions ?? 0),
+  };
+}
+
+function useContactsData() {
+  const { data, loading, error, refetch } = useApi<any[]>(() => customersApi.list(), [], []);
+  const all = useMemo<ContactRow[]>(() => Array.isArray(data) ? data.map(mapContactRow) : [], [data]);
+  const thirtyDaysAgo = Date.now() - 30 * 86400000;
+  const sevenDaysAgo = Date.now() - 7 * 86400000;
+  const active = useMemo(() => all.filter(c => c.openCases > 0 || (c.lastSeenAt && new Date(c.lastSeenAt).getTime() > thirtyDaysAgo)), [all, thirtyDaysAgo]);
+  const fresh  = useMemo(() => all.filter(c => c.createdAt && new Date(c.createdAt).getTime() > sevenDaysAgo), [all, sevenDaysAgo]);
+  const leads  = useMemo(() => all.filter(c => c.type === 'Lead'), [all]);
+  const users  = useMemo(() => all.filter(c => c.type === 'Usuario'), [all]);
+  return { all, users, active, fresh, leads, loading, error, refetch };
+}
+
+function ContactsSidebar({
+  view, onNavigate, counts,
+}: {
+  view: View;
+  onNavigate: (v: View) => void;
+  counts?: { allUsers: number; allLeads: number; active: number; fresh: number };
+}) {
   // Local active state — solves the bug where 3 items all using itemView="contacts"
   // were all highlighted at once. Each item has its own unique id; only one is active.
   // The view-level navigation maps to: contacts | allLeads | conversations (3 screens),
@@ -4195,10 +4273,10 @@ function ContactsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
           <img src={ICON_PERSONAS} alt="" className="w-3.5 h-3.5 opacity-50" />
           <span className="text-[12px] font-medium text-[#646462]">Personas:</span>
         </div>
-        <SidebarItem id="allUsers" label="All users" count={4} itemView="contacts" />
-        <SidebarItem id="allLeads" label="All leads" count={0} itemView="allLeads" opacity50Count />
-        <SidebarItem id="active"   label="Active"    count={4} itemView="contacts" />
-        <SidebarItem id="new"      label="New"       count={0} itemView="contacts" opacity50Count />
+        <SidebarItem id="allUsers" label="All users" count={counts?.allUsers ?? 0} itemView="contacts"  opacity50Count={(counts?.allUsers ?? 0) === 0} />
+        <SidebarItem id="allLeads" label="All leads" count={counts?.allLeads ?? 0} itemView="allLeads"  opacity50Count={(counts?.allLeads ?? 0) === 0} />
+        <SidebarItem id="active"   label="Active"    count={counts?.active   ?? 0} itemView="contacts"  opacity50Count={(counts?.active   ?? 0) === 0} />
+        <SidebarItem id="new"      label="New"       count={counts?.fresh    ?? 0} itemView="contacts"  opacity50Count={(counts?.fresh    ?? 0) === 0} />
       </div>
 
       <div className="h-px bg-[#e9eae6] mx-2 my-1" />
@@ -4229,7 +4307,13 @@ function ContactsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   );
 }
 
-function ContactsPageHeader({ onBack }: { onBack: () => void }) {
+function ContactsPageHeader({
+  onBack, title = 'Active', onCreate,
+}: {
+  onBack: () => void;
+  title?: string;
+  onCreate?: () => void;
+}) {
   return (
     <div className="flex items-center justify-between px-4 pt-4 pb-3">
       <div className="flex items-center gap-3">
@@ -4239,7 +4323,7 @@ function ContactsPageHeader({ onBack }: { onBack: () => void }) {
         >
           <img src={ICON_BACK} alt="" className="w-4 h-4" />
         </button>
-        <span className="text-[20px] font-semibold text-[#1a1a1a] tracking-[-0.4px]">Active</span>
+        <span className="text-[20px] font-semibold text-[#1a1a1a] tracking-[-0.4px]">{title}</span>
       </div>
       <div className="flex items-center gap-2">
         <button className="flex items-center gap-1.5 bg-[#f8f8f7] rounded-full pl-[12px] pr-[6px] py-[8px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#efefed]">
@@ -4247,13 +4331,411 @@ function ContactsPageHeader({ onBack }: { onBack: () => void }) {
           <span>Aprender</span>
           <img src={ICON_CHEVRON} alt="" className="w-3.5 h-3.5 opacity-40" />
         </button>
-        <button className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[6px] py-[8px] text-[13px] font-medium text-[#f8f8f7] hover:bg-[#333]">
+        <button
+          onClick={onCreate}
+          className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[6px] py-[8px] text-[13px] font-medium text-[#f8f8f7] hover:bg-[#333]"
+        >
           <img src={ICON_NEW_USER} alt="" className="w-3.5 h-3.5" />
           <span>Nuevos usuarios o leads</span>
           <img src={ICON_CHEVRON} alt="" className="w-3.5 h-3.5 opacity-60" />
         </button>
       </div>
     </div>
+  );
+}
+
+// ── New contact modal — calls customersApi.create() ─────────────────────────
+function NewContactModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [company, setCompany] = useState('');
+  const [kind, setKind] = useState<'user' | 'lead'>('user');
+  const [submitting, setSubmitting] = useState(false);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) { setName(''); setEmail(''); setCompany(''); setKind('user'); setErrMsg(null); }
+  }, [open]);
+
+  if (!open) return null;
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setErrMsg(null);
+    try {
+      await customersApi.create({
+        canonical_name:  name.trim() || email.trim() || 'Nuevo contacto',
+        canonical_email: email.trim() || null,
+        company:         company.trim() || null,
+        kind,
+      });
+      onCreated();
+      onClose();
+    } catch (err: any) {
+      setErrMsg(err?.message || 'No se pudo crear el contacto');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={onClose}>
+      <form
+        onClick={e => e.stopPropagation()}
+        onSubmit={handleSubmit}
+        className="w-[440px] bg-white rounded-[12px] border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Nuevo contacto</h3>
+        <p className="text-[12.5px] text-[#646462] mb-4">Crea un usuario o lead manualmente. Podrás enriquecerlo después con los datos canónicos.</p>
+        <div className="flex gap-2 mb-4">
+          {(['user', 'lead'] as const).map(k => (
+            <button
+              type="button"
+              key={k}
+              onClick={() => setKind(k)}
+              className={`h-8 px-3 rounded-full text-[13px] font-semibold border ${
+                kind === k ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white text-[#1a1a1a] border-[#e9eae6] hover:bg-[#f8f8f7]'
+              }`}
+            >
+              {k === 'user' ? 'Usuario' : 'Lead'}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-medium text-[#646462]">Nombre</span>
+            <input value={name} onChange={e => setName(e.target.value)} className="h-9 px-3 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Ada Lovelace" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-medium text-[#646462]">Email</span>
+            <input value={email} onChange={e => setEmail(e.target.value)} type="email" className="h-9 px-3 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="ada@example.com" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-medium text-[#646462]">Empresa (opcional)</span>
+            <input value={company} onChange={e => setCompany(e.target.value)} className="h-9 px-3 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Acme Corp" />
+          </label>
+        </div>
+        {errMsg && <p className="mt-3 text-[12.5px] text-[#b91c1c]">{errMsg}</p>}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="h-8 px-3 rounded-[8px] text-[13px] font-semibold text-[#646462] hover:bg-[#f8f8f7]">Cancelar</button>
+          <button type="submit" disabled={submitting || (!name.trim() && !email.trim())} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:opacity-50">
+            {submitting ? 'Creando…' : 'Crear contacto'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ── Profile drawer — full customer detail from customersApi.state/activity ─
+// Mirrors every section of the legacy Customers profile (segment, risk, AI
+// impact, LTV, plan, renewal, linked identities, reconciliation, top issues,
+// open cases) re-skinned to the Clain card system. Adds Esc-to-close.
+function ContactProfileDrawer({
+  contactId, onClose, onUpdated,
+}: {
+  contactId: string | null;
+  onClose: () => void;
+  onUpdated?: () => void;
+}) {
+  const { data: state, loading: stateLoading, refetch: refetchState } = useApi<any>(
+    () => contactId ? customersApi.state(contactId) : Promise.resolve(null),
+    [contactId],
+    null,
+  );
+  const { data: activity } = useApi<any[]>(
+    () => contactId ? customersApi.activity(contactId) : Promise.resolve([]),
+    [contactId],
+    [],
+  );
+  const [tab, setTab] = useState<'all_activity' | 'conversations' | 'orders' | 'system_logs'>('all_activity');
+  const [savingSegment, setSavingSegment] = useState(false);
+  const [savingRisk, setSavingRisk] = useState(false);
+  const [localMsg, setLocalMsg] = useState<string | null>(null);
+
+  // Reset tab + transient state whenever a different contact opens
+  useEffect(() => { setTab('all_activity'); setLocalMsg(null); }, [contactId]);
+
+  // Esc-to-close (also picked up at the parent level, but local handler is more
+  // resilient when this drawer is the top-most element).
+  useEffect(() => {
+    if (!contactId) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [contactId, onClose]);
+
+  if (!contactId) return null;
+  const customer: any = state?.customer || state || {};
+  const name  = customer.canonicalName || customer.name || 'Contacto';
+  const email = customer.canonicalEmail || customer.email || '';
+  const phone = customer.phone || '';
+  const initial = (name.trim()[0] || '?').toUpperCase();
+  const color = pickContactColor(contactId);
+  const segment = customer.segment === 'vip' ? 'VIP' : customer.segment === 'standard' ? 'Standard' : 'Regular';
+  const riskRaw = (customer.riskLevel || 'low').toString();
+  const risk =
+    riskRaw === 'high' || riskRaw === 'critical' ? 'Riesgo de fuga' :
+    riskRaw === 'medium' ? 'Vigilar' : 'Healthy';
+  const ltv = customer.lifetimeValue ?? customer.ltv;
+  const ltvLabel = (ltv ?? null) === null ? '—' : `$${Number(ltv).toLocaleString()}`;
+  const linkedIdentities: Array<{ system?: string; externalId?: string }> = Array.isArray(customer.linkedIdentities) ? customer.linkedIdentities : [];
+  const recentCases: any[] = Array.isArray(customer.recentCases) ? customer.recentCases : Array.isArray(state?.recentCases) ? state.recentCases : [];
+  const recon = state?.reconciliation || customer.reconciliation;
+  const reconUnhealthy = recon && recon.status && recon.status !== 'Healthy';
+  const allActivity: any[] = Array.isArray(activity) ? activity : [];
+  const filteredActivity = (() => {
+    if (tab === 'all_activity') return allActivity;
+    if (tab === 'conversations') return allActivity.filter(a => /conv|message|reply|note/i.test(a.type || a.kind || ''));
+    if (tab === 'orders')        return allActivity.filter(a => /order|payment|refund|return|cancel/i.test(a.type || a.kind || ''));
+    if (tab === 'system_logs')   return allActivity.filter(a => /system|webhook|sync|reconciliation|writeback/i.test(a.type || a.kind || ''));
+    return allActivity;
+  })();
+
+  async function changeSegment(next: 'vip' | 'standard' | 'regular') {
+    if (savingSegment || customer.segment === next) return;
+    setSavingSegment(true);
+    setLocalMsg(null);
+    try {
+      await customersApi.update(contactId!, { segment: next });
+      setLocalMsg(`Segmento actualizado a ${next}`);
+      refetchState();
+      onUpdated?.();
+    } catch (err: any) {
+      setLocalMsg(err?.message || 'No se pudo actualizar el segmento');
+    } finally {
+      setSavingSegment(false);
+    }
+  }
+  async function changeRisk(next: 'low' | 'medium' | 'high' | 'critical') {
+    if (savingRisk || customer.riskLevel === next) return;
+    setSavingRisk(true);
+    setLocalMsg(null);
+    try {
+      await customersApi.update(contactId!, { risk_level: next });
+      setLocalMsg(`Nivel de riesgo: ${next}`);
+      refetchState();
+      onUpdated?.();
+    } catch (err: any) {
+      setLocalMsg(err?.message || 'No se pudo actualizar el riesgo');
+    } finally {
+      setSavingRisk(false);
+    }
+  }
+
+  const tabs: Array<{ id: typeof tab; label: string }> = [
+    { id: 'all_activity',  label: 'Actividad' },
+    { id: 'conversations', label: 'Conversaciones' },
+    { id: 'orders',        label: 'Pedidos' },
+    { id: 'system_logs',   label: 'Logs del sistema' },
+  ];
+
+  return (
+    <div className="absolute inset-0 z-40 bg-black/20 flex justify-end" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="h-full w-[640px] max-w-[100vw] bg-white border-l border-[#e9eae6] shadow-[-8px_0px_32px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 py-5 border-b border-[#e9eae6] flex-shrink-0">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center text-[16px] font-semibold text-white flex-shrink-0" style={{ backgroundColor: color }}>{initial}</div>
+            <div className="min-w-0">
+              <div className="text-[18px] font-bold text-[#1a1a1a] truncate" title={name}>{name}</div>
+              {email && <div className="text-[13px] text-[#646462] truncate" title={email}>{email}</div>}
+              {phone && <div className="text-[12.5px] text-[#646462] truncate">{phone}</div>}
+              <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                <span className={`px-2 py-[2px] rounded-full text-[11px] font-semibold border ${segment === 'VIP' ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6]'}`}>{segment}</span>
+                <span className={`px-2 py-[2px] rounded-full text-[11px] font-semibold border ${risk === 'Healthy' ? 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6]' : 'bg-white text-[#b91c1c] border-[#fcc]'}`}>{risk}</span>
+                {customer.company && <span className="px-2 py-[2px] rounded-full text-[11px] font-medium bg-[#f8f8f7] text-[#646462] border border-[#e9eae6]">{customer.company}</span>}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-[#f8f8f7] flex items-center justify-center flex-shrink-0" title="Cerrar (Esc)">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {stateLoading && <p className="px-6 py-5 text-[13px] text-[#646462]">Cargando datos del contacto…</p>}
+          {!stateLoading && (
+            <div className="flex flex-col gap-5 px-6 py-5">
+              {/* KPI grid */}
+              <div className="grid grid-cols-4 gap-3">
+                <KpiCard label="Casos abiertos" value={String(customer.openCases ?? 0)} />
+                <KpiCard label="Resueltos"      value={String(customer.problemsResolved ?? customer.problems_resolved ?? 0)} />
+                <KpiCard label="AI resueltos"   value={String(customer.aiImpactResolved ?? 0)} />
+                <KpiCard label="LTV"            value={ltvLabel} />
+              </div>
+
+              {/* Metadata grid */}
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px]">
+                <MetaRow label="Plan"            value={customer.plan || '—'} />
+                <MetaRow label="Próx. renovación" value={customer.nextRenewal ? new Date(customer.nextRenewal).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'} />
+                <MetaRow label="Empresa"         value={customer.company || '—'} />
+                <MetaRow label="Localización"    value={customer.location || '—'} />
+                <MetaRow label="Zona horaria"    value={customer.timezone || '—'} />
+                <MetaRow label="Cliente desde"   value={customer.createdAt ? new Date(customer.createdAt).getFullYear().toString() : '—'} />
+                <MetaRow label="Top issue"       value={customer.topIssue || '—'} />
+                <MetaRow label="Canal preferido" value={customer.preferredChannel || '—'} />
+              </div>
+
+              {/* Linked identities (Stripe / Shopify / OMS / …) */}
+              {linkedIdentities.length > 0 && (
+                <div>
+                  <h3 className="text-[12px] font-mono uppercase tracking-[0.6px] text-[#646462] mb-2">Identidades vinculadas</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {linkedIdentities.map((id, idx) => (
+                      <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[12px] text-[#1a1a1a]">
+                        <span className="font-semibold capitalize">{id.system || 'sistema'}</span>
+                        {id.externalId && <span className="font-mono text-[#646462]">{id.externalId}</span>}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Reconciliation panel — only when not Healthy */}
+              {reconUnhealthy && (
+                <div className="border border-[#e9eae6] rounded-[10px] p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-[13px] font-bold text-[#1a1a1a]">Reconciliación · {recon.status}</h3>
+                    <span className="text-[11px] text-[#646462]">Revisado {recon.lastChecked || '—'}</span>
+                  </div>
+                  <p className="text-[12.5px] text-[#646462] mb-3">{recon.mismatches || 0} discrepancias detectadas entre los sistemas conectados.</p>
+                  {Array.isArray(recon.domains) && recon.domains.length > 0 && (
+                    <ul className="flex flex-col gap-2">
+                      {recon.domains.slice(0, 4).map((d: any, idx: number) => (
+                        <li key={idx} className="bg-[#f8f8f7] rounded-[8px] p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[12.5px] font-semibold text-[#1a1a1a]">{d.domain || 'dominio'}</span>
+                            <span className="text-[11px] text-[#646462]">{d.severity || 'low'} · fuente: {d.sourceOfTruth || '—'}</span>
+                          </div>
+                          {d.context && <p className="text-[12px] text-[#646462] mt-1">{d.context}</p>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* Recent cases */}
+              {recentCases.length > 0 && (
+                <div>
+                  <h3 className="text-[12px] font-mono uppercase tracking-[0.6px] text-[#646462] mb-2">Casos recientes</h3>
+                  <ul className="flex flex-col gap-1.5">
+                    {recentCases.slice(0, 5).map((c: any, idx: number) => (
+                      <li key={c.id || idx} className="border border-[#e9eae6] rounded-[8px] px-3 py-2 flex items-center justify-between">
+                        <div className="min-w-0">
+                          <span className="text-[13px] font-medium text-[#1a1a1a]">{c.caseNumber || c.id || `Caso ${idx + 1}`}</span>
+                          {c.type && <span className="ml-2 text-[12px] text-[#646462]">{c.type}</span>}
+                        </div>
+                        {c.status && <span className="text-[11px] font-semibold text-[#646462] uppercase">{c.status}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Quick actions: change segment / risk via customersApi.update */}
+              <div>
+                <h3 className="text-[12px] font-mono uppercase tracking-[0.6px] text-[#646462] mb-2">Cambiar segmento</h3>
+                <div className="flex gap-1.5 flex-wrap">
+                  {(['vip', 'standard', 'regular'] as const).map(s => (
+                    <button
+                      key={s}
+                      onClick={() => changeSegment(s)}
+                      disabled={savingSegment || customer.segment === s}
+                      className={`h-7 px-2.5 rounded-full text-[12px] font-semibold border ${
+                        customer.segment === s ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white text-[#1a1a1a] border-[#e9eae6] hover:bg-[#f8f8f7]'
+                      } disabled:opacity-50`}
+                    >
+                      {s === 'vip' ? 'VIP' : s === 'standard' ? 'Standard' : 'Regular'}
+                    </button>
+                  ))}
+                </div>
+                <h3 className="text-[12px] font-mono uppercase tracking-[0.6px] text-[#646462] mt-4 mb-2">Cambiar riesgo</h3>
+                <div className="flex gap-1.5 flex-wrap">
+                  {(['low', 'medium', 'high', 'critical'] as const).map(r => (
+                    <button
+                      key={r}
+                      onClick={() => changeRisk(r)}
+                      disabled={savingRisk || customer.riskLevel === r}
+                      className={`h-7 px-2.5 rounded-full text-[12px] font-semibold border ${
+                        customer.riskLevel === r ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white text-[#1a1a1a] border-[#e9eae6] hover:bg-[#f8f8f7]'
+                      } disabled:opacity-50 capitalize`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+                {localMsg && <p className="mt-3 text-[12px] text-[#646462]">{localMsg}</p>}
+              </div>
+
+              {/* Activity tabs (matches the legacy Customers detail) */}
+              <div>
+                <div className="flex items-center gap-1 border-b border-[#e9eae6] mb-3">
+                  {tabs.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTab(t.id)}
+                      className={`text-[13px] h-8 px-3 -mb-px ${tab === t.id ? 'font-semibold text-[#1a1a1a] border-b-2 border-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {filteredActivity.length === 0 ? (
+                  <p className="text-[13px] text-[#646462]">Sin actividad en esta categoría.</p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {filteredActivity.slice(0, 50).map((a: any, idx: number) => (
+                      <li key={a.id || idx} className="border border-[#e9eae6] rounded-[8px] p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-[13px] font-medium text-[#1a1a1a]">{a.title || a.type || a.kind || 'Evento'}</p>
+                          <span className="text-[11px] text-[#a4a4a2] flex-shrink-0">{formatContactWhen(a.timestamp || a.createdAt || a.at || null)}</span>
+                        </div>
+                        {(a.summary || a.description || a.message) && (
+                          <p className="text-[12px] text-[#646462] mt-1">{a.summary || a.description || a.message}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KpiCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] p-3">
+      <p className="text-[10px] font-mono uppercase tracking-[0.6px] text-[#646462]">{label}</p>
+      <p className="text-[20px] font-bold text-[#1a1a1a] leading-none mt-1.5 truncate" title={value}>{value}</p>
+    </div>
+  );
+}
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <span className="text-[12px] text-[#646462] flex-shrink-0">{label}</span>
+      <span className="text-[13px] font-medium text-[#1a1a1a] truncate" title={value}>{value}</span>
+    </div>
+  );
+}
+
+// Toast for action feedback
+function ContactsToast({ message, type }: { message: string | null; type: 'success' | 'error' }) {
+  if (!message) return null;
+  return (
+    <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-[8px] text-[13px] font-medium shadow-[0px_4px_12px_rgba(20,20,20,0.15)] ${
+      type === 'error' ? 'bg-[#1a1a1a] text-white border border-[#b91c1c]' : 'bg-[#1a1a1a] text-white'
+    }`}>{message}</div>
   );
 }
 
@@ -4294,60 +4776,122 @@ function ImportHero() {
   );
 }
 
-function UsersTable() {
-  const rows = [
-    { color: "#61d65c", initial: "E", name: "Email", channel: "en [Demo]", city: "Desconocido" },
-    { color: "#85e0d9", initial: "M", name: "Messenger", channel: "en [Demo]", city: "Desconocido" },
-    { color: "#b09efa", initial: "P", name: "Phone & SMS", channel: "en [Demo]", city: "Desconocido" },
-    { color: "#61d65c", initial: "W", name: "WhatsApp & Social", channel: "en [Demo]", city: "Desconocido" },
-  ];
+function UsersTable({
+  rows, loading, error, totalLabel, onRowClick, onAction, onRefresh,
+}: {
+  rows: ContactRow[];
+  loading: boolean;
+  error: string | null;
+  totalLabel: string;
+  onRowClick: (id: string) => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [showVerifyBanner, setShowVerifyBanner] = useState(true);
+  const [view, setView] = useState<'grid' | 'list'>('list');
+
+  useEffect(() => { setSelected(new Set()); }, [rows]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(r => `${r.name} ${r.email} ${r.channel} ${r.city}`.toLowerCase().includes(q));
+  }, [rows, search]);
+
+  const allSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
+  function toggleAll() {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(filtered.map(r => r.id)));
+  }
+  function toggleOne(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  const selectionCount = selected.size;
+  const headerLabel = selectionCount > 0
+    ? `${selectionCount} seleccionado${selectionCount === 1 ? '' : 's'}`
+    : totalLabel;
   return (
     <div className="mx-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-[18px] font-semibold text-[#1a1a1a]">4 usuarios</span>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[18px] font-semibold text-[#1a1a1a]">{headerLabel}</span>
           <div className="flex items-center gap-1">
-            <button className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]">
+            <button
+              disabled={selectionCount === 0}
+              onClick={() => onAction(`Compón un nuevo mensaje para ${selectionCount} contacto${selectionCount === 1 ? '' : 's'} (próximamente)`)}
+              className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <img src={ICON_MSG} alt="" className="w-3.5 h-3.5" /><span>Nuevo mensaje</span>
             </button>
-            <button className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]">
+            <button
+              disabled={selectionCount === 0}
+              onClick={() => onAction('Etiquetado masivo: bloqueado por backend (tags endpoint pendiente)', 'error')}
+              className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <img src={ICON_TAG} alt="" className="w-3.5 h-3.5" /><span>Añadir etiqueta</span>
             </button>
-            <button className="flex items-center gap-1 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]">
-              <span>Más</span><img src={ICON_CHEVRON} alt="" className="w-3 h-3 opacity-40" />
+            <button
+              onClick={onRefresh}
+              className="flex items-center gap-1 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed]"
+              title="Recargar"
+            >
+              <span>Actualizar</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M8 3V1L4 5l4 4V7a4 4 0 11-4 4H2.5A5.5 5.5 0 108 3z"/></svg>
             </button>
           </div>
         </div>
-        <div className="flex items-center border border-[#e9eae6] rounded-[8px] overflow-hidden">
-          <button className="px-2 py-1.5 hover:bg-[#f8f8f7] border-r border-[#e9eae6]">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="1" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity="0.4"/>
-              <rect x="9" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity="0.4"/>
-              <rect x="1" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity="0.4"/>
-              <rect x="9" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity="0.4"/>
-            </svg>
-          </button>
-          <button className="px-2 py-1.5 bg-white hover:bg-[#f8f8f7]">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="1" y="3" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
-              <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
-              <rect x="1" y="11.5" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
-            </svg>
-          </button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <svg viewBox="0 0 16 16" className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar contactos…"
+              className="h-8 w-[220px] pl-8 pr-3 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+            />
+          </div>
+          <div className="flex items-center border border-[#e9eae6] rounded-[8px] overflow-hidden">
+            <button onClick={() => setView('grid')} className={`px-2 py-1.5 ${view === 'grid' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'} border-r border-[#e9eae6]`} title="Vista de cuadrícula">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity={view === 'grid' ? '0.9' : '0.4'}/>
+                <rect x="9" y="1" width="6" height="6" rx="1" fill="#1a1a1a" opacity={view === 'grid' ? '0.9' : '0.4'}/>
+                <rect x="1" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity={view === 'grid' ? '0.9' : '0.4'}/>
+                <rect x="9" y="9" width="6" height="6" rx="1" fill="#1a1a1a" opacity={view === 'grid' ? '0.9' : '0.4'}/>
+              </svg>
+            </button>
+            <button onClick={() => setView('list')} className={`px-2 py-1.5 ${view === 'list' ? 'bg-[#f8f8f7]' : 'bg-white hover:bg-[#f8f8f7]'}`} title="Vista de lista">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="3" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
+                <rect x="1" y="7.25" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
+                <rect x="1" y="11.5" width="14" height="1.5" rx="0.75" fill="#1a1a1a"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-between bg-[#f8f8f7] rounded-[6px] px-[15px] py-[10px] border border-[#e9eae6]">
-        <span className="text-[13px] text-[#1a1a1a]">
-          Exige la verificación de identidad para proteger los datos de tus usuarios.{" "}
-          <span className="underline cursor-pointer">Configurar verificación de identidad.</span>
-        </span>
-        <button className="text-[13px] text-[#646462] ml-4 hover:text-[#1a1a1a] flex-shrink-0">✕</button>
-      </div>
+      {showVerifyBanner && (
+        <div className="flex items-center justify-between bg-[#f8f8f7] rounded-[6px] px-[15px] py-[10px] border border-[#e9eae6]">
+          <span className="text-[13px] text-[#1a1a1a]">
+            Exige la verificación de identidad para proteger los datos de tus usuarios.{" "}
+            <span className="underline cursor-pointer">Configurar verificación de identidad.</span>
+          </span>
+          <button onClick={() => setShowVerifyBanner(false)} className="text-[13px] text-[#646462] ml-4 hover:text-[#1a1a1a] flex-shrink-0">✕</button>
+        </div>
+      )}
 
       <div className="w-full">
         <div className="flex items-center border-b border-[#e9eae6] pb-2 text-[12px] font-medium text-[#646462]">
-          <div className="w-7 flex-shrink-0" />
+          <div className="w-7 flex-shrink-0">
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 rounded border-[#e9eae6]" />
+          </div>
           <div className="flex-1 min-w-[180px]">Nombre</div>
           <div className="w-[130px] flex-shrink-0 flex items-center gap-1">
             <span className="text-[#e35712]">Last seen</span>
@@ -4359,29 +4903,49 @@ function UsersTable() {
           <div className="w-[90px] flex-shrink-0">Type</div>
           <div className="w-[110px] flex-shrink-0">First seen</div>
           <div className="w-[100px] flex-shrink-0">Signed up</div>
-          <div className="w-[100px] flex-shrink-0">Web sessions</div>
+          <div className="w-[100px] flex-shrink-0">Open cases</div>
           <div className="w-[100px] flex-shrink-0">City</div>
         </div>
-        {rows.map((row, i) => (
-          <div key={i} className="flex items-center border-b border-[#e9eae6] py-[10px] hover:bg-[#f8f8f7] cursor-pointer">
-            <div className="w-7 flex-shrink-0">
-              <input type="checkbox" className="w-3.5 h-3.5 rounded border-[#e9eae6]" />
+        {loading && rows.length === 0 && (
+          <div className="py-12 text-center text-[13px] text-[#646462]">Cargando contactos…</div>
+        )}
+        {error && (
+          <div className="py-12 text-center text-[13px] text-[#b91c1c]">No se pudo cargar la lista de contactos.</div>
+        )}
+        {!loading && !error && filtered.length === 0 && (
+          <div className="py-12 text-center text-[13px] text-[#646462]">
+            {search ? 'Ningún contacto coincide con la búsqueda.' : 'No hay contactos en este filtro.'}
+          </div>
+        )}
+        {filtered.map(row => (
+          <div
+            key={row.id}
+            onClick={() => onRowClick(row.id)}
+            className="flex items-center border-b border-[#e9eae6] py-[10px] hover:bg-[#f8f8f7] cursor-pointer"
+          >
+            <div className="w-7 flex-shrink-0" onClick={e => e.stopPropagation()}>
+              <input
+                type="checkbox"
+                checked={selected.has(row.id)}
+                onChange={() => toggleOne(row.id)}
+                className="w-3.5 h-3.5 rounded border-[#e9eae6]"
+              />
             </div>
-            <div className="flex-1 min-w-[180px] flex items-center gap-2">
+            <div className="flex-1 min-w-[180px] flex items-center gap-2 min-w-0">
               <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold text-white flex-shrink-0" style={{ backgroundColor: row.color }}>
                 {row.initial}
               </div>
-              <div className="flex flex-col">
-                <span className="text-[13px] font-medium text-[#1a1a1a]">{row.name}</span>
-                <span className="text-[12px] text-[#646462]">{row.channel}</span>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[13px] font-medium text-[#1a1a1a] truncate" title={row.name}>{row.name}</span>
+                <span className="text-[12px] text-[#646462] truncate" title={row.email || row.channel}>{row.email || row.channel}</span>
               </div>
             </div>
-            <div className="w-[130px] flex-shrink-0 text-[13px] text-[#1a1a1a]">hace 40 minutos</div>
-            <div className="w-[90px] flex-shrink-0 text-[13px] text-[#1a1a1a]">Usuario</div>
-            <div className="w-[110px] flex-shrink-0 text-[13px] text-[#1a1a1a]">hace 40 min</div>
-            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#1a1a1a]">hace 40 min</div>
-            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#1a1a1a]">0</div>
-            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#646462]">{row.city}</div>
+            <div className="w-[130px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{formatContactWhen(row.lastSeenAt)}</div>
+            <div className="w-[90px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{row.type}</div>
+            <div className="w-[110px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{formatContactWhen(row.createdAt)}</div>
+            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{formatContactWhen(row.createdAt)}</div>
+            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#1a1a1a]">{row.openCases}</div>
+            <div className="w-[100px] flex-shrink-0 text-[13px] text-[#646462] truncate" title={row.city}>{row.city}</div>
           </div>
         ))}
       </div>
@@ -4389,17 +4953,47 @@ function UsersTable() {
   );
 }
 
-function ContactsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v: View) => void; onBack: () => void }) {
+// Shared body for ContactsView / AllLeadsView. The user's spec: all 4 sidebar
+// tabs (All users / All leads / Active / New) show the same full list of
+// contacts; the only thing that changes is the title in the page header.
+function ContactsCommon({
+  view, onNavigate, onBack,
+}: {
+  view: View;
+  onNavigate: (v: View) => void;
+  onBack: () => void;
+}) {
+  const { all, users, active, fresh, leads, loading, error, refetch } = useContactsData();
+  const [openProfileId, setOpenProfileId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const counts = {
+    allUsers: users.length,
+    allLeads: leads.length,
+    active:   active.length,
+    fresh:    fresh.length,
+  };
+
+  // Title reflects which sidebar tab the URL currently points at, but the
+  // dataset is always the full canonical list (`all`).
+  const title = view === 'allLeads' ? 'All leads' : 'Active';
+  const totalLabel = `${all.length} ${all.length === 1 ? 'contacto' : 'contactos'}`;
+
   return (
-    <div className="flex flex-1 min-w-0 h-full overflow-hidden">
-      {/* Contacts sidebar panel */}
+    <div className="relative flex flex-1 min-w-0 h-full overflow-hidden">
       <div className="h-full flex-shrink-0 pt-3 pb-3 pl-1">
-        <div className="h-full rounded-[16px] overflow-hidden bg-[#fbfbf9] drop-shadow-[0px_1px_2px_rgba(20,20,20,0.15)] w-[230px]">
-          <ContactsSidebar view={view} onNavigate={onNavigate} />
+        <div className="h-full rounded-[12px] overflow-hidden w-[236px]">
+          <ContactsSidebar view={view} onNavigate={onNavigate} counts={counts} />
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2 bg-[#e7e2fd] border border-[#b09efa] rounded-[10px] mx-4 mt-3 flex-shrink-0">
           <span className="text-[13px] text-[#1a1a1a]">
@@ -4408,14 +5002,34 @@ function ContactsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
           </span>
           <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">✕</button>
         </div>
-        <ContactsPageHeader onBack={onBack} />
+        <ContactsPageHeader onBack={onBack} title={title} onCreate={() => setCreateOpen(true)} />
         <div className="flex-1 overflow-y-auto min-h-0">
-          <ImportHero />
-          <UsersTable />
+          {!loading && all.length === 0 && <ImportHero />}
+          <UsersTable
+            rows={all}
+            loading={loading}
+            error={error}
+            totalLabel={totalLabel}
+            onRowClick={setOpenProfileId}
+            onAction={(msg, type = 'success') => setToast({ msg, type })}
+            onRefresh={() => { refetch(); setToast({ msg: 'Lista actualizada', type: 'success' }); }}
+          />
         </div>
       </div>
+
+      <NewContactModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => { refetch(); setToast({ msg: 'Contacto creado', type: 'success' }); }}
+      />
+      <ContactProfileDrawer contactId={openProfileId} onClose={() => setOpenProfileId(null)} onUpdated={refetch} />
+      <ContactsToast message={toast?.msg ?? null} type={toast?.type ?? 'success'} />
     </div>
   );
+}
+
+function ContactsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v: View) => void; onBack: () => void }) {
+  return <ContactsCommon view={view} onNavigate={onNavigate} onBack={onBack} />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4536,45 +5150,7 @@ function AllLeadsTableSection() {
 }
 
 function AllLeadsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v: View) => void; onBack: () => void }) {
-  return (
-    <div className="flex flex-1 min-w-0 h-full overflow-hidden">
-      <div className="h-full flex-shrink-0 pt-3 pb-3 pl-1">
-        <div className="h-full rounded-[16px] overflow-hidden bg-[#fbfbf9] drop-shadow-[0px_1px_2px_rgba(20,20,20,0.15)] w-[230px]">
-          <ContactsSidebar view={view} onNavigate={onNavigate} />
-        </div>
-      </div>
-
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden bg-white rounded-[16px] mx-2 my-2 shadow-[0px_1px_2px_rgba(20,20,20,0.15)]">
-        {/* Page header */}
-        <div className="flex items-center justify-between px-6 pt-4 pb-3 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#f8f8f7] hover:bg-[#efefed]">
-              <img src={ICON_BACK} alt="" className="w-4 h-4" />
-            </button>
-            <span className="text-[20px] font-semibold text-[#1a1a1a] tracking-[-0.4px]">All leads</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="flex items-center gap-1.5 bg-[#f8f8f7] rounded-full pl-[12px] pr-[6px] py-[8px] text-[14px] font-semibold text-[#1a1a1a] hover:bg-[#efefed]">
-              <img src={ICON_LEARN} alt="" className="w-4 h-4" />
-              <span>Aprender</span>
-              <img src={ICON_CHEVRON} alt="" className="w-3.5 h-3.5 opacity-40" />
-            </button>
-            <button className="flex items-center gap-1.5 bg-[#222] rounded-full pl-[12px] pr-[6px] py-[8px] text-[14px] font-semibold text-[#f8f8f7] hover:bg-[#333]">
-              <img src={ICON_NEW_USER} alt="" className="w-4 h-4" />
-              <span>Nuevos usuarios o leads</span>
-              <img src={ICON_CHEVRON} alt="" className="w-3.5 h-3.5 opacity-60" />
-            </button>
-          </div>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <AllLeadsHero />
-          <AllLeadsTableSection />
-        </div>
-      </div>
-    </div>
-  );
+  return <ContactsCommon view={view} onNavigate={onNavigate} onBack={onBack} />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
