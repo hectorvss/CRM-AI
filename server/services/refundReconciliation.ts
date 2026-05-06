@@ -143,6 +143,60 @@ export async function reconcileStripeChargeRefunded(
     },
   });
 
+  // ── Reconcile linked returns ─────────────────────────────────────
+  // If the original refund came through the return flow (caller set
+  // reconciliation_details.writeback_source='return-refund'), or if the
+  // payment's order has any return rows in writeback_pending state,
+  // flip those returns to refunded too. Keeps the Returns table in sync
+  // with the actual PSP state and lets the agent dashboard show the
+  // closed loop without manual intervention.
+  const orderIdsToCheck = new Set<string>();
+  if (existingRecon?.return_id) {
+    // Direct link via reconciliation_details.return_id (set by the
+    // return-refund flow above)
+    const { data: directReturn } = await supabase
+      .from('returns')
+      .select('id, status, refund_status')
+      .eq('id', existingRecon.return_id)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .maybeSingle();
+    if (directReturn) {
+      await supabase.from('returns').update({
+        status: 'refunded',
+        refund_status: 'refunded',
+        linked_refund_id: stripeRefundId ?? directReturn.refund_status,
+        last_update: `Stripe confirmed refund ${stripeRefundId ?? ''} (writeback reconciled)`,
+        system_states: { canonical: 'refunded', psp: 'refunded' },
+        updated_at: now,
+      }).eq('id', directReturn.id);
+      logger.info('refundReconciliation: linked return reconciled', { returnId: directReturn.id, paymentId: payment.id });
+    }
+  }
+  // Also reconcile any returns linked to the same order that are still
+  // in writeback_pending state (covers the approval flow where the
+  // payment's reconciliation_details came from the approval, not the
+  // return).
+  const { data: paymentOrderId } = await supabase
+    .from('payments').select('order_id').eq('id', payment.id).maybeSingle();
+  if (paymentOrderId?.order_id) orderIdsToCheck.add(paymentOrderId.order_id);
+  for (const orderId of orderIdsToCheck) {
+    const { data: pendingReturns } = await supabase
+      .from('returns')
+      .select('id, status, refund_status')
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .eq('order_id', orderId)
+      .in('refund_status', ['writeback_pending', 'pending']);
+    for (const r of (pendingReturns ?? [])) {
+      await supabase.from('returns').update({
+        refund_status: 'refunded',
+        last_update: `Reconciled with payment refund ${stripeRefundId ?? ''}`,
+        updated_at: now,
+      }).eq('id', r.id);
+    }
+  }
+
   logger.info('refundReconciliation: payment reconciled', {
     paymentId: payment.id, externalPaymentId, stripeRefundId, source, previousRefundStatus,
   });

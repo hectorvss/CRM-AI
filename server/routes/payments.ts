@@ -15,6 +15,7 @@ import { logger } from '../utils/logger.js';
 import type { WritableRefunds } from '../integrations/types.js';
 import { getRefundThreshold } from '../utils/refundThreshold.js';
 import { isValidStatus, invalidStatusMessage, RETURN_STATUSES, RETURN_INSPECTION_STATUSES, RETURN_REFUND_STATUSES } from '../utils/statusEnums.js';
+import { getSupabaseAdmin } from '../db/supabase.js';
 
 const router = Router();
 const commerceRepo = createCommerceRepository();
@@ -565,25 +566,120 @@ returnsRouter.patch('/:id/status', requirePermission('returns.write'), async (re
     const inspectionStatus = inspectionStatusFromBody ?? stripNA(ret.inspection_status);
     const refundStatus = refundStatusFromBody ?? stripNA(ret.refund_status);
 
+    // ── Connector writeback when the return becomes refunded ─────────
+    // If this status update flips the return into a refund-issuing state
+    // (status='refunded' OR refund_status='refunded'), find the linked
+    // payment and attempt the Stripe refund. Mirrors the approval flow
+    // so returns refunded directly (no approval gate) still hit the PSP.
+    const becomingRefunded =
+      status === 'refunded' ||
+      refundStatusFromBody === 'refunded' ||
+      refundStatusFromBody === 'approved';
+    const wasAlreadyRefunded =
+      ret.status === 'refunded' || ret.refund_status === 'refunded';
+
+    let returnWriteback: { executedVia: string; externalId: string | null; error: string | null; paymentId: string | null } | null = null;
+
+    if (becomingRefunded && !wasAlreadyRefunded) {
+      const { attemptReturnRefundWriteback } = await import('../services/connectorWriteback.js');
+      const refundAmount = Number(req.body?.amount ?? ret.return_value ?? 0);
+      const idempotencyKey = `return-${req.params.id}-refund`;
+      const wb = await attemptReturnRefundWriteback(
+        scope,
+        ret,
+        refundAmount,
+        req.body?.reason ?? `Return ${ret.external_return_id ?? req.params.id} refunded`,
+        idempotencyKey,
+      );
+      returnWriteback = {
+        executedVia: wb.executedVia,
+        externalId: wb.externalId,
+        error: wb.error,
+        paymentId: wb.paymentId,
+      };
+
+      // Sync the linked payment row when the writeback succeeded so the
+      // payment + return reconciliation_details stay in lockstep.
+      if (wb.paymentId && wb.paymentRow) {
+        const supabase = getSupabaseAdmin();
+        const existingRefundIds = Array.isArray(wb.paymentRow.refund_ids) ? wb.paymentRow.refund_ids : [];
+        const newRefundId = wb.externalId ?? `rf_return_${req.params.id}`;
+        const isFull = refundAmount >= Number(wb.paymentRow.amount ?? 0);
+        await supabase.from('payments')
+          .update({
+            status: 'refunded',
+            refund_status: wb.executedVia === 'stripe' ? 'succeeded' : 'writeback_pending',
+            refund_amount: refundAmount,
+            refund_type: isFull ? 'full' : 'partial',
+            refund_ids: existingRefundIds.includes(newRefundId) ? existingRefundIds : [...existingRefundIds, newRefundId],
+            system_states: {
+              ...(wb.paymentRow.system_states ?? {}),
+              canonical: 'refunded',
+              crm_ai: 'refunded',
+              psp: wb.executedVia === 'stripe' ? 'refunded' : 'pending_writeback',
+            },
+            reconciliation_details: {
+              return_id: req.params.id,
+              writeback_executed_via: wb.executedVia,
+              writeback_external_id: wb.externalId,
+              writeback_error: wb.error,
+              writeback_at: new Date().toISOString(),
+              writeback_source: 'return-refund',
+            },
+            last_update: wb.error
+              ? `Return ${req.params.id} refunded locally; PSP writeback failed: ${wb.error}`
+              : `Return ${req.params.id} refunded via ${wb.executedVia}`,
+          })
+          .eq('id', wb.paymentId)
+          .eq('tenant_id', scope.tenantId)
+          .eq('workspace_id', scope.workspaceId);
+      }
+    }
+
     await commerceRepo.updateReturn(scope, req.params.id, {
       status,
       inspection_status: inspectionStatus,
       refund_status: refundStatus,
       approval_status: req.body?.approval_status ?? ret.approval_status,
-      last_update: req.body?.reason ?? `Return status changed to ${status}`,
+      last_update: returnWriteback?.error
+        ? `Return refunded locally; PSP writeback failed: ${returnWriteback.error}`
+        : returnWriteback
+          ? `Return refunded via ${returnWriteback.executedVia}`
+          : (req.body?.reason ?? `Return status changed to ${status}`),
       system_states: { ...(ret.system_states ?? {}), canonical: status, crm_ai: status },
+      // Persist writeback metadata on the return too so the UI can
+      // recompute its own writeback badge once we ship that follow-up.
+      ...(returnWriteback ? {
+        linked_refund_id: returnWriteback.externalId ?? undefined,
+      } : {}),
     });
+
     await auditRepository.log(scope, {
       actorId: req.userId || 'system',
-      action: 'RETURN_STATUS_UPDATED',
+      action: returnWriteback?.error
+        ? 'RETURN_REFUND_WRITEBACK_FAILED'
+        : returnWriteback
+          ? 'RETURN_REFUNDED_VIA_STATUS_UPDATE'
+          : 'RETURN_STATUS_UPDATED',
       entityType: 'return',
       entityId: req.params.id,
-      oldValue: { status: ret.status },
-      newValue: { status },
-      metadata: { reason: req.body?.reason ?? null },
+      oldValue: { status: ret.status, refund_status: ret.refund_status },
+      newValue: { status, refund_status: refundStatus, executed_via: returnWriteback?.executedVia ?? null },
+      metadata: {
+        reason: req.body?.reason ?? null,
+        ...(returnWriteback ? {
+          executed_via: returnWriteback.executedVia,
+          payment_id: returnWriteback.paymentId,
+          stripe_refund_id: returnWriteback.externalId,
+          writeback_error: returnWriteback.error,
+          connector_writeback: returnWriteback.executedVia === 'stripe' ? 'completed' : 'pending',
+          idempotency_key: `return-${req.params.id}-refund`,
+        } : {}),
+      },
     });
+
     const updated = await commerceRepo.getReturn(scope, req.params.id);
-    res.json({ success: true, return: updated });
+    res.json({ success: true, return: updated, ...(returnWriteback ? { writeback: returnWriteback } : {}) });
   } catch (error) {
     console.error('Error updating return status:', error);
     res.status(500).json({ error: 'Internal server error' });
