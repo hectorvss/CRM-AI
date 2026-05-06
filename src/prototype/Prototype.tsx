@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { aiApi, attachmentsApi, casesApi, customersApi, iamApi, macrosApi } from '../api/client';
+import { aiApi, attachmentsApi, casesApi, customersApi, iamApi, knowledgeApi, macrosApi } from '../api/client';
 import { useApi } from '../api/hooks';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
@@ -10441,7 +10441,9 @@ function ReportsView() {
 // KNOWLEDGE HUB VIEW (Figma nodes 1:25483, 1:26753, 1:28237, 1:29395, 1:31138)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type KnowledgeSubView = 'fuentes' | 'contenido' | 'articulos' | 'centroAyuda';
+type KnowledgeSubView = 'fuentes' | 'contenido' | 'articulos' | 'gaps' | 'pruebas' | 'centroAyuda' | 'carpeta';
+// When sub === 'carpeta' we keep the active domain id in a parallel state so
+// the same UI shell renders a single-folder filtered article list.
 
 const KH_PUBLIC_ARTICLES: { provider: string; status: string; action: string; configured: boolean }[] = [
   { provider: 'Intercom', status: '1 artículo',     action: 'Agregar artículo',       configured: true  },
@@ -10557,9 +10559,19 @@ function KhSection({
   );
 }
 
-function KnowledgeSidebar({ sub, onSelect }: { sub: KnowledgeSubView; onSelect: (s: KnowledgeSubView) => void }) {
+function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCreateFolder, refreshKey }: {
+  sub: KnowledgeSubView;
+  onSelect: (s: KnowledgeSubView) => void;
+  activeFolderId?: string | null;
+  onSelectFolder?: (id: string) => void;
+  onCreateFolder?: () => void;
+  refreshKey?: number;
+}) {
   // Match Inbox sidebar UI: w-236, header 20px font-semibold tracking -0.4px, items text-13.
-  const [openContenido, setOpenContenido] = useState(sub === 'contenido' || sub === 'articulos');
+  const [openContenido, setOpenContenido] = useState(sub === 'contenido' || sub === 'articulos' || sub === 'gaps' || sub === 'pruebas');
+  const [openCarpetas, setOpenCarpetas] = useState(true);
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [refreshKey ?? 0], []);
+  const domains = Array.isArray(domainsData) ? domainsData : [];
   const itemCls = (isActive: boolean) =>
     `relative flex items-center gap-2 h-8 pl-3 pr-3 py-1 rounded-lg cursor-pointer text-[13px] w-full text-left transition-colors ${
       isActive
@@ -10582,7 +10594,7 @@ function KnowledgeSidebar({ sub, onSelect }: { sub: KnowledgeSubView; onSelect: 
           <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-13" size={16} /></span>
           <span className="flex-1">Fuentes</span>
         </button>
-        {/* Contenido — expandable group */}
+        {/* Contenido — expandable group, with new sub-items */}
         <button onClick={() => setOpenContenido(o => !o)} className={itemCls(false)}>
           <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-14" size={16} /></span>
           <span className="flex-1">Contenido</span>
@@ -10590,13 +10602,56 @@ function KnowledgeSidebar({ sub, onSelect }: { sub: KnowledgeSubView; onSelect: 
         </button>
         {openContenido && (
           <div className="flex flex-col pl-7 mt-0.5 mb-0.5 gap-0.5">
+            <button onClick={() => onSelect('contenido')} className={itemCls(sub === 'contenido')}>
+              <span className="flex-1">Resumen</span>
+            </button>
             <button onClick={() => onSelect('articulos')} className={itemCls(sub === 'articulos')}>
-              <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-14" size={16} /></span>
               <span className="flex-1">Artículos</span>
+            </button>
+            <button onClick={() => onSelect('gaps')} className={itemCls(sub === 'gaps')}>
+              <span className="flex-1">Vacíos</span>
+            </button>
+            <button onClick={() => onSelect('pruebas')} className={itemCls(sub === 'pruebas')}>
+              <span className="flex-1">Probar</span>
             </button>
           </div>
         )}
-        <button onClick={() => onSelect('centroAyuda')} className={itemCls(sub === 'centroAyuda')}>
+        {/* Carpetas / Domains — collapsible group with + to create new */}
+        <div className="flex items-center gap-1 mt-2 pl-3 pr-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[#646462]">
+          <button onClick={() => setOpenCarpetas(o => !o)} className="flex-1 flex items-center gap-1.5 hover:text-[#1a1a1a] py-1.5">
+            <Chev open={openCarpetas} />
+            <span>Carpetas ({domains.length})</span>
+          </button>
+          {onCreateFolder && (
+            <button
+              onClick={onCreateFolder}
+              title="Nueva carpeta"
+              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            </button>
+          )}
+        </div>
+        {openCarpetas && (
+          <div className="flex flex-col mt-0.5 gap-0.5">
+            {domains.length === 0 && (
+              <p className="px-3 py-1.5 text-[12px] text-[#646462] italic">Sin carpetas todavía.</p>
+            )}
+            {domains.map((d: any) => (
+              <button
+                key={d.id}
+                onClick={() => onSelectFolder?.(d.id)}
+                className={itemCls(sub === 'carpeta' && activeFolderId === d.id)}
+              >
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.5">
+                  <path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" />
+                </svg>
+                <span className="flex-1 truncate">{d.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <button onClick={() => onSelect('centroAyuda')} className={`mt-2 ${itemCls(sub === 'centroAyuda')}`}>
           <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-20" size={16} /></span>
           <span className="flex-1">Centro de ayuda</span>
           <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-21" size={16} /></span>
@@ -11102,6 +11157,540 @@ function KnowledgeContenido() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Knowledge — full back-end-wired components (ported from src/components/Knowledge.tsx)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const KH_TYPE_OPTIONS = [
+  { value: 'ARTICLE',  label: 'Artículo' },
+  { value: 'POLICY',   label: 'Política' },
+  { value: 'SNIPPET',  label: 'Fragmento' },
+  { value: 'PLAYBOOK', label: 'Playbook' },
+];
+
+// KnowledgeFolderModal — create a new domain (carpeta) via knowledgeApi.createDomain.
+function KnowledgeFolderModal({
+  onClose,
+  onCreated,
+  onAction,
+}: {
+  onClose: () => void;
+  onCreated: (id: string) => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    try {
+      const created = await knowledgeApi.createDomain({ name: trimmed, description: description.trim() || undefined });
+      const id = created?.id || created?.domain?.id;
+      if (id) onCreated(String(id));
+      else { onAction('Carpeta creada'); onClose(); }
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo crear la carpeta', 'error');
+    } finally { setBusy(false); }
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Nueva carpeta de conocimiento</h3>
+        <p className="text-[12.5px] text-[#646462] mb-4">Las carpetas (dominios) agrupan artículos y políticas. Fin y Copilot pueden filtrar por carpeta.</p>
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Nombre</label>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) submit(); }}
+          placeholder="Reembolsos, Envíos, Facturación…"
+          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
+        />
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Descripción (opcional)</label>
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Política y artículos relacionados con…"
+          className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+          <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? 'Creando…' : 'Crear carpeta'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// KnowledgeArticleEditor — create + edit individual articles.
+function KnowledgeArticleEditor({
+  initial,
+  domains,
+  onClose,
+  onSaved,
+  onAction,
+}: {
+  initial?: any;
+  domains: Array<{ id: string; name: string }>;
+  onClose: () => void;
+  onSaved: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  const [title, setTitle] = useState(initial?.title || '');
+  const [content, setContent] = useState(initial?.content || initial?.body || '');
+  const [type, setType] = useState<string>(String(initial?.type || 'ARTICLE').toUpperCase());
+  const [domainId, setDomainId] = useState<string>(initial?.domain_id || initial?.domainId || (domains[0]?.id ?? ''));
+  const [visibility, setVisibility] = useState<'public' | 'internal'>(initial?.visibility === 'internal' ? 'internal' : 'public');
+  const [busy, setBusy] = useState(false);
+
+  async function save(publish = false) {
+    if (!title.trim() || busy) return;
+    setBusy(true);
+    try {
+      const payload: Record<string, any> = {
+        title: title.trim(),
+        content: content,
+        type: type.toLowerCase(),
+        visibility,
+      };
+      if (domainId) payload.domain_id = domainId;
+      let id = initial?.id;
+      if (id) {
+        await knowledgeApi.updateArticle(id, payload);
+      } else {
+        const created = await knowledgeApi.createArticle(payload);
+        id = created?.id;
+      }
+      if (publish && id) {
+        await knowledgeApi.publishArticle(id);
+        onAction('Artículo publicado');
+      } else {
+        onAction(initial?.id ? 'Artículo actualizado' : 'Artículo creado');
+      }
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo guardar', 'error');
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[640px] max-h-[80vh] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5 flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">{initial?.id ? 'Editar artículo' : 'Nuevo artículo'}</h3>
+        <input
+          autoFocus
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Título del artículo"
+          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13.5px] font-semibold focus:outline-none focus:border-[#1a1a1a] mb-3"
+        />
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <select
+            value={type}
+            onChange={e => setType(e.target.value)}
+            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+          >
+            {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select
+            value={visibility}
+            onChange={e => setVisibility(e.target.value as 'public' | 'internal')}
+            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+          >
+            <option value="public">Público</option>
+            <option value="internal">Interno</option>
+          </select>
+          <select
+            value={domainId}
+            onChange={e => setDomainId(e.target.value)}
+            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+          >
+            <option value="">Sin carpeta</option>
+            {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+        <textarea
+          value={content}
+          onChange={e => setContent(e.target.value)}
+          placeholder="Cuerpo del artículo. Usa Markdown si quieres dar formato."
+          className="flex-1 min-h-[200px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-[#e9eae6]">
+          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+          <button onClick={() => save(false)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-white border border-[#1a1a1a] text-[13px] font-semibold text-[#1a1a1a] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar borrador'}</button>
+          <button onClick={() => save(true)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? '…' : 'Publicar'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// KnowledgeArticulos — list + filter + create + publish, optionally scoped to a folder.
+function KnowledgeArticulos({
+  onAction,
+  onRefresh,
+  domainFilter,
+}: {
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+  domainFilter: string | null;
+}) {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published'>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [editing, setEditing] = useState<any | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
+  const domains = (Array.isArray(domainsData) ? domainsData : []).map((d: any) => ({ id: d.id, name: d.name }));
+
+  const { data: articlesData, loading } = useApi(
+    () => {
+      const params: Record<string, string> = {};
+      if (domainFilter) params.domain_id = domainFilter;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (typeFilter !== 'all')   params.type   = typeFilter.toLowerCase();
+      if (search.trim())          params.q      = search.trim();
+      return knowledgeApi.listArticles(Object.keys(params).length ? params : undefined);
+    },
+    [domainFilter, statusFilter, typeFilter, search, refreshKey],
+    [],
+  );
+  const articles = Array.isArray(articlesData) ? articlesData : [];
+  const folderName = domainFilter ? (domains.find(d => d.id === domainFilter)?.name || 'Carpeta') : null;
+
+  async function publish(id: string) {
+    try {
+      await knowledgeApi.publishArticle(id);
+      onAction('Artículo publicado');
+      setRefreshKey(k => k + 1);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo publicar', 'error');
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          {folderName && (
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5">
+              <path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/>
+            </svg>
+          )}
+          <h1 className="text-[18px] font-bold text-[#1a1a1a] truncate">{folderName || 'Artículos'}</h1>
+          <span className="text-[12.5px] text-[#646462]">· {articles.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCreating(true)}
+            className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nuevo artículo
+          </button>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 px-6 py-3 border-b border-[#f1f1ee] flex-shrink-0">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por título o contenido…"
+          className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
+          <option value="all">Estado: cualquiera</option>
+          <option value="published">Publicado</option>
+          <option value="draft">Borrador</option>
+        </select>
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
+          <option value="all">Tipo: cualquiera</option>
+          {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {loading && <div className="px-6 py-8 text-[13px] text-[#646462]">Cargando artículos…</div>}
+        {!loading && articles.length === 0 && (
+          <div className="px-6 py-12 text-center">
+            <p className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Sin artículos todavía</p>
+            <p className="text-[13px] text-[#646462] mb-4">Crea el primer artículo {folderName ? `en "${folderName}"` : ''} para que Fin y Copilot puedan responder con tu conocimiento.</p>
+            <button
+              onClick={() => setCreating(true)}
+              className="inline-flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-4 py-2 text-[13px] font-semibold hover:bg-black"
+            >+ Crear artículo</button>
+          </div>
+        )}
+        {!loading && articles.length > 0 && (
+          <table className="w-full">
+            <thead className="bg-[#f8f8f7] sticky top-0">
+              <tr className="text-[11px] font-semibold uppercase tracking-wide text-[#646462]">
+                <th className="text-left px-6 py-2.5">Título</th>
+                <th className="text-left px-3 py-2.5">Tipo</th>
+                <th className="text-left px-3 py-2.5">Carpeta</th>
+                <th className="text-left px-3 py-2.5">Estado</th>
+                <th className="text-left px-3 py-2.5">Actualizado</th>
+                <th className="text-right px-6 py-2.5">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {articles.map((a: any) => (
+                <tr key={a.id} className="border-t border-[#f1f1ee] hover:bg-[#f8f8f7]">
+                  <td className="px-6 py-3 text-[13px] text-[#1a1a1a] font-medium max-w-[320px] truncate">{a.title || 'Sin título'}</td>
+                  <td className="px-3 py-3 text-[12.5px] text-[#646462]">{titleCase(a.type || 'article')}</td>
+                  <td className="px-3 py-3 text-[12.5px] text-[#646462] truncate max-w-[140px]">{a.domain_name || a.domain || '—'}</td>
+                  <td className="px-3 py-3">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${a.status === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                      {a.status === 'published' ? 'Publicado' : 'Borrador'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-[12px] text-[#646462]">{relativeTime(a.updated_at || a.created_at)}</td>
+                  <td className="px-6 py-3 text-right">
+                    <button onClick={() => setEditing(a)} className="text-[12px] font-semibold text-[#1a1a1a] hover:underline mr-3">Editar</button>
+                    {a.status !== 'published' && (
+                      <button onClick={() => publish(a.id)} className="text-[12px] font-semibold text-[#15803d] hover:underline">Publicar</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {(creating || editing) && (
+        <KnowledgeArticleEditor
+          initial={editing || (domainFilter ? { domain_id: domainFilter } : undefined)}
+          domains={domains}
+          onClose={() => { setCreating(false); setEditing(null); }}
+          onSaved={() => { setRefreshKey(k => k + 1); onRefresh(); }}
+          onAction={onAction}
+        />
+      )}
+    </>
+  );
+}
+
+// KnowledgeGaps — surfaces missing/stale topics so the agent can fill them.
+function KnowledgeGaps({ onAction }: { onAction: (msg: string, type?: 'success' | 'error') => void }) {
+  const { data: gapsData, loading, error } = useApi(() => knowledgeApi.gaps(), [], null);
+  const stats = gapsData?.stats || {};
+  const gaps: any[] = Array.isArray(gapsData?.gaps) ? gapsData.gaps : [];
+  const problems: any[] = Array.isArray(gapsData?.problemArticles) ? gapsData.problemArticles : [];
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 1.5l7 13H1z"/><path d="M8 6v3M8 11v.5"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Vacíos de conocimiento</h1>
+        </div>
+        <button
+          onClick={() => onAction('Listo para crear artículos a partir de los vacíos')}
+          className="text-[13px] font-medium text-[#1a1a1a] hover:underline"
+        >Aprender ↗</button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-4">
+        {loading && <p className="text-[13px] text-[#646462]">Calculando vacíos…</p>}
+        {error && <p className="text-[13px] text-[#b91c1c]">No se pudo cargar el análisis.</p>}
+        {!loading && gapsData && (
+          <>
+            <div className="grid grid-cols-4 gap-3">
+              <div className="bg-white border border-[#e9eae6] rounded-[10px] p-3">
+                <p className="text-[11px] uppercase tracking-wide text-[#646462] font-semibold">Sin respuesta</p>
+                <p className="text-[20px] font-semibold text-[#1a1a1a] mt-1">{stats.unanswered ?? 0}</p>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[10px] p-3">
+                <p className="text-[11px] uppercase tracking-wide text-[#646462] font-semibold">Escalados</p>
+                <p className="text-[20px] font-semibold text-[#1a1a1a] mt-1">{stats.escalations ?? 0}</p>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[10px] p-3">
+                <p className="text-[11px] uppercase tracking-wide text-[#646462] font-semibold">Cobertura desactualizada</p>
+                <p className="text-[20px] font-semibold text-[#1a1a1a] mt-1">{stats.staleCoverage ?? 0}</p>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[10px] p-3">
+                <p className="text-[11px] uppercase tracking-wide text-[#646462] font-semibold">Score cobertura</p>
+                <p className="text-[20px] font-semibold text-[#1a1a1a] mt-1">{stats.coverageScore ?? '—'}</p>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-2">Vacíos detectados ({gaps.length})</h3>
+              {gaps.length === 0 && <p className="text-[12.5px] text-[#646462]">Todo cubierto. La IA ha podido responder a las preguntas recientes.</p>}
+              <div className="flex flex-col gap-2">
+                {gaps.slice(0, 12).map((g: any, i: number) => (
+                  <div key={`${g.topic}-${i}`} className="bg-white border border-[#e9eae6] rounded-[10px] p-3">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">{g.topic}</p>
+                      <span className={`text-[10.5px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${
+                        g.status === 'missing' ? 'bg-[#fee2e2] text-[#b91c1c]' :
+                        g.status === 'stale'   ? 'bg-[#fef3c7] text-[#92400e]' :
+                        g.status === 'weak'    ? 'bg-[#dbeafe] text-[#1e40af]' :
+                                                 'bg-[#dcfce7] text-[#15803d]'
+                      }`}>
+                        {g.status === 'missing' ? 'Falta' : g.status === 'stale' ? 'Desactualizado' : g.status === 'weak' ? 'Débil' : 'Cubierto'}
+                      </span>
+                    </div>
+                    <p className="text-[12px] text-[#646462] mb-1.5">{g.whyItMatters || g.recommendedAction}</p>
+                    <div className="flex items-center gap-3 text-[11px] text-[#646462]">
+                      <span>{g.frequency || 0} preguntas</span>
+                      {g.unresolvedCases > 0 && <span>· {g.unresolvedCases} sin resolver</span>}
+                      {g.escalations > 0 && <span>· {g.escalations} escalados</span>}
+                      {g.suggestedDomain && <span>· Sugerido: {g.suggestedDomain}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {problems.length > 0 && (
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-2">Artículos con problemas ({problems.length})</h3>
+                <div className="flex flex-col gap-2">
+                  {problems.slice(0, 8).map((p: any) => (
+                    <div key={p.id} className="bg-white border border-[#e9eae6] rounded-[10px] p-3 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{p.title}</p>
+                        <p className="text-[12px] text-[#646462]">{p.issue} · {p.citationCount || 0} citas</p>
+                      </div>
+                      <span className="text-[11px] text-[#646462] flex-shrink-0">{p.domain}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+// KnowledgePruebas — query playground that calls /knowledge/test.
+function KnowledgePruebas({ onAction }: { onAction: (msg: string, type?: 'success' | 'error') => void }) {
+  const [query, setQuery] = useState('Política de reembolso de plan anual');
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  async function run() {
+    if (!query.trim() || running) return;
+    setRunning(true);
+    try {
+      const payload = await knowledgeApi.test({ query: query.trim(), agentId: null, selectedArticleIds: [] });
+      setResult(payload);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo ejecutar la prueba', 'error');
+      setResult(null);
+    } finally { setRunning(false); }
+  }
+
+  const verdict = result?.summary?.verdict;
+  const verdictClass = verdict === 'strong' ? 'bg-[#dcfce7] text-[#15803d]'
+                     : verdict === 'partial' ? 'bg-[#fef3c7] text-[#92400e]'
+                     : verdict === 'missing' ? 'bg-[#fee2e2] text-[#b91c1c]'
+                     : 'bg-[#f3f3f1] text-[#646462]';
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Probar conocimiento</h1>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && query.trim()) run(); }}
+            placeholder="Pregunta como un cliente: «¿cómo cancelo mi plan anual?»"
+            className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+          />
+          <button
+            onClick={run}
+            disabled={!query.trim() || running}
+            className="h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
+          >{running ? 'Probando…' : 'Probar'}</button>
+        </div>
+
+        {!result && !running && (
+          <div className="bg-white border border-[#e9eae6] rounded-[10px] p-5 text-center">
+            <p className="text-[13.5px] font-semibold text-[#1a1a1a] mb-1">Lanza una consulta de prueba</p>
+            <p className="text-[12.5px] text-[#646462]">Te dirá qué artículos cubren la pregunta, qué se le bloquea por permisos, y qué falta.</p>
+          </div>
+        )}
+
+        {result && (
+          <>
+            <div className="bg-white border border-[#e9eae6] rounded-[10px] p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[13px] font-semibold text-[#1a1a1a]">Veredicto</p>
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${verdictClass}`}>
+                  {verdict || 'desconocido'}
+                </span>
+              </div>
+              <p className="text-[12.5px] text-[#1a1a1a] leading-5">{result.summary?.suggestedNextStep || 'Sin sugerencia.'}</p>
+              <div className="flex items-center gap-3 mt-2 text-[11px] text-[#646462]">
+                <span>{result.summary?.matchedSources ?? 0} fuentes encontradas</span>
+                <span>· {result.summary?.healthySources ?? 0} accesibles</span>
+                <span>· {result.summary?.blockedSources ?? 0} bloqueadas</span>
+              </div>
+            </div>
+
+            {result.answerPreview && (
+              <div className="bg-[#f4f4ff] border border-[#dadbf3] rounded-[10px] p-4">
+                <p className="text-[11px] uppercase tracking-wide text-[#646462] font-semibold mb-1">Respuesta sugerida</p>
+                <p className="text-[12.5px] text-[#1a1a1a] leading-5 whitespace-pre-wrap">{result.answerPreview}</p>
+              </div>
+            )}
+
+            {Array.isArray(result.accessibleResults) && result.accessibleResults.length > 0 && (
+              <div>
+                <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Artículos accesibles ({result.accessibleResults.length})</h3>
+                <div className="flex flex-col gap-2">
+                  {result.accessibleResults.map((r: any) => (
+                    <div key={r.id} className="bg-white border border-[#e9eae6] rounded-[10px] p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">{r.title}</p>
+                        <span className="text-[11px] text-[#646462] flex-shrink-0">{Math.round((r.relevance_score || 0) * 100)}%</span>
+                      </div>
+                      <p className="text-[12px] text-[#646462] mt-1">{r.excerpt || r.whyMatched}</p>
+                      <p className="text-[11px] text-[#646462] mt-1">{r.domain_name || '—'} · {r.status}{r.outdated_flag ? ' · desactualizado' : ''}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {Array.isArray(result.blockedResults) && result.blockedResults.length > 0 && (
+              <div>
+                <h3 className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Bloqueado por permisos ({result.blockedResults.length})</h3>
+                <div className="flex flex-col gap-2">
+                  {result.blockedResults.map((r: any) => (
+                    <div key={r.id} className="bg-[#fef7f7] border border-[#fde2e2] rounded-[10px] p-3">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a]">{r.title}</p>
+                      <p className="text-[12px] text-[#b91c1c] mt-0.5">{r.blocked_reason}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 function KnowledgePlaceholder({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <>
@@ -11120,11 +11709,22 @@ function KnowledgePlaceholder({ title, subtitle }: { title: string; subtitle: st
 
 function KnowledgeView() {
   const [sub, setSub] = useState<KnowledgeSubView>('fuentes');
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    setToast({ message, type });
+    window.setTimeout(() => setToast(null), 2500);
+  }
   function renderSub() {
     switch (sub) {
       case 'fuentes':     return <KnowledgeFuentes />;
       case 'contenido':   return <KnowledgeContenido />;
-      case 'articulos':   return <KnowledgePlaceholder title="Artículos" subtitle="Gestiona los artículos públicos e internos disponibles para Fin y Copilot." />;
+      case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} />;
+      case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} />;
+      case 'gaps':        return <KnowledgeGaps   onAction={showToast} />;
+      case 'pruebas':     return <KnowledgePruebas onAction={showToast} />;
       case 'centroAyuda': return <KnowledgePlaceholder title="Centro de ayuda" subtitle="Configuración del Help Center y experiencias de cliente autoservicio." />;
     }
   }
@@ -11132,11 +11732,37 @@ function KnowledgeView() {
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
-        <KnowledgeSidebar sub={sub} onSelect={setSub} />
+        <KnowledgeSidebar
+          sub={sub}
+          onSelect={(s) => { setSub(s); if (s !== 'carpeta') setActiveFolderId(null); }}
+          activeFolderId={activeFolderId}
+          onSelectFolder={(id) => { setActiveFolderId(id); setSub('carpeta'); }}
+          onCreateFolder={() => setShowFolderModal(true)}
+          refreshKey={refreshKey}
+        />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           {renderSub()}
         </div>
       </div>
+      {showFolderModal && (
+        <KnowledgeFolderModal
+          onClose={() => setShowFolderModal(false)}
+          onCreated={(id) => {
+            setRefreshKey(k => k + 1);
+            setActiveFolderId(id);
+            setSub('carpeta');
+            showToast('Carpeta creada');
+          }}
+          onAction={showToast}
+        />
+      )}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full text-[13px] font-semibold shadow-lg ${
+          toast.type === 'success' ? 'bg-[#222] text-white' : 'bg-red-600 text-white'
+        }`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }

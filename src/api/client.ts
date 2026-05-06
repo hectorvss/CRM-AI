@@ -564,6 +564,12 @@ export const knowledgeApi = {
       body: '{}',
     }),
   listDomains: () => request<any>('/knowledge/domains').then(unwrapList),
+  createDomain: (payload: { name: string; description?: string; parent_id?: string | null }) =>
+    request<any>('/knowledge/domains', { method: 'POST', body: JSON.stringify(payload) }),
+  updateDomain: (id: string, payload: Record<string, any>) =>
+    request<any>(`/knowledge/domains/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteDomain: (id: string) =>
+    request<any>(`/knowledge/domains/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   listPolicies: () => request<any>('/knowledge/policies').then(unwrapList),
 };
 
