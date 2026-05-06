@@ -461,6 +461,35 @@ async function handleWebhookProcess(
     void autoCreateCaseAndFireEvent(scope, payload.source, topic, parsedBody, extraction, log)
       .catch((err) => log.warn('webhookProcess: auto-case/event dispatch failed', { error: String(err?.message ?? err) }));
   });
+
+  // ── 9. Refund reconciliation sweep ──────────────────────────────────────
+  // When Stripe sends `charge.refunded`, find the local payment row and
+  // flip its writeback status from 'writeback_pending' to 'succeeded' so
+  // the Approvals UI badge updates from amber to green. Also handles
+  // refunds initiated externally (Stripe dashboard) where we still want
+  // local state in sync.
+  if (payload.source === 'stripe' && (topic === 'charge.refunded' || topic.startsWith('refund.'))) {
+    setImmediate(() => {
+      void (async () => {
+        try {
+          const { reconcileStripeChargeRefunded } = await import('../../services/refundReconciliation.js');
+          const result = await reconcileStripeChargeRefunded(scope, parsedBody);
+          if (result.matched) {
+            log.info('webhookProcess: refund reconciliation succeeded', {
+              paymentId: result.paymentId, source: result.source,
+              previousStatus: result.previousStatus, refundId: result.refundId,
+            });
+          } else {
+            log.debug('webhookProcess: refund reconciliation found no local payment', {
+              externalPaymentId: parsedBody?.data?.object?.id,
+            });
+          }
+        } catch (err: any) {
+          log.warn('webhookProcess: refund reconciliation failed', { error: String(err?.message ?? err) });
+        }
+      })();
+    });
+  }
 }
 
 // ── Topics that should automatically create a CRM case ───────────────────────
