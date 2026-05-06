@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { aiApi, attachmentsApi, casesApi, customersApi, iamApi, knowledgeApi, macrosApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi } from '../api/client';
 import { useApi } from '../api/hooks';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
@@ -10559,12 +10559,14 @@ function KhSection({
   );
 }
 
-function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCreateFolder, refreshKey }: {
+function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCreateFolder, onEditFolder, onDeleteFolder, refreshKey }: {
   sub: KnowledgeSubView;
   onSelect: (s: KnowledgeSubView) => void;
   activeFolderId?: string | null;
   onSelectFolder?: (id: string) => void;
   onCreateFolder?: () => void;
+  onEditFolder?: (folder: { id: string; name: string; description?: string }) => void;
+  onDeleteFolder?: (folder: { id: string; name: string }) => void;
   refreshKey?: number;
 }) {
   // Match Inbox sidebar UI: w-236, header 20px font-semibold tracking -0.4px, items text-13.
@@ -10638,16 +10640,39 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
               <p className="px-3 py-1.5 text-[12px] text-[#646462] italic">Sin carpetas todavía.</p>
             )}
             {domains.map((d: any) => (
-              <button
-                key={d.id}
-                onClick={() => onSelectFolder?.(d.id)}
-                className={itemCls(sub === 'carpeta' && activeFolderId === d.id)}
-              >
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.5">
-                  <path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" />
-                </svg>
-                <span className="flex-1 truncate">{d.name}</span>
-              </button>
+              <div key={d.id} className="group relative">
+                <button
+                  onClick={() => onSelectFolder?.(d.id)}
+                  className={itemCls(sub === 'carpeta' && activeFolderId === d.id)}
+                >
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.5">
+                    <path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" />
+                  </svg>
+                  <span className="flex-1 truncate pr-9">{d.name}</span>
+                </button>
+                {(onEditFolder || onDeleteFolder) && (
+                  <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 bg-[#f8f8f7] rounded">
+                    {onEditFolder && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onEditFolder({ id: d.id, name: d.name, description: d.description }); }}
+                        title="Renombrar carpeta"
+                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#e9eae6] text-[#646462] hover:text-[#1a1a1a]"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M11.5 1.5l3 3-9 9H2.5v-3z"/></svg>
+                      </button>
+                    )}
+                    {onDeleteFolder && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeleteFolder({ id: d.id, name: d.name }); }}
+                        title="Borrar carpeta"
+                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#fef7f7] text-[#646462] hover:text-[#b91c1c]"
+                      >
+                        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M5 3V2.5A1.5 1.5 0 016.5 1h3A1.5 1.5 0 0111 2.5V3h3v1.5h-1V13a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 014 13V4.5H3V3h2zm1.5 1.5V13h3V4.5h-3z"/></svg>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -10793,6 +10818,36 @@ function KhChecklist({ title, items }: { title: string; items: { label: string; 
 
 function KnowledgeFuentes() {
   const [tab, setTab] = useState<KhTab>('all');
+  // Real connector status. We don't replace the static catalog (it's the
+  // canonical product list shown in Figma), we just enrich each row with
+  // live "configured" + "status" info when the user has actually wired the
+  // matching connector to Clain.
+  const { data: connectorsData } = useApi(() => connectorsApi.list(), [], []);
+  const connectors = Array.isArray(connectorsData) ? connectorsData : [];
+  const connectorsByProvider = useMemo(() => {
+    const map = new Map<string, any>();
+    connectors.forEach((c: any) => {
+      const key = String(c.provider || c.name || c.type || '').toLowerCase();
+      if (key) map.set(key, c);
+    });
+    return map;
+  }, [connectors]);
+  function enrich(items: typeof KH_PUBLIC_ARTICLES) {
+    return items.map(it => {
+      const live = connectorsByProvider.get(it.provider.toLowerCase());
+      if (!live) return it;
+      const status = live.status === 'connected' || live.status === 'active'
+        ? `Conectado · ${live.last_synced_at ? `actualizado ${relativeTime(live.last_synced_at)}` : 'sin sincronizar todavía'}`
+        : live.status === 'error' ? `Error: ${live.last_error || 'revisar configuración'}`
+        : it.status;
+      return {
+        ...it,
+        configured: true,
+        status,
+        action: live.status === 'error' ? 'Reconectar' : 'Administrar',
+      };
+    });
+  }
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
@@ -10864,17 +10919,17 @@ function KnowledgeFuentes() {
         <KhSection
           title="Artículos públicos"
           description="Permite que Fin AI Agent y Copilot usen artículos públicos de tu centro de ayuda."
-          items={KH_PUBLIC_ARTICLES}
+          items={enrich(KH_PUBLIC_ARTICLES)}
         />
         <KhSection
           title="Artículos internos"
           description="Proporcione a Fin AI Agent y Copilot el conocimiento interno que solo está disponible para usted y su equipo."
-          items={KH_INTERNAL_ARTICLES}
+          items={enrich(KH_INTERNAL_ARTICLES)}
         />
         <KhSection
           title="Conversaciones"
           description="Deja que Copilot utilice las conversaciones de tu equipo y los folios de atención de los clientes de los últimos 4 meses."
-          items={KH_CONVERSATIONS}
+          items={enrich(KH_CONVERSATIONS)}
         />
         <KhSection
           title="Macros"
@@ -11170,28 +11225,38 @@ const KH_TYPE_OPTIONS = [
 
 // KnowledgeFolderModal — create a new domain (carpeta) via knowledgeApi.createDomain.
 function KnowledgeFolderModal({
+  initial,
   onClose,
-  onCreated,
+  onSaved,
   onAction,
 }: {
+  // Pass a domain to enter edit mode; omit for create mode.
+  initial?: { id: string; name: string; description?: string } | null;
   onClose: () => void;
-  onCreated: (id: string) => void;
+  onSaved: (id: string) => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
 }) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const editing = !!initial?.id;
+  const [name, setName] = useState(initial?.name || '');
+  const [description, setDescription] = useState(initial?.description || '');
   const [busy, setBusy] = useState(false);
   async function submit() {
     const trimmed = name.trim();
     if (!trimmed || busy) return;
     setBusy(true);
     try {
-      const created = await knowledgeApi.createDomain({ name: trimmed, description: description.trim() || undefined });
-      const id = created?.id || created?.domain?.id;
-      if (id) onCreated(String(id));
-      else { onAction('Carpeta creada'); onClose(); }
+      if (editing && initial?.id) {
+        await knowledgeApi.updateDomain(initial.id, { name: trimmed, description: description.trim() || null });
+        onAction('Carpeta actualizada');
+        onSaved(initial.id);
+      } else {
+        const created = await knowledgeApi.createDomain({ name: trimmed, description: description.trim() || undefined });
+        const id = created?.id || created?.domain?.id;
+        if (id) onSaved(String(id));
+        else { onAction('Carpeta creada'); onClose(); }
+      }
     } catch (err: any) {
-      onAction(err?.message || 'No se pudo crear la carpeta', 'error');
+      onAction(err?.message || (editing ? 'No se pudo actualizar' : 'No se pudo crear la carpeta'), 'error');
     } finally { setBusy(false); }
   }
   return (
@@ -11200,7 +11265,7 @@ function KnowledgeFolderModal({
         className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Nueva carpeta de conocimiento</h3>
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">{editing ? 'Renombrar carpeta' : 'Nueva carpeta de conocimiento'}</h3>
         <p className="text-[12.5px] text-[#646462] mb-4">Las carpetas (dominios) agrupan artículos y políticas. Fin y Copilot pueden filtrar por carpeta.</p>
         <label className="block text-[12px] font-semibold text-[#646462] mb-1">Nombre</label>
         <input
@@ -11220,7 +11285,7 @@ function KnowledgeFolderModal({
         />
         <div className="flex items-center justify-end gap-2 mt-4">
           <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
-          <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? 'Creando…' : 'Crear carpeta'}</button>
+          <button onClick={submit} disabled={busy || !name.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? (editing ? 'Guardando…' : 'Creando…') : (editing ? 'Guardar' : 'Crear carpeta')}</button>
         </div>
       </div>
     </div>
@@ -11247,6 +11312,98 @@ function KnowledgeArticleEditor({
   const [domainId, setDomainId] = useState<string>(initial?.domain_id || initial?.domainId || (domains[0]?.id ?? ''));
   const [visibility, setVisibility] = useState<'public' | 'internal'>(initial?.visibility === 'internal' ? 'internal' : 'public');
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Knowledge sheet (structured fields the AI agent reads) ────────────────
+  // Backend stores them as JSON in content_structured. The simple editor stays
+  // exactly the same; "Estructura para IA" toggles a panel where each array
+  // field is a textarea (one line per item).
+  const [showSheet, setShowSheet] = useState(false);
+  const seedSheet = (() => {
+    const raw = initial?.content_structured;
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return null; } }
+    return null;
+  })();
+  const [sheetSummary,    setSheetSummary]    = useState<string>(String(seedSheet?.summary ?? ''));
+  const [sheetPolicy,     setSheetPolicy]     = useState<string>(String(seedSheet?.policy ?? ''));
+  const [sheetAllowed,    setSheetAllowed]    = useState<string>((seedSheet?.allowed    || []).join('\n'));
+  const [sheetBlocked,    setSheetBlocked]    = useState<string>((seedSheet?.blocked    || []).join('\n'));
+  const [sheetEscalation, setSheetEscalation] = useState<string>((seedSheet?.escalation || []).join('\n'));
+  const [sheetEvidence,   setSheetEvidence]   = useState<string>((seedSheet?.evidence   || []).join('\n'));
+  const [sheetAgentNotes, setSheetAgentNotes] = useState<string>((seedSheet?.agent_notes || []).join('\n'));
+  const [sheetExamples,   setSheetExamples]   = useState<string>((seedSheet?.examples   || []).join('\n'));
+  const [sheetKeywords,   setSheetKeywords]   = useState<string>((seedSheet?.keywords   || []).join('\n'));
+  function buildContentStructured() {
+    const lines = (s: string) => s.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const sheet = {
+      summary:     sheetSummary.trim(),
+      policy:      sheetPolicy.trim(),
+      allowed:     lines(sheetAllowed),
+      blocked:     lines(sheetBlocked),
+      escalation:  lines(sheetEscalation),
+      evidence:    lines(sheetEvidence),
+      agent_notes: lines(sheetAgentNotes),
+      examples:    lines(sheetExamples),
+      keywords:    lines(sheetKeywords),
+    };
+    // Only include if at least one field has content; otherwise leave null.
+    const hasContent = sheet.summary || sheet.policy
+      || sheet.allowed.length || sheet.blocked.length || sheet.escalation.length
+      || sheet.evidence.length || sheet.agent_notes.length
+      || sheet.examples.length || sheet.keywords.length;
+    return hasContent ? sheet : null;
+  }
+
+  // Import a PDF / Markdown / text file and stuff its text into the body.
+  async function handleImport(file: File) {
+    setImporting(true);
+    try {
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      let extracted = '';
+      if (file.type === 'application/pdf' || ext === 'pdf') {
+        const pdfjs: any = await import('pdfjs-dist/build/pdf.mjs');
+        const data = await file.arrayBuffer();
+        const doc = await pdfjs.getDocument({ data, disableWorker: true }).promise;
+        const pages: string[] = [];
+        for (let i = 1; i <= doc.numPages; i++) {
+          const page = await doc.getPage(i);
+          const text = await page.getTextContent();
+          const pageText = (text.items as Array<{ str?: string }>)
+            .map(it => it.str ?? '')
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (pageText) pages.push(pageText);
+        }
+        extracted = pages.join('\n\n').trim();
+      } else {
+        extracted = (await file.text()).trim();
+      }
+      if (!extracted) {
+        onAction('No se ha podido extraer texto del archivo', 'error');
+        return;
+      }
+      // Append (or replace if body is empty) and use filename as title fallback.
+      setContent(prev => prev ? `${prev}\n\n---\n\n${extracted}` : extracted);
+      if (!title.trim()) {
+        const stem = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim();
+        if (stem) setTitle(stem.replace(/\b\w/g, c => c.toUpperCase()));
+      }
+      // POLICY heuristic from legacy: filename or first heading hints.
+      if (/policy|pol[ií]tica/i.test(file.name) || /^#{1,3}\s+(policy|pol[ií]tica)/i.test(extracted)) {
+        setType('POLICY');
+      }
+      onAction(`Importado: ${file.name} (${extracted.length.toLocaleString('es-ES')} caracteres)`);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo importar el archivo', 'error');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   async function save(publish = false) {
     if (!title.trim() || busy) return;
@@ -11259,6 +11416,8 @@ function KnowledgeArticleEditor({
         visibility,
       };
       if (domainId) payload.domain_id = domainId;
+      const structured = buildContentStructured();
+      if (structured) payload.content_structured = structured;
       let id = initial?.id;
       if (id) {
         await knowledgeApi.updateArticle(id, payload);
@@ -11322,12 +11481,80 @@ function KnowledgeArticleEditor({
           value={content}
           onChange={e => setContent(e.target.value)}
           placeholder="Cuerpo del artículo. Usa Markdown si quieres dar formato."
-          className="flex-1 min-h-[200px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+          className="flex-1 min-h-[160px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
         />
-        <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-[#e9eae6]">
-          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
-          <button onClick={() => save(false)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-white border border-[#1a1a1a] text-[13px] font-semibold text-[#1a1a1a] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar borrador'}</button>
-          <button onClick={() => save(true)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? '…' : 'Publicar'}</button>
+        {/* Estructura para IA — extra fields the AI agent reads. Toggleable so
+            the simple editor stays clean. Each list field is one item per line. */}
+        <button
+          onClick={() => setShowSheet(s => !s)}
+          className="mt-3 self-start text-[12px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1"
+        >
+          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current transition-transform ${showSheet ? 'rotate-90' : ''}`}><path d="M5 4l5 4-5 4z"/></svg>
+          Estructura para la IA (opcional)
+        </button>
+        {showSheet && (
+          <div className="mt-2 grid grid-cols-2 gap-3 max-h-[260px] overflow-y-auto pr-1">
+            <div className="col-span-2">
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Resumen ejecutivo</label>
+              <textarea value={sheetSummary} onChange={e => setSheetSummary(e.target.value)} placeholder="Una frase con la idea clave que el agente debe recordar." className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Política / regla principal</label>
+              <textarea value={sheetPolicy} onChange={e => setSheetPolicy(e.target.value)} placeholder="La política aplicable, redactada para que el agente la cite literal." className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+            <div>
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Permitido (uno por línea)</label>
+              <textarea value={sheetAllowed} onChange={e => setSheetAllowed(e.target.value)} placeholder={'Reembolso completo en 14 días\nCambio de talla sin coste'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+            <div>
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Bloqueado (uno por línea)</label>
+              <textarea value={sheetBlocked} onChange={e => setSheetBlocked(e.target.value)} placeholder={'Reembolso fuera de plazo\nDescuento sobre artículos en oferta'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+            <div>
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Escalación (uno por línea)</label>
+              <textarea value={sheetEscalation} onChange={e => setSheetEscalation(e.target.value)} placeholder={'Pedido > 500€\nCliente VIP'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+            <div>
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Evidencia / fuentes (uno por línea)</label>
+              <textarea value={sheetEvidence} onChange={e => setSheetEvidence(e.target.value)} placeholder={'Cláusula 4.2 del contrato\nManual interno OPS-12'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+            <div>
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Notas para el agente</label>
+              <textarea value={sheetAgentNotes} onChange={e => setSheetAgentNotes(e.target.value)} placeholder={'Pide siempre nº de pedido antes de empezar.'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+            <div>
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Ejemplos de pregunta</label>
+              <textarea value={sheetExamples} onChange={e => setSheetExamples(e.target.value)} placeholder={'¿Puedo devolver un artículo en oferta?\n¿En cuánto recibo el reembolso?'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Palabras clave (separadas por línea o coma)</label>
+              <textarea value={sheetKeywords} onChange={e => setSheetKeywords(e.target.value.replace(/,/g, '\n'))} placeholder={'reembolso\ndevolución\nrefund'} className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+            </div>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-[#e9eae6]">
+          <div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy || importing}
+              className="h-8 px-3 rounded-full bg-[#f8f8f7] text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50"
+              title="Importar PDF o Markdown al cuerpo"
+            >
+              📄 {importing ? 'Importando…' : 'Importar archivo'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.md,.markdown,.txt,text/markdown,application/pdf,text/plain"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleImport(f); }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+            <button onClick={() => save(false)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-white border border-[#1a1a1a] text-[13px] font-semibold text-[#1a1a1a] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar borrador'}</button>
+            <button onClick={() => save(true)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? '…' : 'Publicar'}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -11339,17 +11566,41 @@ function KnowledgeArticulos({
   onAction,
   onRefresh,
   domainFilter,
+  externalDraft,
+  onConsumeDraft,
 }: {
   onAction: (msg: string, type?: 'success' | 'error') => void;
   onRefresh: () => void;
   domainFilter: string | null;
+  // When the Vacíos sub-view sends the user here with a pre-filled draft
+  // ("Crear borrador desde vacío"), open the editor automatically with this
+  // initial payload, then call onConsumeDraft to clear the parent.
+  externalDraft?: { title: string; content: string; type?: string } | null;
+  onConsumeDraft?: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published'>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [healthFilter, setHealthFilter] = useState<'all' | 'ok' | 'stale'>('all');
   const [editing, setEditing] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
+  // Bulk-select state for the publish-multi flow.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Pop the editor when an external draft (from Vacíos) is handed in.
+  useEffect(() => {
+    if (externalDraft) {
+      setEditing({
+        title: externalDraft.title,
+        content: externalDraft.content,
+        type: externalDraft.type || 'ARTICLE',
+        domain_id: domainFilter || '',
+      });
+      onConsumeDraft?.();
+    }
+  }, [externalDraft, domainFilter, onConsumeDraft]);
 
   const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
   const domains = (Array.isArray(domainsData) ? domainsData : []).map((d: any) => ({ id: d.id, name: d.name }));
@@ -11366,8 +11617,40 @@ function KnowledgeArticulos({
     [domainFilter, statusFilter, typeFilter, search, refreshKey],
     [],
   );
-  const articles = Array.isArray(articlesData) ? articlesData : [];
+  const allArticles = Array.isArray(articlesData) ? articlesData : [];
+  // Health is returned per-row by the backend ('ok' | 'stale'). Client-side
+  // filter so we don't have to round-trip on each toggle.
+  const articles = healthFilter === 'all'
+    ? allArticles
+    : allArticles.filter((a: any) => String(a.health || 'ok').toLowerCase() === healthFilter);
   const folderName = domainFilter ? (domains.find(d => d.id === domainFilter)?.name || 'Carpeta') : null;
+
+  // Reset selection when filters change to avoid leaking ids the user can no
+  // longer see in the list.
+  useEffect(() => { setSelectedIds(new Set()); }, [domainFilter, statusFilter, typeFilter, search, healthFilter, refreshKey]);
+
+  function toggleSelect(id: string) {
+    setSelectedIds(s => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleSelectAll() {
+    setSelectedIds(s => {
+      const visible = articles.map((a: any) => a.id);
+      const allSelected = visible.length > 0 && visible.every((id: string) => s.has(id));
+      if (allSelected) {
+        const next = new Set(s);
+        visible.forEach((id: string) => next.delete(id));
+        return next;
+      }
+      const next = new Set(s);
+      visible.forEach((id: string) => next.add(id));
+      return next;
+    });
+  }
+  const draftSelectedCount = articles.filter((a: any) => selectedIds.has(a.id) && a.status !== 'published').length;
 
   async function publish(id: string) {
     try {
@@ -11377,6 +11660,20 @@ function KnowledgeArticulos({
     } catch (err: any) {
       onAction(err?.message || 'No se pudo publicar', 'error');
     }
+  }
+  async function bulkPublish() {
+    if (bulkBusy || draftSelectedCount === 0) return;
+    setBulkBusy(true);
+    let ok = 0, fail = 0;
+    for (const a of articles) {
+      if (!selectedIds.has(a.id) || a.status === 'published') continue;
+      try { await knowledgeApi.publishArticle(a.id); ok++; }
+      catch { fail++; }
+    }
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    setRefreshKey(k => k + 1);
+    onAction(fail === 0 ? `${ok} artículo${ok === 1 ? '' : 's'} publicado${ok === 1 ? '' : 's'}` : `${ok} publicados, ${fail} fallaron`, fail === 0 ? 'success' : 'error');
   }
 
   return (
@@ -11417,7 +11714,30 @@ function KnowledgeArticulos({
           <option value="all">Tipo: cualquiera</option>
           {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        <select value={healthFilter} onChange={e => setHealthFilter(e.target.value as any)} className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]">
+          <option value="all">Salud: cualquiera</option>
+          <option value="ok">Al día</option>
+          <option value="stale">Desactualizados</option>
+        </select>
       </div>
+      {/* Bulk-action bar — appears as soon as one or more rows are selected. */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between gap-3 px-6 py-2 bg-[#f4f4ff] border-b border-[#dadbf3]">
+          <span className="text-[12.5px] text-[#1a1a1a]">
+            <strong>{selectedIds.size}</strong> seleccionado{selectedIds.size === 1 ? '' : 's'} · {draftSelectedCount} borrador{draftSelectedCount === 1 ? '' : 'es'}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setSelectedIds(new Set())} className="text-[12px] font-semibold text-[#646462] hover:text-[#1a1a1a]">Limpiar</button>
+            <button
+              onClick={bulkPublish}
+              disabled={bulkBusy || draftSelectedCount === 0}
+              className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
+            >
+              {bulkBusy ? 'Publicando…' : `Publicar ${draftSelectedCount} borrador${draftSelectedCount === 1 ? '' : 'es'}`}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto min-h-0">
         {loading && <div className="px-6 py-8 text-[13px] text-[#646462]">Cargando artículos…</div>}
         {!loading && articles.length === 0 && (
@@ -11434,34 +11754,60 @@ function KnowledgeArticulos({
           <table className="w-full">
             <thead className="bg-[#f8f8f7] sticky top-0">
               <tr className="text-[11px] font-semibold uppercase tracking-wide text-[#646462]">
-                <th className="text-left px-6 py-2.5">Título</th>
+                <th className="px-3 py-2.5 w-8">
+                  <input
+                    type="checkbox"
+                    checked={articles.length > 0 && articles.every((a: any) => selectedIds.has(a.id))}
+                    onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 accent-[#1a1a1a] cursor-pointer"
+                    title="Seleccionar todo"
+                  />
+                </th>
+                <th className="text-left px-3 py-2.5">Título</th>
                 <th className="text-left px-3 py-2.5">Tipo</th>
                 <th className="text-left px-3 py-2.5">Carpeta</th>
                 <th className="text-left px-3 py-2.5">Estado</th>
+                <th className="text-left px-3 py-2.5">Salud</th>
                 <th className="text-left px-3 py-2.5">Actualizado</th>
                 <th className="text-right px-6 py-2.5">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {articles.map((a: any) => (
-                <tr key={a.id} className="border-t border-[#f1f1ee] hover:bg-[#f8f8f7]">
-                  <td className="px-6 py-3 text-[13px] text-[#1a1a1a] font-medium max-w-[320px] truncate">{a.title || 'Sin título'}</td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#646462]">{titleCase(a.type || 'article')}</td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#646462] truncate max-w-[140px]">{a.domain_name || a.domain || '—'}</td>
-                  <td className="px-3 py-3">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${a.status === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
-                      {a.status === 'published' ? 'Publicado' : 'Borrador'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 text-[12px] text-[#646462]">{relativeTime(a.updated_at || a.created_at)}</td>
-                  <td className="px-6 py-3 text-right">
-                    <button onClick={() => setEditing(a)} className="text-[12px] font-semibold text-[#1a1a1a] hover:underline mr-3">Editar</button>
-                    {a.status !== 'published' && (
-                      <button onClick={() => publish(a.id)} className="text-[12px] font-semibold text-[#15803d] hover:underline">Publicar</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {articles.map((a: any) => {
+                const isStale = String(a.health || 'ok').toLowerCase() === 'stale';
+                return (
+                  <tr key={a.id} className={`border-t border-[#f1f1ee] hover:bg-[#f8f8f7] ${selectedIds.has(a.id) ? 'bg-[#f4f4ff]' : ''}`}>
+                    <td className="px-3 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(a.id)}
+                        onChange={() => toggleSelect(a.id)}
+                        className="w-3.5 h-3.5 accent-[#1a1a1a] cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-[13px] text-[#1a1a1a] font-medium max-w-[300px] truncate">{a.title || 'Sin título'}</td>
+                    <td className="px-3 py-3 text-[12.5px] text-[#646462]">{titleCase(a.type || 'article')}</td>
+                    <td className="px-3 py-3 text-[12.5px] text-[#646462] truncate max-w-[140px]">{a.domain_name || a.domain || '—'}</td>
+                    <td className="px-3 py-3">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full ${a.status === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                        {a.status === 'published' ? 'Publicado' : 'Borrador'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full ${isStale ? 'bg-[#fef3c7] text-[#92400e]' : 'bg-[#dcfce7] text-[#15803d]'}`}>
+                        {isStale ? 'Desactualizado' : 'Al día'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-[12px] text-[#646462]">{relativeTime(a.updated_at || a.created_at)}</td>
+                    <td className="px-6 py-3 text-right">
+                      <button onClick={() => setEditing(a)} className="text-[12px] font-semibold text-[#1a1a1a] hover:underline mr-3">Editar</button>
+                      {a.status !== 'published' && (
+                        <button onClick={() => publish(a.id)} className="text-[12px] font-semibold text-[#15803d] hover:underline">Publicar</button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -11480,7 +11826,10 @@ function KnowledgeArticulos({
 }
 
 // KnowledgeGaps — surfaces missing/stale topics so the agent can fill them.
-function KnowledgeGaps({ onAction }: { onAction: (msg: string, type?: 'success' | 'error') => void }) {
+function KnowledgeGaps({ onAction, onDraftFromGap }: {
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onDraftFromGap?: (gap: any) => void;
+}) {
   const { data: gapsData, loading, error } = useApi(() => knowledgeApi.gaps(), [], null);
   const stats = gapsData?.stats || {};
   const gaps: any[] = Array.isArray(gapsData?.gaps) ? gapsData.gaps : [];
@@ -11540,11 +11889,22 @@ function KnowledgeGaps({ onAction }: { onAction: (msg: string, type?: 'success' 
                       </span>
                     </div>
                     <p className="text-[12px] text-[#646462] mb-1.5">{g.whyItMatters || g.recommendedAction}</p>
-                    <div className="flex items-center gap-3 text-[11px] text-[#646462]">
-                      <span>{g.frequency || 0} preguntas</span>
-                      {g.unresolvedCases > 0 && <span>· {g.unresolvedCases} sin resolver</span>}
-                      {g.escalations > 0 && <span>· {g.escalations} escalados</span>}
-                      {g.suggestedDomain && <span>· Sugerido: {g.suggestedDomain}</span>}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 text-[11px] text-[#646462] min-w-0">
+                        <span>{g.frequency || 0} preguntas</span>
+                        {g.unresolvedCases > 0 && <span>· {g.unresolvedCases} sin resolver</span>}
+                        {g.escalations > 0 && <span>· {g.escalations} escalados</span>}
+                        {g.suggestedDomain && <span className="truncate">· Sugerido: {g.suggestedDomain}</span>}
+                      </div>
+                      {onDraftFromGap && (
+                        <button
+                          onClick={() => onDraftFromGap(g)}
+                          className="flex-shrink-0 h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[11.5px] font-semibold hover:bg-black"
+                          title="Crear un artículo borrador a partir de este vacío"
+                        >
+                          Crear borrador
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -11579,17 +11939,39 @@ function KnowledgePruebas({ onAction }: { onAction: (msg: string, type?: 'succes
   const [query, setQuery] = useState('Política de reembolso de plan anual');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [agentId, setAgentId] = useState<string>('all');
+  // Optional scope: pick specific articles to constrain the search to.
+  const [articleScope, setArticleScope] = useState<Set<string>>(new Set());
+  const [showArticlePicker, setShowArticlePicker] = useState(false);
+
+  // Load agents + articles once for the selectors. Agents endpoint is shared
+  // with Fin AI Studio so the same dropdown semantics apply here.
+  const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
+  const { data: articlesData } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const agents = Array.isArray(agentsData) ? agentsData : [];
+  const articles = Array.isArray(articlesData) ? articlesData : [];
 
   async function run() {
     if (!query.trim() || running) return;
     setRunning(true);
     try {
-      const payload = await knowledgeApi.test({ query: query.trim(), agentId: null, selectedArticleIds: [] });
+      const payload = await knowledgeApi.test({
+        query: query.trim(),
+        agentId: agentId === 'all' ? null : agentId,
+        selectedArticleIds: Array.from(articleScope),
+      });
       setResult(payload);
     } catch (err: any) {
       onAction(err?.message || 'No se pudo ejecutar la prueba', 'error');
       setResult(null);
     } finally { setRunning(false); }
+  }
+  function toggleArticleInScope(id: string) {
+    setArticleScope(s => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   }
 
   const verdict = result?.summary?.verdict;
@@ -11615,12 +11997,56 @@ function KnowledgePruebas({ onAction }: { onAction: (msg: string, type?: 'succes
             placeholder="Pregunta como un cliente: «¿cómo cancelo mi plan anual?»"
             className="flex-1 h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
           />
+          <select
+            value={agentId}
+            onChange={e => setAgentId(e.target.value)}
+            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+            title="Limita la prueba al conocimiento que ve un agente concreto"
+          >
+            <option value="all">Todos los agentes</option>
+            {agents.map((a: any) => (
+              <option key={a.id || a.slug} value={a.id || a.slug}>{a.name || a.slug}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setShowArticlePicker(s => !s)}
+            className={`h-9 px-3 rounded-lg border text-[12.5px] font-semibold ${articleScope.size > 0 ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-white text-[#1a1a1a] border-[#e9eae6] hover:bg-[#f8f8f7]'}`}
+            title="Limita la prueba a un subconjunto de artículos"
+          >
+            {articleScope.size > 0 ? `${articleScope.size} artículo${articleScope.size === 1 ? '' : 's'}` : 'Artículos: todos'}
+          </button>
           <button
             onClick={run}
             disabled={!query.trim() || running}
             className="h-9 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
           >{running ? 'Probando…' : 'Probar'}</button>
         </div>
+
+        {showArticlePicker && (
+          <div className="bg-white border border-[#e9eae6] rounded-[10px] p-3 max-h-[260px] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[12.5px] font-semibold text-[#1a1a1a]">Limitar a artículos seleccionados ({articleScope.size}/{articles.length})</p>
+              {articleScope.size > 0 && (
+                <button onClick={() => setArticleScope(new Set())} className="text-[11.5px] font-semibold text-[#646462] hover:text-[#1a1a1a]">Limpiar</button>
+              )}
+            </div>
+            {articles.length === 0 && <p className="text-[12px] text-[#646462]">Aún no hay artículos publicados.</p>}
+            <div className="flex flex-col gap-0.5">
+              {articles.map((a: any) => (
+                <label key={a.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#f8f8f7] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={articleScope.has(a.id)}
+                    onChange={() => toggleArticleInScope(a.id)}
+                    className="w-3.5 h-3.5 accent-[#1a1a1a]"
+                  />
+                  <span className="text-[12.5px] text-[#1a1a1a] truncate flex-1">{a.title || 'Sin título'}</span>
+                  <span className="text-[11px] text-[#646462] flex-shrink-0">{a.domain_name || a.domain || '—'}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {!result && !running && (
           <div className="bg-white border border-[#e9eae6] rounded-[10px] p-5 text-center">
@@ -11710,20 +12136,61 @@ function KnowledgePlaceholder({ title, subtitle }: { title: string; subtitle: st
 function KnowledgeView() {
   const [sub, setSub] = useState<KnowledgeSubView>('fuentes');
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const [showFolderModal, setShowFolderModal] = useState(false);
+  // null = closed, 'create' = creating, { id, name, description } = editing.
+  const [folderModal, setFolderModal] = useState<null | 'create' | { id: string; name: string; description?: string }>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  async function deleteFolder(folder: { id: string; name: string }) {
+    if (typeof window !== 'undefined' && !window.confirm(`¿Borrar la carpeta "${folder.name}"? Los artículos quedarán sin carpeta.`)) return;
+    try {
+      await knowledgeApi.deleteDomain(folder.id);
+      showToast('Carpeta borrada');
+      setRefreshKey(k => k + 1);
+      if (activeFolderId === folder.id) {
+        setActiveFolderId(null);
+        setSub('articulos');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'No se pudo borrar la carpeta', 'error');
+    }
+  }
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  // Pre-filled draft handed from Vacíos → Articulos via "Crear borrador desde vacío".
+  const [pendingDraft, setPendingDraft] = useState<{ title: string; content: string; type?: string } | null>(null);
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
     window.setTimeout(() => setToast(null), 2500);
+  }
+  function draftFromGap(g: any) {
+    const title = String(g?.topic || 'Nuevo artículo').trim();
+    const lines = [
+      `# ${title}`,
+      '',
+      '## Resumen',
+      String(g?.whyItMatters || 'Por qué importa este tema para el cliente y el agente.'),
+      '',
+      '## Política / Acción recomendada',
+      String(g?.recommendedAction || 'Pasos concretos que el agente debe seguir.'),
+      '',
+      '## Evidencia',
+      ...(Array.isArray(g?.sampleCases) && g.sampleCases.length > 0
+          ? g.sampleCases.map((c: string) => `- Caso ${c}`)
+          : ['- Añadir IDs de casos donde apareció esta pregunta.']),
+      '',
+      '## Notas para el agente',
+      `- Dominio sugerido: ${g?.suggestedDomain || 'Sin clasificar'}`,
+      `- Aprobaciones pendientes vinculadas: ${g?.pendingApprovals ?? 0}`,
+    ];
+    setPendingDraft({ title, content: lines.join('\n'), type: 'ARTICLE' });
+    setSub('articulos');
+    showToast('Borrador preparado, revísalo antes de publicar');
   }
   function renderSub() {
     switch (sub) {
       case 'fuentes':     return <KnowledgeFuentes />;
       case 'contenido':   return <KnowledgeContenido />;
-      case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} />;
-      case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} />;
-      case 'gaps':        return <KnowledgeGaps   onAction={showToast} />;
+      case 'articulos':   return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={null} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
+      case 'carpeta':     return <KnowledgeArticulos onAction={showToast} onRefresh={() => setRefreshKey(k => k + 1)} domainFilter={activeFolderId} externalDraft={pendingDraft} onConsumeDraft={() => setPendingDraft(null)} />;
+      case 'gaps':        return <KnowledgeGaps    onAction={showToast} onDraftFromGap={draftFromGap} />;
       case 'pruebas':     return <KnowledgePruebas onAction={showToast} />;
       case 'centroAyuda': return <KnowledgePlaceholder title="Centro de ayuda" subtitle="Configuración del Help Center y experiencias de cliente autoservicio." />;
     }
@@ -11737,21 +12204,29 @@ function KnowledgeView() {
           onSelect={(s) => { setSub(s); if (s !== 'carpeta') setActiveFolderId(null); }}
           activeFolderId={activeFolderId}
           onSelectFolder={(id) => { setActiveFolderId(id); setSub('carpeta'); }}
-          onCreateFolder={() => setShowFolderModal(true)}
+          onCreateFolder={() => setFolderModal('create')}
+          onEditFolder={(folder) => setFolderModal(folder)}
+          onDeleteFolder={(folder) => deleteFolder(folder)}
           refreshKey={refreshKey}
         />
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           {renderSub()}
         </div>
       </div>
-      {showFolderModal && (
+      {folderModal && (
         <KnowledgeFolderModal
-          onClose={() => setShowFolderModal(false)}
-          onCreated={(id) => {
+          initial={folderModal === 'create' ? null : folderModal}
+          onClose={() => setFolderModal(null)}
+          onSaved={(id) => {
             setRefreshKey(k => k + 1);
-            setActiveFolderId(id);
-            setSub('carpeta');
-            showToast('Carpeta creada');
+            // On create, deep-link into the new folder. On edit, just close.
+            if (folderModal === 'create') {
+              setActiveFolderId(id);
+              setSub('carpeta');
+              showToast('Carpeta creada');
+            } else {
+              setFolderModal(null);
+            }
           }}
           onAction={showToast}
         />
