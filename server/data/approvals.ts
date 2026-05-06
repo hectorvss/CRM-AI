@@ -345,16 +345,22 @@ export async function findCaseIdForEntity(input: {
 }): Promise<string | null> {
   const supabase = getSupabaseAdmin();
   const column = input.entity === 'payment' ? 'payment_ids' : 'order_ids';
+  // Supabase JS .contains() serialises the value as a Postgres text array
+  // ('{uuid}'), but `payment_ids` / `order_ids` are jsonb columns — that
+  // mismatch makes Postgres throw "invalid input syntax for type json"
+  // and the lookup silently returns null.
+  // Use the raw filter operator with a JSON array literal instead, which
+  // produces `payment_ids @> '["<uuid>"]'`.
+  const jsonArrayLiteral = JSON.stringify([input.entityId]);
   const { data, error } = await supabase
     .from('cases')
     .select('id')
     .eq('tenant_id', input.tenantId)
     .eq('workspace_id', input.workspaceId)
-    .contains(column, [input.entityId])
+    .filter(column, 'cs', jsonArrayLiteral)
     .order('created_at', { ascending: false })
     .limit(1);
   if (error) {
-    // contains() on jsonb requires array literal; fall back to silent null on driver error
     return null;
   }
   return data?.[0]?.id ?? null;

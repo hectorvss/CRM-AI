@@ -1,6 +1,151 @@
 import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '../db/supabase.js';
 import { createAuditRepository } from '../data/audit.js';
+import { integrationRegistry } from '../integrations/registry.js';
+import { logger } from '../utils/logger.js';
+
+// ── Connector writeback helpers ───────────────────────────────────────────
+//
+// When an approval is granted, we re-apply the gated action on the local DB
+// (status=refunded, status=cancelled, etc.) AND attempt the corresponding
+// connector call so the dollars actually move at the PSP / OMS layer.
+//
+// Both helpers degrade gracefully:
+//   - if the integration isn't configured → returns { executedVia: 'db-only' }
+//     and the caller proceeds with the local-only contract that existed before
+//   - if the connector throws → returns { executedVia: 'db-only', error }
+//     and the audit metadata captures the failure so reconciliation can
+//     retry / surface to the manager
+
+interface ConnectorWritebackResult {
+  executedVia: 'stripe' | 'shopify' | 'woocommerce' | 'db-only';
+  externalId: string | null;
+  error: string | null;
+}
+
+async function attemptStripeRefundWriteback(
+  scope: PostApprovalScope,
+  paymentRow: any,
+  amount: number,
+  reason: string,
+  idempotencyKey: string,
+): Promise<ConnectorWritebackResult> {
+  const externalPaymentId: string | null =
+    paymentRow.external_payment_id ?? paymentRow.psp_reference ?? null;
+  if (!externalPaymentId) {
+    return { executedVia: 'db-only', externalId: null, error: 'no external_payment_id' };
+  }
+
+  // Prefer the per-tenant Stripe adapter when the workspace has its own
+  // Stripe connector configured (multi-tenant path). Fall back to the
+  // workspace-global integration registry otherwise (single-tenant /
+  // platform Stripe key).
+  let adapter: any = null;
+  try {
+    const { stripeForTenant } = await import('../integrations/stripe-tenant.js');
+    const r = await stripeForTenant(scope.tenantId, scope.workspaceId);
+    if (r) adapter = (r as any).adapter ?? r;
+  } catch { /* fall through to global registry */ }
+  if (!adapter) {
+    adapter = integrationRegistry.get('stripe') as any;
+  }
+  if (!adapter || typeof adapter.createRefund !== 'function') {
+    return { executedVia: 'db-only', externalId: null, error: 'stripe adapter unavailable' };
+  }
+
+  try {
+    const refund = await adapter.createRefund({
+      paymentExternalId: externalPaymentId,
+      amount,
+      currency: paymentRow.currency ?? 'USD',
+      reason,
+      idempotencyKey,
+    });
+    logger.info('approval.writeback: Stripe refund created', {
+      paymentId: paymentRow.id, stripeRefundId: refund?.id, amount,
+    });
+    return { executedVia: 'stripe', externalId: refund?.id ?? null, error: null };
+  } catch (err: any) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn('approval.writeback: Stripe refund failed, falling back to db-only', {
+      paymentId: paymentRow.id, error: msg,
+    });
+    return { executedVia: 'db-only', externalId: null, error: msg };
+  }
+}
+
+async function attemptOrderCancelWriteback(
+  scope: PostApprovalScope,
+  orderRow: any,
+  reason: string,
+): Promise<ConnectorWritebackResult> {
+  const externalOrderId: string | null = orderRow.external_order_id ?? null;
+  if (!externalOrderId) {
+    return { executedVia: 'db-only', externalId: null, error: 'no external_order_id' };
+  }
+
+  // Try Shopify first (most common ecommerce in our stack), then WooCommerce.
+  // Per-tenant adapter is preferred so each workspace cancels via its own
+  // shop credentials.
+  try {
+    const { shopifyForTenant } = await import('../integrations/shopify-tenant.js');
+    const r = await shopifyForTenant(scope.tenantId, scope.workspaceId);
+    if (r) {
+      const adapter: any = (r as any).rest ?? (r as any).adapter ?? r;
+      if (adapter && typeof adapter.cancelOrder === 'function') {
+        try {
+          const cancelled = await adapter.cancelOrder({
+            orderExternalId: externalOrderId,
+            reason: 'customer',
+            email: false,
+            restock: true,
+          });
+          logger.info('approval.writeback: Shopify order cancelled', {
+            orderId: orderRow.id, externalOrderId,
+          });
+          return { executedVia: 'shopify', externalId: cancelled?.id ?? externalOrderId, error: null };
+        } catch (err: any) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn('approval.writeback: Shopify cancel failed, falling back to db-only', {
+            orderId: orderRow.id, error: msg,
+          });
+          return { executedVia: 'db-only', externalId: null, error: `shopify: ${msg}` };
+        }
+      }
+    }
+  } catch (err: any) {
+    logger.debug('approval.writeback: shopify resolver unavailable, trying woo', { error: String(err?.message ?? err) });
+  }
+
+  try {
+    const { wooForTenant } = await import('../integrations/woocommerce-tenant.js');
+    const r = await wooForTenant(scope.tenantId, scope.workspaceId);
+    if (r) {
+      const adapter: any = (r as any).adapter ?? r;
+      if (adapter && typeof adapter.updateOrder === 'function') {
+        try {
+          // WooCommerce cancels by setting status=cancelled.
+          const wooId = Number(externalOrderId);
+          if (Number.isFinite(wooId)) {
+            await adapter.updateOrder(wooId, { status: 'cancelled', customer_note: reason });
+            logger.info('approval.writeback: WooCommerce order cancelled', {
+              orderId: orderRow.id, externalOrderId,
+            });
+            return { executedVia: 'woocommerce', externalId: externalOrderId, error: null };
+          }
+        } catch (err: any) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn('approval.writeback: Woo cancel failed', { orderId: orderRow.id, error: msg });
+          return { executedVia: 'db-only', externalId: null, error: `woocommerce: ${msg}` };
+        }
+      }
+    }
+  } catch (err: any) {
+    logger.debug('approval.writeback: woo resolver unavailable', { error: String(err?.message ?? err) });
+  }
+
+  return { executedVia: 'db-only', externalId: null, error: 'no ecommerce connector configured' };
+}
 
 type ApprovalDecision = 'approved' | 'rejected';
 
@@ -533,10 +678,25 @@ export async function applyPostApprovalDecision(
           .maybeSingle();
         if (paymentLookupError) throw paymentLookupError;
         if (paymentRow) {
+          // ── Connector writeback FIRST ─────────────────────────────────
+          // Try Stripe live before mutating the local row so we can capture
+          // the real refund id in refund_ids (instead of a synthetic rf_*).
+          // If Stripe rejects (already-refunded / disputed payment / API
+          // outage) we still update DB so the manager's decision is honoured
+          // locally and a `writeback_failed` flag flips on for reconciliation.
+          const idempotencyKey = `approval-${approval.id}-refund`;
+          const writeback = await attemptStripeRefundWriteback(
+            scope,
+            paymentRow,
+            refundAmount,
+            actionPayload.reason ?? 'Refund approved by manager',
+            idempotencyKey,
+          );
+
           const existingRefundIds = Array.isArray(paymentRow.refund_ids)
             ? paymentRow.refund_ids
             : asArray(paymentRow.refund_ids);
-          const newRefundId = `rf_${randomUUID()}`;
+          const newRefundId = writeback.externalId ?? `rf_${randomUUID()}`;
           const isFull = refundAmount > 0 && refundAmount >= Number(paymentRow.amount ?? 0);
           const { error: refundUpdateError } = await supabase
             .from('payments')
@@ -544,14 +704,25 @@ export async function applyPostApprovalDecision(
               status: 'refunded',
               refund_amount: refundAmount,
               refund_type: isFull ? 'full' : 'partial',
+              refund_status: writeback.executedVia === 'stripe' ? 'succeeded' : 'writeback_pending',
               approval_status: 'approved',
               refund_ids: [...existingRefundIds, newRefundId],
               system_states: {
                 ...(parseMaybeJson<Record<string, any>>(paymentRow.system_states, {})),
                 canonical: 'refunded',
                 crm_ai: 'refunded',
+                psp: writeback.executedVia === 'stripe' ? 'refunded' : (paymentRow.system_states?.psp ?? 'pending_writeback'),
               },
-              last_update: actionPayload.reason ?? 'Refund executed via approval',
+              reconciliation_details: {
+                approval_request_id: approval.id,
+                writeback_executed_via: writeback.executedVia,
+                writeback_external_id: writeback.externalId,
+                writeback_error: writeback.error,
+                writeback_at: now,
+              },
+              last_update: writeback.error
+                ? `Refund approved locally; PSP writeback failed: ${writeback.error}`
+                : (actionPayload.reason ?? 'Refund executed via approval'),
               updated_at: now,
             })
             .eq('id', targetPaymentId)
@@ -562,16 +733,25 @@ export async function applyPostApprovalDecision(
           await createAuditRepository().log(scope, {
             actorId: decidedBy,
             actorType: 'human',
-            action: 'PAYMENT_REFUNDED_VIA_APPROVAL',
+            action: writeback.error
+              ? 'PAYMENT_REFUND_APPROVAL_WRITEBACK_FAILED'
+              : 'PAYMENT_REFUNDED_VIA_APPROVAL',
             entityType: 'payment',
             entityId: targetPaymentId,
             oldValue: { status: paymentRow.status, approval_status: paymentRow.approval_status },
-            newValue: { status: 'refunded', refund_amount: refundAmount, refund_id: newRefundId },
+            newValue: {
+              status: 'refunded',
+              refund_amount: refundAmount,
+              refund_id: newRefundId,
+              executed_via: writeback.executedVia,
+            },
             metadata: {
               approval_request_id: approval.id,
               reason: actionPayload.reason ?? null,
-              executed_via: 'db-only',
-              connector_writeback: 'deferred',
+              executed_via: writeback.executedVia,
+              connector_writeback: writeback.executedVia === 'stripe' ? 'completed' : 'pending',
+              writeback_error: writeback.error,
+              idempotency_key: idempotencyKey,
             },
           });
         }
@@ -588,6 +768,13 @@ export async function applyPostApprovalDecision(
           .maybeSingle();
         if (orderLookupError) throw orderLookupError;
         if (orderRow) {
+          // ── Connector writeback — try Shopify, then Woo, then db-only ─
+          const writeback = await attemptOrderCancelWriteback(
+            scope,
+            orderRow,
+            actionPayload.reason ?? 'Cancellation approved by manager',
+          );
+
           const { error: cancelUpdateError } = await supabase
             .from('orders')
             .update({
@@ -595,12 +782,19 @@ export async function applyPostApprovalDecision(
               approval_status: 'approved',
               has_conflict: false,
               conflict_detected: null,
-              recommended_action: 'Cancellation executed via approval; connector writeback pending.',
-              last_update: actionPayload.reason ?? 'Cancellation executed via approval',
+              recommended_action: writeback.executedVia === 'db-only'
+                ? 'Cancellation approved; connector writeback pending or unavailable.'
+                : `Cancellation executed via ${writeback.executedVia}.`,
+              last_update: writeback.error
+                ? `Cancellation approved locally; ${writeback.executedVia} writeback failed: ${writeback.error}`
+                : (actionPayload.reason ?? 'Cancellation executed via approval'),
               system_states: {
                 ...(parseMaybeJson<Record<string, any>>(orderRow.system_states, {})),
                 canonical: 'cancelled',
                 crm_ai: 'cancelled',
+                oms: writeback.executedVia === 'shopify' || writeback.executedVia === 'woocommerce'
+                  ? 'cancelled'
+                  : (orderRow.system_states?.oms ?? 'pending_writeback'),
               },
               updated_at: now,
             })
@@ -612,16 +806,24 @@ export async function applyPostApprovalDecision(
           await createAuditRepository().log(scope, {
             actorId: decidedBy,
             actorType: 'human',
-            action: 'ORDER_CANCELLED_VIA_APPROVAL',
+            action: writeback.error
+              ? 'ORDER_CANCEL_APPROVAL_WRITEBACK_FAILED'
+              : 'ORDER_CANCELLED_VIA_APPROVAL',
             entityType: 'order',
             entityId: targetOrderId,
             oldValue: { status: orderRow.status, approval_status: orderRow.approval_status },
-            newValue: { status: 'cancelled', approval_status: 'approved' },
+            newValue: {
+              status: 'cancelled',
+              approval_status: 'approved',
+              executed_via: writeback.executedVia,
+            },
             metadata: {
               approval_request_id: approval.id,
               reason: actionPayload.reason ?? null,
-              executed_via: 'db-only',
-              connector_writeback: 'deferred',
+              executed_via: writeback.executedVia,
+              connector_writeback: writeback.executedVia === 'db-only' ? 'pending' : 'completed',
+              writeback_error: writeback.error,
+              writeback_external_id: writeback.externalId,
             },
           });
         }
