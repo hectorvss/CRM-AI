@@ -492,19 +492,28 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
 
 // ── Shared: Trial Banner ──────────────────────────────────────────────────────
 function TrialBanner() {
+  // Banner currently uses static demo copy. Once /api/billing exposes real
+  // trial state we can switch this to a useApi() call. Until then, render
+  // Clain-branded copy instead of the leftover "Comprar Intercom" CTA.
   return (
     <div className="flex items-center justify-between bg-[#e7e2fd] border border-[#b09efa] rounded-2xl px-4 py-[9px] flex-shrink-0 mx-0">
       <p className="text-[14px] text-[#1a1a1a]">
         Quedan <strong>14 días</strong> en tu{" "}
-        <span className="underline">prueba de Advanced</span>. Incluye uso ilimitado de Fin.
+        <span className="underline">prueba de Clain Advanced</span>. Incluye uso ilimitado del agente de IA.
       </p>
       <div className="flex items-center gap-2">
-        <button className="text-[14px] font-semibold text-[#1a1a1a] px-3 py-[7px] rounded-full hover:bg-white/40">
-          Solicita un descuento del 93 % en la Early Stage.
-        </button>
-        <button className="text-[14px] font-semibold text-white bg-[#222] px-3 py-[7px] rounded-full hover:bg-[#444]">
-          Comprar Intercom
-        </button>
+        <a
+          href="/pricing?promo=early-stage"
+          className="text-[14px] font-semibold text-[#1a1a1a] px-3 py-[7px] rounded-full hover:bg-white/40"
+        >
+          Solicita el descuento Early Stage (93 %)
+        </a>
+        <a
+          href="/pricing"
+          className="text-[14px] font-semibold text-white bg-[#222] px-3 py-[7px] rounded-full hover:bg-[#444]"
+        >
+          Pasar a Pro
+        </a>
       </div>
     </div>
   );
@@ -514,9 +523,17 @@ function TrialBanner() {
 // INBOX VIEW
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Minimalist 16×16 check (no fill, 1.5 stroke). Used for "Resuelto" /
+// "Resolver" — replaces the chunky Figma chevron-right asset.
+const CheckIconMinimal = ({ className = '' }: { className?: string }) => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M3 8.5l3.2 3L13 5" />
+  </svg>
+);
+
 function SidebarNavItem({
   icon, label, count, active = false, onClick,
-}: { icon: string; label: string; count?: number; active?: boolean; onClick?: () => void }) {
+}: { icon: string | ReactNode; label: string; count?: number; active?: boolean; onClick?: () => void }) {
   return (
     <button
       type="button"
@@ -527,8 +544,8 @@ function SidebarNavItem({
           : "hover:bg-[#e9eae6]/40 text-[#1a1a1a]"
       }`}
     >
-      <div className="flex items-center justify-center w-[18px] h-[18px] flex-shrink-0">
-        <img src={icon} alt="" className="w-4 h-4" />
+      <div className="flex items-center justify-center w-[18px] h-[18px] flex-shrink-0 text-[#1a1a1a]">
+        {typeof icon === 'string' ? <img src={icon} alt="" className="w-4 h-4" /> : icon}
       </div>
       <span className="flex-1 leading-4">{label}</span>
       {count !== undefined && (
@@ -563,11 +580,13 @@ function InboxSidebar({
   onScopeChange,
   counts,
   onAction,
+  onCollapse,
 }: {
   active: InboxScope;
   onScopeChange: (scope: InboxScope) => void;
   counts: Partial<Record<InboxScope, number>>;
   onAction?: (message: string, type?: 'success' | 'error') => void;
+  onCollapse?: () => void;
 }) {
   const notify = (msg: string) => onAction?.(msg, 'success');
   // 4 expandable sections (Fin para servicio / Inbox para el equipo / Compañeros de equipo / Vistas)
@@ -587,13 +606,26 @@ function InboxSidebar({
     <div className="flex flex-col h-full w-[236px] bg-[#f8f8f7] border-r border-[#e9eae6] flex-shrink-0 overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
         <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Inbox</span>
-        <button
-          onClick={() => notify('Nueva conversación — próximamente')}
-          title="Nueva conversación"
-          className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]"
-        >
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => notify('Nueva conversación — próximamente')}
+            title="Nueva conversación"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]"
+          >
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          </button>
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              title="Esconder sidebar"
+              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#e9eae6] text-[#646462]"
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <path d="M10 4l-4 4 4 4" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pl-3 pr-0 pb-4">
@@ -628,7 +660,7 @@ function InboxSidebar({
           {openFin && (
             <div className="flex flex-col gap-0.5 pl-1 mt-0.5">
               <SidebarNavItem icon={ICON_FIN_SVC} label="Todas las conversaciones" count={counts['fin-all'] ?? 0} active={active === 'fin-all'} onClick={() => onScopeChange('fin-all')} />
-              <SidebarNavItem icon={ICON_RESOLVED} label="Resuelto" count={counts['fin-resolved'] ?? 0} active={active === 'fin-resolved'} onClick={() => onScopeChange('fin-resolved')} />
+              <SidebarNavItem icon={<CheckIconMinimal className="w-4 h-4" />} label="Resuelto" count={counts['fin-resolved'] ?? 0} active={active === 'fin-resolved'} onClick={() => onScopeChange('fin-resolved')} />
               <SidebarNavItem icon={ICON_ESCALATED} label="Escalado y transferencia" count={counts['fin-escalated'] ?? 0} active={active === 'fin-escalated'} onClick={() => onScopeChange('fin-escalated')} />
               <SidebarNavItem icon={ICON_PENDING} label="Pendiente" count={counts['fin-pending'] ?? 0} active={active === 'fin-pending'} onClick={() => onScopeChange('fin-pending')} />
               <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" count={counts['fin-spam'] ?? 0} active={active === 'fin-spam'} onClick={() => onScopeChange('fin-spam')} />
@@ -933,6 +965,7 @@ function ConversationList({
   error,
   title,
   scope,
+  onCollapse,
 }: {
   selectedId: string;
   onSelect: (id: string) => void;
@@ -941,20 +974,30 @@ function ConversationList({
   error?: string | null;
   title: string;
   scope: InboxScope;
+  onCollapse?: () => void;
 }) {
   const openCount = items.filter(conv => conv.status !== 'closed' && conv.status !== 'resolved').length;
   return (
     <div className="flex flex-col h-full w-[271px] border-l border-[#e9eae6] bg-[#f8f8f7] flex-shrink-0">
       <div className="flex items-center justify-between px-4 py-4 h-16 sticky top-0">
-        <div className="flex items-center gap-2">
-          <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7]">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7] flex-shrink-0">
             <img src={AVATAR_ME} alt="" className="absolute inset-0 w-full h-full object-cover" />
           </div>
-          <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">{title}</span>
+          <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a] truncate">{title}</span>
         </div>
-        <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
-          <img src={ICON_SEARCH2} alt="" className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
+            <img src={ICON_SEARCH2} alt="" className="w-4 h-4" />
+          </button>
+          {onCollapse && (
+            <button onClick={onCollapse} title="Esconder lista" className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#e9eae6] text-[#646462]">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <path d="M10 4l-4 4 4 4" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between px-3 py-2 flex-shrink-0">
@@ -1612,6 +1655,8 @@ function ConversationPanel({
   setReplyText,
   replyTab,
   setReplyTab,
+  panels,
+  onTogglePanel,
 }: {
   selectedConv: Conversation;
   inboxView: any;
@@ -1621,14 +1666,36 @@ function ConversationPanel({
   setReplyText: Dispatch<SetStateAction<string>>;
   replyTab: 'responder' | 'nota' | 'datosIA';
   setReplyTab: Dispatch<SetStateAction<'responder' | 'nota' | 'datosIA'>>;
+  panels?: { left: boolean; list: boolean; right: boolean };
+  onTogglePanel?: (which: 'left' | 'list' | 'right') => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [showResolveModal, setShowResolveModal] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [starred, setStarred] = useState(false);
+  // Star persists across reloads via localStorage keyed by caseId. The
+  // backend doesn't have a "starred" column yet, so this is a pragmatic
+  // bridge — easy to swap for a real PATCH /cases/:id/star later.
+  const STARRED_LS_KEY = 'clain.inbox.starred';
+  function readStarredSet(): Set<string> {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const raw = window.localStorage.getItem(STARRED_LS_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch { return new Set(); }
+  }
+  function writeStarredSet(set: Set<string>) {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem(STARRED_LS_KEY, JSON.stringify(Array.from(set))); } catch { /* ignore quota errors */ }
+  }
+  const [starred, setStarred] = useState<boolean>(() => readStarredSet().has(selectedConv.id));
+  // Re-read whenever the active case changes (keeps the icon in sync when the
+  // user navigates between conversations with j/k or by clicking the list).
+  useEffect(() => {
+    setStarred(readStarredSet().has(selectedConv.id));
+  }, [selectedConv.id]);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1777,8 +1844,17 @@ function ConversationPanel({
   const [statusMode, setStatusMode] = useState<StatusMode | null>(null);
 
   function toggleStar() {
-    setStarred(s => !s);
-    onAction(starred ? 'Caso desmarcado' : 'Caso destacado', 'success');
+    const set = readStarredSet();
+    if (set.has(selectedConv.id)) {
+      set.delete(selectedConv.id);
+      setStarred(false);
+      onAction('Caso desmarcado', 'success');
+    } else {
+      set.add(selectedConv.id);
+      setStarred(true);
+      onAction('Caso destacado', 'success');
+    }
+    writeStarredSet(set);
   }
 
   function exportConversationAsText() {
@@ -1819,6 +1895,43 @@ function ConversationPanel({
             <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a] truncate">{channelLabel}</h2>
           </div>
           <div className="flex items-center gap-1">
+            {/* Per-panel toggles. Each button reflects the current open/hidden
+                state of one of the three sidebars; click to flip it. */}
+            {onTogglePanel && panels && (
+              <div className="flex items-center gap-0.5 mr-1 pr-1 border-r border-[#e9eae6]">
+                <button
+                  onClick={() => onTogglePanel('left')}
+                  title={panels.left ? 'Esconder sidebar' : 'Mostrar sidebar'}
+                  className={`w-7 h-7 flex items-center justify-center rounded ${panels.left ? 'text-[#1a1a1a] bg-[#f8f8f7]' : 'text-[#646462] hover:bg-[#f8f8f7]'}`}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                    <rect x="2" y="3" width="12" height="10" rx="1.5" />
+                    <line x1="6" y1="3" x2="6" y2="13" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => onTogglePanel('list')}
+                  title={panels.list ? 'Esconder lista' : 'Mostrar lista'}
+                  className={`w-7 h-7 flex items-center justify-center rounded ${panels.list ? 'text-[#1a1a1a] bg-[#f8f8f7]' : 'text-[#646462] hover:bg-[#f8f8f7]'}`}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                    <line x1="3" y1="5" x2="13" y2="5" />
+                    <line x1="3" y1="8" x2="13" y2="8" />
+                    <line x1="3" y1="11" x2="13" y2="11" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => onTogglePanel('right')}
+                  title={panels.right ? 'Esconder detalles' : 'Mostrar detalles'}
+                  className={`w-7 h-7 flex items-center justify-center rounded ${panels.right ? 'text-[#1a1a1a] bg-[#f8f8f7]' : 'text-[#646462] hover:bg-[#f8f8f7]'}`}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                    <rect x="2" y="3" width="12" height="10" rx="1.5" />
+                    <line x1="10" y1="3" x2="10" y2="13" />
+                  </svg>
+                </button>
+              </div>
+            )}
             <button onClick={toggleStar} title={starred ? 'Quitar destacado' : 'Destacar caso'}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className={`w-4 h-4 ${starred ? 'fill-[#f59e0b]' : 'fill-none stroke-[#646462]'}`} strokeWidth="1.5"><path d="M8 1l2.2 4.5 4.8.7-3.5 3.4.8 4.9L8 12.2 3.7 14.5l.8-4.9L1 6.2l4.8-.7L8 1z"/></svg>
@@ -1831,13 +1944,8 @@ function ConversationPanel({
               className={`w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#e9eae6] ${showSearch ? 'bg-[#1a1a1a]' : 'bg-[#f8f8f7]'}`}>
               <img src={ICON_SEARCH2} alt="" className={`w-4 h-4 ${showSearch ? 'invert' : ''}`} />
             </button>
-            <button onClick={() => setShowResolveModal(true)} title="Plan de resolución con IA"
-              className="h-8 px-3 bg-[#e7e2fd] hover:bg-[#d4cffb] text-[#1a1a1a] text-[13px] font-semibold rounded-full flex items-center gap-1">
-              <span>✨</span>
-              <span>Resolver con IA</span>
-            </button>
-            <button onClick={resolveCase} className="h-8 px-4 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] flex items-center gap-1">
-              <img src={ICON_RESOLVED} alt="" className="w-4 h-4 invert" />
+            <button onClick={resolveCase} className="h-8 px-4 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] flex items-center gap-1.5">
+              <CheckIconMinimal className="w-3.5 h-3.5" />
               <span>Resolver</span>
             </button>
             <button onClick={() => setStatusMode('snoozed')} className="h-8 px-3 bg-[#f8f8f7] text-[#1a1a1a] text-[13px] font-semibold rounded-full hover:bg-[#e9eae6]">
@@ -1891,18 +1999,34 @@ function ConversationPanel({
           </div>
         )}
         {displayMessages.map((msg) => <ChatMessage key={msg.id} msg={msg} />)}
-        <div className="bg-[#f8f8f7] rounded-2xl p-4 mb-3">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-5 h-5 rounded-full bg-[#9ec5fa] flex items-center justify-center">
-              <span className="text-[10px] font-bold text-[#1a1a1a]">F</span>
+        {/* Live AI summary card — only shown when the backend actually exposes
+            a summary for this case (case.ai_diagnosis.summary or
+            customer.ai_executive_summary). No fake placeholder anymore. */}
+        {(() => {
+          const aiRaw = inboxView?.case?.ai_diagnosis ?? inboxView?.state?.case?.ai_diagnosis;
+          let aiObj: any = null;
+          if (aiRaw && typeof aiRaw === 'object') aiObj = aiRaw;
+          else if (typeof aiRaw === 'string') {
+            try { aiObj = JSON.parse(aiRaw); } catch { aiObj = { summary: aiRaw }; }
+          }
+          const summary = aiObj?.summary
+            || aiObj?.executive_summary
+            || inboxView?.state?.customer?.ai_executive_summary
+            || null;
+          if (!summary) return null;
+          return (
+            <div className="bg-[#f8f8f7] rounded-2xl p-4 mb-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-5 h-5 rounded-full bg-[#e7e2fd] flex items-center justify-center">
+                  <img src={ICON_FIN} alt="" className="w-3 h-3" />
+                </div>
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">Clain AI</span>
+                <span className="text-[12px] text-[#646462]">· Resumen del caso</span>
+              </div>
+              <p className="text-[13px] text-[#1a1a1a] leading-5 whitespace-pre-wrap">{String(summary)}</p>
             </div>
-            <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin</span>
-            <span className="text-[12px] text-[#646462]">· Resumen de la IA</span>
-          </div>
-          <p className="text-[13px] text-[#1a1a1a] leading-5">
-            El cliente quiere instalar el Messenger de Intercom en su sitio web. Fin proporcionó instrucciones de instalación estándar.
-          </p>
-        </div>
+          );
+        })()}
       </div>
 
       <div className="border-t border-[#e9eae6] flex-shrink-0">
@@ -1915,14 +2039,53 @@ function ConversationPanel({
           ))}
         </div>
         <div className="px-4 py-3">
-          {replyTab === 'datosIA' ? (
-            <div className="border border-[#e9eae6] rounded-2xl p-4 text-[13px] text-[#646462]">
-              <p className="font-semibold text-[#1a1a1a] mb-2">Datos de IA de esta conversación</p>
-              <p>Canal: {channelLabel}</p>
-              <p className="mt-1">Resolución estimada: 2 min</p>
-              <p className="mt-1">Intención detectada: Instalación de producto</p>
-            </div>
-          ) : (
+          {replyTab === 'datosIA' ? (() => {
+            // Render the real AI diagnosis if the backend has one. Otherwise
+            // surface neutral metadata + an action to ask the Copilot, instead
+            // of fake "Resolución estimada: 2 min".
+            const caseRow: any = inboxView?.case || {};
+            const stateCase: any = inboxView?.state?.case || {};
+            const aiRaw = caseRow.ai_diagnosis ?? stateCase.ai_diagnosis ?? null;
+            let aiObj: any = null;
+            if (aiRaw && typeof aiRaw === 'object') aiObj = aiRaw;
+            else if (typeof aiRaw === 'string') {
+              try { aiObj = JSON.parse(aiRaw); } catch { aiObj = { summary: aiRaw }; }
+            }
+            const intent = caseRow.intent || stateCase.intent || aiObj?.intent || null;
+            const intentConfidence = caseRow.intent_confidence ?? stateCase.intent_confidence ?? aiObj?.confidence ?? null;
+            const summary = aiObj?.summary || aiObj?.executive_summary || null;
+            const recommended = aiObj?.recommended_action || aiObj?.next_step || null;
+            const risk = caseRow.risk_level || stateCase.risk_level || (selectedConv as any).riskLevel || null;
+            const sla = caseRow.sla_status || stateCase.sla_status || null;
+            const hasAnything = !!(intent || summary || recommended || risk || sla);
+            return (
+              <div className="border border-[#e9eae6] rounded-2xl p-4 text-[13px] text-[#646462]">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-[#1a1a1a]">Datos de IA de este caso</p>
+                  <span className="text-[11px] text-[#646462]">vista en vivo</span>
+                </div>
+                {!hasAnything ? (
+                  <p className="text-[12.5px] text-[#646462] leading-5">
+                    Aún no hay diagnóstico de la IA. Pulsa <span className="font-semibold text-[#1a1a1a]">"Resumir caso"</span> en el panel Copilot para generar uno.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-1.5 text-[12.5px] text-[#1a1a1a]">
+                    <p><span className="text-[#646462]">Canal:</span> {channelLabel || '—'}</p>
+                    {intent && (
+                      <p>
+                        <span className="text-[#646462]">Intención:</span> {titleCase(String(intent))}
+                        {Number.isFinite(intentConfidence) && <span className="text-[#646462]"> ({Math.round(Number(intentConfidence) * 100)}%)</span>}
+                      </p>
+                    )}
+                    {risk && <p><span className="text-[#646462]">Riesgo:</span> {titleCase(String(risk))}</p>}
+                    {sla && <p><span className="text-[#646462]">Estado SLA:</span> {titleCase(String(sla).replace(/_/g, ' '))}</p>}
+                    {summary && <p className="whitespace-pre-wrap"><span className="text-[#646462]">Resumen:</span> {summary}</p>}
+                    {recommended && <p className="whitespace-pre-wrap"><span className="text-[#646462]">Acción sugerida:</span> {recommended}</p>}
+                  </div>
+                )}
+              </div>
+            );
+          })() : (
             <div className={`border rounded-2xl overflow-hidden ${replyTab === 'nota' ? 'border-[#fde68a] bg-[#fffbeb]' : 'border-[#e9eae6]'}`}>
               <textarea
                 ref={textareaRef}
@@ -2003,24 +2166,18 @@ function ConversationPanel({
           onAction={onAction}
         />
       )}
-      {showResolveModal && (
-        <ResolutionPlanModal
-          caseId={selectedConv.id}
-          onClose={() => setShowResolveModal(false)}
-          onAction={onAction}
-          onRefresh={onRefresh}
-        />
-      )}
     </div>
   );
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center h-8 w-full">
+    <div className="flex items-center h-8 w-full min-w-0 overflow-hidden">
       <span className="w-[113px] flex-shrink-0 text-[13px] text-[#646462] truncate">{label}</span>
-      <div className="flex-1 px-1">
-        <span className="text-[13px] text-[#1a1a1a] truncate block">{value}</span>
+      <div className="flex-1 min-w-0 px-1 overflow-hidden">
+        {/* title attribute keeps the full value reachable on hover even when
+            the visible text is truncated, so we never need horizontal scroll. */}
+        <span className="text-[13px] text-[#1a1a1a] truncate block" title={value}>{value}</span>
       </div>
     </div>
   );
@@ -2088,7 +2245,19 @@ function DetailSection({ title, children, defaultOpen = true }: { title: string;
         className="flex items-center justify-between w-full h-8 px-6 py-2 hover:bg-[#f8f8f7]"
       >
         <span className="text-[13px] font-semibold text-[#1a1a1a]">{title}</span>
-        <img src={ICON_CHEVRON} alt="" className={`w-4 h-4 transition-transform ${open ? 'rotate-90' : ''} opacity-50`} />
+        {/* Real chevron — points down when expanded, right when collapsed.
+            Stroke-only SVG, no Figma decorative asset. */}
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`w-3.5 h-3.5 text-[#646462] transition-transform ${open ? 'rotate-90' : ''}`}
+        >
+          <path d="M6 4l4 4-4 4" />
+        </svg>
       </button>
       {open && <div className="px-6">{children}</div>}
     </div>
@@ -2276,6 +2445,253 @@ function CopilotModule({
 
 type PrototypeCopilotMessage = { id: string; role: 'user' | 'assistant'; content: string; time: string };
 
+// Format a "X ago" / absolute datetime label for the user-creation row.
+function relativeOrAbsoluteTime(value?: string | null): string {
+  if (!value) return '—';
+  const ts = new Date(value).getTime();
+  if (Number.isNaN(ts)) return String(value);
+  return relativeTime(value);
+}
+
+// Pretty-print SLA deadlines: "deadline en 2h" / "vencido hace 1h" / "—".
+function slaDeadlineLabel(deadline?: string | null, status?: string | null): string {
+  if (!deadline) return '—';
+  const t = new Date(deadline).getTime();
+  if (Number.isNaN(t)) return String(deadline);
+  const diffMin = Math.round((t - Date.now()) / 60000);
+  if (diffMin < 0) return `vencido hace ${Math.abs(diffMin) > 60 ? `${Math.round(Math.abs(diffMin) / 60)}h` : `${Math.abs(diffMin)}m`}`;
+  if (diffMin < 60) return `en ${diffMin}m${status ? ` · ${titleCase(status)}` : ''}`;
+  return `en ${Math.round(diffMin / 60)}h${status ? ` · ${titleCase(status)}` : ''}`;
+}
+
+// Detalles tab content — pulls everything from inboxView / state.customer / case
+// instead of the previous hardcoded "Visitante anónimo / España / Hace 4 minutos"
+// placeholders. Includes: real customer card, conversation attributes with
+// real SLA deadlines, internal notes with an inline "+ Añadir nota" form, and
+// real AI activity from case.ai_diagnosis (hidden when null).
+function DetailsTabContent({
+  selectedConv,
+  inboxView,
+  channelName,
+  internalNotes,
+  operationalLinks,
+  onAction,
+  onRefresh,
+}: {
+  selectedConv: Conversation;
+  inboxView: any;
+  channelName: string;
+  internalNotes: any[];
+  operationalLinks: Array<{ type: string; id: string }>;
+  onAction: (message: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  const customer = inboxView?.state?.customer || {};
+  const caseRow = inboxView?.case || {};
+  const caseStateSnap = inboxView?.state?.case || {};
+  const sla = inboxView?.sla || {};
+
+  // Real customer fields, falling back to selectedConv where the API hasn't
+  // hydrated yet (so the panel still renders something while inboxView loads).
+  const realName = customer.canonical_name || customer.name || (selectedConv as any).customerName || 'Sin nombre';
+  const realEmail = customer.canonical_email || customer.email || selectedConv.customerEmail || null;
+  const realCompany = customer.company || selectedConv.company || null;
+  const realLocation = customer.location || null;
+  const realTimezone = customer.timezone || null;
+  const realCreated = customer.created_at || null;
+  const realSegment = customer.segment || null;
+  const realLifetimeValue = customer.lifetime_value;
+  const realCurrency = customer.currency || 'USD';
+  const realTotalOrders = customer.total_orders;
+
+  const firstResponseAt = caseRow.first_response_at || caseStateSnap.first_response_at || null;
+  const resolvedAt = caseRow.resolved_at || caseStateSnap.resolved_at || null;
+  const slaFirstResponseLabel = firstResponseAt
+    ? `Respondido ${relativeTime(firstResponseAt)}`
+    : slaDeadlineLabel(caseRow.sla_first_response_deadline || sla.firstResponseDeadline, caseRow.sla_status || sla.status);
+  const slaResolutionLabel = resolvedAt
+    ? `Resuelto ${relativeTime(resolvedAt)}`
+    : slaDeadlineLabel(caseRow.sla_resolution_deadline || sla.resolutionDeadline, caseRow.sla_status || sla.status);
+
+  // The case row may carry an ai_diagnosis JSON blob with summary + actions.
+  // We render it cleanly when present and just hide the section otherwise so
+  // we never show "Fin gestionó esta conversación" as fake content.
+  const aiDiagnosisRaw = caseRow.ai_diagnosis ?? caseStateSnap.ai_diagnosis ?? null;
+  const aiDiagnosis: any = (() => {
+    if (!aiDiagnosisRaw) return null;
+    if (typeof aiDiagnosisRaw === 'object') return aiDiagnosisRaw;
+    if (typeof aiDiagnosisRaw === 'string') {
+      try { return JSON.parse(aiDiagnosisRaw); } catch { return { summary: aiDiagnosisRaw }; }
+    }
+    return null;
+  })();
+  const aiSummaryText: string | null = aiDiagnosis?.summary
+    || aiDiagnosis?.executive_summary
+    || customer.ai_executive_summary
+    || null;
+  const aiRecommendedAction: string | null = aiDiagnosis?.recommended_action
+    || aiDiagnosis?.next_step
+    || null;
+
+  // Inline "+ Añadir nota" form: collapsed by default, opens to a small
+  // textarea + "Guardar" button. Posts via casesApi.addInternalNote and
+  // refreshes the case so the new note appears in the list.
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [submittingNote, setSubmittingNote] = useState(false);
+  async function submitNote() {
+    const content = draft.trim();
+    if (!content || submittingNote) return;
+    setSubmittingNote(true);
+    try {
+      await casesApi.addInternalNote(selectedConv.id, content);
+      onAction('Nota añadida');
+      setDraft('');
+      setAdding(false);
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo guardar la nota', 'error');
+    } finally {
+      setSubmittingNote(false);
+    }
+  }
+
+  return (
+    <>
+      <DetailSection title="Detalles de la conversación">
+        <DetailRow label="Persona asignada" value={selectedConv.assignee || 'Sin asignar'} />
+        <DetailRow label="Equipo asignado" value={selectedConv.team || 'Sin asignar'} />
+        <DetailRow label="Estado" value={titleCase(selectedConv.status)} />
+        <DetailRow label="Canal" value={channelName} />
+        <DetailRow label="Prioridad" value={titleCase(selectedConv.priority)} />
+        <DetailRow label="Riesgo" value={titleCase(selectedConv.riskLevel || customer.risk_level || '—')} />
+        <DetailRow label="Etiquetas" value={selectedConv.tags?.length ? selectedConv.tags.join(', ') : 'Sin etiquetas'} />
+      </DetailSection>
+
+      <DetailSection title="Cliente">
+        <div className="flex items-center gap-2 py-2">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: selectedConv.avatarColor }}>
+            <span className="text-[14px] font-semibold text-[#1a1a1a]">{String(realName).slice(0, 1).toUpperCase()}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{realName}</p>
+            <p className="text-[12px] text-[#646462] truncate">
+              {realSegment ? `${titleCase(realSegment)} · ` : ''}
+              {realCreated ? `cliente desde ${relativeOrAbsoluteTime(realCreated)}` : 'sin antigüedad registrada'}
+            </p>
+          </div>
+        </div>
+        {realEmail && <DetailRow label="Correo" value={realEmail} />}
+        {realLocation && <DetailRow label="Localización" value={realLocation} />}
+        {realTimezone && <DetailRow label="Zona horaria" value={realTimezone} />}
+        {Number.isFinite(realLifetimeValue) && realLifetimeValue !== 0 && (
+          <DetailRow label="Valor vida" value={`${realLifetimeValue} ${realCurrency}`} />
+        )}
+        {Number.isFinite(realTotalOrders) && realTotalOrders > 0 && (
+          <DetailRow label="Pedidos totales" value={String(realTotalOrders)} />
+        )}
+      </DetailSection>
+
+      {realCompany && (
+        <DetailSection title="Empresa">
+          <p className="text-[13px] text-[#1a1a1a] py-2 truncate">{realCompany}</p>
+        </DetailSection>
+      )}
+
+      <DetailSection title="Atributos de conversación">
+        <DetailRow label="ID de conversación" value={String(selectedConv.id).slice(0, 30)} />
+        <DetailRow label="Iniciada" value={selectedConv.time} />
+        <DetailRow label="SLA primera resp." value={slaFirstResponseLabel} />
+        <DetailRow label="SLA resolución" value={slaResolutionLabel} />
+      </DetailSection>
+
+      <DetailSection title={`Notas internas (${internalNotes.length})`}>
+        <div className="py-2 flex flex-col gap-2">
+          {internalNotes.length === 0 && !adding && <p className="text-[13px] text-[#646462]">Sin notas internas todavía.</p>}
+          {internalNotes.slice(0, 10).map((note: any, index: number) => (
+            <div key={note.id || index} className="rounded-xl bg-[#fffbeb] border border-[#fde68a] px-3 py-2">
+              <p className="text-[13px] text-[#1a1a1a] leading-5 whitespace-pre-wrap">{note.content || note.text || 'Nota sin contenido'}</p>
+              <p className="text-[11px] text-[#646462] mt-1">
+                {(note.createdBy || note.created_by || 'sistema')} · {relativeTime(note.createdAt || note.created_at)}
+              </p>
+            </div>
+          ))}
+          {adding ? (
+            <div className="flex flex-col gap-2 mt-1">
+              <textarea
+                autoFocus
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                placeholder="Escribe una nota interna…"
+                className="w-full min-h-[68px] rounded-xl border border-[#fde68a] bg-[#fffbeb] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#f59e0b]"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => { setAdding(false); setDraft(''); }}
+                  disabled={submittingNote}
+                  className="text-[12px] font-semibold text-[#646462] hover:text-[#1a1a1a]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={submitNote}
+                  disabled={!draft.trim() || submittingNote}
+                  className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
+                >
+                  {submittingNote ? 'Guardando…' : 'Guardar nota'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="self-start mt-1 text-[12px] font-semibold text-[#1a1a1a] hover:underline"
+            >
+              + Añadir nota interna
+            </button>
+          )}
+        </div>
+      </DetailSection>
+
+      <DetailSection title="Enlaces operativos">
+        <div className="py-2 flex flex-col gap-2">
+          {operationalLinks.length === 0 && <p className="text-[13px] text-[#646462]">Sin pedidos, pagos o devoluciones vinculadas.</p>}
+          {operationalLinks.map((link, index) => (
+            <div key={`${link.type}-${link.id}-${index}`} className="flex items-center justify-between rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2">
+              <span className="text-[12px] font-semibold text-[#1a1a1a]">{link.type}</span>
+              <span className="text-[12px] text-[#646462] truncate ml-2">{link.id}</span>
+            </div>
+          ))}
+        </div>
+      </DetailSection>
+
+      {(aiSummaryText || aiRecommendedAction) && (
+        <DetailSection title="Análisis de la IA">
+          <div className="py-2 flex flex-col gap-2">
+            {aiSummaryText && (
+              <div className="rounded-2xl bg-[#f4f4ff] border border-[#dadbf3] p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-full bg-[#e7e2fd] flex items-center justify-center">
+                    <img src={ICON_FIN} alt="" className="w-2.5 h-2.5" />
+                  </div>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[#646462]">Resumen ejecutivo</span>
+                </div>
+                <p className="text-[12.5px] text-[#1a1a1a] leading-5 whitespace-pre-wrap">{aiSummaryText}</p>
+              </div>
+            )}
+            {aiRecommendedAction && (
+              <div className="rounded-2xl bg-[#f8f8f7] border border-[#e9eae6] p-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-[#646462]">Próxima acción sugerida</span>
+                <p className="text-[12.5px] text-[#1a1a1a] leading-5 mt-1 whitespace-pre-wrap">{aiRecommendedAction}</p>
+              </div>
+            )}
+          </div>
+        </DetailSection>
+      )}
+    </>
+  );
+}
+
 function DetailsSidebar({
   selectedConv,
   inboxView,
@@ -2285,6 +2701,9 @@ function DetailsSidebar({
   onUseAsReply,
   onGenerateDraft,
   draftLoading,
+  onRefresh,
+  onAction,
+  onCollapse,
 }: {
   selectedConv: Conversation;
   inboxView: any;
@@ -2294,6 +2713,9 @@ function DetailsSidebar({
   onUseAsReply: (text: string) => void;
   onGenerateDraft: () => void;
   draftLoading: boolean;
+  onRefresh: () => void;
+  onAction: (message: string, type?: 'success' | 'error') => void;
+  onCollapse?: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<'details' | 'copilot'>('details');
   const [detailSubTab, setDetailSubTab] = useState<'detalles' | 'cronologia' | 'conversaciones'>('detalles');
@@ -2330,16 +2752,25 @@ function DetailsSidebar({
   }, [timelineData]);
 
   return (
-    <div className="flex flex-col h-full w-[346px] bg-white rounded-2xl shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] flex-shrink-0 overflow-hidden">
-      <div className="flex items-center border-b border-[#e9eae6] px-4 flex-shrink-0">
-        {([['details', 'Detalles'], ['copilot', 'Copilot']] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setActiveTab(id)}
-            className={`text-[13px] h-10 px-2 mr-2 ${activeTab === id ? 'font-semibold text-[#1a1a1a] border-b-2 border-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
-            {label}
+    <div className="flex flex-col h-full w-[346px] min-w-[346px] max-w-[346px] bg-white rounded-2xl shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] flex-shrink-0 overflow-hidden">
+      <div className="flex items-center justify-between border-b border-[#e9eae6] px-4 flex-shrink-0">
+        <div className="flex items-center min-w-0">
+          {([['details', 'Detalles'], ['copilot', 'Copilot']] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setActiveTab(id)}
+              className={`text-[13px] h-10 px-2 mr-2 ${activeTab === id ? 'font-semibold text-[#1a1a1a] border-b-2 border-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {onCollapse && (
+          <button onClick={onCollapse} title="Esconder detalles" className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#f8f8f7] text-[#646462] flex-shrink-0">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+              <path d="M6 4l4 4-4 4" />
+            </svg>
           </button>
-        ))}
+        )}
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {activeTab === 'details' && (
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6]">
             {([['detalles', 'Detalles'], ['cronologia', 'Cronología'], ['conversaciones', 'Conversaciones']] as const).map(([id, label]) => (
@@ -2355,77 +2786,15 @@ function DetailsSidebar({
             ))}
           </div>
         )}
-        {activeTab === 'details' && detailSubTab === 'detalles' && <>
-          <DetailSection title="Detalles de la conversación">
-            <DetailRow label="Persona asignada" value={selectedConv.assignee || "Sin asignar"} />
-            <DetailRow label="Equipo asignado" value={selectedConv.team || "Sin asignar"} />
-            <DetailRow label="Estado" value={titleCase(selectedConv.status)} />
-            <DetailRow label="Canal" value={channelName} />
-            <DetailRow label="Prioridad" value={titleCase(selectedConv.priority)} />
-            <DetailRow label="Etiquetas reales" value={selectedConv.tags?.join(', ') || "Sin etiquetas"} />
-            <DetailRow label="Etiquetas" value="Añadir etiqueta..." />
-          </DetailSection>
-          <DetailSection title="Usuario">
-            <div className="flex items-center gap-2 py-2">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: selectedConv.avatarColor }}>
-                <span className="text-[14px] font-semibold text-[#1a1a1a]">{selectedConv.avatarLetter}</span>
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-[#1a1a1a]">Visitante anónimo</p>
-                <p className="text-[12px] text-[#646462]">Nunca visto antes</p>
-              </div>
-            </div>
-            <DetailRow label="Correo" value={selectedConv.customerEmail || "Sin correo"} />
-            <DetailRow label="Localización" value="España" />
-            <DetailRow label="Idioma" value="Español" />
-            <DetailRow label="Zona horaria" value="Europe/Madrid" />
-            <DetailRow label="Creado" value="Hace 4 minutos" />
-          </DetailSection>
-          <DetailSection title="Empresa">
-            <p className="text-[13px] text-[#646462] py-2">{selectedConv.company || 'Sin empresa asociada'}</p>
-          </DetailSection>
-          <DetailSection title="Atributos de conversación">
-            <DetailRow label="ID de conversación" value={selectedConv.id} />
-            <DetailRow label="Iniciada" value={selectedConv.time} />
-            <DetailRow label="Primer tiempo resp." value="—" />
-            <DetailRow label="Tiempo de resolución" value="—" />
-          </DetailSection>
-          <DetailSection title="Notas internas">
-            <div className="py-2 flex flex-col gap-2">
-              {internalNotes.length === 0 && <p className="text-[13px] text-[#646462]">Sin notas internas.</p>}
-              {internalNotes.slice(0, 4).map((note: any, index: number) => (
-                <div key={note.id || index} className="rounded-xl bg-[#fffbeb] border border-[#fde68a] px-3 py-2">
-                  <p className="text-[13px] text-[#1a1a1a] leading-5">{note.content || note.text || 'Nota sin contenido'}</p>
-                  <p className="text-[11px] text-[#646462] mt-1">{relativeTime(note.createdAt || note.created_at)}</p>
-                </div>
-              ))}
-            </div>
-          </DetailSection>
-          <DetailSection title="Enlaces operativos">
-            <div className="py-2 flex flex-col gap-2">
-              {operationalLinks.length === 0 && <p className="text-[13px] text-[#646462]">Sin pedidos, pagos o devoluciones vinculadas.</p>}
-              {operationalLinks.map((link, index) => (
-                <div key={`${link.type}-${link.id}-${index}`} className="flex items-center justify-between rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2">
-                  <span className="text-[12px] font-semibold text-[#1a1a1a]">{link.type}</span>
-                  <span className="text-[12px] text-[#646462] truncate ml-2">{link.id}</span>
-                </div>
-              ))}
-            </div>
-          </DetailSection>
-          <DetailSection title="Actividad de Fin">
-            <div className="py-2">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-5 h-5 rounded-full bg-[#e7e2fd] flex items-center justify-center">
-                  <img src={ICON_FIN} alt="" className="w-3 h-3" />
-                </div>
-                <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin gestionó esta conversación</span>
-              </div>
-              <p className="text-[12px] text-[#646462] leading-4">
-                Fin proporcionó instrucciones de instalación y cerró la conversación.
-              </p>
-            </div>
-          </DetailSection>
-        </>}
+        {activeTab === 'details' && detailSubTab === 'detalles' && <DetailsTabContent
+          selectedConv={selectedConv}
+          inboxView={inboxView}
+          channelName={channelName}
+          internalNotes={internalNotes}
+          operationalLinks={operationalLinks}
+          onAction={onAction}
+          onRefresh={onRefresh}
+        />}
         {activeTab === 'details' && detailSubTab === 'cronologia' && (
           <div className="px-5 py-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
@@ -2487,6 +2856,23 @@ function readInitialInboxParams(): { scope: InboxScope; caseId: string } {
   return { scope, caseId: sp.get('case') || '' };
 }
 
+// CollapsedRail — thin (28px) bar shown in place of a hidden sidebar. Click
+// expands the sidebar back. Arrow points outward from the chat ("▶" on the
+// right, "◀" on the left equivalent) so the affordance is obvious.
+function CollapsedRail({ side, label, onClick }: { side: 'left' | 'right'; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      className="flex flex-col items-center justify-center h-full w-7 flex-shrink-0 rounded-2xl bg-[#f8f8f7] border border-[#e9eae6] hover:bg-[#ededea] text-[#646462]"
+    >
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+        {side === 'left' ? <path d="M6 4l4 4-4 4" /> : <path d="M10 4l-4 4 4 4" />}
+      </svg>
+    </button>
+  );
+}
+
 function InboxView() {
   const initialParams = readInitialInboxParams();
   const [selectedConvId, setSelectedConvId] = useState(initialParams.caseId);
@@ -2501,6 +2887,31 @@ function InboxView() {
   // ref-bridge.
   const [replyText, setReplyText] = useState('');
   const [replyTab, setReplyTab] = useState<'responder' | 'nota' | 'datosIA'>('responder');
+  // Each sidebar can be hidden so the agent can focus on the conversation
+  // panel. Persisted per-browser via localStorage so the layout survives
+  // reloads. Defaults: all three open.
+  const PANELS_LS_KEY = 'clain.inbox.panels';
+  type PanelState = { left: boolean; list: boolean; right: boolean };
+  const [panels, setPanels] = useState<PanelState>(() => {
+    if (typeof window === 'undefined') return { left: true, list: true, right: true };
+    try {
+      const raw = window.localStorage.getItem(PANELS_LS_KEY);
+      if (!raw) return { left: true, list: true, right: true };
+      const parsed = JSON.parse(raw);
+      return {
+        left:  typeof parsed?.left  === 'boolean' ? parsed.left  : true,
+        list:  typeof parsed?.list  === 'boolean' ? parsed.list  : true,
+        right: typeof parsed?.right === 'boolean' ? parsed.right : true,
+      };
+    } catch { return { left: true, list: true, right: true }; }
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem(PANELS_LS_KEY, JSON.stringify(panels)); } catch { /* ignore quota */ }
+  }, [panels]);
+  function togglePanel(which: keyof PanelState) {
+    setPanels(p => ({ ...p, [which]: !p[which] }));
+  }
   const { data: apiCases, loading, error } = useApi(
     () => casesApi.list(),
     [refreshKey],
@@ -2511,10 +2922,32 @@ function InboxView() {
     () => (Array.isArray(apiCases) ? apiCases.map(mapCaseToPrototypeConversation) : []),
     [apiCases],
   );
-  const scopedConversations = useMemo(
-    () => liveConversations.filter(conv => matchesInboxScope(conv, scope)),
-    [liveConversations, scope],
-  );
+  // Sidebar "Buscar" → activates a global free-text search across every
+  // conversation field (channel / customer / preview / tags / company /
+  // assignee / case id). When the search query is empty we fall through to
+  // the regular scope filter so the user can clear without leaving the view.
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const scopedConversations = useMemo(() => {
+    if (scope === 'search') {
+      const q = globalSearchQuery.trim().toLowerCase();
+      if (!q) return liveConversations;
+      return liveConversations.filter(conv => {
+        const haystack = [
+          conv.id,
+          conv.channel,
+          conv.customerName,
+          conv.customerEmail,
+          conv.preview,
+          conv.assignee,
+          conv.team,
+          conv.company,
+          (conv.tags || []).join(' '),
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+    return liveConversations.filter(conv => matchesInboxScope(conv, scope));
+  }, [liveConversations, scope, globalSearchQuery]);
   const counts = useMemo(() => {
     const scopes: InboxScope[] = ['inbox', 'mentions', 'created', 'all', 'unassigned', 'spam', 'fin-all', 'fin-resolved', 'fin-escalated', 'fin-pending', 'fin-spam', 'v-messenger', 'v-email', 'v-whatsapp', 'v-phone', 'v-tickets'];
     return scopes.reduce<Partial<Record<InboxScope, number>>>((acc, key) => {
@@ -2698,18 +3131,45 @@ function InboxView() {
     <div className="flex flex-col flex-1 min-w-0 p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
-        <InboxSidebar active={scope} onScopeChange={changeScope} counts={counts} onAction={showToast} />
-        <div className="relative h-full flex-shrink-0">
-          <ConversationList
-            selectedId={selectedConv?.id || selectedConvId}
-            onSelect={setSelectedConvId}
-            items={scope === 'dashboard' ? liveConversations : scopedConversations}
-            loading={loading}
-            error={error}
-            title={inboxScopeTitle(scope)}
-            scope={scope}
-          />
-        </div>
+        {panels.left ? (
+          <InboxSidebar active={scope} onScopeChange={changeScope} counts={counts} onAction={showToast} onCollapse={() => togglePanel('left')} />
+        ) : (
+          <CollapsedRail side="left" label="Mostrar sidebar" onClick={() => togglePanel('left')} />
+        )}
+        {panels.list ? (
+          <div className="relative h-full flex-shrink-0">
+            {scope === 'search' && (
+              <div className="absolute top-0 left-0 right-0 z-10 bg-[#f8f8f7] border-b border-[#e9eae6] px-3 py-3">
+                <input
+                  autoFocus
+                  value={globalSearchQuery}
+                  onChange={e => setGlobalSearchQuery(e.target.value)}
+                  placeholder="Buscar conversaciones, clientes, etiquetas…"
+                  className="w-full h-9 rounded-lg border border-[#e9eae6] bg-white px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="text-[11px] text-[#646462] mt-1.5">
+                  {globalSearchQuery.trim()
+                    ? `${scopedConversations.length} de ${liveConversations.length} coinciden`
+                    : `Buscando en ${liveConversations.length} conversaciones`}
+                </p>
+              </div>
+            )}
+            <div className={scope === 'search' ? 'pt-[88px] h-full' : 'h-full'}>
+              <ConversationList
+                selectedId={selectedConv?.id || selectedConvId}
+                onSelect={setSelectedConvId}
+                items={scope === 'dashboard' ? liveConversations : scopedConversations}
+                loading={loading}
+                error={error}
+                title={inboxScopeTitle(scope)}
+                scope={scope}
+                onCollapse={() => togglePanel('list')}
+              />
+            </div>
+          </div>
+        ) : (
+          <CollapsedRail side="left" label="Mostrar lista" onClick={() => togglePanel('list')} />
+        )}
         <div className="flex flex-1 min-w-0 gap-2">
           {selectedConv ? (
             <>
@@ -2722,17 +3182,26 @@ function InboxView() {
                 setReplyText={setReplyText}
                 replyTab={replyTab}
                 setReplyTab={setReplyTab}
+                panels={panels}
+                onTogglePanel={togglePanel}
               />
-              <DetailsSidebar
-                selectedConv={selectedConv}
-                inboxView={inboxView}
-                copilotMessages={copilotByCaseId[selectedConv.id] || []}
-                onSendCopilot={sendCopilot}
-                copilotLoading={copilotLoading}
-                onUseAsReply={useAsReply}
-                onGenerateDraft={generateDraftFromCopilot}
-                draftLoading={copilotDraftLoading}
-              />
+              {panels.right ? (
+                <DetailsSidebar
+                  selectedConv={selectedConv}
+                  inboxView={inboxView}
+                  copilotMessages={copilotByCaseId[selectedConv.id] || []}
+                  onSendCopilot={sendCopilot}
+                  copilotLoading={copilotLoading}
+                  onUseAsReply={useAsReply}
+                  onGenerateDraft={generateDraftFromCopilot}
+                  draftLoading={copilotDraftLoading}
+                  onRefresh={() => setRefreshKey(k => k + 1)}
+                  onAction={showToast}
+                  onCollapse={() => togglePanel('right')}
+                />
+              ) : (
+                <CollapsedRail side="right" label="Mostrar detalles" onClick={() => togglePanel('right')} />
+              )}
             </>
           ) : (
             <div className="flex flex-1 min-w-0 items-center justify-center bg-white rounded-2xl shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)]">
