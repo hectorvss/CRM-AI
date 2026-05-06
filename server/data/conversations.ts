@@ -7,6 +7,22 @@ export interface ConversationScope {
   userId?: string;
 }
 
+export interface MessageAttachment {
+  /** Stable id within the message payload (UUID generated client-side OK). */
+  id: string;
+  /** Original filename. */
+  name: string;
+  /** Bytes. */
+  size: number;
+  /** MIME type, e.g. image/png. */
+  type: string;
+  /** Base64 data URL (data:<mime>;base64,…). Stored verbatim — Supabase
+   *  Storage upload will replace this with a signed URL in a follow-up. */
+  dataUrl?: string;
+  /** Optional public URL once uploaded. */
+  url?: string;
+}
+
 export interface AppendMessageInput {
   /** Optional pre-generated id (used when caller wants to correlate with a queued job). */
   id?: string;
@@ -25,6 +41,9 @@ export interface AppendMessageInput {
   /** 'pending' | 'sent' | 'failed'. Defaults to 'sent' for backward compatibility. */
   deliveryStatus?: 'pending' | 'sent' | 'failed';
   deliveryError?: string | null;
+  /** File previews / data URIs attached to this reply. Stored as JSON in
+   *  the messages.attachments column (legacy schema already supports it). */
+  attachments?: MessageAttachment[];
 }
 
 export interface InternalNoteInput {
@@ -139,7 +158,7 @@ async function appendMessageSupabase(scope: ConversationScope, input: AppendMess
   const supabase = getSupabaseAdmin();
   const now = input.sentAt || new Date().toISOString();
   const messageId = input.id || crypto.randomUUID();
-  const payload = {
+  const payload: Record<string, any> = {
     id: messageId,
     conversation_id: input.conversationId,
     case_id: input.caseId,
@@ -159,6 +178,12 @@ async function appendMessageSupabase(scope: ConversationScope, input: AppendMess
     // Note: messages has no delivery_status / delivery_error / workspace_id
     // columns — keep this payload minimal to avoid 42703 inserts.
   };
+  // Attachments are stored as JSON text in the legacy messages.attachments
+  // column. Only include the field when there is at least one attachment so
+  // older Supabase schemas without the column won't choke on the insert.
+  if (input.attachments && input.attachments.length > 0) {
+    payload.attachments = JSON.stringify(input.attachments);
+  }
 
   const { error: insertError } = await supabase.from('messages').insert(payload);
   if (insertError) throw insertError;

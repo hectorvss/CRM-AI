@@ -285,10 +285,10 @@ export const casesApi = {
       method: 'POST',
       body: JSON.stringify({ content }),
     }),
-  reply: (id: string, content: string, draft_reply_id?: string) =>
+  reply: (id: string, content: string, draft_reply_id?: string, attachments?: Array<{ id: string; name: string; size: number; type: string; dataUrl?: string; url?: string }>) =>
     request<any>(`/cases/${id}/reply`, {
       method: 'POST',
-      body: JSON.stringify({ content, draft_reply_id }),
+      body: JSON.stringify({ content, draft_reply_id, attachments }),
     }),
   executeResolutionStep: (id: string, stepId: string) =>
     request<any>(`/cases/${id}/resolution/execute-step`, {

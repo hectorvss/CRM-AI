@@ -698,10 +698,25 @@ router.post('/:id/notes', handleInternalNote);
 
 router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
   try {
-    const { content, draft_reply_id } = req.body;
-    if (!content || !String(content).trim()) {
-      return res.status(400).json({ error: 'Reply content is required' });
+    const { content, draft_reply_id, attachments } = req.body;
+    const trimmedContent = String(content || '').trim();
+    const incomingAttachments = Array.isArray(attachments) ? attachments : [];
+    // Either the body must be non-empty OR there must be at least one attachment
+    // (a "send file with no caption" reply is legitimate).
+    if (!trimmedContent && incomingAttachments.length === 0) {
+      return res.status(400).json({ error: 'Reply content or attachments are required' });
     }
+    // Defensive shape: only keep fields we expect, normalize types.
+    const safeAttachments = incomingAttachments.slice(0, 10).map((att: any, i: number) => ({
+      id: String(att?.id || `att-${Date.now()}-${i}`),
+      name: String(att?.name || `attachment-${i + 1}`),
+      size: Number.isFinite(att?.size) ? Number(att.size) : 0,
+      type: String(att?.type || 'application/octet-stream'),
+      // dataUrl can be huge — cap at ~5 MB encoded so a malicious or
+      // accidental upload of a 50 MB blob doesn't bloat the messages row.
+      dataUrl: typeof att?.dataUrl === 'string' && att.dataUrl.length < 5_500_000 ? att.dataUrl : undefined,
+      url: typeof att?.url === 'string' ? att.url : undefined,
+    }));
 
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
     const bundle = await caseRepository.getBundle(scope, req.params.id);
@@ -720,11 +735,12 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
       direction: 'outbound',
       senderId: req.userId || 'user_local',
       senderName: 'Alex Morgan',
-      content: String(content).trim(),
+      content: trimmedContent || (safeAttachments.length === 1 ? `Adjunto: ${safeAttachments[0].name}` : `${safeAttachments.length} adjuntos`),
       channel,
       externalMessageId: `queued_${queuedMessageId}`,
       draftReplyId: draft_reply_id || null,
       sentAt: now,
+      attachments: safeAttachments.length > 0 ? safeAttachments : undefined,
     });
 
     if (draft_reply_id) {
@@ -738,9 +754,10 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         caseId: req.params.id,
         conversationId: conversation.id,
         channel,
-        content: String(content).trim(),
+        content: trimmedContent,
         queuedMessageId,
         draftReplyId: draft_reply_id || undefined,
+        attachments: safeAttachments.length > 0 ? safeAttachments : undefined,
       },
       {
         tenantId: req.tenantId!,
@@ -762,6 +779,7 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         channel,
         queuedMessageId,
         draftReplyId: draft_reply_id || null,
+        attachmentCount: safeAttachments.length,
       },
     });
 
@@ -774,9 +792,10 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         type: 'agent',
         direction: 'outbound',
         sender_name: 'Alex Morgan',
-        content: String(content).trim(),
+        content: trimmedContent,
         channel,
         sent_at: now,
+        attachments: safeAttachments,
       },
     });
   } catch (error) {

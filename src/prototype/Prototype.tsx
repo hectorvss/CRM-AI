@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { aiApi, casesApi } from '../api/client';
+import { aiApi, casesApi, iamApi } from '../api/client';
 import { useApi } from '../api/hooks';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
@@ -45,6 +45,13 @@ const IMG_OFFICE_HOURS_BANNER = "https://www.figma.com/api/mcp/asset/4ce970fe-a9
 const IMG_OFFICE_HOURS_FIN_AI = "https://www.figma.com/api/mcp/asset/6cf6adf2-9cc9-4fbf-a7ca-fb1832331ac7";
 // Chat support floating icon (1:55751 mask, used in all settings screens)
 const IMG_CHAT_SUPPORT_MASK = "http://localhost:3845/assets/7d6b74634c1449d020cbc1db43f39966f662badb.svg";
+// Fin Deploy hero images (audit pass 9 — replaced hand-coded mockups with real Figma assets)
+// Chat 1:11722 (fin-deploy-chat-eb9e48bead5c65c37096718276eda303.png — 388x212)
+const IMG_FIN_DEPLOY_CHAT  = "http://localhost:3845/assets/222b2b9d1515fc2cbc95fbf0d6270d743617e8bf.png";
+// Email 1:13373 (fin-deploy-email-68f7d0016a876341da3cdc56522be3a4.png — 388x212)
+const IMG_FIN_DEPLOY_EMAIL = "http://localhost:3845/assets/d4d68c5f932609fedf41c1ded3a73ef52af056c5.png";
+// Phone 1:14530 (fin-voice-coming-soon-6f4acefc29fcc6d0e4edc15621ecf710.png — 400x264)
+const IMG_FIN_VOICE_BANNER = "http://localhost:3845/assets/570533ec5bf7bbeabe2e299695110a691ed84218.png";
 // AllChannels card logos — each is a composition of bg SVG + foreground SVGs
 // All extracted node-by-node via cloud Figma MCP (1:67155, 70, 84, 202, 22, 41, 60, 99, 314)
 const FIGMA_CDN = "https://www.figma.com/api/mcp/asset";
@@ -1006,7 +1013,8 @@ function ConversationList({
   );
 }
 
-type Message = { id: string; from: "user" | "agent" | "bot"; text: string; time: string; senderName?: string };
+type Attachment = { id: string; name: string; size: number; type: string; dataUrl?: string; url?: string };
+type Message = { id: string; from: "user" | "agent" | "bot"; text: string; time: string; senderName?: string; attachments?: Attachment[] };
 type ComposerAttachment = { id: string; name: string; size: number; type: string; dataUrl?: string; file: File };
 const PROTOTYPE_COMMON_EMOJIS = ['😊','😄','😂','😍','🤔','😅','😭','😤','👍','🙏','🎉','✅','🚚','💳','📦','⚠️','❤️','🔥'];
 const messages: Message[] = [
@@ -1039,13 +1047,71 @@ function normalizePrototypeMessage(message: any, index: number): Message {
   const key = String(direction).toLowerCase();
   const isCustomer = ['customer', 'user', 'inbound'].includes(key);
   const isAi = ['ai', 'assistant', 'bot', 'fin'].includes(key);
+  // The backend stores attachments as a JSON string on the messages row.
+  // Parse it defensively — old rows have null, integration messages might
+  // pass an array directly.
+  let attachments: Attachment[] | undefined;
+  const raw = message.attachments;
+  if (Array.isArray(raw)) {
+    attachments = raw.filter((a: any) => a && a.name).map((a: any, i: number) => ({
+      id: String(a.id || `att-${i}`),
+      name: String(a.name),
+      size: Number.isFinite(a.size) ? Number(a.size) : 0,
+      type: String(a.type || 'application/octet-stream'),
+      dataUrl: typeof a.dataUrl === 'string' ? a.dataUrl : undefined,
+      url: typeof a.url === 'string' ? a.url : undefined,
+    }));
+  } else if (typeof raw === 'string' && raw.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        attachments = parsed.filter((a: any) => a && a.name).map((a: any, i: number) => ({
+          id: String(a.id || `att-${i}`),
+          name: String(a.name),
+          size: Number.isFinite(a.size) ? Number(a.size) : 0,
+          type: String(a.type || 'application/octet-stream'),
+          dataUrl: typeof a.dataUrl === 'string' ? a.dataUrl : undefined,
+          url: typeof a.url === 'string' ? a.url : undefined,
+        }));
+      }
+    } catch {
+      // ignore malformed JSON
+    }
+  }
   return {
     id: String(message.id || `msg-${index}`),
     from: isCustomer ? 'user' : isAi ? 'bot' : 'agent',
     text,
     time: relativeTime(message.createdAt || message.created_at || message.time || message.timestamp),
     senderName: message.senderName || message.sender_name || (isAi ? 'Fin' : isCustomer ? undefined : 'Equipo'),
+    attachments: attachments && attachments.length > 0 ? attachments : undefined,
   };
+}
+
+function MessageAttachmentChip({ att }: { att: Attachment }) {
+  const isImage = (att.type || '').startsWith('image/') || (att.dataUrl || '').startsWith('data:image');
+  const href = att.url || att.dataUrl;
+  return (
+    <a
+      href={href || '#'}
+      download={href && !att.url ? att.name : undefined}
+      target={att.url ? '_blank' : undefined}
+      rel="noopener noreferrer"
+      onClick={e => { if (!href) e.preventDefault(); }}
+      className="flex items-center gap-2 rounded-xl bg-white border border-[#e9eae6] px-2 py-1.5 hover:bg-[#f8f8f7] max-w-full"
+      title={`${att.name} · ${formatBytes(att.size)}`}
+    >
+      {isImage && href ? (
+        <img src={href} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0" />
+      ) : (
+        <span className="w-6 h-6 rounded bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[11px]">📎</span>
+      )}
+      <div className="flex flex-col min-w-0">
+        <span className="text-[12px] font-semibold text-[#1a1a1a] truncate max-w-[180px]">{att.name}</span>
+        <span className="text-[10px] text-[#646462]">{formatBytes(att.size)}</span>
+      </div>
+    </a>
+  );
 }
 
 function ChatMessage({ msg }: { msg: Message }) {
@@ -1059,7 +1125,12 @@ function ChatMessage({ msg }: { msg: Message }) {
       )}
       <div className={`max-w-[380px] px-4 py-4 rounded-xl text-[14px] leading-[20px] bg-[#f8f8f7] text-[#1a1a1a] ${isUser ? "rounded-br-sm" : "rounded-bl-sm"}`}>
         {msg.senderName && <p className="text-[12px] font-semibold text-[#646462] mb-1">{msg.senderName}</p>}
-        <p>{msg.text}</p>
+        {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
+        {msg.attachments && msg.attachments.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1.5">
+            {msg.attachments.map(att => <MessageAttachmentChip key={att.id} att={att} />)}
+          </div>
+        )}
         <p className="text-[11px] text-[#646462] mt-2 text-right">{msg.time}</p>
       </div>
     </div>
@@ -1118,6 +1189,420 @@ function PrototypeMergeModal({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ResolutionPlanModal — fetches the AI-built case resolution plan and lets the
+// agent run individual steps or the whole plan. Each step shows a kind badge
+// (tool / navigate / blocked) and its own Ejecutar button. After execution,
+// the trace summary appears under the step. "Ejecutar todo" runs every step
+// of kind=tool sequentially via /resolution-plan/run.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ResolutionPlanModal({
+  caseId,
+  onClose,
+  onAction,
+  onRefresh,
+}: {
+  caseId: string;
+  onClose: () => void;
+  onAction: (message: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  const [planRefresh, setPlanRefresh] = useState(0);
+  const [runningStep, setRunningStep] = useState<string | null>(null);
+  const [runningAll, setRunningAll] = useState(false);
+  // Per-step result keyed by step id: { ok, summary }.
+  const [results, setResults] = useState<Record<string, { ok: boolean; summary: string }>>({});
+
+  const { data: plan, loading, error } = useApi(
+    () => casesApi.resolutionPlan(caseId),
+    [caseId, planRefresh],
+  );
+  const steps: any[] = Array.isArray(plan?.steps) ? plan.steps : [];
+
+  async function runStep(step: any) {
+    if (runningStep || runningAll) return;
+    setRunningStep(step.id);
+    try {
+      const result = await casesApi.runResolutionStep(caseId, step.id);
+      const summary = result?.message || result?.trace?.summary || (result?.ok ? 'Paso ejecutado' : 'Paso bloqueado');
+      setResults(state => ({ ...state, [step.id]: { ok: !!result?.ok, summary } }));
+      onAction(`${step.title}: ${summary}`, result?.ok ? 'success' : 'error');
+    } catch (err: any) {
+      const summary = err?.message || 'No se pudo ejecutar el paso';
+      setResults(state => ({ ...state, [step.id]: { ok: false, summary } }));
+      onAction(summary, 'error');
+    } finally {
+      setRunningStep(null);
+    }
+  }
+
+  async function runAll() {
+    if (runningStep || runningAll) return;
+    setRunningAll(true);
+    try {
+      const result = await casesApi.runResolutionPlan(caseId);
+      const summary = result?.message || result?.summary || 'Plan ejecutado';
+      onAction(summary, result?.ok ? 'success' : 'error');
+      setPlanRefresh(k => k + 1);
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo ejecutar el plan', 'error');
+    } finally {
+      setRunningAll(false);
+    }
+  }
+
+  function kindBadge(kind: string) {
+    const map: Record<string, string> = {
+      tool:     'bg-[#dbeafe] text-[#1e3a8a]',
+      navigate: 'bg-[#f4f4ff] text-[#3b59f6]',
+      blocked:  'bg-[#fee2e2] text-[#b91c1c]',
+    };
+    return <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${map[kind] || 'bg-[#f8f8f7] text-[#646462]'}`}>{kind}</span>;
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[560px] max-h-[80vh] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5 flex flex-col"
+        onClick={event => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div>
+            <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Plan de resolución con IA</h3>
+            <p className="text-[12.5px] text-[#646462] mt-0.5">{plan?.title || 'Pasos sugeridos para cerrar este caso.'}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-full hover:bg-[#f8f8f7] text-[#646462] text-[14px] flex items-center justify-center"
+            title="Cerrar"
+          >×</button>
+        </div>
+        <div className="flex-1 overflow-y-auto -mx-1 px-1 mt-3">
+          {loading && <div className="text-[12.5px] text-[#646462] px-2 py-3">Cargando plan…</div>}
+          {error && <div className="text-[12.5px] text-[#b91c1c] px-2 py-3">No se pudo cargar el plan</div>}
+          {!loading && !error && steps.length === 0 && (
+            <div className="text-[12.5px] text-[#646462] px-2 py-3">No hay pasos sugeridos para este caso todavía.</div>
+          )}
+          <div className="flex flex-col gap-2">
+            {steps.map((step: any, i: number) => {
+              const result = results[step.id];
+              const kind = step.execution?.kind || 'tool';
+              const isBlocked = kind === 'blocked';
+              const reason = step.execution?.reason || step.description;
+              return (
+                <div key={step.id || i} className={`rounded-xl border px-3 py-2.5 ${isBlocked ? 'border-[#fde2e2] bg-[#fef7f7]' : 'border-[#e9eae6] bg-white'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] font-semibold text-[#646462]">Paso {i + 1}</span>
+                        {kindBadge(kind)}
+                        {step.execution?.tool && <span className="text-[10.5px] text-[#646462] font-mono">{step.execution.tool}</span>}
+                      </div>
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] mt-0.5">{step.title || 'Paso'}</p>
+                      {reason && <p className="text-[12px] text-[#646462] leading-5 mt-0.5 whitespace-pre-wrap">{reason}</p>}
+                      {result && (
+                        <p className={`text-[11.5px] mt-1.5 ${result.ok ? 'text-[#16a34a]' : 'text-[#b91c1c]'}`}>{result.ok ? '✓' : '✗'} {result.summary}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => runStep(step)}
+                      disabled={isBlocked || runningStep === step.id || runningAll}
+                      className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[11.5px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462] flex-shrink-0"
+                    >
+                      {runningStep === step.id ? '…' : isBlocked ? 'Bloqueado' : 'Ejecutar'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-[#e9eae6]">
+          <button
+            onClick={() => setPlanRefresh(k => k + 1)}
+            disabled={loading || runningAll || !!runningStep}
+            className="text-[12px] font-semibold text-[#646462] hover:text-[#1a1a1a] disabled:opacity-50"
+          >
+            Recargar plan
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]"
+            >
+              Cerrar
+            </button>
+            <button
+              onClick={runAll}
+              disabled={loading || runningAll || !!runningStep || steps.length === 0}
+              className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
+            >
+              {runningAll ? 'Ejecutando…' : 'Ejecutar todo'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StatusChangeModal — generic confirm-with-reason for non-trivial status moves
+// (snooze / escalate / close / reopen). Each mode pre-loads helpful presets and
+// validates before submitting via casesApi.updateStatus(id, status, reason).
+// ─────────────────────────────────────────────────────────────────────────────
+
+type StatusMode = 'snoozed' | 'escalated' | 'closed' | 'open';
+
+const STATUS_MODE_CONFIG: Record<StatusMode, {
+  title: string;
+  description: string;
+  ctaLabel: string;
+  ctaClass: string;
+  presets: string[];
+  reasonRequired: boolean;
+  successLabel: string;
+}> = {
+  snoozed: {
+    title: 'Posponer conversación',
+    description: 'El caso reaparecerá cuando se cumpla la condición que indiques.',
+    ctaLabel: 'Posponer',
+    ctaClass: 'bg-[#1a1a1a] text-white',
+    presets: ['Esperando respuesta del cliente', 'Esperando confirmación del banco', 'Volver mañana', 'Esperar 4 horas', 'Esperar 1 hora'],
+    reasonRequired: true,
+    successLabel: 'Caso pospuesto',
+  },
+  escalated: {
+    title: 'Escalar conversación',
+    description: 'Indica por qué hay que escalarlo y a quién avisar (opcional).',
+    ctaLabel: 'Escalar',
+    ctaClass: 'bg-[#b91c1c] text-white',
+    presets: ['Caso de alto valor — necesita aprobación', 'Riesgo de fraude detectado', 'Cliente VIP', 'Conflicto entre sistemas (OMS/PSP)', 'Política excede los límites del agente'],
+    reasonRequired: true,
+    successLabel: 'Caso escalado',
+  },
+  closed: {
+    title: 'Cerrar conversación',
+    description: 'Cerrar es definitivo. Indica el motivo del cierre.',
+    ctaLabel: 'Cerrar caso',
+    ctaClass: 'bg-[#1a1a1a] text-white',
+    presets: ['Cliente no respondió', 'Resuelto fuera del canal', 'Spam', 'Duplicado', 'Sin contenido'],
+    reasonRequired: true,
+    successLabel: 'Caso cerrado',
+  },
+  open: {
+    title: 'Reabrir conversación',
+    description: '¿Por qué hay que reabrirlo?',
+    ctaLabel: 'Reabrir',
+    ctaClass: 'bg-[#1a1a1a] text-white',
+    presets: ['Cliente respondió', 'Información nueva', 'Reabierto por error de cierre'],
+    reasonRequired: false,
+    successLabel: 'Caso reabierto',
+  },
+};
+
+function StatusChangeModal({
+  caseId,
+  mode,
+  onClose,
+  onChanged,
+  onAction,
+}: {
+  caseId: string;
+  mode: StatusMode;
+  onClose: () => void;
+  onChanged: () => void;
+  onAction: (message: string, type?: 'success' | 'error') => void;
+}) {
+  const cfg = STATUS_MODE_CONFIG[mode];
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function confirm() {
+    const trimmed = reason.trim();
+    if (cfg.reasonRequired && !trimmed) {
+      onAction('Indica un motivo antes de continuar', 'error');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await casesApi.updateStatus(caseId, mode, trimmed || `Inbox: ${cfg.successLabel}`, 'system');
+      onAction(cfg.successLabel);
+      onChanged();
+      onClose();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo actualizar el estado', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+        onClick={event => event.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">{cfg.title}</h3>
+        <p className="text-[12.5px] text-[#646462] mb-3">{cfg.description}</p>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {cfg.presets.map(preset => (
+            <button
+              key={preset}
+              onClick={() => setReason(preset)}
+              className="h-7 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a] hover:bg-[#ededea]"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+        <textarea
+          autoFocus
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder={cfg.reasonRequired ? 'Motivo (obligatorio)…' : 'Motivo (opcional)…'}
+          className="w-full min-h-[80px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={confirm}
+            disabled={submitting || (cfg.reasonRequired && !reason.trim())}
+            className={`h-8 px-4 rounded-full text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462] ${cfg.ctaClass}`}
+          >
+            {submitting ? '…' : cfg.ctaLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AssignModal — pick a workspace member to own this case.
+// Renders the member list from /iam/members, search-filters by name/email/role,
+// calls casesApi.assign(caseId, user_id) and closes on success.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AssignModal({
+  caseId,
+  currentAssignee,
+  onClose,
+  onAssigned,
+  onAction,
+}: {
+  caseId: string;
+  currentAssignee?: string;
+  onClose: () => void;
+  onAssigned: () => void;
+  onAction: (message: string, type?: 'success' | 'error') => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const { data: members, loading, error } = useApi(
+    () => iamApi.members(),
+    [],
+    [],
+  );
+
+  const filtered = useMemo(() => {
+    const list = Array.isArray(members) ? members : [];
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((m: any) => {
+      const haystack = `${m.name || ''} ${m.full_name || ''} ${m.email || ''} ${m.role_name || ''}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [members, query]);
+
+  async function assignTo(memberId: string | null) {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await casesApi.assign(caseId, memberId || undefined);
+      onAction(memberId ? 'Caso asignado' : 'Asignación retirada');
+      onAssigned();
+      onClose();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo asignar el caso', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[420px] max-h-[520px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5 flex flex-col"
+        onClick={event => event.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Asignar conversación</h3>
+        <p className="text-[12.5px] text-[#646462] mb-3">
+          {currentAssignee ? <>Asignado actualmente a <span className="font-semibold text-[#1a1a1a]">{currentAssignee}</span>.</> : 'Sin asignar.'}
+        </p>
+        <input
+          autoFocus
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Buscar por nombre, email o rol…"
+          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex-1 overflow-y-auto mt-3 -mx-1 flex flex-col gap-0.5 min-h-[120px]">
+          {loading && <div className="text-[13px] text-[#646462] px-2 py-3">Cargando compañeros…</div>}
+          {error && <div className="text-[13px] text-[#b91c1c] px-2 py-3">No se pudo cargar la lista</div>}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="text-[13px] text-[#646462] px-2 py-3">Sin coincidencias.</div>
+          )}
+          {filtered.map((m: any) => {
+            const name = m.name || m.full_name || m.email || 'Sin nombre';
+            const initial = String(name).slice(0, 1).toUpperCase();
+            return (
+              <button
+                key={m.id || m.user_id || m.email}
+                onClick={() => assignTo(m.id || m.user_id)}
+                disabled={submitting}
+                className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#f3f3f1] text-left disabled:opacity-50"
+              >
+                <div className="w-7 h-7 rounded-full bg-[#e7e2fd] flex items-center justify-center flex-shrink-0">
+                  <span className="text-[12px] font-semibold text-[#1a1a1a]">{initial}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{name}</p>
+                  {m.email && <p className="text-[11.5px] text-[#646462] truncate">{m.email}</p>}
+                </div>
+                {m.role_name && <span className="text-[11px] text-[#646462] flex-shrink-0">{titleCase(m.role_name)}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-[#e9eae6]">
+          <button
+            onClick={() => assignTo(null)}
+            disabled={submitting}
+            className="text-[12.5px] font-semibold text-[#b91c1c] hover:underline disabled:opacity-50"
+          >
+            Quitar asignación
+          </button>
+          <button
+            onClick={onClose}
+            className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ConversationPanel({
   selectedConv,
   inboxView,
@@ -1139,6 +1624,8 @@ function ConversationPanel({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [starred, setStarred] = useState(false);
@@ -1164,9 +1651,22 @@ function ConversationPanel({
     setShowEmojiPicker(false);
   }, [selectedConv.id, latestDraft?.id, latestDraft?.content]);
 
+  // Backend caps a single attachment's data URL at ~5 MB encoded; raw file
+  // size therefore needs to stay under ~3.7 MB. We round to 4 MB as the
+  // user-facing limit. We also cap the total per reply at 10 attachments.
+  const ATTACHMENT_MAX_BYTES = 4 * 1024 * 1024;
+  const ATTACHMENT_MAX_COUNT = 10;
   function handleFiles(files: FileList | null) {
     if (!files) return;
     Array.from(files).forEach(file => {
+      if (attachments.length >= ATTACHMENT_MAX_COUNT) {
+        onAction(`Solo puedes adjuntar hasta ${ATTACHMENT_MAX_COUNT} archivos por respuesta`, 'error');
+        return;
+      }
+      if (file.size > ATTACHMENT_MAX_BYTES) {
+        onAction(`"${file.name}" supera el límite de ${formatBytes(ATTACHMENT_MAX_BYTES)}`, 'error');
+        return;
+      }
       const reader = new FileReader();
       reader.onload = event => {
         setAttachments(current => [...current, {
@@ -1178,6 +1678,7 @@ function ConversationPanel({
           file,
         }]);
       };
+      reader.onerror = () => onAction(`No se pudo leer "${file.name}"`, 'error');
       reader.readAsDataURL(file);
     });
   }
@@ -1232,17 +1733,34 @@ function ConversationPanel({
   async function submitReply() {
     const content = replyText.trim();
     if (!content && attachments.length === 0) return;
-    const attachmentText = attachments.length
-      ? `\n\n${attachments.map(file => `[${file.name} - ${formatBytes(file.size)}]`).join('\n')}`
-      : '';
-    const finalContent = `${content}${attachmentText}`.trim();
+    // Wire-format payload for the backend. The reply route extends the
+    // legacy messages.attachments JSON column, so we send structured items
+    // here instead of inlining filenames into the body. Internal notes
+    // don't yet accept attachments — fall back to the inline summary.
+    const attachmentPayload = attachments.map(att => ({
+      id: att.id,
+      name: att.name,
+      size: att.size,
+      type: att.type,
+      dataUrl: att.dataUrl,
+    }));
     try {
       if (replyTab === 'nota') {
-        await casesApi.addInternalNote(selectedConv.id, finalContent);
+        const noteSummary = attachments.length
+          ? `\n\nAdjuntos: ${attachments.map(a => a.name).join(', ')}`
+          : '';
+        await casesApi.addInternalNote(selectedConv.id, `${content}${noteSummary}`.trim());
         onAction('Nota interna añadida');
       } else {
-        await casesApi.reply(selectedConv.id, finalContent, latestDraft?.id);
-        onAction('Respuesta enviada');
+        await casesApi.reply(
+          selectedConv.id,
+          content,
+          latestDraft?.id,
+          attachmentPayload.length > 0 ? attachmentPayload : undefined,
+        );
+        onAction(attachments.length > 0
+          ? `Respuesta enviada con ${attachments.length} adjunto${attachments.length === 1 ? '' : 's'}`
+          : 'Respuesta enviada');
       }
       setReplyText('');
       setAttachments([]);
@@ -1254,17 +1772,9 @@ function ConversationPanel({
 
   const channelLabel = selectedConv.channel.split('·')[0].trim();
 
-  async function snoozeCase() {
-    await updateStatus('snoozed', 'Caso pospuesto');
-  }
-
-  async function escalateCase() {
-    await updateStatus('escalated', 'Caso escalado');
-  }
-
-  async function reopenCase() {
-    await updateStatus('open', 'Caso reabierto');
-  }
+  // Status modal mode: opens a reason-prompt modal for snooze/escalate/close
+  // /reopen instead of firing the change immediately. Null = modal closed.
+  const [statusMode, setStatusMode] = useState<StatusMode | null>(null);
 
   function toggleStar() {
     setStarred(s => !s);
@@ -1291,13 +1801,14 @@ function ConversationPanel({
   }
 
   const menuActions = [
-    { icon: '👥', label: 'Administrar participantes', shortcut: '', onClick: () => { onAction('Administrar participantes — próximamente'); setMenuOpen(false); } },
+    { icon: '👥', label: 'Asignar a un compañero',    shortcut: '', onClick: () => { setShowAssignModal(true); setMenuOpen(false); } },
     { icon: '⇄', label: 'Fusionar con...',          shortcut: 'Ctrl+Shift+M', onClick: () => { setShowMergeModal(true); setMenuOpen(false); } },
     { icon: '✚', label: 'Nueva conversación',       shortcut: '', onClick: () => { onAction('Nueva conversación — próximamente'); setMenuOpen(false); } },
     { icon: '↗', label: 'Exportar como texto',      shortcut: '', onClick: exportConversationAsText },
     { icon: '↗', label: 'Exportar como PDF',        shortcut: '', onClick: () => { onAction('Exportar como PDF — próximamente'); setMenuOpen(false); } },
-    { icon: '↻', label: 'Reabrir caso',              shortcut: '', onClick: () => { reopenCase(); setMenuOpen(false); } },
-    { icon: '⚠', label: 'Escalar caso',              shortcut: '', onClick: () => { escalateCase(); setMenuOpen(false); } },
+    { icon: '↻', label: 'Reabrir caso',              shortcut: '', onClick: () => { setStatusMode('open');      setMenuOpen(false); } },
+    { icon: '⚠', label: 'Escalar caso',              shortcut: '', onClick: () => { setStatusMode('escalated'); setMenuOpen(false); } },
+    { icon: '✕', label: 'Cerrar caso',               shortcut: '', onClick: () => { setStatusMode('closed');    setMenuOpen(false); } },
   ];
 
   return (
@@ -1320,12 +1831,20 @@ function ConversationPanel({
               className={`w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#e9eae6] ${showSearch ? 'bg-[#1a1a1a]' : 'bg-[#f8f8f7]'}`}>
               <img src={ICON_SEARCH2} alt="" className={`w-4 h-4 ${showSearch ? 'invert' : ''}`} />
             </button>
+            <button onClick={() => setShowResolveModal(true)} title="Plan de resolución con IA"
+              className="h-8 px-3 bg-[#e7e2fd] hover:bg-[#d4cffb] text-[#1a1a1a] text-[13px] font-semibold rounded-full flex items-center gap-1">
+              <span>✨</span>
+              <span>Resolver con IA</span>
+            </button>
             <button onClick={resolveCase} className="h-8 px-4 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] flex items-center gap-1">
               <img src={ICON_RESOLVED} alt="" className="w-4 h-4 invert" />
               <span>Resolver</span>
             </button>
-            <button onClick={snoozeCase} className="h-8 px-3 bg-[#f8f8f7] text-[#1a1a1a] text-[13px] font-semibold rounded-full hover:bg-[#e9eae6]">
+            <button onClick={() => setStatusMode('snoozed')} className="h-8 px-3 bg-[#f8f8f7] text-[#1a1a1a] text-[13px] font-semibold rounded-full hover:bg-[#e9eae6]">
               Posponer
+            </button>
+            <button onClick={() => setShowAssignModal(true)} className="h-8 px-3 bg-[#f8f8f7] text-[#1a1a1a] text-[13px] font-semibold rounded-full hover:bg-[#e9eae6]" title="Asignar / transferir el caso">
+              Asignar
             </button>
             <button onClick={() => setShowMergeModal(true)} className="h-8 px-3 bg-[#f8f8f7] text-[#1a1a1a] text-[13px] font-semibold rounded-full hover:bg-[#e9eae6]">
               Fusionar
@@ -1466,6 +1985,32 @@ function ConversationPanel({
           onAction={onAction}
         />
       )}
+      {showAssignModal && (
+        <AssignModal
+          caseId={selectedConv.id}
+          currentAssignee={selectedConv.assignee}
+          onClose={() => setShowAssignModal(false)}
+          onAssigned={onRefresh}
+          onAction={onAction}
+        />
+      )}
+      {statusMode && (
+        <StatusChangeModal
+          caseId={selectedConv.id}
+          mode={statusMode}
+          onClose={() => setStatusMode(null)}
+          onChanged={onRefresh}
+          onAction={onAction}
+        />
+      )}
+      {showResolveModal && (
+        <ResolutionPlanModal
+          caseId={selectedConv.id}
+          onClose={() => setShowResolveModal(false)}
+          onAction={onAction}
+          onRefresh={onRefresh}
+        />
+      )}
     </div>
   );
 }
@@ -1476,6 +2021,59 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <span className="w-[113px] flex-shrink-0 text-[13px] text-[#646462] truncate">{label}</span>
       <div className="flex-1 px-1">
         <span className="text-[13px] text-[#1a1a1a] truncate block">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+// Severity → bullet color. Backend returns 'pending' | 'warning' | 'critical' |
+// 'healthy'. Anything else falls back to neutral grey.
+function timelineSeverityClass(sev?: string): string {
+  switch (String(sev || '').toLowerCase()) {
+    case 'critical':
+    case 'error':   return 'bg-[#b91c1c]';
+    case 'warning': return 'bg-[#f59e0b]';
+    case 'healthy':
+    case 'success': return 'bg-[#16a34a]';
+    case 'pending': return 'bg-[#3b59f6]';
+    default:        return 'bg-[#646462]';
+  }
+}
+
+// Pretty-print backend entry types into Spanish chip labels for the timeline.
+function timelineDomainLabel(entry: any): string {
+  const map: Record<string, string> = {
+    message:                'Mensaje',
+    internal_note:          'Nota interna',
+    reconciliation_issue:   'Conflicto',
+    case_status_history:    'Estado',
+    order_event:            'Pedido',
+    payment_event:          'Pago',
+    return_event:           'Devolución',
+    audit_log:              'Auditoría',
+    workflow_event:         'Workflow',
+    ai_run:                 'IA',
+  };
+  return map[String(entry?.entry_type || '').toLowerCase()]
+    || titleCase(String(entry?.domain || entry?.type || 'evento'));
+}
+
+function TimelineEntryRow({ entry }: { entry: any }) {
+  const time = relativeTime(entry?.occurred_at || entry?.created_at);
+  const actor = entry?.actor || entry?.source || 'sistema';
+  const content = String(entry?.content || entry?.summary || entry?.type || '').trim();
+  const truncated = content.length > 220 ? `${content.slice(0, 220)}…` : content;
+  return (
+    <div className="flex items-start gap-3">
+      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${timelineSeverityClass(entry?.severity)}`} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10.5px] uppercase tracking-wide font-semibold text-[#646462]">{timelineDomainLabel(entry)}</span>
+          <span className="text-[11px] text-[#646462]">·</span>
+          <span className="text-[11px] text-[#646462] truncate">{actor}</span>
+        </div>
+        <p className="text-[13px] text-[#1a1a1a] leading-5 mt-0.5 break-words">{truncated || '—'}</p>
+        <p className="text-[11px] text-[#646462] mt-0.5">{time}</p>
       </div>
     </div>
   );
@@ -1698,32 +2296,38 @@ function DetailsSidebar({
   draftLoading: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<'details' | 'copilot'>('details');
-  const [detailSubTab, setDetailSubTab] = useState<'detalles' | 'actividad' | 'conversaciones'>('detalles');
+  const [detailSubTab, setDetailSubTab] = useState<'detalles' | 'cronologia' | 'conversaciones'>('detalles');
   const [copilotText, setCopilotText] = useState('');
 
   const channelName = titleCase(selectedConv.sourceChannel || selectedConv.channel.split('·')[0].trim());
 
   const caseState = inboxView?.state || selectedConv.raw?.stateSnapshot || {};
   const internalNotes = getInboxInternalNotes(inboxView);
-  const inboxMessages = getInboxMessages(inboxView);
   const relatedCases = safeArray(caseState?.related?.linkedCases || caseState?.related?.linked_cases);
   const operationalLinks = [
     ...safeArray(caseState?.related?.orders).map((item: any) => ({ type: 'OMS', id: item.id || item.orderId || item.order_id || String(item) })),
     ...safeArray(caseState?.related?.payments).map((item: any) => ({ type: 'PSP', id: item.id || item.paymentId || item.payment_id || String(item) })),
     ...safeArray(caseState?.related?.returns).map((item: any) => ({ type: 'RMS', id: item.id || item.returnId || item.return_id || String(item) })),
   ];
-  const activityItems = [
-    ...inboxMessages.map((message: any, index: number) => ({
-      id: `msg-${message.id || index}`,
-      time: relativeTime(message.createdAt || message.created_at || message.timestamp),
-      text: `${titleCase(message.direction || message.role || 'mensaje')}: ${(message.content || message.text || '').slice(0, 80) || 'Sin contenido'}`,
-    })),
-    ...internalNotes.map((note: any, index: number) => ({
-      id: `note-${note.id || index}`,
-      time: relativeTime(note.createdAt || note.created_at),
-      text: `Nota interna: ${(note.content || note.text || '').slice(0, 80) || 'Sin contenido'}`,
-    })),
-  ];
+
+  // Real timeline from /cases/:id/timeline. Lazy-loaded — only fetched when
+  // the user actually opens the cronología sub-tab. Re-fetches when the case
+  // changes or the sub-tab is re-opened.
+  const timelineCaseId = activeTab === 'details' && detailSubTab === 'cronologia' ? selectedConv.id : null;
+  const { data: timelineData, loading: timelineLoading, error: timelineError } = useApi(
+    () => timelineCaseId ? casesApi.timeline(timelineCaseId) : Promise.resolve([]),
+    [timelineCaseId],
+    [],
+  );
+  const timelineEntries = useMemo(() => {
+    const arr = Array.isArray(timelineData) ? timelineData : [];
+    // Sort newest first; items without occurred_at fall to the bottom.
+    return [...arr].sort((a: any, b: any) => {
+      const ta = new Date(a?.occurred_at || a?.created_at || 0).getTime();
+      const tb = new Date(b?.occurred_at || b?.created_at || 0).getTime();
+      return tb - ta;
+    });
+  }, [timelineData]);
 
   return (
     <div className="flex flex-col h-full w-[346px] bg-white rounded-2xl shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] flex-shrink-0 overflow-hidden">
@@ -1738,7 +2342,7 @@ function DetailsSidebar({
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'details' && (
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6]">
-            {([['detalles', 'Detalles'], ['actividad', 'Actividad'], ['conversaciones', 'Conversaciones']] as const).map(([id, label]) => (
+            {([['detalles', 'Detalles'], ['cronologia', 'Cronología'], ['conversaciones', 'Conversaciones']] as const).map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setDetailSubTab(id)}
@@ -1822,22 +2426,20 @@ function DetailsSidebar({
             </div>
           </DetailSection>
         </>}
-        {activeTab === 'details' && detailSubTab === 'actividad' && (
-          <div className="px-6 py-4 flex flex-col gap-3">
-            <p className="text-[13px] font-semibold text-[#1a1a1a]">Actividad reciente</p>
-            {(activityItems.length > 0 ? activityItems : [
-              { time: 'Hace 4 min', text: 'Conversación iniciada por visitante anónimo' },
-              { time: 'Hace 4 min', text: 'Fin respondió automáticamente' },
-              { time: 'Hace 4 min', text: 'Fin cerró la conversación' },
-            ]).map((item, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#3b59f6] mt-1.5 flex-shrink-0" />
-                <div>
-                  <p className="text-[13px] text-[#1a1a1a]">{item.text}</p>
-                  <p className="text-[12px] text-[#646462]">{item.time}</p>
-                </div>
-              </div>
-            ))}
+        {activeTab === 'details' && detailSubTab === 'cronologia' && (
+          <div className="px-5 py-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-[#1a1a1a]">Cronología completa</p>
+              {timelineEntries.length > 0 && (
+                <span className="text-[11px] text-[#646462]">{timelineEntries.length} eventos</span>
+              )}
+            </div>
+            {timelineLoading && <p className="text-[12.5px] text-[#646462]">Cargando cronología…</p>}
+            {timelineError && <p className="text-[12.5px] text-[#b91c1c]">No se pudo cargar la cronología.</p>}
+            {!timelineLoading && !timelineError && timelineEntries.length === 0 && (
+              <p className="text-[12.5px] text-[#646462]">Sin eventos registrados todavía.</p>
+            )}
+            {timelineEntries.map((entry: any, i: number) => <TimelineEntryRow key={entry.id || `tl-${i}`} entry={entry} />)}
           </div>
         )}
         {activeTab === 'details' && detailSubTab === 'conversaciones' && (
@@ -1929,6 +2531,72 @@ function InboxView() {
   useEffect(() => {
     if (!selectedConvId && liveConversations[0]?.id) setSelectedConvId(liveConversations[0].id);
   }, [selectedConvId, liveConversations]);
+
+  // ─── Inbox-global keyboard shortcuts ─────────────────────────────────────
+  // j / k       → next / previous conversation in the current scope
+  // Esc         → blur active textarea / cancel ongoing composer focus
+  // Cmd/Ctrl+K  → focus the conversation-list filter button (visible cue)
+  // ?           → show a small toast listing the shortcuts
+  // We bind on window so the keys work regardless of focus, but explicitly
+  // ignore events fired from inputs / textareas / contenteditables so we
+  // never steal a keystroke from the composer.
+  const showShortcutsHelp = () => {
+    setToast({
+      type: 'success',
+      message: 'Atajos: j/k siguiente/anterior · Esc enfocar lista · Ctrl+K filtros · Ctrl+Enter envía',
+    });
+    window.setTimeout(() => setToast(null), 4500);
+  };
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null): boolean {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = (el.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+      if (el.isContentEditable) return true;
+      return false;
+    }
+    function handler(e: KeyboardEvent) {
+      const inEditable = isEditableTarget(e.target);
+      // Cmd/Ctrl + K → focus the filter toggle on the conversation list.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const btn = document.querySelector<HTMLButtonElement>('button[title="Filtros"]')
+                 || document.querySelector<HTMLButtonElement>('button[title="Buscar en la conversación"]');
+        btn?.focus();
+        btn?.click();
+        return;
+      }
+      // ? → shortcut help (only when not typing).
+      if (!inEditable && e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        showShortcutsHelp();
+        return;
+      }
+      // Esc → blur whatever input is focused; keeps the user from being
+      // trapped inside the composer and ready for j/k navigation.
+      if (e.key === 'Escape' && inEditable) {
+        (e.target as HTMLElement).blur();
+        return;
+      }
+      // j / k navigation through scopedConversations. Only when not editing.
+      if (!inEditable && (e.key === 'j' || e.key === 'k')) {
+        const list = scopedConversations.length ? scopedConversations : liveConversations;
+        if (!list.length) return;
+        const idx = Math.max(0, list.findIndex((c: any) => c.id === selectedConv?.id));
+        const nextIdx = e.key === 'j'
+          ? Math.min(list.length - 1, idx + 1)
+          : Math.max(0, idx - 1);
+        const next = list[nextIdx];
+        if (next && next.id !== selectedConv?.id) {
+          e.preventDefault();
+          setSelectedConvId(next.id);
+        }
+      }
+    }
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [scopedConversations, liveConversations, selectedConv?.id]);
 
   // Reflect scope + selected case in the URL so deep-links survive reloads
   // and back/forward navigation. Only writes when something actually changed.
@@ -10373,29 +11041,7 @@ function FinDespliegueChatContent() {
               </a>
             </div>
           </div>
-          <div className="relative w-[230px] h-[140px] rounded-[10px] overflow-hidden bg-[#f4d8b0] flex-shrink-0 p-3">
-            <div className="absolute top-3 right-3 left-3 bg-white rounded-[8px] px-2.5 py-1.5 shadow-sm flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded-full bg-[#1a1a1a] flex items-center justify-center">
-                <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-semibold text-[#1a1a1a] leading-[12px]">Fin</p>
-                <p className="text-[9px] text-[#646462] leading-[11px] truncate">The team can also help</p>
-              </div>
-            </div>
-            <div className="absolute top-[42px] right-3 bg-[#ff5f3f] text-white rounded-[8px] rounded-br-[2px] px-2.5 py-1.5 max-w-[140px]">
-              <p className="text-[9px] leading-[12px]">Can I change the date of my reservation?</p>
-            </div>
-            <div className="absolute bottom-3 left-3 right-3 bg-white rounded-[8px] px-2.5 py-1.5 shadow-sm">
-              <div className="flex items-center gap-1 mb-0.5">
-                <span className="w-3 h-3 rounded-sm bg-[#1a1a1a] flex items-center justify-center">
-                  <svg viewBox="0 0 16 16" className="w-2 h-2 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
-                </span>
-                <p className="text-[8px] font-semibold text-[#1a1a1a]">Fin • AI Agent</p>
-              </div>
-              <p className="text-[8.5px] leading-[10px] text-[#1a1a1a]">Yes, you can change the date of your reservation.</p>
-            </div>
-          </div>
+          <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
           <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
           </button>
@@ -10499,26 +11145,7 @@ function FinDespliegueEmailContent() {
               </a>
             </div>
           </div>
-          <div className="relative w-[230px] h-[140px] rounded-[10px] overflow-hidden bg-[#cfe4d6] flex-shrink-0 p-3">
-            <div className="absolute top-3 left-3 right-3 bg-white rounded-[8px] px-2.5 py-2 shadow-sm">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-semibold text-[#1a1a1a]">Email</span>
-                <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-4 h-4 rounded-full bg-[#1a1a1a] flex items-center justify-center">
-                  <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[8.5px] font-semibold text-[#1a1a1a] leading-[10px]">Fin <span className="text-[#646462] font-normal">{'<support@acme.com>'}</span></p>
-                  <p className="text-[8px] text-[#646462] leading-[10px]">to me</p>
-                </div>
-              </div>
-            </div>
-            <div className="absolute bottom-3 left-3 right-3 bg-white rounded-[8px] px-2.5 py-1.5 shadow-sm">
-              <p className="text-[8.5px] leading-[10px] text-[#1a1a1a]">Hi Mark. Yes, you can change the date of your reservation up to seven days in advance.</p>
-            </div>
-          </div>
+          <img src={IMG_FIN_DEPLOY_EMAIL} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
           <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
           </button>
@@ -10632,33 +11259,7 @@ function FinDespliegueTelefonoContent() {
                 </a>
               </div>
             </div>
-            <div className="relative w-[290px] h-[140px] flex-shrink-0 flex items-center justify-end">
-              {/* Audio waveform */}
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-[2px]">
-                {Array.from({ length: 28 }).map((_, i) => {
-                  const heights = [12, 18, 24, 30, 22, 14, 28, 36, 20, 10, 26, 32, 38, 30, 22, 16, 28, 24, 14, 20, 32, 26, 18, 22, 14, 24, 28, 18];
-                  return <span key={i} className="w-[2px] bg-[#1a1a1a] rounded-full" style={{ height: `${heights[i]}px` }} />;
-                })}
-              </div>
-              {/* Call card */}
-              <div className="relative w-[180px] bg-white rounded-[10px] shadow-md overflow-hidden">
-                <div className="px-3 pt-3 pb-2 flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-full bg-[#f1f1ee] flex items-center justify-center">
-                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
-                  </span>
-                  <div>
-                    <p className="text-[12px] font-semibold text-[#1a1a1a]">Inbound call</p>
-                    <p className="text-[11px] text-[#646462]">3:09</p>
-                  </div>
-                </div>
-                <div className="border-t border-[#e9eae6] px-3 py-2 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-[5px] bg-[#1a1a1a] flex items-center justify-center">
-                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
-                  </span>
-                  <p className="text-[11px] text-[#1a1a1a]">Call is in progress with Fin</p>
-                </div>
-              </div>
-            </div>
+            <img src={IMG_FIN_VOICE_BANNER} alt="" className="flex-shrink-0 rounded-[8px] object-cover" style={{ width: 400, height: 260 }} />
           </div>
         </div>
       </div>
