@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, ty
 import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
+import SuperAgent from '../components/SuperAgent';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
 
@@ -12259,7 +12260,7 @@ type FinSubView =
   | 'changelog' | 'settings' | 'settingsAudiences'
   | 'finWorkflows' | 'finSimpleAutomations'
   // Studio (legacy AIStudio merged into Fin shell)
-  | 'studio' | 'studioOverview' | 'studioAgents' | 'studioPermissions' | 'studioKnowledge' | 'studioReasoning' | 'studioSafety';
+  | 'studio' | 'studioOverview' | 'studioAgents' | 'studioConnections' | 'studioPermissions' | 'studioKnowledge' | 'studioReasoning' | 'studioSafety' | 'studioSuperAgent';
 
 const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | 'rocket' | 'chart' | 'studio'; children?: { key: FinSubView; label: string; badge?: string }[] }[] = [
   {
@@ -12301,10 +12302,12 @@ const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | '
     children: [
       { key: 'studioOverview',    label: 'Resumen' },
       { key: 'studioAgents',      label: 'Agentes' },
+      { key: 'studioConnections', label: 'Conexiones' },
       { key: 'studioPermissions', label: 'Permisos' },
       { key: 'studioKnowledge',   label: 'Conocimiento' },
       { key: 'studioReasoning',   label: 'Razonamiento' },
       { key: 'studioSafety',      label: 'Seguridad' },
+      { key: 'studioSuperAgent',  label: 'Super Agent' },
     ],
   },
 ];
@@ -12322,7 +12325,7 @@ function FinNavIcon({ kind }: { kind: 'book' | 'play' | 'rocket' | 'chart' | 'st
   }
 }
 
-function FinSidebar({ sub, onSelect }: { sub: FinSubView; onSelect: (s: FinSubView) => void }) {
+function FinSidebar({ sub, onSelect, onCollapse }: { sub: FinSubView; onSelect: (s: FinSubView) => void; onCollapse?: () => void }) {
   // Per-group expand/collapse state — explicit chevron toggle (not auto-expand).
   // Default: only auto-open the group whose child is currently active (preserves nav context).
   const isInGroup = (groupKey: FinSubView, childKeys: FinSubView[]): boolean =>
@@ -12349,6 +12352,15 @@ function FinSidebar({ sub, onSelect }: { sub: FinSubView; onSelect: (s: FinSubVi
       {/* Header — same pattern as Inbox */}
       <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
         <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Fin AI Agent</span>
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            title="Colapsar barra lateral"
+            className="w-6 h-6 -mr-2 rounded hover:bg-[#ededea] flex items-center justify-center"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M10 4l-4 4 4 4z"/></svg>
+          </button>
+        )}
       </div>
       {/* Role dropdown — shows "Todos los roles" on all-roles view, "Servicio" otherwise */}
       <div className="px-3 pb-2 flex-shrink-0">
@@ -14832,7 +14844,7 @@ function readInitialFinSubFromUrl(): FinSubView {
     'analizar','anaPerformance','anaRecommendations','anaTopicExplorer','anaTopicTrends','anaMonitor',
     'changelog','settings','settingsAudiences',
     'finWorkflows','finSimpleAutomations',
-    'studio','studioOverview','studioAgents','studioPermissions','studioKnowledge','studioReasoning','studioSafety',
+    'studio','studioOverview','studioAgents','studioConnections','studioPermissions','studioKnowledge','studioReasoning','studioSafety','studioSuperAgent',
   ];
   return s && (known as string[]).includes(s) ? (s as FinSubView) : 'allRoles';
 }
@@ -14840,7 +14852,19 @@ function readInitialFinSubFromUrl(): FinSubView {
 function FinAiView() {
   const [sub, setSub] = useState<FinSubView>(() => readInitialFinSubFromUrl());
   const showVistaPrevia = sub === 'capContent' || sub === 'capGuidance' || sub === 'capAttributes' || sub === 'capEscalation' || sub === 'desplegar' || sub === 'depChat' || sub === 'depEmail';
-  const isStudio = sub === 'studio' || sub === 'studioOverview' || sub === 'studioAgents' || sub === 'studioPermissions' || sub === 'studioKnowledge' || sub === 'studioReasoning' || sub === 'studioSafety';
+  const isStudio = sub === 'studio' || sub === 'studioOverview' || sub === 'studioAgents' || sub === 'studioConnections' || sub === 'studioPermissions' || sub === 'studioKnowledge' || sub === 'studioReasoning' || sub === 'studioSafety' || sub === 'studioSuperAgent';
+
+  // Persist sidebar collapse state per-Fin module (Inbox-style rail).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const raw = window.localStorage.getItem('clain.fin.panels');
+      return raw ? Boolean(JSON.parse(raw).sidebar) : false;
+    } catch { return false; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem('clain.fin.panels', JSON.stringify({ sidebar: sidebarCollapsed })); } catch { /* storage may be disabled */ }
+  }, [sidebarCollapsed]);
 
   // Sync ?sub= with current state so back/forward + reload work.
   useEffect(() => {
@@ -14851,6 +14875,56 @@ function FinAiView() {
       window.history.replaceState({}, '', url.toString());
     }
   }, [sub]);
+
+  // When AIStudio's own internal links flip its activeTab, mirror that to the
+  // Fin sub-view so the URL stays accurate and the sidebar selection updates.
+  function onStudioTabChange(tab: 'Overview' | 'Agents' | 'Connections' | 'Permissions' | 'Knowledge' | 'Reasoning' | 'Safety') {
+    const map: Record<typeof tab, FinSubView> = {
+      Overview:    'studioOverview',
+      Agents:      'studioAgents',
+      Connections: 'studioConnections',
+      Permissions: 'studioPermissions',
+      Knowledge:   'studioKnowledge',
+      Reasoning:   'studioReasoning',
+      Safety:      'studioSafety',
+    };
+    setSub(map[tab]);
+  }
+
+  // Keyboard shortcuts inside the Fin shell, mirroring the Inbox pattern.
+  // j/k cycle through the Studio sub-views (when one is active). Esc blurs
+  // the focused input. ? toggles a small help overlay. All shortcuts are
+  // suppressed when the user is typing in an input/textarea/contenteditable.
+  const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    const STUDIO_ORDER: FinSubView[] = [
+      'studioOverview','studioAgents','studioConnections','studioPermissions','studioKnowledge','studioReasoning','studioSafety','studioSuperAgent',
+    ];
+    function inEditable(el: EventTarget | null): boolean {
+      const node = el as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable === true;
+    }
+    function onKey(e: KeyboardEvent) {
+      if (inEditable(e.target)) {
+        if (e.key === 'Escape') (e.target as HTMLElement).blur();
+        return;
+      }
+      if (e.key === 'Escape') { setShowHelp(false); return; }
+      if (e.key === '?') { e.preventDefault(); setShowHelp(s => !s); return; }
+      if (e.key === 'j' || e.key === 'k') {
+        if (!isStudio) return;
+        const idx = STUDIO_ORDER.indexOf(sub);
+        if (idx < 0) return;
+        const next = e.key === 'j' ? (idx + 1) % STUDIO_ORDER.length : (idx - 1 + STUDIO_ORDER.length) % STUDIO_ORDER.length;
+        e.preventDefault();
+        setSub(STUDIO_ORDER[next]);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sub, isStudio]);
 
   function renderSub() {
     switch (sub) {
@@ -14881,13 +14955,17 @@ function FinAiView() {
       case 'finSimpleAutomations': return <FinAutomatizacionesSimplesContent />;
       // Studio — embed legacy AIStudio with the requested tab so the policy/agent/
       // knowledge/reasoning/safety surface is fully functional inside the Fin shell.
+      // The onTabChange callback keeps the URL ?sub= in sync when AIStudio's
+      // own internal cross-links flip the tab (e.g. "Open agents" inside Overview).
       case 'studio':
-      case 'studioOverview':    return <AIStudio embedded initialTab="Overview" />;
-      case 'studioAgents':      return <AIStudio embedded initialTab="Agents" />;
-      case 'studioPermissions': return <AIStudio embedded initialTab="Permissions" />;
-      case 'studioKnowledge':   return <AIStudio embedded initialTab="Knowledge" />;
-      case 'studioReasoning':   return <AIStudio embedded initialTab="Reasoning" />;
-      case 'studioSafety':      return <AIStudio embedded initialTab="Safety" />;
+      case 'studioOverview':    return <AIStudio embedded initialTab="Overview"    onTabChange={onStudioTabChange} />;
+      case 'studioAgents':      return <AIStudio embedded initialTab="Agents"      onTabChange={onStudioTabChange} />;
+      case 'studioConnections': return <AIStudio embedded initialTab="Connections" onTabChange={onStudioTabChange} />;
+      case 'studioPermissions': return <AIStudio embedded initialTab="Permissions" onTabChange={onStudioTabChange} />;
+      case 'studioKnowledge':   return <AIStudio embedded initialTab="Knowledge"   onTabChange={onStudioTabChange} />;
+      case 'studioReasoning':   return <AIStudio embedded initialTab="Reasoning"   onTabChange={onStudioTabChange} />;
+      case 'studioSafety':      return <AIStudio embedded initialTab="Safety"      onTabChange={onStudioTabChange} />;
+      case 'studioSuperAgent':  return <SuperAgent embedded />;
     }
   }
 
@@ -14895,13 +14973,43 @@ function FinAiView() {
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
-        <FinSidebar sub={sub} onSelect={setSub} />
+        {sidebarCollapsed ? (
+          <FinSidebarRail onExpand={() => setSidebarCollapsed(false)} />
+        ) : (
+          <FinSidebar sub={sub} onSelect={setSub} onCollapse={() => setSidebarCollapsed(true)} />
+        )}
         <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
           {renderSub()}
         </div>
         {showVistaPrevia && <FinVistaPreviaPanel />}
       </div>
+      {showHelp && (
+        <div className="absolute inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowHelp(false)}>
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-6 w-[360px]" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[15px] font-bold text-[#1a1a1a] mb-3">Atajos de teclado</h3>
+            <ul className="text-[13px] text-[#1a1a1a] space-y-1.5">
+              <li className="flex items-center justify-between"><span>Siguiente sección Studio</span><kbd className="px-1.5 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded text-[11px] font-mono">j</kbd></li>
+              <li className="flex items-center justify-between"><span>Sección anterior</span><kbd className="px-1.5 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded text-[11px] font-mono">k</kbd></li>
+              <li className="flex items-center justify-between"><span>Cerrar / quitar foco</span><kbd className="px-1.5 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded text-[11px] font-mono">Esc</kbd></li>
+              <li className="flex items-center justify-between"><span>Mostrar / ocultar ayuda</span><kbd className="px-1.5 py-0.5 bg-[#f8f8f7] border border-[#e9eae6] rounded text-[11px] font-mono">?</kbd></li>
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// Collapsed-sidebar 28-px rail, matches Inbox panel-collapse pattern.
+function FinSidebarRail({ onExpand }: { onExpand: () => void }) {
+  return (
+    <button
+      onClick={onExpand}
+      title="Expandir barra lateral"
+      className="w-7 flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] flex flex-col items-center justify-start py-3 hover:bg-[#ededea]"
+    >
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+    </button>
   );
 }
 

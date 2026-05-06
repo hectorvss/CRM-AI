@@ -119,6 +119,24 @@ function Root() {
     );
   }
 
+  // When `?prototype=1` is set, render the new Fin/Inbox prototype inside
+  // the same auth-bootstrapped shell so its components can hit the live API
+  // (agents, reports, operations, …). Without auth the prototype still
+  // renders, but `useApi` calls fall back to empty state.
+  if (protoParam === '1') {
+    return (
+      <PageErrorBoundary page="prototype">
+        <PrototypeShell><Prototype /></PrototypeShell>
+      </PageErrorBoundary>
+    );
+  }
+  if (protoParam === '2') {
+    return (
+      <PageErrorBoundary page="prototype">
+        <PrototypeShell><InboxPrototype2 /></PrototypeShell>
+      </PageErrorBoundary>
+    );
+  }
   return (
     <PageErrorBoundary page="root">
       <App />
@@ -126,7 +144,8 @@ function Root() {
   );
 }
 
-// Render standalone prototypes at ?prototype=N — no auth required.
+// Pulled out of `renderApp()` so the auth-bootstrapped Root can decide
+// whether to render the prototype or the production App.
 const protoParam = typeof window !== 'undefined'
   ? new URLSearchParams(window.location.search).get('prototype')
   : null;
@@ -139,17 +158,9 @@ function PrototypeShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Render the production SaaS by default. Standalone prototypes are still
-// reachable locally via `?prototype=1` (Prototype) or `?prototype=2`
-// (InboxPrototype2) for design work — they never become the default for
-// the deployed app.
+// Always go through Root() so Supabase config + session are bootstrapped
+// before either the App or the Prototype renders.
 function renderApp() {
-  if (protoParam === '1') {
-    return <PrototypeShell><Prototype /></PrototypeShell>;
-  }
-  if (protoParam === '2') {
-    return <PrototypeShell><InboxPrototype2 /></PrototypeShell>;
-  }
   return <Root />;
 }
 

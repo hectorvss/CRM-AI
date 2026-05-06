@@ -376,13 +376,21 @@ interface AIStudioProps {
   /** When true, hides the outer card chrome and the AI Studio header/tabs strip
    * so the component can be embedded inside another shell (e.g. Fin AI Agent). */
   embedded?: boolean;
+  /** Fired when an internal cross-link (e.g. Overview's "Open agents" button)
+   * switches the active tab. The Fin shell uses it to sync the URL ?sub=. */
+  onTabChange?: (tab: AIStudioTab) => void;
 }
 
-export default function AIStudio({ initialTab = 'Overview', embedded = false }: AIStudioProps = {}) {
-  const [activeTab, setActiveTab] = useState<AIStudioTab>(initialTab);
+export default function AIStudio({ initialTab = 'Overview', embedded = false, onTabChange }: AIStudioProps = {}) {
+  const [activeTab, setActiveTabRaw] = useState<AIStudioTab>(initialTab);
+  // Wrap setActiveTab so internal cross-links also notify the embedding shell.
+  const setActiveTab = (next: AIStudioTab) => {
+    setActiveTabRaw(next);
+    if (onTabChange) onTabChange(next);
+  };
   // Keep the active tab in sync when the parent re-mounts with a different initialTab
   // (e.g. user navigates between Fin sidebar entries that each map to a tab).
-  useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
+  useEffect(() => { setActiveTabRaw(initialTab); }, [initialTab]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [agentSearch, setAgentSearch] = useState('');
