@@ -3,7 +3,7 @@
 // Navigate via the left-nav icons. All assets from Figma CDN (7-day TTL).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { aiApi, casesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 
@@ -555,11 +555,14 @@ function InboxSidebar({
   active,
   onScopeChange,
   counts,
+  onAction,
 }: {
   active: InboxScope;
   onScopeChange: (scope: InboxScope) => void;
   counts: Partial<Record<InboxScope, number>>;
+  onAction?: (message: string, type?: 'success' | 'error') => void;
 }) {
+  const notify = (msg: string) => onAction?.(msg, 'success');
   // 4 expandable sections (Fin para servicio / Inbox para el equipo / Compañeros de equipo / Vistas)
   // — same expand/collapse pattern as the Fin AI Agent sidebar.
   const [openFin, setOpenFin] = useState(true);
@@ -577,7 +580,11 @@ function InboxSidebar({
     <div className="flex flex-col h-full w-[236px] bg-[#f8f8f7] border-r border-[#e9eae6] flex-shrink-0 overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
         <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Inbox</span>
-        <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
+        <button
+          onClick={() => notify('Nueva conversación — próximamente')}
+          title="Nueva conversación"
+          className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]"
+        >
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
         </button>
       </div>
@@ -598,7 +605,14 @@ function InboxSidebar({
           <button onClick={() => setOpenFin(o => !o)} className="w-full flex items-center justify-between h-8 px-3 cursor-pointer hover:bg-[#ededea]/40 rounded-[6px]">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin para servicio</span>
             <div className="flex items-center gap-1">
-              <span onClick={(e) => e.stopPropagation()} className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)]">
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); notify('Crear nueva regla de Fin — próximamente'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); notify('Crear nueva regla de Fin — próximamente'); } }}
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7] cursor-pointer"
+                title="Nueva regla de Fin"
+              >
                 <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
               </span>
               <span className="w-5 h-4 flex items-center justify-center"><Chevron open={openFin} /></span>
@@ -619,7 +633,14 @@ function InboxSidebar({
           <button onClick={() => setOpenTeamInbox(o => !o)} className="w-full flex items-center justify-between h-8 px-3 cursor-pointer hover:bg-[#ededea]/40 rounded-[6px] group">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Inbox para el equipo</span>
             <div className="flex items-center gap-1">
-              <span onClick={(e) => e.stopPropagation()} className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7]">
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); notify('Crear inbox de equipo — próximamente'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); notify('Crear inbox de equipo — próximamente'); } }}
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7] cursor-pointer"
+                title="Crear inbox de equipo"
+              >
                 <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
               </span>
               <span className="w-5 h-4 flex items-center justify-center"><Chevron open={openTeamInbox} /></span>
@@ -634,7 +655,14 @@ function InboxSidebar({
           <button onClick={() => setOpenTeammates(o => !o)} className="w-full flex items-center justify-between h-8 px-3 cursor-pointer hover:bg-[#ededea]/40 rounded-[6px] group">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Compañeros de equipo</span>
             <div className="flex items-center gap-1">
-              <span onClick={(e) => e.stopPropagation()} className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7]">
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); notify('Invitar compañero de equipo — próximamente'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); notify('Invitar compañero de equipo — próximamente'); } }}
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7] cursor-pointer"
+                title="Invitar compañero"
+              >
                 <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
               </span>
               <span className="w-5 h-4 flex items-center justify-center"><Chevron open={openTeammates} /></span>
@@ -1095,28 +1123,41 @@ function ConversationPanel({
   inboxView,
   onRefresh,
   onAction,
+  replyText,
+  setReplyText,
+  replyTab,
+  setReplyTab,
 }: {
   selectedConv: Conversation;
   inboxView: any;
   onRefresh: () => void;
   onAction: (message: string, type?: 'success' | 'error') => void;
+  replyText: string;
+  setReplyText: Dispatch<SetStateAction<string>>;
+  replyTab: 'responder' | 'nota' | 'datosIA';
+  setReplyTab: Dispatch<SetStateAction<'responder' | 'nota' | 'datosIA'>>;
 }) {
-  const [replyTab, setReplyTab] = useState<'responder' | 'nota' | 'datosIA'>('responder');
-  const [replyText, setReplyText] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [starred, setStarred] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const latestDraft = getInboxLatestDraft(inboxView);
   // Real backend messages only — no mock fallback. Empty thread = empty UI.
-  const displayMessages = getInboxMessages(inboxView).map(normalizePrototypeMessage);
+  const allMessages = getInboxMessages(inboxView).map(normalizePrototypeMessage);
+  const displayMessages = showSearch && searchQuery.trim()
+    ? allMessages.filter((m: any) => (m.text || '').toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : allMessages;
 
   useEffect(() => {
+    // Only hydrate from latest backend draft when the case changes or the
+    // backend draft itself changes — otherwise we'd clobber what the user is
+    // typing (or what the Copilot just inserted) on every refresh.
     setReplyText(latestDraft?.content || '');
     setReplyTab('responder');
     setAttachments([]);
@@ -1217,6 +1258,48 @@ function ConversationPanel({
     await updateStatus('snoozed', 'Caso pospuesto');
   }
 
+  async function escalateCase() {
+    await updateStatus('escalated', 'Caso escalado');
+  }
+
+  async function reopenCase() {
+    await updateStatus('open', 'Caso reabierto');
+  }
+
+  function toggleStar() {
+    setStarred(s => !s);
+    onAction(starred ? 'Caso desmarcado' : 'Caso destacado', 'success');
+  }
+
+  function exportConversationAsText() {
+    const lines = [
+      `# Caso ${selectedConv.id}`,
+      `Cliente: ${(selectedConv as any).customerName || '—'}`,
+      `Canal: ${channelLabel}`,
+      '',
+      ...allMessages.map((m: any) => `[${m.time || ''}] ${m.from || 'agent'}: ${m.text || ''}`),
+    ];
+    const text = lines.join('\n');
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text)
+        .then(() => onAction('Conversación copiada al portapapeles'))
+        .catch(() => onAction('No se pudo copiar al portapapeles', 'error'));
+    } else {
+      onAction('Portapapeles no disponible en este navegador', 'error');
+    }
+    setMenuOpen(false);
+  }
+
+  const menuActions = [
+    { icon: '👥', label: 'Administrar participantes', shortcut: '', onClick: () => { onAction('Administrar participantes — próximamente'); setMenuOpen(false); } },
+    { icon: '⇄', label: 'Fusionar con...',          shortcut: 'Ctrl+Shift+M', onClick: () => { setShowMergeModal(true); setMenuOpen(false); } },
+    { icon: '✚', label: 'Nueva conversación',       shortcut: '', onClick: () => { onAction('Nueva conversación — próximamente'); setMenuOpen(false); } },
+    { icon: '↗', label: 'Exportar como texto',      shortcut: '', onClick: exportConversationAsText },
+    { icon: '↗', label: 'Exportar como PDF',        shortcut: '', onClick: () => { onAction('Exportar como PDF — próximamente'); setMenuOpen(false); } },
+    { icon: '↻', label: 'Reabrir caso',              shortcut: '', onClick: () => { reopenCase(); setMenuOpen(false); } },
+    { icon: '⚠', label: 'Escalar caso',              shortcut: '', onClick: () => { escalateCase(); setMenuOpen(false); } },
+  ];
+
   return (
     <div className="flex flex-col h-full flex-1 min-w-[400px] bg-white rounded-2xl shadow-[0px_1px_2px_rgba(20,20,20,0.15)] overflow-hidden">
       <div className="flex flex-col gap-4 pt-4 flex-shrink-0">
@@ -1225,22 +1308,17 @@ function ConversationPanel({
             <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a] truncate">{channelLabel}</h2>
           </div>
           <div className="flex items-center gap-1">
-            {/* Star toggle */}
-            <button onClick={() => setStarred(s => !s)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f8f8f7]">
+            <button onClick={toggleStar} title={starred ? 'Quitar destacado' : 'Destacar caso'}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className={`w-4 h-4 ${starred ? 'fill-[#f59e0b]' : 'fill-none stroke-[#646462]'}`} strokeWidth="1.5"><path d="M8 1l2.2 4.5 4.8.7-3.5 3.4.8 4.9L8 12.2 3.7 14.5l.8-4.9L1 6.2l4.8-.7L8 1z"/></svg>
             </button>
-            {/* Menu trigger */}
-            <button onClick={() => setMenuOpen(o => !o)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f8f8f7]">
+            <button onClick={() => setMenuOpen(o => !o)} title="Más acciones"
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
             </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
-              <img src={ICON_SEARCH2} alt="" className="w-4 h-4" />
-            </button>
-            <button onClick={() => setDarkMode(d => !d)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
-              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]">{darkMode ? <path d="M11 1c.5 1 .5 2.5 0 3.5s-2 2-3.5 2c-.5 0-1 0-1.5-.2.7 2.4 3 4.2 5.5 4.2 3 0 5.5-2.5 5.5-5.5 0-2.5-1.8-4.8-4-5.5-.7-.1-1.3-.1-2 0z"/> : <><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3" stroke="#646462" strokeWidth="1"/></>}</svg>
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#e7e2fd] border border-[#c6c9c0] hover:bg-[#d4cffb]">
-              <img src={ICON_FIN} alt="" className="w-4 h-4" />
+            <button onClick={() => setShowSearch(s => !s)} title="Buscar en la conversación"
+              className={`w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#e9eae6] ${showSearch ? 'bg-[#1a1a1a]' : 'bg-[#f8f8f7]'}`}>
+              <img src={ICON_SEARCH2} alt="" className={`w-4 h-4 ${showSearch ? 'invert' : ''}`} />
             </button>
             <button onClick={resolveCase} className="h-8 px-4 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] flex items-center gap-1">
               <img src={ICON_RESOLVED} alt="" className="w-4 h-4 invert" />
@@ -1253,20 +1331,12 @@ function ConversationPanel({
               Fusionar
             </button>
           </div>
-          {/* Dropdown menu (1-124503) */}
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute top-12 right-[170px] z-20 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] py-1.5 w-[300px]" data-node-id="1:124503">
-                {[
-                  { icon: '👥', label: 'Administrar participantes', shortcut: '' },
-                  { icon: '⇄', label: 'Fusionar con...', shortcut: 'Ctrl Shift M' },
-                  { icon: '✚', label: 'Nueva conversación', shortcut: '' },
-                  { icon: '↗', label: 'Exportar conversación como texto', shortcut: '' },
-                  { icon: '↗', label: 'Exportar conversación como PDF', shortcut: '' },
-                  { icon: '👁', label: 'Mostrar eventos de conversación', shortcut: 'Ctrl Shift E' },
-                ].map(item => (
-                  <button key={item.label} onClick={() => setMenuOpen(false)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#f3f3f1] text-left">
+              <div className="absolute top-12 right-[170px] z-20 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] py-1.5 w-[300px]">
+                {menuActions.map(item => (
+                  <button key={item.label} onClick={item.onClick} className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#f3f3f1] text-left">
                     <div className="flex items-center gap-2.5">
                       <span className="text-[14px] text-[#646462] w-4 text-center">{item.icon}</span>
                       <span className="text-[13px] text-[#1a1a1a]">{item.label}</span>
@@ -1278,6 +1348,20 @@ function ConversationPanel({
             </>
           )}
         </div>
+        {showSearch && (
+          <div className="px-6 -mt-2">
+            <input
+              autoFocus
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Buscar texto en esta conversación…"
+              className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+            />
+            {searchQuery.trim() && (
+              <p className="text-[11px] text-[#646462] mt-1">{displayMessages.length} de {allMessages.length} mensajes coinciden</p>
+            )}
+          </div>
+        )}
         <div className="h-[1px] bg-[#e9eae6]" />
       </div>
 
@@ -1397,14 +1481,197 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+function DetailSection({ title, children, defaultOpen = true }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border-b border-[#e9eae6] pb-3">
-      <button className="flex items-center justify-between w-full h-8 px-6 py-2 hover:bg-[#f8f8f7]">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center justify-between w-full h-8 px-6 py-2 hover:bg-[#f8f8f7]"
+      >
         <span className="text-[13px] font-semibold text-[#1a1a1a]">{title}</span>
-        <img src={ICON_CHEVRON} alt="" className="w-4 h-4 rotate-90 opacity-50" />
+        <img src={ICON_CHEVRON} alt="" className={`w-4 h-4 transition-transform ${open ? 'rotate-90' : ''} opacity-50`} />
       </button>
-      <div className="px-6">{children}</div>
+      {open && <div className="px-6">{children}</div>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CopilotModule — full-featured AI sidebar module:
+//   • AI Summary card (auto-loaded from /ai/copilot for the active case)
+//   • Quick-action chips (resumen, riesgo, próximo paso, casos similares,
+//     borrador) that fire the right copilot prompts in one click
+//   • Persistent chat (keyed by caseId in the parent state)
+//   • "Usar como respuesta" on any assistant bubble → pushes text to composer
+//   • "Generar borrador" → calls copilot for a clean reply, drops it in composer
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COPILOT_QUICK_ACTIONS: Array<{ id: string; label: string; prompt: string }> = [
+  { id: 'summary',  label: 'Resumir caso',          prompt: 'Resume este caso en 4 viñetas: situación, datos clave, lo que se ha intentado y qué falta.' },
+  { id: 'risk',     label: 'Detectar riesgo',       prompt: 'Detecta los riesgos de este caso (fraude, devolución, churn, escalado) y dime qué evidencias has usado.' },
+  { id: 'next',     label: 'Próximo paso',          prompt: '¿Cuál es la siguiente acción concreta que debo tomar ahora? Sé específico (qué API, qué sistema, qué decir al cliente).' },
+  { id: 'similar',  label: 'Casos similares',       prompt: 'Busca casos parecidos en el histórico y dime qué resolución funcionó y por qué.' },
+  { id: 'policy',   label: 'Verificar política',    prompt: 'Verifica si la acción que estoy a punto de tomar cumple las políticas (reembolsos, descuentos, escalado). Cita la política aplicable.' },
+];
+
+function CopilotModule({
+  selectedConv,
+  inboxView,
+  messages,
+  loading,
+  draftLoading,
+  text,
+  setText,
+  onSend,
+  onUseAsReply,
+  onGenerateDraft,
+}: {
+  selectedConv: Conversation;
+  inboxView: any;
+  messages: PrototypeCopilotMessage[];
+  loading: boolean;
+  draftLoading: boolean;
+  text: string;
+  setText: Dispatch<SetStateAction<string>>;
+  onSend: (q: string) => void;
+  onUseAsReply: (text: string) => void;
+  onGenerateDraft: () => void;
+}) {
+  const caseState = inboxView?.state || (selectedConv as any)?.raw?.stateSnapshot || {};
+  const summary = inboxView?.summary || caseState?.summary || null;
+  const channelLabel = titleCase((selectedConv as any).sourceChannel || (selectedConv.channel || '').split('·')[0].trim() || 'canal');
+  const customerName = (selectedConv as any).customerName || 'el cliente';
+  const riskLevel = (selectedConv as any).riskLevel || caseState?.riskLevel || caseState?.risk_level;
+  const orderId = (selectedConv as any).orderId || caseState?.related?.orders?.[0]?.id;
+
+  function send(question: string) {
+    const q = question.trim();
+    if (!q) return;
+    onSend(q);
+  }
+
+  return (
+    <div className="flex flex-col min-h-full">
+      {/* Header with title + Generate Draft action */}
+      <div className="px-5 py-4 border-b border-[#e9eae6] flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-[#1a1a1a]">Copilot del caso</p>
+          <p className="text-[12px] text-[#646462] mt-1 truncate">
+            {customerName} · {channelLabel}
+            {riskLevel && <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${String(riskLevel).toLowerCase().includes('high') || String(riskLevel).toLowerCase().includes('critical') ? 'bg-[#fee2e2] text-[#b91c1c]' : 'bg-[#f8f8f7] text-[#646462]'}`}>{titleCase(String(riskLevel))}</span>}
+          </p>
+        </div>
+        <button
+          onClick={onGenerateDraft}
+          disabled={draftLoading || !selectedConv?.id}
+          className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[11.5px] font-semibold flex items-center gap-1 disabled:bg-[#e9eae6] disabled:text-[#646462]"
+          title="Generar borrador y pegarlo en el composer"
+        >
+          {draftLoading ? '…' : '✨'}
+          <span>Borrador</span>
+        </button>
+      </div>
+
+      {/* AI summary card (uses the structured summary the backend returns) */}
+      {summary && (
+        <div className="mx-4 mt-3 rounded-2xl bg-[#f4f4ff] border border-[#dadbf3] p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-5 h-5 rounded-full bg-[#e7e2fd] flex items-center justify-center">
+              <img src={ICON_FIN} alt="" className="w-3 h-3" />
+            </div>
+            <span className="text-[12px] font-semibold text-[#1a1a1a]">Resumen del caso</span>
+          </div>
+          <p className="text-[12.5px] text-[#1a1a1a] leading-5 whitespace-pre-wrap">
+            {typeof summary === 'string'
+              ? summary
+              : [
+                  summary.subject && `Asunto: ${summary.subject}`,
+                  summary.intent && `Intención: ${summary.intent}`,
+                  summary.priority && `Prioridad: ${titleCase(String(summary.priority))}`,
+                  summary.recommendedAction && `Próxima acción: ${summary.recommendedAction}`,
+                ].filter(Boolean).join('\n') || 'Sin resumen estructurado disponible.'}
+          </p>
+          {orderId && (
+            <p className="text-[11px] text-[#646462] mt-2">Pedido vinculado: <span className="font-semibold text-[#1a1a1a]">{orderId}</span></p>
+          )}
+        </div>
+      )}
+
+      {/* Quick action chips — prompts the copilot in one click */}
+      <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
+        {COPILOT_QUICK_ACTIONS.map(action => (
+          <button
+            key={action.id}
+            onClick={() => send(action.prompt)}
+            disabled={loading || !selectedConv?.id}
+            className="h-7 px-3 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[11.5px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50"
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Chat history */}
+      <div className="flex-1 px-4 py-3 flex flex-col gap-2 overflow-y-auto">
+        {messages.length === 0 && (
+          <div className="rounded-2xl bg-[#f8f8f7] border border-[#e9eae6] p-3 text-[12.5px] text-[#646462] leading-5">
+            Pulsa una acción rápida o escribe tu propia pregunta. El Copilot ve los datos reales del caso (canal, pedido, sistemas conectados, historial).
+          </div>
+        )}
+        {messages.map(msg => (
+          <div key={msg.id} className={`rounded-2xl px-3 py-2 text-[13px] leading-5 ${
+            msg.role === 'user' ? 'bg-[#1a1a1a] text-white ml-8' : 'bg-[#f8f8f7] text-[#1a1a1a] mr-4 border border-[#e9eae6]'
+          }`}>
+            <p className="whitespace-pre-wrap">{msg.content}</p>
+            <div className="flex items-center justify-between mt-1.5 gap-2">
+              <p className={`text-[10px] ${msg.role === 'user' ? 'text-white/70' : 'text-[#646462]'}`}>{msg.time}</p>
+              {msg.role === 'assistant' && msg.content && (
+                <button
+                  onClick={() => onUseAsReply(msg.content)}
+                  className="text-[11px] font-semibold text-[#1a1a1a] hover:underline"
+                  title="Insertar este texto en el composer"
+                >
+                  Usar como respuesta ↑
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="rounded-2xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2 mr-4 text-[12.5px] text-[#646462] flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#646462] animate-pulse" />
+            <span>Copilot está pensando…</span>
+          </div>
+        )}
+      </div>
+
+      {/* Composer */}
+      <div className="border-t border-[#e9eae6] p-3 flex-shrink-0">
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              e.preventDefault();
+              send(text);
+              setText('');
+            }
+          }}
+          placeholder="Pregunta al Copilot… (Ctrl+Enter envía)"
+          className="w-full min-h-[60px] rounded-xl border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-[11px] text-[#646462]">{loading ? 'Esperando respuesta…' : 'Ctrl+Enter para enviar'}</span>
+          <button
+            onClick={() => { send(text); setText(''); }}
+            disabled={!text.trim() || loading}
+            className="h-7 px-4 rounded-full bg-[#1a1a1a] text-white text-[12.5px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
+          >
+            Enviar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1417,12 +1684,18 @@ function DetailsSidebar({
   copilotMessages,
   onSendCopilot,
   copilotLoading,
+  onUseAsReply,
+  onGenerateDraft,
+  draftLoading,
 }: {
   selectedConv: Conversation;
   inboxView: any;
   copilotMessages: PrototypeCopilotMessage[];
   onSendCopilot: (question: string) => void;
   copilotLoading: boolean;
+  onUseAsReply: (text: string) => void;
+  onGenerateDraft: () => void;
+  draftLoading: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<'details' | 'copilot'>('details');
   const [detailSubTab, setDetailSubTab] = useState<'detalles' | 'actividad' | 'conversaciones'>('detalles');
@@ -1582,48 +1855,18 @@ function DetailsSidebar({
           </div>
         )}
         {activeTab === 'copilot' && (
-          <div className="flex flex-col min-h-full">
-            <div className="px-5 py-4 border-b border-[#e9eae6]">
-              <p className="text-[13px] font-semibold text-[#1a1a1a]">Copilot del caso</p>
-              <p className="text-[12px] text-[#646462] mt-1">Pregunta sobre estado, riesgo, resumen o siguiente acción.</p>
-            </div>
-            <div className="flex-1 px-4 py-4 flex flex-col gap-3">
-              {copilotMessages.length === 0 && (
-                <div className="rounded-2xl bg-[#f8f8f7] border border-[#e9eae6] p-3 text-[13px] text-[#646462]">
-                  Prueba con: “resume este caso” o “qué debería hacer ahora”.
-                </div>
-              )}
-              {copilotMessages.map(msg => (
-                <div key={msg.id} className={`rounded-2xl px-3 py-2 text-[13px] leading-5 ${
-                  msg.role === 'user' ? 'bg-[#1a1a1a] text-white ml-8' : 'bg-[#f8f8f7] text-[#1a1a1a] mr-8'
-                }`}>
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                  <p className={`mt-1 text-[10px] ${msg.role === 'user' ? 'text-white/70' : 'text-[#646462]'}`}>{msg.time}</p>
-                </div>
-              ))}
-              {copilotLoading && <p className="text-[12px] text-[#646462]">Copilot está pensando...</p>}
-            </div>
-            <div className="border-t border-[#e9eae6] p-3">
-              <textarea
-                value={copilotText}
-                onChange={event => setCopilotText(event.target.value)}
-                placeholder="Pregunta a Copilot..."
-                className="w-full min-h-[70px] rounded-xl border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
-              />
-              <button
-                onClick={() => {
-                  const question = copilotText.trim();
-                  if (!question) return;
-                  onSendCopilot(question);
-                  setCopilotText('');
-                }}
-                disabled={!copilotText.trim() || copilotLoading}
-                className="mt-2 h-8 px-4 rounded-full bg-[#222] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
-              >
-                Enviar a Copilot
-              </button>
-            </div>
-          </div>
+          <CopilotModule
+            selectedConv={selectedConv}
+            inboxView={inboxView}
+            messages={copilotMessages}
+            loading={copilotLoading}
+            draftLoading={draftLoading}
+            text={copilotText}
+            setText={setCopilotText}
+            onSend={onSendCopilot}
+            onUseAsReply={onUseAsReply}
+            onGenerateDraft={onGenerateDraft}
+          />
         )}
       </div>
     </div>
@@ -1650,6 +1893,12 @@ function InboxView() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [copilotByCaseId, setCopilotByCaseId] = useState<Record<string, PrototypeCopilotMessage[]>>({});
   const [copilotLoading, setCopilotLoading] = useState(false);
+  const [copilotDraftLoading, setCopilotDraftLoading] = useState(false);
+  // Composer state lifted up from ConversationPanel so the right-sidebar
+  // Copilot can push drafts straight into the reply box without a sibling
+  // ref-bridge.
+  const [replyText, setReplyText] = useState('');
+  const [replyTab, setReplyTab] = useState<'responder' | 'nota' | 'datosIA'>('responder');
   const { data: apiCases, loading, error } = useApi(
     () => casesApi.list(),
     [refreshKey],
@@ -1745,11 +1994,43 @@ function InboxView() {
     }
   }
 
+  // Push a string from the Copilot (chat answer or generated draft) into the
+  // composer. Switches the composer to "Responder" so the agent sees it.
+  function useAsReply(text: string) {
+    setReplyText(text);
+    setReplyTab('responder');
+    showToast('Insertado en el composer', 'success');
+  }
+
+  // Generate a fresh AI draft via the backend's copilot endpoint and drop it
+  // straight into the composer. Uses copilot (synchronous) instead of
+  // aiApi.draft (async job queue) so the agent gets text immediately.
+  async function generateDraftFromCopilot() {
+    if (!selectedConv?.id || copilotDraftLoading) return;
+    setCopilotDraftLoading(true);
+    try {
+      const customer = (selectedConv as any).customerName || 'el cliente';
+      const channel = (selectedConv as any).sourceChannel || 'el canal actual';
+      const question = `Redacta una respuesta clara, empática y accionable para ${customer} usando ${channel}. Devuelve SOLO el texto del mensaje, sin preámbulo ni cabecera.`;
+      const response = await aiApi.copilot(selectedConv.id, question, []);
+      const draft = response?.answer || response?.message || response?.content || '';
+      if (draft.trim()) {
+        useAsReply(draft.trim());
+      } else {
+        showToast('Copilot no ha podido generar el borrador', 'error');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'No se ha podido generar el borrador', 'error');
+    } finally {
+      setCopilotDraftLoading(false);
+    }
+  }
+
   return (
     <div className="flex flex-col flex-1 min-w-0 p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
-        <InboxSidebar active={scope} onScopeChange={changeScope} counts={counts} />
+        <InboxSidebar active={scope} onScopeChange={changeScope} counts={counts} onAction={showToast} />
         <div className="relative h-full flex-shrink-0">
           <ConversationList
             selectedId={selectedConv?.id || selectedConvId}
@@ -1769,6 +2050,10 @@ function InboxView() {
                 inboxView={inboxView}
                 onRefresh={() => setRefreshKey(k => k + 1)}
                 onAction={showToast}
+                replyText={replyText}
+                setReplyText={setReplyText}
+                replyTab={replyTab}
+                setReplyTab={setReplyTab}
               />
               <DetailsSidebar
                 selectedConv={selectedConv}
@@ -1776,6 +2061,9 @@ function InboxView() {
                 copilotMessages={copilotByCaseId[selectedConv.id] || []}
                 onSendCopilot={sendCopilot}
                 copilotLoading={copilotLoading}
+                onUseAsReply={useAsReply}
+                onGenerateDraft={generateDraftFromCopilot}
+                draftLoading={copilotDraftLoading}
               />
             </>
           ) : (
