@@ -229,6 +229,39 @@ async function createInternalNoteSupabase(scope: ConversationScope, input: Inter
   return { id: noteId, ...payload };
 }
 
+async function updateInternalNoteSupabase(
+  scope: ConversationScope,
+  caseId: string,
+  noteId: string,
+  content: string,
+) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('internal_notes')
+    .update({ content, updated_at: new Date().toISOString() })
+    .eq('id', noteId)
+    .eq('case_id', caseId)
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function deleteInternalNoteSupabase(scope: ConversationScope, caseId: string, noteId: string) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('internal_notes')
+    .delete()
+    .eq('id', noteId)
+    .eq('case_id', caseId)
+    .eq('tenant_id', scope.tenantId)
+    .eq('workspace_id', scope.workspaceId);
+  if (error) throw error;
+  return { ok: true };
+}
+
 
 export interface ConversationRepository {
   getByCase(scope: ConversationScope, caseId: string): Promise<any | null>;
@@ -237,6 +270,8 @@ export interface ConversationRepository {
   ensureForCase(scope: ConversationScope, caseRow: any): Promise<any>;
   appendMessage(scope: ConversationScope, input: AppendMessageInput): Promise<any>;
   createInternalNote(scope: ConversationScope, input: InternalNoteInput): Promise<any>;
+  updateInternalNote(scope: ConversationScope, caseId: string, noteId: string, content: string): Promise<any>;
+  deleteInternalNote(scope: ConversationScope, caseId: string, noteId: string): Promise<any>;
 }
 
 export function createConversationRepository(): ConversationRepository {
@@ -247,5 +282,7 @@ export function createConversationRepository(): ConversationRepository {
     ensureForCase: ensureConversationForCaseSupabase,
     appendMessage: appendMessageSupabase,
     createInternalNote: createInternalNoteSupabase,
+    updateInternalNote: updateInternalNoteSupabase,
+    deleteInternalNote: deleteInternalNoteSupabase,
   };
 }

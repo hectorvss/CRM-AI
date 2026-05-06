@@ -590,6 +590,145 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
   }
 });
 
+// ── PATCH /cases/:id/tags ────────────────────────────────────────────────────
+//
+// Inline tag CRUD. Three modes selected by `mode`:
+//   • "set"     — replace the whole tag list with `tags: string[]`
+//   • "add"     — append the items in `tags`, dedupe, no reorder
+//   • "remove"  — remove the items in `tags`
+// All modes write to cases.tags and emit a workflow event so subscribers
+// (analytics, automation rules, etc.) can react to tag changes.
+router.patch('/:id/tags', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
+    const { mode = 'set', tags } = req.body ?? {};
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ error: 'tags must be an array of strings' });
+    }
+    const sanitized = tags
+      .map((t: any) => String(t || '').trim())
+      .filter((t: string) => t.length > 0 && t.length <= 60)
+      .slice(0, 50);
+
+    const bundle = await caseRepository.getBundle(scope, req.params.id);
+    if (!bundle) return res.status(404).json({ error: 'Case not found' });
+
+    const current: string[] = Array.isArray(bundle.case.tags) ? bundle.case.tags : [];
+    let next: string[];
+    if (mode === 'add') {
+      next = Array.from(new Set([...current, ...sanitized]));
+    } else if (mode === 'remove') {
+      const drop = new Set(sanitized);
+      next = current.filter(t => !drop.has(t));
+    } else {
+      // 'set' is default
+      next = Array.from(new Set(sanitized));
+    }
+
+    await caseRepository.update(scope, req.params.id, {
+      tags: next,
+      last_activity_at: new Date().toISOString(),
+    });
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CASE_TAGS_UPDATE',
+      entityType: 'case',
+      entityId: req.params.id,
+      oldValue: { tags: current },
+      newValue: { tags: next },
+      metadata: { mode },
+    });
+
+    await fireWorkflowEvent(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
+      'case.updated',
+      { caseId: req.params.id, tags: next, change: 'tags' },
+    );
+
+    res.json({ success: true, tags: next });
+  } catch (error) {
+    console.error('Error updating tags:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Star (favorite) — per-user, persisted in case_stars ─────────────────────
+router.get('/:id/star', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const userId = req.userId || 'user_local';
+    const starred = await caseRepository.isStarred(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId },
+      req.params.id,
+    );
+    res.json({ starred });
+  } catch (error) {
+    console.error('Error reading star:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/:id/star', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const userId = req.userId || 'user_local';
+    await caseRepository.starCase(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId },
+      req.params.id,
+    );
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: userId,
+      action: 'CASE_STARRED',
+      entityType: 'case',
+      entityId: req.params.id,
+    });
+    res.json({ success: true, starred: true });
+  } catch (error) {
+    console.error('Error starring case:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/:id/star', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const userId = req.userId || 'user_local';
+    await caseRepository.unstarCase(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId },
+      req.params.id,
+    );
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: userId,
+      action: 'CASE_UNSTARRED',
+      entityType: 'case',
+      entityId: req.params.id,
+    });
+    res.json({ success: true, starred: false });
+  } catch (error) {
+    console.error('Error unstarring case:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /cases/starred — list ids the current user has starred. Lightweight
+// payload (just ids) so the inbox sidebar can highlight them client-side.
+router.get('/starred/ids', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const userId = req.userId || 'user_local';
+    const ids = await caseRepository.listStarredCaseIds(
+      { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId },
+    );
+    res.json({ ids });
+  } catch (error) {
+    console.error('Error listing starred ids:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
   try {
     const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId! };
@@ -695,6 +834,57 @@ async function handleInternalNote(req: MultiTenantRequest, res: Response): Promi
 router.post('/:id/internal-note', handleInternalNote);
 // /:id/notes is an alias for /:id/internal-note
 router.post('/:id/notes', handleInternalNote);
+
+// PATCH /cases/:id/internal-notes/:noteId — update existing note content.
+router.patch('/:id/internal-notes/:noteId', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    const content = String(req.body?.content || '').trim();
+    if (!content) return res.status(400).json({ error: 'content is required' });
+    if (content.length > 4000) return res.status(400).json({ error: 'content too long (max 4000)' });
+
+    const updated = await conversationRepository.updateInternalNote(scope, req.params.id, req.params.noteId, content);
+    if (!updated) return res.status(404).json({ error: 'Note not found' });
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CASE_INTERNAL_NOTE_UPDATE',
+      entityType: 'internal_note',
+      entityId: req.params.noteId,
+      metadata: { caseId: req.params.id },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating internal note:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /cases/:id/internal-notes/:noteId — remove a note.
+router.delete('/:id/internal-notes/:noteId', async (req: MultiTenantRequest, res: Response) => {
+  try {
+    const scope = { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId };
+    await conversationRepository.deleteInternalNote(scope, req.params.id, req.params.noteId);
+
+    await auditRepository.log({
+      tenantId: req.tenantId!,
+      workspaceId: req.workspaceId!,
+      actorId: req.userId || 'system',
+      action: 'CASE_INTERNAL_NOTE_DELETE',
+      entityType: 'internal_note',
+      entityId: req.params.noteId,
+      metadata: { caseId: req.params.id },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting internal note:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
   try {

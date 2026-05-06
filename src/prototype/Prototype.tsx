@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { aiApi, casesApi, iamApi } from '../api/client';
+import { aiApi, casesApi, customersApi, iamApi } from '../api/client';
 import { useApi } from '../api/hooks';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
@@ -1816,26 +1816,16 @@ function ConversationPanel({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   // Star persists across reloads via localStorage keyed by caseId. The
-  // backend doesn't have a "starred" column yet, so this is a pragmatic
-  // bridge — easy to swap for a real PATCH /cases/:id/star later.
-  const STARRED_LS_KEY = 'clain.inbox.starred';
-  function readStarredSet(): Set<string> {
-    if (typeof window === 'undefined') return new Set();
-    try {
-      const raw = window.localStorage.getItem(STARRED_LS_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return new Set(Array.isArray(arr) ? arr.map(String) : []);
-    } catch { return new Set(); }
-  }
-  function writeStarredSet(set: Set<string>) {
-    if (typeof window === 'undefined') return;
-    try { window.localStorage.setItem(STARRED_LS_KEY, JSON.stringify(Array.from(set))); } catch { /* ignore quota errors */ }
-  }
-  const [starred, setStarred] = useState<boolean>(() => readStarredSet().has(selectedConv.id));
-  // Re-read whenever the active case changes (keeps the icon in sync when the
-  // user navigates between conversations with j/k or by clicking the list).
+  // Star is now backed by the case_stars table per-user. We fetch the
+  // current state when the active case changes, then optimistically flip on
+  // toggle. localStorage is no longer used for this.
+  const [starred, setStarred] = useState<boolean>(false);
   useEffect(() => {
-    setStarred(readStarredSet().has(selectedConv.id));
+    let cancelled = false;
+    casesApi.isStarred(selectedConv.id)
+      .then(res => { if (!cancelled) setStarred(!!res?.starred); })
+      .catch(() => { if (!cancelled) setStarred(false); });
+    return () => { cancelled = true; };
   }, [selectedConv.id]);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2002,18 +1992,22 @@ function ConversationPanel({
   // /reopen instead of firing the change immediately. Null = modal closed.
   const [statusMode, setStatusMode] = useState<StatusMode | null>(null);
 
-  function toggleStar() {
-    const set = readStarredSet();
-    if (set.has(selectedConv.id)) {
-      set.delete(selectedConv.id);
-      setStarred(false);
-      onAction('Caso desmarcado', 'success');
-    } else {
-      set.add(selectedConv.id);
-      setStarred(true);
-      onAction('Caso destacado', 'success');
+  async function toggleStar() {
+    // Optimistic flip; revert on error.
+    const next = !starred;
+    setStarred(next);
+    try {
+      if (next) {
+        await casesApi.starCase(selectedConv.id);
+        onAction('Caso destacado', 'success');
+      } else {
+        await casesApi.unstarCase(selectedConv.id);
+        onAction('Caso desmarcado', 'success');
+      }
+    } catch (err: any) {
+      setStarred(!next);
+      onAction(err?.message || 'No se pudo cambiar el destacado', 'error');
     }
-    writeStarredSet(set);
   }
 
   function exportConversationAsText() {
@@ -2758,6 +2752,477 @@ function slaDeadlineLabel(deadline?: string | null, status?: string | null): str
 // placeholders. Includes: real customer card, conversation attributes with
 // real SLA deadlines, internal notes with an inline "+ Añadir nota" form, and
 // real AI activity from case.ai_diagnosis (hidden when null).
+// NoteCard — single internal note with hover-revealed Edit / Delete buttons.
+// Editing swaps content for a textarea; saving calls PATCH /internal-notes,
+// deleting calls DELETE. onRefresh re-fetches the case.
+function NoteCard({
+  note,
+  caseId,
+  onAction,
+  onRefresh,
+}: {
+  note: any;
+  caseId: string;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note.content || note.text || '');
+  const [busy, setBusy] = useState(false);
+  const noteId = note.id || note.note_id;
+
+  async function save() {
+    const v = draft.trim();
+    if (!v || busy || !noteId) return;
+    setBusy(true);
+    try {
+      await casesApi.updateInternalNote(caseId, String(noteId), v);
+      onAction('Nota actualizada');
+      setEditing(false);
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo actualizar la nota', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (busy || !noteId) return;
+    if (typeof window !== 'undefined' && !window.confirm('¿Borrar esta nota interna?')) return;
+    setBusy(true);
+    try {
+      await casesApi.deleteInternalNote(caseId, String(noteId));
+      onAction('Nota borrada');
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo borrar la nota', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="rounded-xl bg-[#fffbeb] border border-[#f59e0b] px-3 py-2 flex flex-col gap-2">
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          className="w-full min-h-[60px] rounded-lg bg-white border border-[#fde68a] px-2 py-1.5 text-[13px] resize-none focus:outline-none focus:border-[#f59e0b]"
+        />
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={() => { setEditing(false); setDraft(note.content || note.text || ''); }} disabled={busy} className="text-[12px] font-semibold text-[#646462] hover:text-[#1a1a1a]">Cancelar</button>
+          <button onClick={save} disabled={!draft.trim() || busy} className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? 'Guardando…' : 'Guardar'}</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl bg-[#fffbeb] border border-[#fde68a] px-3 py-2 group">
+      <p className="text-[13px] text-[#1a1a1a] leading-5 whitespace-pre-wrap">{note.content || note.text || 'Nota sin contenido'}</p>
+      <div className="flex items-center justify-between mt-1 gap-2">
+        <p className="text-[11px] text-[#646462] truncate">
+          {(note.createdBy || note.created_by || 'sistema')} · {relativeTime(note.createdAt || note.created_at)}
+          {note.updated_at && note.updated_at !== note.created_at && <span> · editada</span>}
+        </p>
+        {noteId && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={() => setEditing(true)} title="Editar" className="text-[11px] font-semibold text-[#646462] hover:text-[#1a1a1a]">Editar</button>
+            <span className="text-[#c6c9c0]">·</span>
+            <button onClick={remove} disabled={busy} title="Borrar" className="text-[11px] font-semibold text-[#646462] hover:text-[#b91c1c]">Borrar</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// TagsRow — inline tag editor chips. Click × to remove (PATCH /tags
+// mode=remove); type into the inline input + Enter to add (mode=add).
+// Optimistic refresh via onRefresh.
+function TagsRow({
+  tags,
+  caseId,
+  onAction,
+  onRefresh,
+}: {
+  tags: string[];
+  caseId: string;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    const v = draft.trim();
+    if (!v || busy) return;
+    setBusy(true);
+    try {
+      await casesApi.updateTags(caseId, [v], 'add');
+      setDraft('');
+      setAdding(false);
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo añadir la etiqueta', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(tag: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await casesApi.updateTags(caseId, [tag], 'remove');
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo quitar la etiqueta', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-start py-1.5 w-full min-w-0">
+      <span className="w-[113px] flex-shrink-0 text-[13px] text-[#646462] truncate pt-0.5">Etiquetas</span>
+      <div className="flex-1 min-w-0 flex flex-wrap gap-1">
+        {tags.length === 0 && !adding && (
+          <span className="text-[12.5px] text-[#646462] italic">Sin etiquetas</span>
+        )}
+        {tags.map(tag => (
+          <span key={tag} className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a] max-w-full">
+            <span className="truncate max-w-[140px]">{tag}</span>
+            <button
+              onClick={() => remove(tag)}
+              disabled={busy}
+              title="Quitar etiqueta"
+              className="text-[#646462] hover:text-[#b91c1c] disabled:opacity-50"
+            >×</button>
+          </span>
+        ))}
+        {adding ? (
+          <input
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); add(); }
+              if (e.key === 'Escape') { setAdding(false); setDraft(''); }
+            }}
+            onBlur={() => { if (!draft.trim()) setAdding(false); }}
+            placeholder="nueva-etiqueta"
+            className="h-6 px-2 rounded-full border border-[#1a1a1a] text-[11.5px] focus:outline-none w-[120px]"
+          />
+        ) : (
+          <button
+            onClick={() => setAdding(true)}
+            disabled={busy}
+            className="h-6 px-2 rounded-full border border-dashed border-[#c6c9c0] text-[11.5px] text-[#646462] hover:bg-[#f8f8f7] hover:text-[#1a1a1a] disabled:opacity-50"
+          >+ Añadir</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CustomerInfoSections — 7 collapsible modules wired to real backend:
+//   1. Conversaciones recientes  → casesApi.list({ customer_id })
+//   2. Notas del usuario         → customer.notes (PATCH /customers/:id)
+//   3. Etiquetas de usuario      → customer.tags  (PATCH /customers/:id)
+//   4. Etiquetas de conversación → casesApi.updateTags (already on case row)
+//   5. Segmentos de usuario      → customer.segment chip + edit
+//   6. Vistas recientes          → customersApi.activity()
+//   7. Conversaciones similares  → top tag-overlap with the active case
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CustomerInfoSections({
+  customer,
+  currentCaseId,
+  onAction,
+  onRefresh,
+}: {
+  customer: any;
+  currentCaseId: string;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <>
+      <CustomerRecentConvsSection customerId={customer.id} currentCaseId={currentCaseId} />
+      <CustomerNotesSection customer={customer} onAction={onAction} onRefresh={onRefresh} />
+      <CustomerTagsSection customer={customer} onAction={onAction} onRefresh={onRefresh} />
+      <CustomerSegmentSection customer={customer} onAction={onAction} onRefresh={onRefresh} />
+      <CustomerActivitySection customerId={customer.id} />
+      <SimilarConversationsSection customerId={customer.id} currentCaseId={currentCaseId} />
+    </>
+  );
+}
+
+// 1 + 7. Recent conversations + similar conversations both pull
+//        casesApi.list({ customer_id }). 7 also intersects tags with the
+//        current case to surface the most relevant siblings first.
+
+function CustomerRecentConvsSection({ customerId, currentCaseId }: { customerId: string; currentCaseId: string }) {
+  const { data: cases, loading } = useApi(
+    () => casesApi.list({ customer_id: customerId }),
+    [customerId],
+    [],
+  );
+  const others = (Array.isArray(cases) ? cases : []).filter((c: any) => c.id !== currentCaseId).slice(0, 8);
+  return (
+    <DetailSection title={`Conversaciones recientes (${others.length})`}>
+      <div className="py-2 flex flex-col gap-1.5">
+        {loading && <p className="text-[12.5px] text-[#646462]">Cargando…</p>}
+        {!loading && others.length === 0 && <p className="text-[12.5px] text-[#646462]">No hay conversaciones recientes.</p>}
+        {others.map((c: any) => (
+          <a
+            key={c.id}
+            href={`/?view=inbox&scope=all&case=${encodeURIComponent(c.id)}`}
+            className="flex items-center justify-between rounded-lg bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2 hover:bg-[#ededea]"
+          >
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-semibold text-[#1a1a1a] truncate">{c.case_number || c.id}</p>
+              <p className="text-[11px] text-[#646462] truncate">{titleCase(c.status)} · {titleCase(c.source_channel || c.channel || 'caso')}</p>
+            </div>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="w-3 h-3 text-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4" /></svg>
+          </a>
+        ))}
+      </div>
+    </DetailSection>
+  );
+}
+
+function CustomerNotesSection({ customer, onAction, onRefresh }: {
+  customer: any;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(customer.notes || '');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { setDraft(customer.notes || ''); setEditing(false); }, [customer.id, customer.notes]);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await customersApi.update(customer.id, { notes: draft });
+      onAction('Nota del usuario guardada');
+      setEditing(false);
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo guardar la nota', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DetailSection title="Notas del usuario">
+      <div className="py-2">
+        {editing ? (
+          <div className="flex flex-col gap-2">
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              placeholder="Añadir una nota sobre este cliente…"
+              className="w-full min-h-[60px] rounded-xl bg-[#fffbeb] border border-[#fde68a] px-3 py-2 text-[13px] text-[#1a1a1a] resize-none focus:outline-none focus:border-[#f59e0b]"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => { setEditing(false); setDraft(customer.notes || ''); }} disabled={busy} className="text-[12px] font-semibold text-[#646462] hover:text-[#1a1a1a]">Cancelar</button>
+              <button onClick={save} disabled={busy} className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar'}</button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setEditing(true)}
+            className="w-full text-left rounded-xl bg-[#fffbeb] border border-[#fde68a] px-3 py-2.5 hover:bg-[#fef3c7]"
+          >
+            <p className={`text-[13px] leading-5 whitespace-pre-wrap ${customer.notes ? 'text-[#1a1a1a]' : 'text-[#646462]'}`}>
+              {customer.notes || 'Añadir una nota'}
+            </p>
+          </button>
+        )}
+      </div>
+    </DetailSection>
+  );
+}
+
+function CustomerTagsSection({ customer, onAction, onRefresh }: {
+  customer: any;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  const tags: string[] = Array.isArray(customer.tags) ? customer.tags : [];
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function addTag() {
+    const v = draft.trim();
+    if (!v || busy) return;
+    setBusy(true);
+    try {
+      const next = Array.from(new Set([...tags, v]));
+      await customersApi.update(customer.id, { tags: next });
+      setDraft(''); setAdding(false); onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo añadir la etiqueta', 'error');
+    } finally { setBusy(false); }
+  }
+  async function removeTag(tag: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const next = tags.filter(t => t !== tag);
+      await customersApi.update(customer.id, { tags: next });
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo quitar la etiqueta', 'error');
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <DetailSection title={`Etiquetas de usuario (${tags.length})`}>
+      <div className="py-2 flex flex-wrap gap-1">
+        {tags.length === 0 && !adding && <span className="text-[12.5px] text-[#646462] italic">Sin etiquetas</span>}
+        {tags.map(t => (
+          <span key={t} className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a] max-w-full">
+            <span className="truncate max-w-[140px]">{t}</span>
+            <button onClick={() => removeTag(t)} disabled={busy} className="text-[#646462] hover:text-[#b91c1c] disabled:opacity-50">×</button>
+          </span>
+        ))}
+        {adding ? (
+          <input
+            autoFocus value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } if (e.key === 'Escape') { setAdding(false); setDraft(''); } }}
+            onBlur={() => { if (!draft.trim()) setAdding(false); }}
+            placeholder="nueva-etiqueta"
+            className="h-6 px-2 rounded-full border border-[#1a1a1a] text-[11.5px] focus:outline-none w-[120px]"
+          />
+        ) : (
+          <button onClick={() => setAdding(true)} disabled={busy} className="h-6 w-6 rounded-full border border-dashed border-[#c6c9c0] text-[#646462] hover:bg-[#f8f8f7] hover:text-[#1a1a1a] disabled:opacity-50 flex items-center justify-center text-[14px] leading-none">+</button>
+        )}
+      </div>
+    </DetailSection>
+  );
+}
+
+function CustomerSegmentSection({ customer, onAction, onRefresh }: {
+  customer: any;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onRefresh: () => void;
+}) {
+  const SEGMENTS = ['vip', 'active', 'new', 'churn_risk', 'enterprise'];
+  const [busy, setBusy] = useState(false);
+  async function pick(seg: string) {
+    if (busy || customer.segment === seg) return;
+    setBusy(true);
+    try {
+      await customersApi.update(customer.id, { segment: seg });
+      onAction('Segmento actualizado');
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo actualizar el segmento', 'error');
+    } finally { setBusy(false); }
+  }
+  return (
+    <DetailSection title="Segmentos de usuario">
+      <div className="py-2 flex flex-wrap gap-1.5">
+        {SEGMENTS.map(seg => {
+          const active = String(customer.segment || '').toLowerCase() === seg;
+          return (
+            <button
+              key={seg}
+              onClick={() => pick(seg)}
+              disabled={busy}
+              className={`h-6 px-2.5 rounded-full text-[11.5px] font-semibold border ${active ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6] hover:bg-[#ededea]'}`}
+            >
+              {titleCase(seg.replace(/_/g, ' '))}
+            </button>
+          );
+        })}
+      </div>
+    </DetailSection>
+  );
+}
+
+function CustomerActivitySection({ customerId }: { customerId: string }) {
+  const { data, loading } = useApi(
+    () => customersApi.activity(customerId),
+    [customerId],
+    null,
+  );
+  const items = Array.isArray(data) ? data : Array.isArray(data?.events) ? data.events : Array.isArray(data?.activity) ? data.activity : [];
+  return (
+    <DetailSection title={`Vistas recientes de la página (${items.length})`} defaultOpen={false}>
+      <div className="py-2 flex flex-col gap-1.5">
+        {loading && <p className="text-[12.5px] text-[#646462]">Cargando actividad…</p>}
+        {!loading && items.length === 0 && <p className="text-[12.5px] text-[#646462]">No hay actividad registrada.</p>}
+        {items.slice(0, 10).map((ev: any, i: number) => (
+          <div key={ev.id || i} className="flex items-start gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#3b59f6] mt-1.5 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] text-[#1a1a1a] truncate">{ev.title || ev.description || ev.event_type || ev.type || 'Evento'}</p>
+              <p className="text-[11px] text-[#646462]">{relativeTime(ev.occurred_at || ev.created_at || ev.time)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </DetailSection>
+  );
+}
+
+function SimilarConversationsSection({ customerId, currentCaseId }: { customerId: string; currentCaseId: string }) {
+  const { data: cases, loading } = useApi(
+    () => casesApi.list({ customer_id: customerId }),
+    [customerId],
+    [],
+  );
+  const list = Array.isArray(cases) ? cases : [];
+  const current = list.find((c: any) => c.id === currentCaseId);
+  const currentTags = new Set<string>(Array.isArray(current?.tags) ? current.tags : []);
+  // Score by tag overlap; ties broken by recency.
+  const ranked = list
+    .filter((c: any) => c.id !== currentCaseId)
+    .map((c: any) => {
+      const tags: string[] = Array.isArray(c.tags) ? c.tags : [];
+      const overlap = tags.filter(t => currentTags.has(t)).length;
+      return { c, overlap };
+    })
+    .filter(x => x.overlap > 0)
+    .sort((a, b) => b.overlap - a.overlap || (new Date(b.c.last_activity_at || b.c.created_at || 0).getTime() - new Date(a.c.last_activity_at || a.c.created_at || 0).getTime()))
+    .slice(0, 5);
+  return (
+    <DetailSection title={`Conversaciones similares (${ranked.length})`} defaultOpen={false}>
+      <div className="py-2 flex flex-col gap-1.5">
+        {loading && <p className="text-[12.5px] text-[#646462]">Cargando…</p>}
+        {!loading && ranked.length === 0 && <p className="text-[12.5px] text-[#646462]">No hay conversaciones con etiquetas en común.</p>}
+        {ranked.map(({ c, overlap }) => (
+          <a
+            key={c.id}
+            href={`/?view=inbox&scope=all&case=${encodeURIComponent(c.id)}`}
+            className="flex items-center justify-between rounded-lg bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2 hover:bg-[#ededea]"
+          >
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-semibold text-[#1a1a1a] truncate">{c.case_number || c.id}</p>
+              <p className="text-[11px] text-[#646462] truncate">{titleCase(c.status)} · {overlap} etiqueta{overlap === 1 ? '' : 's'} en común</p>
+            </div>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="w-3 h-3 text-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4" /></svg>
+          </a>
+        ))}
+      </div>
+    </DetailSection>
+  );
+}
+
 function DetailsTabContent({
   selectedConv,
   inboxView,
@@ -2854,7 +3319,15 @@ function DetailsTabContent({
         <DetailRow label="Canal" value={channelName} />
         <DetailRow label="Prioridad" value={titleCase(selectedConv.priority)} />
         <DetailRow label="Riesgo" value={titleCase(selectedConv.riskLevel || customer.risk_level || '—')} />
-        <DetailRow label="Etiquetas" value={selectedConv.tags?.length ? selectedConv.tags.join(', ') : 'Sin etiquetas'} />
+        {/* Inline tag editor — chips with × to remove + input to add. Calls
+            casesApi.updateTags with mode 'add' or 'remove' so the optimistic
+            UI is fast and the audit log captures the granular change. */}
+        <TagsRow
+          tags={selectedConv.tags || []}
+          caseId={selectedConv.id}
+          onAction={onAction}
+          onRefresh={onRefresh}
+        />
       </DetailSection>
 
       <DetailSection title="Cliente">
@@ -2898,12 +3371,13 @@ function DetailsTabContent({
         <div className="py-2 flex flex-col gap-2">
           {internalNotes.length === 0 && !adding && <p className="text-[13px] text-[#646462]">Sin notas internas todavía.</p>}
           {internalNotes.slice(0, 10).map((note: any, index: number) => (
-            <div key={note.id || index} className="rounded-xl bg-[#fffbeb] border border-[#fde68a] px-3 py-2">
-              <p className="text-[13px] text-[#1a1a1a] leading-5 whitespace-pre-wrap">{note.content || note.text || 'Nota sin contenido'}</p>
-              <p className="text-[11px] text-[#646462] mt-1">
-                {(note.createdBy || note.created_by || 'sistema')} · {relativeTime(note.createdAt || note.created_at)}
-              </p>
-            </div>
+            <NoteCard
+              key={note.id || index}
+              note={note}
+              caseId={selectedConv.id}
+              onAction={onAction}
+              onRefresh={onRefresh}
+            />
           ))}
           {adding ? (
             <div className="flex flex-col gap-2 mt-1">
@@ -2977,6 +3451,16 @@ function DetailsTabContent({
           </div>
         </DetailSection>
       )}
+
+      {/* ── Customer-side modules — 7 collapsible sections under Información ── */}
+      {customer.id && (
+        <CustomerInfoSections
+          customer={customer}
+          currentCaseId={selectedConv.id}
+          onAction={onAction}
+          onRefresh={onRefresh}
+        />
+      )}
     </>
   );
 }
@@ -3044,7 +3528,7 @@ function DetailsSidebar({
     <div className="flex flex-col h-full w-[346px] min-w-[346px] max-w-[346px] bg-white rounded-2xl shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] flex-shrink-0 overflow-hidden">
       <div className="flex items-center justify-between border-b border-[#e9eae6] px-4 flex-shrink-0">
         <div className="flex items-center min-w-0">
-          {([['details', 'Detalles'], ['copilot', 'Copilot']] as const).map(([id, label]) => (
+          {([['details', 'Información'], ['copilot', 'Copilot']] as const).map(([id, label]) => (
             <button key={id} onClick={() => setActiveTab(id)}
               className={`text-[13px] h-10 px-2 mr-2 ${activeTab === id ? 'font-semibold text-[#1a1a1a] border-b-2 border-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
               {label}

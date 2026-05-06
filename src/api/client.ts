@@ -277,6 +277,17 @@ export const casesApi = {
       method: 'PATCH',
       body: JSON.stringify({ user_id, team_id }),
     }),
+  // Inline tag CRUD. mode = 'set' | 'add' | 'remove' (default 'set').
+  updateTags: (id: string, tags: string[], mode: 'set' | 'add' | 'remove' = 'set') =>
+    request<any>(`/cases/${id}/tags`, {
+      method: 'PATCH',
+      body: JSON.stringify({ tags, mode }),
+    }),
+  // Per-user star (favorite). Backed by the case_stars table.
+  isStarred:    (id: string) => request<{ starred: boolean }>(`/cases/${id}/star`),
+  starCase:     (id: string) => request<any>(`/cases/${id}/star`, { method: 'PUT' }),
+  unstarCase:   (id: string) => request<any>(`/cases/${id}/star`, { method: 'DELETE' }),
+  listStarred:  () => request<{ ids: string[] }>(`/cases/starred/ids`),
   addNote: (id: string, content: string, created_by?: string) =>
     request<any>(`/cases/${id}/notes`, {
       method: 'POST',
@@ -286,6 +297,15 @@ export const casesApi = {
     request<any>(`/cases/${id}/internal-note`, {
       method: 'POST',
       body: JSON.stringify({ content }),
+    }),
+  updateInternalNote: (caseId: string, noteId: string, content: string) =>
+    request<any>(`/cases/${caseId}/internal-notes/${encodeURIComponent(noteId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    }),
+  deleteInternalNote: (caseId: string, noteId: string) =>
+    request<any>(`/cases/${caseId}/internal-notes/${encodeURIComponent(noteId)}`, {
+      method: 'DELETE',
     }),
   reply: (id: string, content: string, draft_reply_id?: string, attachments?: Array<{ id: string; name: string; size: number; type: string; dataUrl?: string; url?: string }>) =>
     request<any>(`/cases/${id}/reply`, {
@@ -341,6 +361,8 @@ export const customersApi = {
     canonical_name?: string;
     canonical_email?: string;
     phone?: string;
+    notes?: string;
+    tags?: string[];
   }) =>
     request<any>(`/customers/${id}`, {
       method: 'PATCH',

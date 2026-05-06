@@ -1655,6 +1655,13 @@ export interface CaseRepository {
   getOpenReconciliationIssues(scope: CaseScope, caseId: string): Promise<any[]>;
   upsertReconciliationIssue(scope: CaseScope, data: any): Promise<string>;
   findStaleCases(scope: CaseScope, limit: number, thresholdMins: number): Promise<any[]>;
+  // Per-user star (favorite). starCase / unstarCase are idempotent; isStarred
+  // tells the frontend which icon state to render. listStarredCaseIds powers
+  // a "Destacados" inbox scope on the client.
+  starCase(scope: CaseScope & { userId: string }, caseId: string): Promise<void>;
+  unstarCase(scope: CaseScope & { userId: string }, caseId: string): Promise<void>;
+  isStarred(scope: CaseScope & { userId: string }, caseId: string): Promise<boolean>;
+  listStarredCaseIds(scope: CaseScope & { userId: string }): Promise<string[]>;
 }
 
 async function updateConflictStateSupabase(scope: CaseScope, caseId: string, hasConflict: boolean, severity: string | null) {
@@ -2049,6 +2056,55 @@ class SupabaseCaseRepository implements CaseRepository {
     if (insertError) throw insertError;
     return id;
   }
+  // ── Per-user case stars ──────────────────────────────────────────────
+  async starCase(scope: CaseScope & { userId: string }, caseId: string) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('case_stars')
+      .upsert({
+        case_id: caseId,
+        user_id: scope.userId,
+        tenant_id: scope.tenantId,
+        workspace_id: scope.workspaceId,
+      }, { onConflict: 'case_id,user_id' });
+    if (error) throw error;
+  }
+  async unstarCase(scope: CaseScope & { userId: string }, caseId: string) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('case_stars')
+      .delete()
+      .eq('case_id', caseId)
+      .eq('user_id', scope.userId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId);
+    if (error) throw error;
+  }
+  async isStarred(scope: CaseScope & { userId: string }, caseId: string) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('case_stars')
+      .select('case_id')
+      .eq('case_id', caseId)
+      .eq('user_id', scope.userId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId)
+      .limit(1);
+    if (error) throw error;
+    return Array.isArray(data) && data.length > 0;
+  }
+  async listStarredCaseIds(scope: CaseScope & { userId: string }) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('case_stars')
+      .select('case_id')
+      .eq('user_id', scope.userId)
+      .eq('tenant_id', scope.tenantId)
+      .eq('workspace_id', scope.workspaceId);
+    if (error) throw error;
+    return Array.isArray(data) ? data.map((r: any) => r.case_id) : [];
+  }
+
   async findStaleCases(scope: CaseScope, limit: number, thresholdMins: number) {
     const supabase = getSupabaseAdmin();
     const threshold = new Date(Date.now() - thresholdMins * 60_000).toISOString();

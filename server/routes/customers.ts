@@ -124,7 +124,7 @@ router.patch('/:id', requirePermission('customers.write'), async (req: MultiTena
     const existing = await customerRepository.getDetail(scope, req.params.id);
     if (!existing) return res.status(404).json({ error: 'Customer not found' });
 
-    const ALLOWED_FIELDS = ['segment', 'risk_level', 'preferred_channel', 'fraud_flag', 'canonical_name', 'canonical_email', 'phone'];
+    const ALLOWED_FIELDS = ['segment', 'risk_level', 'preferred_channel', 'fraud_flag', 'canonical_name', 'canonical_email', 'phone', 'notes', 'tags'];
     const body = req.body ?? {};
     const updates: Record<string, any> = {};
     for (const field of ALLOWED_FIELDS) {
