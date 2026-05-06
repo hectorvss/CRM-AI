@@ -44,6 +44,18 @@ type ApprovalRecord = {
   expiresAt?: string | null;
   actionPayload?: Record<string, any> | null;
   evidencePackage?: Record<string, any> | null;
+  /**
+   * Connector writeback status for approved decisions. Returned by the
+   * backend by reading the underlying entity (payment.refund_status,
+   * order.system_states.oms). Drives the "Writeback pending / failed"
+   * badge on the approval card.
+   */
+  writeback?: {
+    status: 'not_applicable' | 'completed' | 'pending' | 'failed' | 'unknown';
+    executedVia?: 'stripe' | 'shopify' | 'woocommerce' | 'db-only' | null;
+    externalId?: string | null;
+    error?: string | null;
+  } | null;
 };
 
 type ApprovalContext = {
@@ -120,7 +132,52 @@ function normalizeApproval(item: any): ApprovalRecord {
     expiresAt: item.expiresAt || null,
     actionPayload: item.actionPayload || {},
     evidencePackage: item.evidencePackage || {},
+    writeback: item.writeback || null,
   };
+}
+
+// Visual styles for the writeback badge. The 4 distinct states map to
+// different colours so a manager can scan the queue and instantly tell
+// which approvals still need connector reconciliation.
+function writebackBadge(wb: ApprovalRecord['writeback']) {
+  if (!wb || wb.status === 'not_applicable') return null;
+  const labels: Record<string, { label: string; cls: string; dot: string; title: string }> = {
+    completed: {
+      label: wb.executedVia ? `Writeback ${wb.executedVia}` : 'Writeback complete',
+      cls: 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800/30',
+      dot: 'bg-emerald-500',
+      title: wb.externalId ? `External id: ${wb.externalId}` : 'Connector confirmed the action',
+    },
+    pending: {
+      label: 'Writeback pending',
+      cls: 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/30',
+      dot: 'bg-amber-500',
+      title: 'Approved locally; the connector has not confirmed yet (db-only or no connector configured)',
+    },
+    failed: {
+      label: 'Writeback failed',
+      cls: 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800/30',
+      dot: 'bg-red-500',
+      title: wb.error ? `Connector error: ${wb.error}` : 'The connector returned an error during writeback',
+    },
+    unknown: {
+      label: 'Writeback unknown',
+      cls: 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800/40 dark:text-gray-300 dark:border-gray-700',
+      dot: 'bg-gray-400',
+      title: 'Could not resolve the underlying payment/order to compute writeback',
+    },
+  };
+  const info = labels[wb.status];
+  if (!info) return null;
+  return (
+    <span
+      title={info.title}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${info.cls}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${info.dot}`} />
+      {info.label}
+    </span>
+  );
 }
 
 function SectionCard({
@@ -457,6 +514,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{titleCase(item.actionType || 'Approval')}</span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${statusStyles(item.status)}`}>{statusLabel(item.status)}</span>
+                          {writebackBadge(item.writeback)}
                         </div>
                         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">
                           {item.customerName || 'Unknown customer'}
@@ -523,6 +581,7 @@ export default function Approvals({ onNavigate, focusApprovalId }: ApprovalsProp
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-[0.18em] border ${statusStyles(selectedApproval.status)}`}>
                           {statusLabel(selectedApproval.status)}
                         </span>
+                        {writebackBadge(selectedApproval.writeback)}
                         <span className="text-xs text-gray-500 dark:text-gray-400">Created {formatDate(selectedApproval.createdAt)}</span>
                       </div>
                       <h2 className="mt-4 text-2xl font-semibold text-gray-900 dark:text-white tracking-[-0.02em]">

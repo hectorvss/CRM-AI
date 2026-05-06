@@ -23,6 +23,96 @@ function parseJsonApproval(row: any) {
   return result;
 }
 
+function parseMaybeJson<T>(value: unknown, fallback: T): T {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value !== 'string') return value as T;
+  try { return JSON.parse(value) as T; } catch { return fallback; }
+}
+
+/**
+ * Computes the writeback status for a decided approval by reading the
+ * underlying entity (payment for refund approvals, order for cancel
+ * approvals). Returns one of:
+ *
+ *   - 'not_applicable' : approval still pending or rejected
+ *   - 'completed'      : connector confirmed the writeback (Stripe / Shopify)
+ *   - 'pending'        : approved locally but connector hasn't confirmed yet
+ *   - 'failed'         : connector returned an error during writeback
+ *   - 'unknown'        : decided approved but entity row not found
+ *
+ * Used by the Approvals UI to surface a "Writeback pending"/"Failed" badge
+ * so managers know whether the dollars / order state actually moved at
+ * the connector layer.
+ */
+export type ApprovalWritebackStatus =
+  | 'not_applicable'
+  | 'completed'
+  | 'pending'
+  | 'failed'
+  | 'unknown';
+
+export interface ApprovalWritebackInfo {
+  status: ApprovalWritebackStatus;
+  executedVia?: 'stripe' | 'shopify' | 'woocommerce' | 'db-only' | null;
+  externalId?: string | null;
+  error?: string | null;
+}
+
+function computeApprovalWriteback(
+  approval: any,
+  paymentsById: Map<string, any>,
+  ordersById: Map<string, any>,
+): ApprovalWritebackInfo {
+  if (approval.status !== 'approved') {
+    // Pending → no writeback yet. Rejected → nothing to write back.
+    return { status: 'not_applicable' };
+  }
+  const action = approval.action_type ?? '';
+  const payload = parseMaybeJson<any>(approval.action_payload, {});
+
+  if (action === 'refund') {
+    const paymentId = payload.payment_id;
+    if (!paymentId) return { status: 'unknown' };
+    const payment = paymentsById.get(paymentId);
+    if (!payment) return { status: 'unknown' };
+    const recon = parseMaybeJson<any>(payment.reconciliation_details, {});
+    if (recon.writeback_error) {
+      return {
+        status: 'failed',
+        executedVia: recon.writeback_executed_via ?? 'db-only',
+        externalId: recon.writeback_external_id ?? null,
+        error: String(recon.writeback_error),
+      };
+    }
+    if (payment.refund_status === 'succeeded' || recon.writeback_executed_via === 'stripe') {
+      return { status: 'completed', executedVia: recon.writeback_executed_via ?? 'stripe', externalId: recon.writeback_external_id ?? null };
+    }
+    return { status: 'pending', executedVia: recon.writeback_executed_via ?? 'db-only', externalId: null };
+  }
+
+  if (action === 'order_cancel') {
+    const orderId = payload.order_id;
+    if (!orderId) return { status: 'unknown' };
+    const order = ordersById.get(orderId);
+    if (!order) return { status: 'unknown' };
+    const systemStates = parseMaybeJson<any>(order.system_states, {});
+    if (systemStates.oms === 'cancelled' && systemStates.canonical === 'cancelled') {
+      return { status: 'completed', executedVia: 'shopify' };
+    }
+    if (systemStates.canonical === 'cancelled') {
+      // local cancel applied but connector not confirmed
+      const lu = String(order.last_update ?? '');
+      if (lu.includes('writeback failed') || lu.includes('failed')) {
+        return { status: 'failed', executedVia: 'db-only', error: lu };
+      }
+      return { status: 'pending', executedVia: 'db-only' };
+    }
+    return { status: 'unknown' };
+  }
+
+  return { status: 'not_applicable' };
+}
+
 async function listApprovalsSupabase(
   scope: ApprovalScope,
   filters: { status?: string; risk_level?: string; assigned_to?: string; limit?: number; offset?: number },
@@ -78,9 +168,44 @@ async function listApprovalsSupabase(
   const customers = new Map<string, any>((customersRes.data ?? []).map((row: any) => [row.id, row]));
   const users = new Map<string, any>((usersRes.data ?? []).map((row: any) => [row.id, row]));
 
+  // ── Writeback enrichment ─────────────────────────────────────────
+  // For decided approvals (approved/rejected), compute the connector
+  // writeback status by reading the underlying entity. The UI uses this to
+  // show a "Writeback pending" or "Writeback failed" badge so managers know
+  // whether the dollars actually moved at the PSP / OMS layer or only in
+  // the local DB.
+  const decidedApprovals = approvals.filter((a) => a.status === 'approved' || a.status === 'rejected');
+  const decidedPaymentIds = Array.from(new Set(decidedApprovals
+    .filter((a) => (a.action_type ?? '') === 'refund')
+    .map((a) => parseMaybeJson<any>(a.action_payload, {})?.payment_id)
+    .filter(Boolean) as string[]));
+  const decidedOrderIds = Array.from(new Set(decidedApprovals
+    .filter((a) => (a.action_type ?? '') === 'order_cancel')
+    .map((a) => parseMaybeJson<any>(a.action_payload, {})?.order_id)
+    .filter(Boolean) as string[]));
+
+  const [paymentsRes, ordersRes] = await Promise.all([
+    decidedPaymentIds.length
+      ? supabase.from('payments')
+          .select('id, refund_status, reconciliation_details, status')
+          .eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+          .in('id', decidedPaymentIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    decidedOrderIds.length
+      ? supabase.from('orders')
+          .select('id, status, system_states, last_update')
+          .eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+          .in('id', decidedOrderIds)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
+  for (const r of [paymentsRes, ordersRes]) if (r?.error) throw r.error;
+  const paymentsById = new Map<string, any>((paymentsRes.data ?? []).map((p: any) => [p.id, p]));
+  const ordersById = new Map<string, any>((ordersRes.data ?? []).map((o: any) => [o.id, o]));
+
   const enriched = approvals.map((approval) => {
     const caseRow = cases.get(approval.case_id);
     const customer = caseRow?.customer_id ? customers.get(caseRow.customer_id) : null;
+    const writeback = computeApprovalWriteback(approval, paymentsById, ordersById);
     return {
       ...approval,
       case_number: caseRow?.case_number || null,
@@ -90,12 +215,20 @@ async function listApprovalsSupabase(
       customer_name: customer?.canonical_name || null,
       customer_segment: customer?.segment || null,
       assigned_user_name: approval.assigned_to ? users.get(approval.assigned_to)?.name || null : null,
+      writeback,
     };
   });
 
-  const items = enriched.filter((approval, index, list) => {
-    const key = [approval.case_id ?? 'no_case', approval.action_type ?? 'manual_review', approval.status ?? 'pending'].join(':');
-    return list.findIndex((item) => [item.case_id ?? 'no_case', item.action_type ?? 'manual_review', item.status ?? 'pending'].join(':') === key) === index;
+  // Dedup by approval id only — multiple approvals on the same case with
+  // the same action_type/status is a real product use case (e.g. partial
+  // refund approved + goodwill credit approved on the same case), and
+  // collapsing on (case_id, action_type, status) silently hides rows
+  // from the manager queue.
+  const seen = new Set<string>();
+  const items = enriched.filter((approval) => {
+    if (!approval.id || seen.has(approval.id)) return false;
+    seen.add(approval.id);
+    return true;
   });
 
   const total = typeof count === 'number' ? count : items.length + offset;
@@ -119,8 +252,34 @@ async function getApprovalSupabase(scope: ApprovalScope, approvalId: string) {
   const bundle = await caseRepository.getBundle({ tenantId: scope.tenantId, workspaceId: scope.workspaceId }, approval.case_id);
   if (!bundle) return parseJsonApproval(approval);
 
+  // ── Writeback enrichment for detail view ─────────────────────────
+  const parsed = parseJsonApproval(approval);
+  let writeback: ApprovalWritebackInfo = { status: 'not_applicable' };
+  if (approval.status === 'approved') {
+    const payload = parseMaybeJson<any>(approval.action_payload, {});
+    if (approval.action_type === 'refund' && payload.payment_id) {
+      const { data: payment } = await supabase
+        .from('payments').select('id, refund_status, reconciliation_details, status')
+        .eq('id', payload.payment_id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+        .maybeSingle();
+      if (payment) {
+        const map = new Map<string, any>([[payment.id, payment]]);
+        writeback = computeApprovalWriteback(approval, map, new Map());
+      }
+    } else if (approval.action_type === 'order_cancel' && payload.order_id) {
+      const { data: order } = await supabase
+        .from('orders').select('id, status, system_states, last_update')
+        .eq('id', payload.order_id).eq('tenant_id', scope.tenantId).eq('workspace_id', scope.workspaceId)
+        .maybeSingle();
+      if (order) {
+        const map = new Map<string, any>([[order.id, order]]);
+        writeback = computeApprovalWriteback(approval, new Map(), map);
+      }
+    }
+  }
+
   return {
-    ...parseJsonApproval(approval),
+    ...parsed,
     case_number: bundle.case.case_number,
     case_type: bundle.case.type,
     priority: bundle.case.priority,
@@ -130,6 +289,7 @@ async function getApprovalSupabase(scope: ApprovalScope, approvalId: string) {
     lifetime_value: bundle.customer?.lifetime_value || 0,
     dispute_rate: bundle.customer?.dispute_rate || 0,
     refund_rate: bundle.customer?.refund_rate || 0,
+    writeback,
   };
 }
 
