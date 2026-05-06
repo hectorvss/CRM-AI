@@ -233,6 +233,27 @@ router.patch('/me', async (req: MultiTenantRequest, res) => {
   }
 });
 
+// GET /iam/teams — list workspace teams. Used by the inbox AssignModal to
+// surface team assignment alongside individual member assignment.
+router.get('/teams', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
+  if (!req.tenantId || !req.workspaceId) {
+    return sendError(res, 500, 'TENANT_CONTEXT_MISSING', 'Tenant/workspace context is missing');
+  }
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('teams')
+      .select('id, name, description, created_at')
+      .eq('workspace_id', req.workspaceId)
+      .order('name', { ascending: true });
+    if (error) throw error;
+    res.json(data ?? []);
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
+  }
+});
+
 // List users for Tenant/Workspace
 router.get('/users', requirePermission('members.read'), async (req: MultiTenantRequest, res) => {
   if (!req.tenantId || !req.workspaceId) {

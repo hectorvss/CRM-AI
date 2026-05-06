@@ -713,6 +713,31 @@ export const connectorsApi = {
     }),
 };
 
+// ── Attachments (Supabase Storage) ───────────────────────
+export const attachmentsApi = {
+  upload: (payload: { name: string; type: string; dataUrl: string }) =>
+    request<{ key: string; url: string; name: string; type: string; size: number }>(
+      '/attachments/upload',
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+  resign: (key: string) =>
+    request<{ key: string; url: string }>('/attachments/sign', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    }),
+};
+
+// ── Macros / Snippets ─────────────────────────────────────
+export const macrosApi = {
+  list: () => request<{ items: any[] }>('/macros').then(r => r.items || []),
+  create: (payload: { label: string; body: string; shortcut?: string; shared?: boolean }) =>
+    request<any>('/macros', { method: 'POST', body: JSON.stringify(payload) }),
+  update: (id: string, payload: Partial<{ label: string; body: string; shortcut: string; shared: boolean }>) =>
+    request<any>(`/macros/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  delete: (id: string) => request<any>(`/macros/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  recordUse: (id: string) => request<any>(`/macros/${encodeURIComponent(id)}/use`, { method: 'POST' }),
+};
+
 // ── AI ────────────────────────────────────────────────────
 export const aiApi = {
   studio: () => request<any>('/ai/studio'),
@@ -746,6 +771,7 @@ export const iamApi = {
   permissionsCatalog: () => request<any>('/iam/permissions/catalog').then(unwrapList),
   users: () => request<any>('/iam/users').then(unwrapList),
   members: () => request<any>('/iam/members').then(unwrapList),
+  teams: () => request<any>('/iam/teams').then(unwrapList),
   roles: () => request<any>('/iam/roles').then(unwrapList),
   inviteMember: (payload: { email: string; name?: string; role_id: string }) =>
     request<any>('/iam/members/invite', {

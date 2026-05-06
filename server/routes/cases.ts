@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import { extractMultiTenant, MultiTenantRequest } from '../middleware/multiTenant.js';
 import { getSupabaseAdmin } from '../db/supabase.js';
+import { broadcastSSE } from './sse.js';
 import {
   createCaseRepository,
   createConversationRepository,
@@ -583,6 +584,7 @@ router.patch('/:id/status', async (req: MultiTenantRequest, res: Response) => {
       'case.updated',
       { caseId: req.params.id, status, previousStatus: oldStatus, reason: reason ?? null, customerId: bundle.case.customer_id },
     );
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId: req.params.id, change: 'status', status, previousStatus: oldStatus }, req.workspaceId!);
     res.json({ success: true, status });
   } catch (error) {
     console.error('Error updating status:', error);
@@ -647,6 +649,7 @@ router.patch('/:id/tags', async (req: MultiTenantRequest, res: Response) => {
       'case.updated',
       { caseId: req.params.id, tags: next, change: 'tags' },
     );
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId: req.params.id, change: 'tags', tags: next }, req.workspaceId!);
 
     res.json({ success: true, tags: next });
   } catch (error) {
@@ -685,6 +688,7 @@ router.put('/:id/star', async (req: MultiTenantRequest, res: Response) => {
       entityType: 'case',
       entityId: req.params.id,
     });
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId: req.params.id, change: 'star', userId, starred: true }, req.workspaceId!);
     res.json({ success: true, starred: true });
   } catch (error) {
     console.error('Error starring case:', error);
@@ -754,6 +758,7 @@ router.patch('/:id/assign', async (req: MultiTenantRequest, res: Response) => {
       'case.updated',
       { caseId: req.params.id, assignedUserId: user_id ?? null, assignedTeamId: team_id ?? null, change: 'assignment' },
     );
+    broadcastSSE(req.tenantId!, 'case:updated', { caseId: req.params.id, change: 'assignment', assignedUserId: user_id ?? null, assignedTeamId: team_id ?? null }, req.workspaceId!);
     res.json({ success: true });
   } catch (error) {
     console.error('Error assigning case:', error);
@@ -972,6 +977,8 @@ router.post('/:id/reply', async (req: MultiTenantRequest, res: Response) => {
         attachmentCount: safeAttachments.length,
       },
     });
+
+    broadcastSSE(req.tenantId!, 'case:reply', { caseId: req.params.id, messageId: queuedMessageId, channel, attachmentCount: safeAttachments.length }, req.workspaceId!);
 
     res.status(202).json({
       success: true,

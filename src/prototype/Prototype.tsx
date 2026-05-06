@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { aiApi, casesApi, customersApi, iamApi } from '../api/client';
+import { aiApi, attachmentsApi, casesApi, customersApi, iamApi, macrosApi } from '../api/client';
 import { useApi } from '../api/hooks';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
@@ -1687,15 +1687,13 @@ function AssignModal({
   onAssigned: () => void;
   onAction: (message: string, type?: 'success' | 'error') => void;
 }) {
+  const [tab, setTab] = useState<'members' | 'teams'>('members');
   const [query, setQuery] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const { data: members, loading, error } = useApi(
-    () => iamApi.members(),
-    [],
-    [],
-  );
+  const { data: members, loading: loadingMembers, error: errorMembers } = useApi(() => iamApi.members(), [], []);
+  const { data: teams,   loading: loadingTeams,   error: errorTeams   } = useApi(() => iamApi.teams(),   [], []);
 
-  const filtered = useMemo(() => {
+  const filteredMembers = useMemo(() => {
     const list = Array.isArray(members) ? members : [];
     const q = query.trim().toLowerCase();
     if (!q) return list;
@@ -1704,13 +1702,19 @@ function AssignModal({
       return haystack.includes(q);
     });
   }, [members, query]);
+  const filteredTeams = useMemo(() => {
+    const list = Array.isArray(teams) ? teams : [];
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((t: any) => `${t.name || ''} ${t.description || ''}`.toLowerCase().includes(q));
+  }, [teams, query]);
 
-  async function assignTo(memberId: string | null) {
+  async function assignTo(opts: { user_id?: string | null; team_id?: string | null }) {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await casesApi.assign(caseId, memberId || undefined);
-      onAction(memberId ? 'Caso asignado' : 'Asignación retirada');
+      await casesApi.assign(caseId, opts.user_id || undefined, opts.team_id || undefined);
+      onAction(opts.user_id ? 'Asignado a persona' : opts.team_id ? 'Asignado al equipo' : 'Asignación retirada');
       onAssigned();
       onClose();
     } catch (err: any) {
@@ -1723,51 +1727,90 @@ function AssignModal({
   return (
     <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
       <div
-        className="w-[420px] max-h-[520px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5 flex flex-col"
+        className="w-[440px] max-h-[560px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5 flex flex-col"
         onClick={event => event.stopPropagation()}
       >
         <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Asignar conversación</h3>
         <p className="text-[12.5px] text-[#646462] mb-3">
           {currentAssignee ? <>Asignado actualmente a <span className="font-semibold text-[#1a1a1a]">{currentAssignee}</span>.</> : 'Sin asignar.'}
         </p>
+        <div className="flex items-center gap-1 border-b border-[#e9eae6] mb-3 -mx-5 px-5">
+          {([['members', 'Personas'], ['teams', 'Equipos']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`text-[13px] h-8 px-2 mr-2 ${tab === id ? 'font-semibold text-[#1a1a1a] border-b-2 border-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <input
           autoFocus
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Buscar por nombre, email o rol…"
+          placeholder={tab === 'members' ? 'Buscar persona…' : 'Buscar equipo…'}
           className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
         />
-        <div className="flex-1 overflow-y-auto mt-3 -mx-1 flex flex-col gap-0.5 min-h-[120px]">
-          {loading && <div className="text-[13px] text-[#646462] px-2 py-3">Cargando compañeros…</div>}
-          {error && <div className="text-[13px] text-[#b91c1c] px-2 py-3">No se pudo cargar la lista</div>}
-          {!loading && !error && filtered.length === 0 && (
-            <div className="text-[13px] text-[#646462] px-2 py-3">Sin coincidencias.</div>
+        <div className="flex-1 overflow-y-auto mt-3 -mx-1 flex flex-col gap-0.5 min-h-[160px]">
+          {tab === 'members' ? (
+            <>
+              {loadingMembers && <div className="text-[13px] text-[#646462] px-2 py-3">Cargando compañeros…</div>}
+              {errorMembers && <div className="text-[13px] text-[#b91c1c] px-2 py-3">No se pudo cargar la lista</div>}
+              {!loadingMembers && !errorMembers && filteredMembers.length === 0 && (
+                <div className="text-[13px] text-[#646462] px-2 py-3">Sin coincidencias.</div>
+              )}
+              {filteredMembers.map((m: any) => {
+                const name = m.name || m.full_name || m.email || 'Sin nombre';
+                const initial = String(name).slice(0, 1).toUpperCase();
+                return (
+                  <button
+                    key={m.id || m.user_id || m.email}
+                    onClick={() => assignTo({ user_id: m.id || m.user_id, team_id: null })}
+                    disabled={submitting}
+                    className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#f3f3f1] text-left disabled:opacity-50"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-[#e7e2fd] flex items-center justify-center flex-shrink-0">
+                      <span className="text-[12px] font-semibold text-[#1a1a1a]">{initial}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{name}</p>
+                      {m.email && <p className="text-[11.5px] text-[#646462] truncate">{m.email}</p>}
+                    </div>
+                    {m.role_name && <span className="text-[11px] text-[#646462] flex-shrink-0">{titleCase(m.role_name)}</span>}
+                  </button>
+                );
+              })}
+            </>
+          ) : (
+            <>
+              {loadingTeams && <div className="text-[13px] text-[#646462] px-2 py-3">Cargando equipos…</div>}
+              {errorTeams && <div className="text-[13px] text-[#b91c1c] px-2 py-3">No se pudo cargar la lista</div>}
+              {!loadingTeams && !errorTeams && filteredTeams.length === 0 && (
+                <div className="text-[13px] text-[#646462] px-2 py-3">Sin equipos creados todavía.</div>
+              )}
+              {filteredTeams.map((t: any) => (
+                <button
+                  key={t.id}
+                  onClick={() => assignTo({ user_id: null, team_id: t.id })}
+                  disabled={submitting}
+                  className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#f3f3f1] text-left disabled:opacity-50"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-[#dbeafe] flex items-center justify-center flex-shrink-0">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><circle cx="6" cy="5" r="2.5"/><path d="M1.8 12.5c.4-2 2.1-3.2 4.2-3.2s3.8 1.2 4.2 3.2v.5H1.8v-.5z"/><circle cx="11.5" cy="6" r="2"/><path d="M9.5 9.4c.6-.2 1.3-.3 2-.3 1.7 0 3 .9 3.4 2.5v.4H10.6c-.1-.9-.4-1.8-1.1-2.6z"/></svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{t.name}</p>
+                    {t.description && <p className="text-[11.5px] text-[#646462] truncate">{t.description}</p>}
+                  </div>
+                </button>
+              ))}
+            </>
           )}
-          {filtered.map((m: any) => {
-            const name = m.name || m.full_name || m.email || 'Sin nombre';
-            const initial = String(name).slice(0, 1).toUpperCase();
-            return (
-              <button
-                key={m.id || m.user_id || m.email}
-                onClick={() => assignTo(m.id || m.user_id)}
-                disabled={submitting}
-                className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-[#f3f3f1] text-left disabled:opacity-50"
-              >
-                <div className="w-7 h-7 rounded-full bg-[#e7e2fd] flex items-center justify-center flex-shrink-0">
-                  <span className="text-[12px] font-semibold text-[#1a1a1a]">{initial}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{name}</p>
-                  {m.email && <p className="text-[11.5px] text-[#646462] truncate">{m.email}</p>}
-                </div>
-                {m.role_name && <span className="text-[11px] text-[#646462] flex-shrink-0">{titleCase(m.role_name)}</span>}
-              </button>
-            );
-          })}
         </div>
         <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-[#e9eae6]">
           <button
-            onClick={() => assignTo(null)}
+            onClick={() => assignTo({ user_id: null, team_id: null })}
             disabled={submitting}
             className="text-[12.5px] font-semibold text-[#b91c1c] hover:underline disabled:opacity-50"
           >
@@ -1829,24 +1872,27 @@ function ConversationPanel({
   }, [selectedConv.id]);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  // Reply snippets / templates — backend has no /macros yet, so we fall back
-  // to a per-browser localStorage list. Each snippet is { id, label, body }.
-  const SNIPPETS_LS_KEY = 'clain.inbox.snippets';
+  // Reply snippets / macros — now backed by /api/macros instead of
+  // localStorage. Loaded once when the snippets dropdown opens; mutations
+  // refetch.
   type Snippet = { id: string; label: string; body: string };
-  function readSnippets(): Snippet[] {
-    if (typeof window === 'undefined') return [];
-    try {
-      const raw = window.localStorage.getItem(SNIPPETS_LS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.filter(s => s && s.id && s.body) : [];
-    } catch { return []; }
-  }
-  function writeSnippets(arr: Snippet[]) {
-    if (typeof window === 'undefined') return;
-    try { window.localStorage.setItem(SNIPPETS_LS_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
-  }
-  const [snippets, setSnippets] = useState<Snippet[]>(() => readSnippets());
+  const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [showSnippets, setShowSnippets] = useState(false);
+  const [snippetsLoading, setSnippetsLoading] = useState(false);
+  async function reloadSnippets() {
+    setSnippetsLoading(true);
+    try {
+      const items = await macrosApi.list();
+      setSnippets((items || []).map((m: any) => ({ id: String(m.id), label: m.label, body: m.body })));
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudieron cargar las plantillas', 'error');
+    } finally {
+      setSnippetsLoading(false);
+    }
+  }
+  useEffect(() => {
+    if (showSnippets) reloadSnippets();
+  }, [showSnippets]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1949,18 +1995,32 @@ function ConversationPanel({
   async function submitReply() {
     const content = replyText.trim();
     if (!content && attachments.length === 0) return;
-    // Wire-format payload for the backend. The reply route extends the
-    // legacy messages.attachments JSON column, so we send structured items
-    // here instead of inlining filenames into the body. Internal notes
-    // don't yet accept attachments — fall back to the inline summary.
-    const attachmentPayload = attachments.map(att => ({
-      id: att.id,
-      name: att.name,
-      size: att.size,
-      type: att.type,
-      dataUrl: att.dataUrl,
-    }));
     try {
+      // Upload each attachment to Supabase Storage first, then send only
+      // the storage key + signed URL to the reply endpoint instead of the
+      // raw data URL. Falls through gracefully — if upload fails we keep
+      // the data URL so the message still gets sent (degraded mode).
+      let attachmentPayload: Array<{ id: string; name: string; size: number; type: string; url?: string; dataUrl?: string; key?: string }> | undefined;
+      if (attachments.length > 0) {
+        attachmentPayload = [];
+        for (const att of attachments) {
+          if (!att.dataUrl) continue;
+          try {
+            const uploaded = await attachmentsApi.upload({ name: att.name, type: att.type, dataUrl: att.dataUrl });
+            attachmentPayload.push({
+              id: att.id,
+              name: uploaded.name,
+              size: uploaded.size,
+              type: uploaded.type,
+              url:  uploaded.url,
+              key:  uploaded.key,
+            });
+          } catch (err: any) {
+            console.warn('Storage upload failed; sending inline as fallback:', err?.message);
+            attachmentPayload.push({ id: att.id, name: att.name, size: att.size, type: att.type, dataUrl: att.dataUrl });
+          }
+        }
+      }
       if (replyTab === 'nota') {
         const noteSummary = attachments.length
           ? `\n\nAdjuntos: ${attachments.map(a => a.name).join(', ')}`
@@ -1972,7 +2032,7 @@ function ConversationPanel({
           selectedConv.id,
           content,
           latestDraft?.id,
-          attachmentPayload.length > 0 ? attachmentPayload : undefined,
+          attachmentPayload && attachmentPayload.length > 0 ? attachmentPayload : undefined,
         );
         onAction(attachments.length > 0
           ? `Respuesta enviada con ${attachments.length} adjunto${attachments.length === 1 ? '' : 's'}`
@@ -2358,13 +2418,18 @@ function ConversationPanel({
                     <div className="fixed inset-0 z-20" onClick={() => setShowSnippets(false)} />
                     <div className="absolute bottom-10 left-3 z-30 w-[300px] bg-white border border-[#e9eae6] rounded-xl shadow-[0px_8px_24px_rgba(20,20,20,0.18)] py-1.5 max-h-[280px] overflow-y-auto">
                       <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#646462]">Plantillas</div>
-                      {snippets.length === 0 && (
+                      {snippetsLoading && <div className="px-3 py-2 text-[12.5px] text-[#646462]">Cargando…</div>}
+                      {!snippetsLoading && snippets.length === 0 && (
                         <div className="px-3 py-2 text-[12.5px] text-[#646462]">Aún no tienes plantillas. Guarda la respuesta actual con el botón de abajo.</div>
                       )}
                       {snippets.map(snip => (
                         <div key={snip.id} className="flex items-center justify-between px-3 py-1.5 hover:bg-[#f3f3f1] group">
                           <button
-                            onClick={() => { insertAtCursor(snip.body); setShowSnippets(false); }}
+                            onClick={async () => {
+                              insertAtCursor(snip.body);
+                              setShowSnippets(false);
+                              try { await macrosApi.recordUse(snip.id); } catch { /* non-critical */ }
+                            }}
                             className="flex-1 text-left min-w-0"
                             title={snip.body}
                           >
@@ -2372,10 +2437,14 @@ function ConversationPanel({
                             <p className="text-[11px] text-[#646462] truncate">{snip.body.slice(0, 60)}</p>
                           </button>
                           <button
-                            onClick={() => {
-                              const next = snippets.filter(s => s.id !== snip.id);
-                              setSnippets(next);
-                              writeSnippets(next);
+                            onClick={async () => {
+                              try {
+                                await macrosApi.delete(snip.id);
+                                onAction('Plantilla borrada');
+                                reloadSnippets();
+                              } catch (err: any) {
+                                onAction(err?.message || 'No se pudo borrar', 'error');
+                              }
                             }}
                             title="Borrar"
                             className="ml-2 w-6 h-6 flex items-center justify-center rounded text-[#646462] hover:text-[#b91c1c] hover:bg-[#fef7f7] opacity-0 group-hover:opacity-100"
@@ -2385,14 +2454,17 @@ function ConversationPanel({
                       <div className="border-t border-[#e9eae6] mt-1 pt-1">
                         <button
                           disabled={!replyText.trim()}
-                          onClick={() => {
+                          onClick={async () => {
                             const body = replyText.trim();
                             if (!body) return;
                             const label = body.split('\n')[0].slice(0, 50);
-                            const next = [...snippets, { id: `s-${Date.now()}`, label, body }];
-                            setSnippets(next);
-                            writeSnippets(next);
-                            onAction('Plantilla guardada');
+                            try {
+                              await macrosApi.create({ label, body });
+                              onAction('Plantilla guardada');
+                              reloadSnippets();
+                            } catch (err: any) {
+                              onAction(err?.message || 'No se pudo guardar', 'error');
+                            }
                           }}
                           className="w-full text-left px-3 py-1.5 text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -3762,6 +3834,34 @@ function InboxView() {
   useEffect(() => {
     if (!selectedConvId && liveConversations[0]?.id) setSelectedConvId(liveConversations[0].id);
   }, [selectedConvId, liveConversations]);
+
+  // ─── Live updates via SSE ────────────────────────────────────────────────
+  // Subscribe once to /api/sse/case-events and bump refreshKey whenever a
+  // case mutation event arrives. Auto-reconnects on drop. Each event also
+  // surfaces a small toast so the agent knows something changed remotely.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let cancelled = false;
+    let es: EventSource | null = null;
+    function connect() {
+      if (cancelled) return;
+      try {
+        es = new EventSource('/api/sse/case-events');
+      } catch {
+        return;
+      }
+      es.addEventListener('case:reply', () => setRefreshKey(k => k + 1));
+      es.addEventListener('case:updated', () => setRefreshKey(k => k + 1));
+      es.addEventListener('case:created', () => setRefreshKey(k => k + 1));
+      es.addEventListener('case:note_added', () => setRefreshKey(k => k + 1));
+      es.onerror = () => {
+        try { es?.close(); } catch { /* ignore */ }
+        if (!cancelled) setTimeout(connect, 5000);
+      };
+    }
+    connect();
+    return () => { cancelled = true; try { es?.close(); } catch { /* ignore */ } };
+  }, []);
 
   // ─── Inbox-global keyboard shortcuts ─────────────────────────────────────
   // j / k       → next / previous conversation in the current scope

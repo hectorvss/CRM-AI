@@ -13,6 +13,8 @@ import { bootstrapIntegrations, integrationRegistry } from './integrations/regis
 import { assertDatabaseProviderReady, getDatabaseConnectivityStatus, getDatabaseProviderStatus } from './db/provider.js';
 
 import casesRouter from './routes/cases.js';
+import macrosRouter from './routes/macros.js';
+import attachmentsRouter from './routes/attachments.js';
 import conversationsRouter from './routes/conversations.js';
 import customersRouter from './routes/customers.js';
 import ordersRouter from './routes/orders.js';
@@ -163,6 +165,8 @@ app.use((req, _res, next) => {
 
 // ── API Routes ────────────────────────────────────────────
 app.use('/api/cases', casesRouter);
+app.use('/api/macros', macrosRouter);
+app.use('/api/attachments', attachmentsRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/orders', ordersRouter);
