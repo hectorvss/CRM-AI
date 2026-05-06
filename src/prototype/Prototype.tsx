@@ -4428,24 +4428,25 @@ function NewContactModal({ open, onClose, onCreated }: { open: boolean; onClose:
   );
 }
 
-// ── Profile drawer — full customer detail from customersApi.state/activity ─
+// ── Profile screen — full customer detail; renders inline replacing the list.
 // Mirrors every section of the legacy Customers profile (segment, risk, AI
 // impact, LTV, plan, renewal, linked identities, reconciliation, top issues,
-// open cases) re-skinned to the Clain card system. Adds Esc-to-close.
-function ContactProfileDrawer({
-  contactId, onClose, onUpdated,
+// open cases) re-skinned to the Clain card system. Back button top-left, Esc
+// also returns to the list.
+function ContactProfileScreen({
+  contactId, onBack, onUpdated,
 }: {
-  contactId: string | null;
-  onClose: () => void;
+  contactId: string;
+  onBack: () => void;
   onUpdated?: () => void;
 }) {
   const { data: state, loading: stateLoading, refetch: refetchState } = useApi<any>(
-    () => contactId ? customersApi.state(contactId) : Promise.resolve(null),
+    () => customersApi.state(contactId),
     [contactId],
     null,
   );
   const { data: activity } = useApi<any[]>(
-    () => contactId ? customersApi.activity(contactId) : Promise.resolve([]),
+    () => customersApi.activity(contactId),
     [contactId],
     [],
   );
@@ -4457,18 +4458,16 @@ function ContactProfileDrawer({
   // Reset tab + transient state whenever a different contact opens
   useEffect(() => { setTab('all_activity'); setLocalMsg(null); }, [contactId]);
 
-  // Esc-to-close (also picked up at the parent level, but local handler is more
-  // resilient when this drawer is the top-most element).
+  // Esc-to-close
   useEffect(() => {
-    if (!contactId) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      const target = e.target as HTMLElement | null;
+      const inEditable = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (e.key === 'Escape' && !inEditable) onBack();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [contactId, onClose]);
-
-  if (!contactId) return null;
+  }, [onBack]);
   const customer: any = state?.customer || state || {};
   const name  = customer.canonicalName || customer.name || 'Contacto';
   const email = customer.canonicalEmail || customer.email || '';
@@ -4534,27 +4533,30 @@ function ContactProfileDrawer({
   ];
 
   return (
-    <div className="absolute inset-0 z-40 bg-black/20 flex justify-end" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="h-full w-[640px] max-w-[100vw] bg-white border-l border-[#e9eae6] shadow-[-8px_0px_32px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-[#e9eae6] flex-shrink-0">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center text-[16px] font-semibold text-white flex-shrink-0" style={{ backgroundColor: color }}>{initial}</div>
-            <div className="min-w-0">
-              <div className="text-[18px] font-bold text-[#1a1a1a] truncate" title={name}>{name}</div>
-              {email && <div className="text-[13px] text-[#646462] truncate" title={email}>{email}</div>}
-              {phone && <div className="text-[12.5px] text-[#646462] truncate">{phone}</div>}
-              <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                <span className={`px-2 py-[2px] rounded-full text-[11px] font-semibold border ${segment === 'VIP' ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6]'}`}>{segment}</span>
-                <span className={`px-2 py-[2px] rounded-full text-[11px] font-semibold border ${risk === 'Healthy' ? 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6]' : 'bg-white text-[#b91c1c] border-[#fcc]'}`}>{risk}</span>
-                {customer.company && <span className="px-2 py-[2px] rounded-full text-[11px] font-medium bg-[#f8f8f7] text-[#646462] border border-[#e9eae6]">{customer.company}</span>}
-              </div>
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+      {/* Header — back button top-left, then identity + segment / risk badges */}
+      <div className="flex items-start justify-between px-6 pt-4 pb-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-start gap-3 min-w-0">
+          <button
+            onClick={onBack}
+            title="Volver (Esc)"
+            className="w-8 h-8 mt-1 flex items-center justify-center rounded-lg bg-[#f8f8f7] hover:bg-[#efefed] flex-shrink-0"
+          >
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M10 3l-5 5 5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <div className="w-12 h-12 rounded-full flex items-center justify-center text-[16px] font-semibold text-white flex-shrink-0" style={{ backgroundColor: color }}>{initial}</div>
+          <div className="min-w-0">
+            <div className="text-[20px] font-bold text-[#1a1a1a] tracking-[-0.4px] truncate" title={name}>{name}</div>
+            {email && <div className="text-[13px] text-[#646462] truncate" title={email}>{email}</div>}
+            {phone && <div className="text-[12.5px] text-[#646462] truncate">{phone}</div>}
+            <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+              <span className={`px-2 py-[2px] rounded-full text-[11px] font-semibold border ${segment === 'VIP' ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6]'}`}>{segment}</span>
+              <span className={`px-2 py-[2px] rounded-full text-[11px] font-semibold border ${risk === 'Healthy' ? 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6]' : 'bg-white text-[#b91c1c] border-[#fcc]'}`}>{risk}</span>
+              {customer.company && <span className="px-2 py-[2px] rounded-full text-[11px] font-medium bg-[#f8f8f7] text-[#646462] border border-[#e9eae6]">{customer.company}</span>}
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-[#f8f8f7] flex items-center justify-center flex-shrink-0" title="Cerrar (Esc)">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-          </button>
         </div>
+      </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto min-h-0">
@@ -4707,7 +4709,6 @@ function ContactProfileDrawer({
             </div>
           )}
         </div>
-      </div>
     </div>
   );
 }
@@ -4736,6 +4737,202 @@ function ContactsToast({ message, type }: { message: string | null; type: 'succe
     <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-[8px] text-[13px] font-medium shadow-[0px_4px_12px_rgba(20,20,20,0.15)] ${
       type === 'error' ? 'bg-[#1a1a1a] text-white border border-[#b91c1c]' : 'bg-[#1a1a1a] text-white'
     }`}>{message}</div>
+  );
+}
+
+// ── Bulk tag modal — appends tags to N selected contacts. Reads each
+// customer's existing tags via customersApi.get(id) and PATCHes the merged
+// set so we never overwrite tags applied elsewhere. Best-effort: continues
+// past per-row failures and reports the count of successes.
+function BulkTagModal({
+  ids, onClose, onApplied,
+}: {
+  ids: string[] | null;
+  onClose: () => void;
+  onApplied: (count: number) => void;
+}) {
+  const [input, setInput] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (ids) { setInput(''); setTags([]); setErrMsg(null); setProgressLabel(null); }
+  }, [ids]);
+
+  if (!ids) return null;
+
+  function commitInput() {
+    const v = input.trim().replace(/^#/, '');
+    if (!v) return;
+    setTags(t => t.includes(v) ? t : [...t, v]);
+    setInput('');
+  }
+  function removeTag(t: string) {
+    setTags(prev => prev.filter(x => x !== t));
+  }
+
+  async function applyTags() {
+    if (submitting || tags.length === 0 || ids.length === 0) return;
+    setSubmitting(true);
+    setErrMsg(null);
+    let success = 0;
+    try {
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        setProgressLabel(`${i + 1} / ${ids.length}`);
+        try {
+          const existing = await customersApi.get(id).catch(() => null) as any;
+          const current: string[] = Array.isArray(existing?.tags) ? existing.tags : [];
+          const merged = Array.from(new Set([...current, ...tags]));
+          await customersApi.update(id, { tags: merged });
+          success += 1;
+        } catch (err: any) {
+          setErrMsg(err?.message || 'No se pudo etiquetar a alguno de los contactos');
+        }
+      }
+      onApplied(success);
+      onClose();
+    } finally {
+      setSubmitting(false);
+      setProgressLabel(null);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="w-[440px] bg-white rounded-[12px] border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5">
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Añadir etiquetas</h3>
+        <p className="text-[12.5px] text-[#646462] mb-4">Las etiquetas se añadirán a {ids.length} contacto{ids.length === 1 ? '' : 's'}. No sobreescribimos las existentes.</p>
+        <div className="flex flex-wrap gap-1.5 min-h-[36px] border border-[#e9eae6] rounded-[8px] p-2 mb-3">
+          {tags.map(t => (
+            <span key={t} className="inline-flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-2 py-[2px] text-[12px]">
+              {t}
+              <button type="button" onClick={() => removeTag(t)} className="text-[#646462] hover:text-[#1a1a1a]">×</button>
+            </span>
+          ))}
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab') {
+                e.preventDefault(); commitInput();
+              } else if (e.key === 'Backspace' && !input && tags.length > 0) {
+                setTags(prev => prev.slice(0, -1));
+              }
+            }}
+            placeholder={tags.length === 0 ? 'Escribe una etiqueta y pulsa Enter…' : ''}
+            className="flex-1 min-w-[140px] outline-none text-[13px] bg-transparent"
+          />
+        </div>
+        {errMsg && <p className="text-[12.5px] text-[#b91c1c] mb-2">{errMsg}</p>}
+        <div className="flex justify-between items-center">
+          <span className="text-[12px] text-[#646462]">{progressLabel ? `Aplicando ${progressLabel}…` : ''}</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="h-8 px-3 rounded-[8px] text-[13px] font-semibold text-[#646462] hover:bg-[#f8f8f7]">Cancelar</button>
+            <button
+              onClick={applyTags}
+              disabled={submitting || tags.length === 0}
+              className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:opacity-50"
+            >
+              {submitting ? 'Aplicando…' : `Aplicar a ${ids.length}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Bulk message modal — opens an outbound case + initial reply per selected
+// contact. Uses casesApi.create + casesApi.reply.
+function BulkMessageModal({
+  ids, onClose, onSent,
+}: {
+  ids: string[] | null;
+  onClose: () => void;
+  onSent: (count: number) => void;
+}) {
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (ids) { setSubject(''); setBody(''); setErrMsg(null); setProgressLabel(null); }
+  }, [ids]);
+
+  if (!ids) return null;
+
+  async function send() {
+    if (submitting || !body.trim() || ids.length === 0) return;
+    setSubmitting(true);
+    setErrMsg(null);
+    let success = 0;
+    try {
+      for (let i = 0; i < ids.length; i++) {
+        const customerId = ids[i];
+        setProgressLabel(`${i + 1} / ${ids.length}`);
+        try {
+          const created = await casesApi.create({
+            customer_id:    customerId,
+            type:           'message',
+            priority:       'medium',
+            status:         'open',
+            source_channel: 'manual_outbound',
+            tags:           subject.trim() ? ['outbound', `subject:${subject.trim().slice(0, 64)}`] : ['outbound'],
+          });
+          if (created?.id) {
+            await casesApi.reply(created.id, body.trim()).catch(err => {
+              console.warn('[bulk-message] reply failed for case', created.id, err);
+            });
+          }
+          success += 1;
+        } catch (err: any) {
+          setErrMsg(err?.message || 'No se pudo crear alguno de los casos');
+        }
+      }
+      onSent(success);
+      onClose();
+    } finally {
+      setSubmitting(false);
+      setProgressLabel(null);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="w-[520px] bg-white rounded-[12px] border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5">
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Nuevo mensaje · {ids.length} contacto{ids.length === 1 ? '' : 's'}</h3>
+        <p className="text-[12.5px] text-[#646462] mb-4">Crea un caso saliente por cada contacto y envía la respuesta inicial. Tipo: outbound · canal: manual_outbound.</p>
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-medium text-[#646462]">Asunto (opcional)</span>
+            <input value={subject} onChange={e => setSubject(e.target.value)} className="h-9 px-3 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a]" placeholder="Lanzamiento Q3" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-medium text-[#646462]">Mensaje</span>
+            <textarea value={body} onChange={e => setBody(e.target.value)} rows={6} className="px-3 py-2 border border-[#e9eae6] rounded-[8px] text-[13px] focus:outline-none focus:border-[#1a1a1a] resize-y" placeholder="Hola, te escribimos porque…" />
+          </label>
+        </div>
+        {errMsg && <p className="text-[12.5px] text-[#b91c1c] mt-2">{errMsg}</p>}
+        <div className="mt-4 flex justify-between items-center">
+          <span className="text-[12px] text-[#646462]">{progressLabel ? `Enviando ${progressLabel}…` : ''}</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="h-8 px-3 rounded-[8px] text-[13px] font-semibold text-[#646462] hover:bg-[#f8f8f7]">Cancelar</button>
+            <button
+              onClick={send}
+              disabled={submitting || !body.trim()}
+              className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:opacity-50"
+            >
+              {submitting ? 'Enviando…' : `Enviar a ${ids.length}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -4777,7 +4974,7 @@ function ImportHero() {
 }
 
 function UsersTable({
-  rows, loading, error, totalLabel, onRowClick, onAction, onRefresh,
+  rows, loading, error, totalLabel, onRowClick, onAction, onRefresh, onBulkTag, onBulkMessage,
 }: {
   rows: ContactRow[];
   loading: boolean;
@@ -4786,6 +4983,8 @@ function UsersTable({
   onRowClick: (id: string) => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
   onRefresh: () => void;
+  onBulkTag: (ids: string[]) => void;
+  onBulkMessage: (ids: string[]) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
@@ -4825,14 +5024,14 @@ function UsersTable({
           <div className="flex items-center gap-1">
             <button
               disabled={selectionCount === 0}
-              onClick={() => onAction(`Compón un nuevo mensaje para ${selectionCount} contacto${selectionCount === 1 ? '' : 's'} (próximamente)`)}
+              onClick={() => onBulkMessage(Array.from(selected))}
               className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <img src={ICON_MSG} alt="" className="w-3.5 h-3.5" /><span>Nuevo mensaje</span>
             </button>
             <button
               disabled={selectionCount === 0}
-              onClick={() => onAction('Etiquetado masivo: bloqueado por backend (tags endpoint pendiente)', 'error')}
+              onClick={() => onBulkTag(Array.from(selected))}
               className="flex items-center gap-1.5 bg-[#f8f8f7] border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] text-[#1a1a1a] hover:bg-[#efefed] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <img src={ICON_TAG} alt="" className="w-3.5 h-3.5" /><span>Añadir etiqueta</span>
@@ -4966,6 +5165,8 @@ function ContactsCommon({
   const { all, users, active, fresh, leads, loading, error, refetch } = useContactsData();
   const [openProfileId, setOpenProfileId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkTagIds, setBulkTagIds] = useState<string[] | null>(null);
+  const [bulkMsgIds, setBulkMsgIds] = useState<string[] | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -4994,35 +5195,54 @@ function ContactsCommon({
         </div>
       </div>
 
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2 bg-[#e7e2fd] border border-[#b09efa] rounded-[10px] mx-4 mt-3 flex-shrink-0">
-          <span className="text-[13px] text-[#1a1a1a]">
-            Quedan <strong>14 días</strong> en tu prueba de Advanced.{" "}
-            <span className="underline cursor-pointer">Explorar planes</span>
-          </span>
-          <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">✕</button>
+      {openProfileId ? (
+        <ContactProfileScreen
+          contactId={openProfileId}
+          onBack={() => setOpenProfileId(null)}
+          onUpdated={refetch}
+        />
+      ) : (
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-[#e7e2fd] border border-[#b09efa] rounded-[10px] mx-4 mt-3 flex-shrink-0">
+            <span className="text-[13px] text-[#1a1a1a]">
+              Quedan <strong>14 días</strong> en tu prueba de Advanced.{" "}
+              <span className="underline cursor-pointer">Explorar planes</span>
+            </span>
+            <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">✕</button>
+          </div>
+          <ContactsPageHeader onBack={onBack} title={title} onCreate={() => setCreateOpen(true)} />
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {!loading && all.length === 0 && <ImportHero />}
+            <UsersTable
+              rows={all}
+              loading={loading}
+              error={error}
+              totalLabel={totalLabel}
+              onRowClick={setOpenProfileId}
+              onAction={(msg, type = 'success') => setToast({ msg, type })}
+              onRefresh={() => { refetch(); setToast({ msg: 'Lista actualizada', type: 'success' }); }}
+              onBulkTag={(ids) => setBulkTagIds(ids)}
+              onBulkMessage={(ids) => setBulkMsgIds(ids)}
+            />
+          </div>
         </div>
-        <ContactsPageHeader onBack={onBack} title={title} onCreate={() => setCreateOpen(true)} />
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {!loading && all.length === 0 && <ImportHero />}
-          <UsersTable
-            rows={all}
-            loading={loading}
-            error={error}
-            totalLabel={totalLabel}
-            onRowClick={setOpenProfileId}
-            onAction={(msg, type = 'success') => setToast({ msg, type })}
-            onRefresh={() => { refetch(); setToast({ msg: 'Lista actualizada', type: 'success' }); }}
-          />
-        </div>
-      </div>
+      )}
 
       <NewContactModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={() => { refetch(); setToast({ msg: 'Contacto creado', type: 'success' }); }}
       />
-      <ContactProfileDrawer contactId={openProfileId} onClose={() => setOpenProfileId(null)} onUpdated={refetch} />
+      <BulkTagModal
+        ids={bulkTagIds}
+        onClose={() => setBulkTagIds(null)}
+        onApplied={(n) => { refetch(); setToast({ msg: `Etiquetas aplicadas a ${n} contacto${n === 1 ? '' : 's'}`, type: 'success' }); }}
+      />
+      <BulkMessageModal
+        ids={bulkMsgIds}
+        onClose={() => setBulkMsgIds(null)}
+        onSent={(n) => { setToast({ msg: `Mensaje enviado a ${n} contacto${n === 1 ? '' : 's'}`, type: 'success' }); }}
+      />
       <ContactsToast message={toast?.msg ?? null} type={toast?.type ?? 'success'} />
     </div>
   );
@@ -5033,50 +5253,13 @@ function ContactsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ALL LEADS VIEW
+// ALL LEADS VIEW — same shell as Contacts; the sidebar sets the title.
+// (Legacy AllLeadsHero / AllLeadsTableSection mocks removed once the live
+// Customers list took over both routes.)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AllLeadsHero() {
-  const bullets = [
-    { icon: ICON_BULLET_BOOK, label: "Comienza a usar los contactos" },
-    { icon: ICON_BULLET_BOOK, label: "Seguimiento y agrupación de tus clientes" },
-    { icon: ICON_BULLET_BOOK, label: "Uso de aplicaciones e integraciones" },
-    { icon: ICON_BULLET_LINK, label: "Visita nuestra tienda de aplicaciones" },
-  ];
-  return (
-    <div className="mx-4 mb-0">
-      <div className="relative bg-[#f8f8f7] rounded-[12px] overflow-hidden h-[288px] flex">
-        <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-black/5 z-10">
-          <img src={ICON_CLOSE} alt="" className="w-3 h-3" />
-        </button>
-        <div className="flex flex-col justify-center px-12 py-8 flex-1 gap-5">
-          <h2 className="text-[20px] font-semibold text-[#1a1a1a] leading-[1.6] max-w-[580px]">
-            Importa tus contactos para una experiencia personalizada
-          </h2>
-          <p className="text-[14px] text-[#1a1a1a] leading-[1.5] max-w-[580px]">
-            Ve los perfiles empresariales o de usuario, o segmenta tus contactos según las
-            acciones que realicen. Integra con más fuentes de datos en nuestra tienda de
-            aplicaciones. Cuando estés listo, comienza a segmentar a tus clientes de manera más
-            efectiva con mensajes salientes, Fin AI Agent y flujos de trabajo.
-          </p>
-          <div className="flex flex-col gap-1">
-            {bullets.map((b, i) => (
-              <button key={i} className="flex items-center gap-2.5 text-left group px-3 py-1.5 rounded-full hover:bg-black/5">
-                <img src={b.icon} alt="" className="w-4 h-4 flex-shrink-0" />
-                <span className="text-[14px] font-semibold text-[#1a1a1a] group-hover:text-[#646462]">{b.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex-shrink-0 flex items-center justify-end pr-14 py-6">
-          <img src={IMG_ILLUSTRATION_LEADS} alt="" className="h-[240px] w-[388px] object-cover object-left-top" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AllLeadsTableSection() {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _AllLeadsTableSection_REMOVED() {
   return (
     <div className="flex flex-col">
       {/* Filter row */}
