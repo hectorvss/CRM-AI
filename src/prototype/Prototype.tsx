@@ -3,9 +3,11 @@
 // Navigate via the left-nav icons. All assets from Figma CDN (7-day TTL).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { aiApi, casesApi } from '../api/client';
+import { useApi } from '../api/hooks';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'fin' | 'knowledge' | 'reports' | 'outbound';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -38,8 +40,221 @@ const IMG_CHANNELS_ALL     = "http://localhost:3845/assets/1db4722d06d0ece26352d
 const IMG_DISCORD_ILLO     = "http://localhost:3845/assets/e25c01bf4ae888185fc2c494120173b16fb88dc8.png";
 const IMG_FACEBOOK_BANNER  = "http://localhost:3845/assets/ff55606a7cb338b7b3782780552d97213eeffd34.png";
 const IMG_INSTAGRAM_BANNER = "http://localhost:3845/assets/adf19f0a72d29719d45fcf27040a591f21c327b1.png";
+// Horario de atención (1-96065) — using full URL since FIGMA_CDN const is declared later
+const IMG_OFFICE_HOURS_BANNER = "https://www.figma.com/api/mcp/asset/4ce970fe-a9db-4084-ab3a-0658acc43c07";
+const IMG_OFFICE_HOURS_FIN_AI = "https://www.figma.com/api/mcp/asset/6cf6adf2-9cc9-4fbf-a7ca-fb1832331ac7";
 // Chat support floating icon (1:55751 mask, used in all settings screens)
 const IMG_CHAT_SUPPORT_MASK = "http://localhost:3845/assets/7d6b74634c1449d020cbc1db43f39966f662badb.svg";
+// AllChannels card logos — each is a composition of bg SVG + foreground SVGs
+// All extracted node-by-node via cloud Figma MCP (1:67155, 70, 84, 202, 22, 41, 60, 99, 314)
+const FIGMA_CDN = "https://www.figma.com/api/mcp/asset";
+const LOGO_MESSENGER_BG = `${FIGMA_CDN}/b0d81969-747c-4440-8aa9-aa5031692d5a`;
+const LOGO_MESSENGER_FG = `${FIGMA_CDN}/0165b2fd-57db-43b2-9d5c-cfd2304b5304`;
+const LOGO_EMAIL_BG     = `${FIGMA_CDN}/fcc5708c-0d76-4080-af5a-55fd9138bb09`;
+const LOGO_EMAIL_FG     = `${FIGMA_CDN}/d586edd5-2c02-4f92-a463-8bac9e93db05`;
+const LOGO_PHONE_BG     = `${FIGMA_CDN}/06f83fba-1298-49e4-99f1-9661af5f5730`;
+const LOGO_PHONE_FG     = `${FIGMA_CDN}/8f27f4fc-9202-418f-a52f-3ca37a9a47c4`;
+const LOGO_WHATSAPP_BG  = `${FIGMA_CDN}/be15355f-4a62-4f45-bebc-2b05cb59a292`;
+const LOGO_WHATSAPP_FG  = `${FIGMA_CDN}/e0ce755b-8837-44c2-bc88-eacd7dcfdddd`;
+const LOGO_INSTAGRAM_BG = `${FIGMA_CDN}/b5b4cea0-56e9-4e29-81b8-0c0065546e44`;
+const LOGO_INSTAGRAM_FG = `${FIGMA_CDN}/ee4ca515-4763-4198-8a62-cbc6037cf207`;
+const LOGO_FACEBOOK_BG  = `${FIGMA_CDN}/6cbcec48-06dc-4d2b-9c56-ae138012031d`;
+const LOGO_FACEBOOK_FG  = `${FIGMA_CDN}/e748c75a-b32e-4e8c-ae61-e328adec6ffa`;
+const LOGO_SMS_BG       = `${FIGMA_CDN}/67ffe9c8-5098-457e-b43d-30a83fb355a8`;
+const LOGO_SMS_FG1      = `${FIGMA_CDN}/dcdb4bd0-9526-4597-b976-ec0ec4b2c3fe`;
+const LOGO_SMS_FG2      = `${FIGMA_CDN}/4b3630c8-3fe6-45dd-99e8-67e3e943bbdd`;
+const LOGO_SWITCH_BG    = `${FIGMA_CDN}/dfc422c2-01f7-4134-8d7d-5badccab6be3`;
+const LOGO_SWITCH_FG1   = `${FIGMA_CDN}/03eeaa29-5ebe-4caa-a956-d979983a1155`;
+const LOGO_SWITCH_FG2   = `${FIGMA_CDN}/3716abaf-18ae-4bc7-bc8f-bad0938a8348`;
+// Slack logo — 14 SVG composition (multi-color hash logo from 1:67260)
+const LOGO_SLACK_V0  = `${FIGMA_CDN}/6b9335b8-ffac-4d3f-8cf5-e0ef88d43356`;
+const LOGO_SLACK_V1  = `${FIGMA_CDN}/f77c3052-7932-4a46-81e9-1b6e1e0b638f`;
+const LOGO_SLACK_F   = `${FIGMA_CDN}/0f22b121-ccf7-486d-b8f7-102c0980dcf6`;
+const LOGO_SLACK_F1  = `${FIGMA_CDN}/197ef1d6-ef8b-40cf-81c8-1ee660a65ec2`;
+const LOGO_SLACK_F2  = `${FIGMA_CDN}/131dd917-5bdc-4405-b7e9-daff51023f6f`;
+const LOGO_SLACK_V2  = `${FIGMA_CDN}/c4e50346-37b4-4cef-aa7d-d6cdf0ca1bc1`;
+const LOGO_SLACK_V3  = `${FIGMA_CDN}/2594f183-8da1-4118-a51a-a4a351be2e28`;
+const LOGO_SLACK_V4  = `${FIGMA_CDN}/fa0bcfe1-3e99-4bb0-8f89-165598a16fad`;
+const LOGO_SLACK_V5  = `${FIGMA_CDN}/57a1d09d-2d63-4bad-9187-096e7a62a326`;
+const LOGO_SLACK_V6  = `${FIGMA_CDN}/dc3820f8-5d7a-4f1c-b463-002d316fd58c`;
+const LOGO_SLACK_V7  = `${FIGMA_CDN}/fd5ce4bc-86cb-412b-b3f1-69bfb705196b`;
+const LOGO_SLACK_H   = `${FIGMA_CDN}/ae7843c2-f654-4caf-a2c5-4ebf4124d4b4`;
+const LOGO_SLACK_H1  = `${FIGMA_CDN}/ca4313c4-3a66-42e9-b4e7-581608936109`;
+const LOGO_SLACK_V8  = `${FIGMA_CDN}/47c5f12e-c79b-432b-8310-bdb1bd6f858f`;
+
+// Icon Library (Figma node 1-85798) — 47 variantes de Component 1, 13 components con variants/hover
+// Cada variante es una composición SVG distinta. Se extraen on-demand vía nodeIds:
+//   variant=1  → 1:85189   variant=2  → 1:85194   variant=3  → 1:85197   ...
+//   variant=45 → 1:85328   variant=46 → 1:85331   variant=47 → 1:85334
+// Para añadir un icono nuevo: pedir get_design_context del nodeId correspondiente, sumar
+// las URLs al ICON_LIBRARY map y usar <LibraryIcon v="N" /> donde haga falta.
+// LibraryV2 (file QhrV4aBbAAqTxgWhaK8hGP, node 3-23460) — 91 variantes Component 1
+// Para identificarlos: ir a `?icons=v2` en el navegador, ver cuál es cada uno
+type IconVariant = '1' | '2' | '45'
+  | 'v2-1' | 'v2-2' | 'v2-3' | 'v2-4' | 'v2-5' | 'v2-6' | 'v2-7' | 'v2-8' | 'v2-9' | 'v2-10'
+  | 'v2-11' | 'v2-12' | 'v2-13' | 'v2-14' | 'v2-15' | 'v2-16' | 'v2-17' | 'v2-18' | 'v2-19' | 'v2-20'
+  | 'v2-21' | 'v2-22' | 'v2-23' | 'v2-24' | 'v2-25' | 'v2-26' | 'v2-27' | 'v2-28' | 'v2-29' | 'v2-30'
+  | 'v2-31' | 'v2-32' | 'v2-33' | 'v2-34' | 'v2-35' | 'v2-36' | 'v2-37' | 'v2-38' | 'v2-39' | 'v2-40'
+  | 'v2-41' | 'v2-42' | 'v2-43' | 'v2-44' | 'v2-45' | 'v2-46' | 'v2-47' | 'v2-48' | 'v2-49' | 'v2-50'
+  | 'v2-51' | 'v2-52' | 'v2-53' | 'v2-54' | 'v2-55' | 'v2-56' | 'v2-57' | 'v2-58' | 'v2-59' | 'v2-60'
+  | 'v2-61' | 'v2-62' | 'v2-63' | 'v2-64' | 'v2-65' | 'v2-66' | 'v2-67' | 'v2-68' | 'v2-69' | 'v2-70'
+  | 'v2-71' | 'v2-72' | 'v2-73' | 'v2-74' | 'v2-75' | 'v2-76' | 'v2-77' | 'v2-78' | 'v2-79' | 'v2-80'
+  | 'v2-81' | 'v2-82' | 'v2-83' | 'v2-84' | 'v2-85' | 'v2-86' | 'v2-87' | 'v2-88' | 'v2-89' | 'v2-90'
+  | 'v2-91';
+
+type IconDef = { svgs: string[]; insets: string[]; rotate?: number; size: number };
+const ic = (size: number, insets: string[], svgs: string[]): IconDef =>
+  ({ size, insets, svgs: svgs.map(u => `${FIGMA_CDN}/${u}`) });
+
+const ICON_LIBRARY: Record<IconVariant, IconDef> = {
+  '1':    { svgs: [`${FIGMA_CDN}/4db2ee8b-9fc6-4c57-824d-ccdb9a327847`], insets: ['30% 19.7% 32.19% 19.7%'], size: 16 },
+  '2':    { svgs: [`${FIGMA_CDN}/9f16b8ea-e048-4d03-9b83-88117fb02d7b`, `${FIGMA_CDN}/933d8a94-7b30-4ce7-bb5f-720cefef3583`], insets: ['11.11%', '11.11%'], size: 18 },
+  '45':   { svgs: [`${FIGMA_CDN}/b536470b-3164-4ad3-b9fd-4d6acde3d69a`], insets: ['0%'], size: 48 },
+  // LibraryV2 — full 91-variant set from file QhrV4aBbAAqTxgWhaK8hGP node 3-23460
+  'v2-1':  ic(16, ['30% 19.7% 32.19% 19.7%'], ['3bf9779b-49e0-4cd4-9a01-5d588d4a6946']),
+  'v2-2':  ic(18, ['11.11%', '11.11%'], ['01cfa523-b10d-49e2-bd8a-4229a0e9243d', 'c8ee63b3-e943-4886-ab1d-dae6b4e037c4']),
+  'v2-3':  ic(24, ['6.25%'], ['ee9a6d2e-71e9-4405-afc4-2430e5f699b7']),
+  'v2-4':  ic(16, ['18.75% 6.25% 12.5% 6.25%'], ['3c743c69-437d-4865-ad65-b3ff2a523884']),
+  'v2-5':  ic(16, ['6.25% 6.18% 6.19% 6.25%'], ['b3688bb3-30b0-474d-946b-57fce92570b2']),
+  'v2-6':  ic(16, ['0 6.19% 1.42% 0'], ['280d64e9-d0d3-47d1-bd93-226668962231']),
+  'v2-7':  ic(16, ['6.25% 12.5%'], ['7f42f314-6614-40ce-a998-2982180fb1bf']),
+  'v2-8':  ic(16, ['7.42% 7.75% 7.42% 7.81%'], ['c16e8b16-e68f-4a2a-8945-14fcfd89b197']),
+  'v2-9':  ic(16, ['10.94% 0 12.5% 0'], ['02dc00a6-6665-4b47-ab2d-eacfacad1cca']),
+  'v2-10': ic(16, ['12.5%', '12.5%'], ['82ac3f2a-fdb8-4d6a-9aca-06851a9d5dc3', '85ba4aeb-2bd2-4514-961d-29fc9e895148']),
+  'v2-11': ic(16, ['9.43% 7.77% 7.77% 9.41%'], ['1d973e66-4782-4ad5-a158-a07b7f7faa8f']),
+  'v2-12': ic(16, ['6.31% 4.92% 6.18% 5.21%'], ['1c231363-e0b6-44cd-8f83-15aade5c38e0']),
+  'v2-13': ic(16, ['12.5%'], ['04cdafc8-bcec-451a-ae4b-4c845e1e7522']),
+  'v2-14': ic(16, ['84.43% 12.44% 6.19% 12.51%','50.03% 68.73% 24.95% 12.51%','31.27% 40.58% 24.95% 40.65%','12.51% 12.44% 24.95% 68.8%','6.3% 62.52% 62.52% 6.3%'], ['068eb55d-51c9-4cc2-a700-5458eae4c03e','0a8380da-4356-4c88-82b5-c2f4cecbf385','069a4f23-2325-489f-8db2-a62d110f9d37','f8be8d31-3925-4078-89e6-ad1441d2a6c8','6e3e6cbe-1e25-43cc-a3b6-04a8e606adb6']),
+  'v2-15': ic(16, ['18.75% 18.75% 15% 15%'], ['dc23cfe4-1204-4890-8292-5422ca141eb7']),
+  'v2-16': ic(16, ['12.5%'], ['d8990269-7b3c-4383-b546-17db21015900']),
+  'v2-17': ic(16, ['6.25% 12.5%'], ['b3dcfbbc-bd18-4021-994b-6f2023c10ae0']),
+  'v2-18': ic(16, ['12.81% 6.25% 8.42% 6.25%'], ['c4cc787f-952e-4b5f-b11c-427355688e8d']),
+  'v2-19': ic(16, ['22.81% 33.75%'], ['fd45ab25-5544-43d3-9d75-bc0eeb029dc1']),
+  'v2-20': ic(16, ['3.87% 14.13% 31.25% 14%','78.13% 31.19% 0 31.25%'], ['0fa055df-bff5-4183-ad0e-a91226b34164','8e1c9410-fe39-46c0-b154-419a611101c3']),
+  'v2-21': ic(16, ['13.56% 0.06% 12.69% 0'], ['68866bbf-e18a-4112-afcf-52b17095a593']),
+  'v2-22': ic(16, ['0'], ['275cad55-cffe-49d9-aeda-1e7f0aa6f101']),
+  'v2-23': ic(16, ['12.5% 6.25%'], ['04db0097-2a87-4c33-8290-115766b9d3df']),
+  'v2-24': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['15c56576-e3a9-4f8c-a7d9-bb286d297b98','15c56576-e3a9-4f8c-a7d9-bb286d297b98','1b811ae9-3965-497f-972c-6a28b9d7cbf7']),
+  'v2-25': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['d55cd93c-3c17-42ea-ac04-687aac17bdb4','d55cd93c-3c17-42ea-ac04-687aac17bdb4','f0a99d07-f3c0-463a-a576-3e752534c217']),
+  'v2-26': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['a3367a5b-1abc-40aa-a018-8a639bd843ba','a3367a5b-1abc-40aa-a018-8a639bd843ba','617cc1bf-1439-4e37-96de-3c0ad3c22c67']),
+  'v2-27': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['93e572d0-0ce9-473c-97fa-0a1bcd3ce6aa','93e572d0-0ce9-473c-97fa-0a1bcd3ce6aa','97342167-e27f-453f-be98-b39c50c093b5']),
+  'v2-28': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['bed04841-c410-4ab3-a2a5-3d3a0d1971f7','bed04841-c410-4ab3-a2a5-3d3a0d1971f7','00014aaf-87dc-42a0-a76e-d02cc1c9a40d']),
+  'v2-29': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['9cd61417-ac88-491a-9b57-77d685ca09dd','9cd61417-ac88-491a-9b57-77d685ca09dd','187b02e2-915d-4387-a34e-5fcae33c9704']),
+  'v2-30': ic(16, ['12.5% 6.25%'], ['96f37bda-2a2a-44ae-a871-8a96cc2d0caf']),
+  'v2-31': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['6faa9688-4a90-4cd0-9364-0f701a22ba90','6faa9688-4a90-4cd0-9364-0f701a22ba90','104c4e54-3a43-40da-90c7-68c5934a9482']),
+  'v2-32': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['f9abaf51-eeeb-43d9-9a48-2e7a3a865945','f9abaf51-eeeb-43d9-9a48-2e7a3a865945','344ec7f8-819b-4d36-a752-26d6f2c69498']),
+  'v2-33': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['33c4f19d-7167-461b-ad33-af59f009f968','33c4f19d-7167-461b-ad33-af59f009f968','5e825b45-aab8-423a-a82c-1657b950f7d2']),
+  'v2-34': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['15a39957-b159-4276-a21f-5caf518b78a7','15a39957-b159-4276-a21f-5caf518b78a7','edb1b56a-65e8-4dca-a1d1-7ce1bdd10406']),
+  'v2-35': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['04408711-f048-47ff-a049-e8e6808e37ca','04408711-f048-47ff-a049-e8e6808e37ca','22c17417-16d1-42a3-8255-1ba459f45821']),
+  'v2-36': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['8d9772ca-d322-4b0a-ad0a-aed0d5022c4d','8d9772ca-d322-4b0a-ad0a-aed0d5022c4d','26e62f6b-5f8a-4cf6-af77-dab6742387ea']),
+  'v2-37': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['9dfe5f66-6085-4055-a594-6de51d17249d','9dfe5f66-6085-4055-a594-6de51d17249d','232be821-0457-4d95-ac51-3a8a8a3099d0']),
+  'v2-38': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['46937ca3-338e-4a02-acf6-b6ed2d140581','46937ca3-338e-4a02-acf6-b6ed2d140581','b23aa366-0dd5-4ca0-a78c-49fca09566b6']),
+  'v2-39': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['2c705dfb-19a7-4324-82e2-23d37d215666','2c705dfb-19a7-4324-82e2-23d37d215666','99b0bef2-fbb9-4f26-9530-9139e7832f0a']),
+  'v2-40': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['df8502f1-7c06-4540-9677-93e0f73b1f0d','df8502f1-7c06-4540-9677-93e0f73b1f0d','311f6822-e66f-4e85-8114-1e8437780d00']),
+  'v2-41': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['8e205125-4ded-4cbf-961a-fbb838b2d562','8e205125-4ded-4cbf-961a-fbb838b2d562','eee3ed36-7200-4188-840a-7a29cc23f31a']),
+  'v2-42': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['6ce54653-45c8-4cd6-9fd9-247c6857f725','6ce54653-45c8-4cd6-9fd9-247c6857f725','1362d316-66ef-4ebb-92a2-14f8e90b24bc']),
+  'v2-43': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['81c463cf-6cb6-4561-bec4-fc02de477683','81c463cf-6cb6-4561-bec4-fc02de477683','670fa7b7-4e3a-48d9-b410-f717c6091dd7']),
+  'v2-44': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['6993538c-7482-4a41-b1f9-3b18df2e92fa','6993538c-7482-4a41-b1f9-3b18df2e92fa','25a03379-222d-4318-b6e1-cab7623a3c4c']),
+  'v2-45': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['d4cc6c6b-58ee-4260-8964-aa6d25c7a406','d4cc6c6b-58ee-4260-8964-aa6d25c7a406','3327847e-4561-4fa1-8d40-d082d6ac239f']),
+  'v2-46': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['0022e793-c806-4e02-a510-fa10a8f4d5e7','0022e793-c806-4e02-a510-fa10a8f4d5e7','4c32aafa-1c91-4e32-909e-e7173cbd3600']),
+  'v2-47': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['0d696791-54ce-41df-98c1-64214318811e','0d696791-54ce-41df-98c1-64214318811e','f821b305-0d59-4ded-a6f7-59ef73b86c4b']),
+  'v2-48': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['6ee4a839-ced7-4eb1-b8a1-5834fe58aad1','6ee4a839-ced7-4eb1-b8a1-5834fe58aad1','1064957f-8ad2-44a1-a256-137f3d960c20']),
+  'v2-49': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['cdf54640-b020-43b3-a596-42a6b8b826c0','cdf54640-b020-43b3-a596-42a6b8b826c0','08a706c2-faaf-4cd6-a1a3-b217ff01316b']),
+  'v2-50': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['776472ef-aab0-4828-8a4b-a7b38bac1d52','776472ef-aab0-4828-8a4b-a7b38bac1d52','706786da-4678-4871-91b9-eeca938378bb']),
+  'v2-51': ic(16, ['12.5% 6.25%'], ['150b0069-2f34-47c8-a193-252b2564f53d']),
+  'v2-52': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['69ae3a4a-a318-465b-b3d6-3ab78f976f16','69ae3a4a-a318-465b-b3d6-3ab78f976f16','a92b5ae1-4712-4f13-a467-732faac2f575']),
+  'v2-53': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['bd9d196a-9d31-4f41-acd3-6ef766f42b26','bd9d196a-9d31-4f41-acd3-6ef766f42b26','78c7cc46-21dd-4050-b696-a312d8805c61']),
+  'v2-54': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['cb12af76-e8da-4236-af36-ce023f40edc4','cb12af76-e8da-4236-af36-ce023f40edc4','5f80fc8a-5aa9-4a89-9000-8ca3f3c28509']),
+  'v2-55': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['a540de0d-331d-4956-a27e-6fc0635ffe07','a540de0d-331d-4956-a27e-6fc0635ffe07','14703441-4327-4436-8d66-e811af7de826']),
+  'v2-56': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['7666e9e1-349e-4e33-bc91-f6820cff8681','7666e9e1-349e-4e33-bc91-f6820cff8681','2d8b861b-b414-47d9-8f58-39261866f258']),
+  'v2-57': ic(12, ['9.38% 40.63% 71.87% 40.62%','40.63%','71.87% 40.63% 9.38% 40.62%'], ['f9c91744-258a-492a-97c7-82769152bdab','f9c91744-258a-492a-97c7-82769152bdab','9d07e9c2-6d6a-4a1b-beae-d7a24232d5dc']),
+  'v2-58': ic(16, ['17.19% 12.5% 17.19% 9.37%'], ['5a95d271-3c41-43dd-aa9b-32b302367d75']),
+  'v2-59': ic(16, ['12.5% 6.25%'], ['6f7880ea-9d35-4ee9-a02b-4634fc6050d3']),
+  'v2-60': ic(16, ['6.25%'], ['85df45c7-cfb1-465b-a43a-9cce82602a0b']),
+  'v2-61': ic(16, ['40.62% 9.37% 40.63% 9.37%'], ['67f61f2b-b88b-4726-a86a-4a5d83baffbd']),
+  'v2-62': ic(16, ['5.07% 7.92% 12.5% 6.25%'], ['010d27cb-88e8-4e50-aecc-43c6ee358506']),
+  'v2-63': ic(16, ['6.25% 6.75%'], ['3aff586b-735e-4017-bdbf-c68526206c7a']),
+  'v2-64': ic(16, ['1.31% 6% 10.87% 6.18%'], ['3eec996a-05e5-47f9-85cf-0ce5d7ee13c0']),
+  'v2-65': ic(16, ['0 6.25% 68.75% 6.25%','40.62% 6.25% 12.5% 6.25%'], ['fec6a49a-2277-45eb-b665-b04f06f4a70e','35766678-4eb8-4587-a2df-b5f48421987a']),
+  'v2-66': ic(16, ['17.19%'], ['a576b540-d192-41bd-a863-ea9a29edacdc']),
+  'v2-67': ic(12, ['4.17%'], ['ba82fb21-ff11-4c52-bedc-2cc1e9ab89d0']),
+  'v2-68': ic(12, ['4.17%'], ['4c47cd39-b4c2-4c0d-9927-ce5d2986b90e']),
+  'v2-69': ic(12, ['7.81% 7.78% 7.78% 7.81%'], ['84a66daa-135b-4896-bd49-3762b594195f']),
+  'v2-70': ic(16, ['33.75% 22.81%'], ['80934a77-c666-492b-a318-097df916a9bb']),
+  'v2-71': ic(12, ['7.81% 7.78% 7.78% 7.81%'], ['63711180-81f7-4f0d-a3c7-d2606c63ea4e']),
+  'v2-72': ic(16, ['33.75% 22.81%'], ['809218ef-249a-48f4-8154-fb944f8ac1c4']),
+  'v2-73': ic(16, ['6.25%'], ['8f1865d9-9366-4104-a4ff-952ed99fb079']),
+  'v2-74': ic(16, ['6.25%'], ['83269336-c694-48db-9455-a138bfe0bc8f']),
+  'v2-75': ic(16, ['6.25%'], ['c7f21fe9-5bdf-4f82-8565-8aec7d3da0b0']),
+  'v2-76': ic(16, ['6.25%'], ['e63deaa6-b53c-4b83-bcf5-93231530b27c']),
+  'v2-77': ic(16, ['6.25%'], ['cdddd034-8c60-48aa-ae5d-1e81fb9f53a4']),
+  'v2-78': ic(16, ['6.25%'], ['0b282eb3-186a-4baa-9c5b-1ad647afba42']),
+  'v2-79': ic(16, ['6.25%'], ['8074a583-cc2b-4217-9621-35931436cbc7']),
+  'v2-80': ic(32, ['6.25% 12.5%'], ['11276de1-adbb-466b-a6fa-23c6e425196d']),
+  'v2-81': ic(16, ['6.25%'], ['5e1cbfd4-b10d-4cfe-a3ca-edf780da9d0b']),
+  'v2-82': ic(32, ['6.25% 12.5%'], ['18cc3188-3e1c-4ddc-bb84-5de178ee393b']),
+  'v2-83': ic(16, ['6.25%'], ['0dc3182b-5026-4a4a-a1b3-607751516bda']),
+  'v2-84': ic(48, ['0'], ['11b2c9e6-332a-47a4-8b28-7c35a8e464f5']),
+  'v2-85': ic(16, ['6.25%'], ['e0c20b04-b665-4102-ac70-4a6dce51d5cd']),
+  'v2-86': ic(32, ['6.25% 12.5%'], ['4da36947-9732-458e-8449-c2bc7532c8e6']),
+  'v2-87': ic(16, ['6.25%'], ['a7354799-492b-49e0-96cf-b12083e8ec2d']),
+  'v2-88': ic(32, ['6.25% 12.5%'], ['0b2c45aa-c47d-4218-afed-5f64ed32d54f']),
+  'v2-89': ic(48, ['0'], ['05c6b5ac-29d2-4671-8c0e-c64ddab09ebf']),
+  'v2-90': ic(24, ['0 6.25%'], ['8bb39ed9-d0c0-4c3c-9464-be5c76935541']),
+  'v2-91': ic(26, ['33.96% 21.46%'], ['fe5e38fe-c456-450c-ad3d-a0a81637741c']),
+};
+
+// Mapping for LibraryV2 nodeIds (variant N → node 3:223XX, every 5 = 78px)
+// To extract: get_design_context fileKey=QhrV4aBbAAqTxgWhaK8hGP nodeId=3-22376 (var 1), 3-22381 (var 2), 3-22384 (var 3), 3-22387 (var 4)…
+// Each fetch returns the SVG URL — add to ICON_LIBRARY then use <LibraryIcon v="v2-N">
+
+function LibraryIcon({ v, size }: { v: IconVariant; size?: number }) {
+  const def = ICON_LIBRARY[v];
+  const finalSize = size ?? def.size;
+  /*
+  // removed: composer logic belongs to ConversationPanel, not LibraryIcon
+  function __unusedLibraryIconGuard() {
+    const content = replyText.trim();
+    if (!content && attachments.length === 0) return;
+    const attachmentText = attachments.length
+      ? `\n\n${attachments.map(file => `[${file.name} · ${formatBytes(file.size)}]`).join('\n')}`
+      : '';
+    const finalContent = `${content}${attachmentText}`.trim();
+    try {
+      if (replyTab === 'nota') {
+        await casesApi.addInternalNote(selectedConv.id, finalContent);
+        onAction('Nota interna añadida');
+      } else {
+        await casesApi.reply(selectedConv.id, finalContent, latestDraft?.id);
+        onAction('Respuesta enviada');
+      }
+      setReplyText('');
+      setAttachments([]);
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo enviar', 'error');
+    }
+  }
+
+  async function snoozeCase() {
+    await updateStatus('snoozed', 'Caso pospuesto');
+  }
+
+  async function snoozeCase() {
+    await updateStatus('snoozed', 'Caso pospuesto');
+  }
+
+  */
+  return (
+    <div className="overflow-hidden relative" style={{ width: finalSize, height: finalSize }}>
+      {def.svgs.map((src, i) => (
+        <div key={i} className="absolute" style={{ inset: def.insets[i] }}>
+          <img src={src} alt="" className="absolute inset-0 w-full h-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
 // Connector icons (SVG, 1-31284…1-31315)
 const SVG_CONN_CREATE      = "http://localhost:3845/assets/9547459195af209d7fc7a8266b21ba259e45d7b3.svg";
 const SVG_CONN_MCP         = "http://localhost:3845/assets/b76967aa85b0e0a5adba750c204f52d62caa1075.svg";
@@ -111,69 +326,157 @@ const ICON_VIEW_LIST         = "https://www.figma.com/api/mcp/asset/9924fb9d-460
 const ICON_INFO              = "https://www.figma.com/api/mcp/asset/fad4bccf-740b-4bc6-a4d4-3de338b2f2ff";
 const ICON_EMPTY_STATE       = "https://www.figma.com/api/mcp/asset/29703bc6-2e1c-4a25-9fd1-6d65c5544121";
 
+// Fin AI Agent assets (Figma node 1:807 — /automation/fin-ai-agent/all-roles)
+const IMG_FIN_LOGO_MARK      = "https://www.figma.com/api/mcp/asset/1d80b781-d725-4789-9a61-46ffed02ecee";
+const IMG_FIN_SERVICE_AGENT  = "https://www.figma.com/api/mcp/asset/36ac43f1-c422-4789-b550-06e1166f033a";
+const IMG_FIN_SALES_AGENT    = "https://www.figma.com/api/mcp/asset/56368a5b-952d-43c9-bef6-0f22824132ad";
+
 // ── Shared: Left Nav ──────────────────────────────────────────────────────────
 function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [expanded, setExpanded] = useState(false);
   const isContacts = view === 'contacts' || view === 'allLeads';
-  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'billing' || view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
+  const isSettings = view === 'settings' || view === 'imports' || view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual' || view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'aiInbox' || view === 'automation' || view === 'appStore' || view === 'connectors' || view === 'labels' || view === 'people' || view === 'companies' || view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands' || view === 'billing' || view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels' || view === 'inboxTeam';
   const isActive = (v: View) => view === v;
 
   function NavBtn({ nav, icon, label, badge }: { nav: View; icon: string; label: string; badge?: number }) {
     const active = nav === 'contacts' ? isContacts : nav === 'settings' ? isSettings : isActive(nav);
     return (
-      <div className="relative w-full">
-        <button
-          onClick={() => onNavigate(nav)}
-          title={label}
-          className={`w-full h-8 flex items-center justify-center rounded-lg relative ${
-            active ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"
-          }`}
-        >
+      <button
+        onClick={() => onNavigate(nav)}
+        title={label}
+        className={`w-full h-9 flex items-center rounded-lg relative ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${
+          active ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"
+        }`}
+      >
+        <div className="relative flex items-center justify-center flex-shrink-0">
           <img src={icon} alt={label} className="w-4 h-4" />
-          {badge !== undefined && active && (
+          {badge !== undefined && !expanded && active && (
             <span className="absolute -top-2 -right-2 bg-[#ffccb2] border border-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center text-[11px] font-bold text-[#1a1a1a] px-1">
               {badge}
             </span>
           )}
-        </button>
-      </div>
+        </div>
+        {expanded && (
+          <span className="flex-1 flex items-center gap-1.5 min-w-0">
+            <span className={`text-[13px] truncate ${active ? 'font-semibold text-[#1a1a1a]' : 'font-medium text-[#1a1a1a]'}`}>{label}</span>
+            {badge !== undefined && (
+              <span className="bg-[#ffccb2] rounded-full min-w-[18px] h-[18px] flex items-center justify-center text-[11px] font-bold text-[#1a1a1a] px-1.5 flex-shrink-0">{badge}</span>
+            )}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  // Same NavBtn but takes SVG children instead of an asset URL — used for the 6
+  // semantic LeftNav icons (envelope/square/book/bars/arrow/person).
+  function NavBtnSvg({ nav, label, badge, children }: { nav: View; label: string; badge?: number; children: ReactNode }) {
+    const active = nav === 'contacts' ? isContacts : nav === 'settings' ? isSettings : isActive(nav);
+    return (
+      <button
+        onClick={() => onNavigate(nav)}
+        title={label}
+        className={`w-full h-9 flex items-center rounded-lg relative ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${
+          active ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"
+        }`}
+      >
+        <span className="relative flex items-center justify-center flex-shrink-0">
+          {children}
+          {badge !== undefined && !expanded && active && (
+            <span className="absolute -top-2 -right-2 bg-[#ffccb2] border border-white rounded-full min-w-[15px] h-[15px] flex items-center justify-center text-[11px] font-bold text-[#1a1a1a] px-1">
+              {badge}
+            </span>
+          )}
+        </span>
+        {expanded && (
+          <span className="flex-1 flex items-center gap-1.5 min-w-0">
+            <span className={`text-[13px] truncate ${active ? 'font-semibold text-[#1a1a1a]' : 'font-medium text-[#1a1a1a]'}`}>{label}</span>
+            {badge !== undefined && (
+              <span className="bg-[#ffccb2] rounded-full min-w-[18px] h-[18px] flex items-center justify-center text-[11px] font-bold text-[#1a1a1a] px-1.5 flex-shrink-0">{badge}</span>
+            )}
+          </span>
+        )}
+      </button>
     );
   }
 
   return (
-    <div className="flex flex-col h-full w-[44px] pt-5 pb-2 bg-[#f3f3f1] rounded-tr-2xl rounded-br-2xl justify-between flex-shrink-0">
-      <div className="flex flex-col gap-4 items-center">
-        <div className="flex items-center justify-center w-9 h-9 mb-1">
+    <div
+      // Hover-to-expand: enter rail → 210px, leave rail → 44px. No manual toggle button.
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+      className="flex flex-col h-full pt-3 pb-2 bg-[#f3f3f1] rounded-tr-2xl rounded-br-2xl justify-between flex-shrink-0 transition-[width] duration-150"
+      style={{ width: expanded ? 210 : 44 }}
+    >
+      <div className="flex flex-col gap-3">
+        {/* Header: the app logo (decorative — no nav action). Uses ICON_INBOX asset which
+            visually IS the app logo per user. Previously this was at position 2 of the rail. */}
+        <div className={`flex items-center ${expanded ? 'justify-between px-3' : 'justify-center'} h-9 flex-shrink-0`}>
           <img src={ICON_INBOX} alt="" className="w-6 h-6" />
+          {expanded && (
+            <span className="w-7 h-7 flex items-center justify-center" title="Pin">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9.5 1.8l4.7 4.7-2 2-2.7-.4-2.4 2.4.7 2.7-2 2-4.7-4.7 2-2 2.7.7 2.4-2.4-.4-2.7z"/>
+                <path d="M5.5 10.5L2 14"/>
+              </svg>
+            </span>
+          )}
         </div>
-        <div className="flex flex-col gap-1 items-start w-full px-1.5">
-          <NavBtn nav="inbox"     icon={ICON_INBOX}    label="Inbox"       badge={4} />
-          <NavBtn nav="fin"       icon={ICON_FIN}      label="Fin" />
-          <NavBtn nav="knowledge" icon={ICON_KNOWLEDGE} label="Knowledge" />
-          <NavBtn nav="reports"   icon={ICON_REPORTS}  label="Reports" />
-          <NavBtn nav="outbound"  icon={ICON_OUTBOUND} label="Outbound" />
-          <NavBtn nav="contacts"  icon={ICON_CONTACTS} label="Contactos" />
-          <NavBtn nav="settings"  icon={ICON_SETUP}    label="Ajustes" />
+        {/* Nav items — icons SHIFTED UP by 1 per user: previous ICON_FIN is now the Inbox
+            visual, ICON_KNOWLEDGE is Fin's, etc. ICON_INBOX is reserved for the top logo.
+            A new inline SVG arrow is added for Canales salientes. */}
+        <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'}`}>
+          <NavBtn nav="inbox"     icon={ICON_FIN}       label="Inbox"             badge={4} />
+          <NavBtn nav="fin"       icon={ICON_KNOWLEDGE} label="Fin AI Agent" />
+          <NavBtn nav="knowledge" icon={ICON_REPORTS}   label="Conocimiento" />
+          <NavBtn nav="reports"   icon={ICON_OUTBOUND}  label="Informes" />
+          {/* Canales salientes — NEW inline-SVG arrow (paper-plane / send) */}
+          <NavBtnSvg nav="outbound" label="Canales salientes">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M14.5 1.5L1.5 6l5 1.5L8 13l3-7z"/></svg>
+          </NavBtnSvg>
+          {/* Contactos — inline SVG of two person silhouettes (proper contacts icon) */}
+          <NavBtnSvg nav="contacts" label="Contactos">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><circle cx="6" cy="5" r="2.5"/><path d="M1.8 12.5c.4-2 2.1-3.2 4.2-3.2s3.8 1.2 4.2 3.2v.5H1.8v-.5z"/><circle cx="11.5" cy="6" r="2"/><path d="M9.5 9.4c.6-.2 1.3-.3 2-.3 1.7 0 3 .9 3.4 2.5v.4H10.6c-.1-.9-.4-1.8-1.1-2.6z"/></svg>
+          </NavBtnSvg>
         </div>
       </div>
 
-      <div className="flex flex-col gap-1 items-start w-full px-1.5 pb-1">
-        <button className="w-full h-8 flex items-center justify-center rounded-lg hover:bg-white/60">
-          <img src={ICON_SEARCH} alt="" className="w-4 h-4" />
+      <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
+        {/* Configurar (with green dot) */}
+        <button className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}>
+          <div className="relative flex-shrink-0">
+            <div className="w-4 h-4 rounded-full border border-[#1a1a1a] flex items-center justify-center">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+            </div>
+          </div>
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Configurar</span>}
         </button>
+        {/* Buscar */}
+        <button className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}>
+          <img src={ICON_SEARCH} alt="" className="w-4 h-4 flex-shrink-0" />
+          {expanded && <>
+            <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Buscar</span>
+            <span className="text-[10px] text-[#646462] bg-white border border-[#e9eae6] rounded px-1 py-0.5">Ctrl K</span>
+          </>}
+        </button>
+        {/* Ajustes */}
         <button
           onClick={() => onNavigate('settings')}
-          className={`w-full h-8 flex items-center justify-center rounded-lg ${isSettings ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
+          className={`w-full h-9 flex items-center rounded-lg ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${isSettings ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
         >
-          <img src={ICON_SETTINGS} alt="" className="w-4 h-4" />
+          <img src={ICON_SETTINGS} alt="" className="w-4 h-4 flex-shrink-0" />
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Ajustes</span>}
         </button>
+        {/* Perfil */}
         <button
           onClick={() => onNavigate('personal')}
-          className="w-full h-8 flex items-center justify-center"
+          className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}
         >
-          <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7]">
+          <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7] flex-shrink-0">
             <img src={AVATAR_ME} alt="" className="absolute inset-0 w-full h-full object-cover" />
             <div className="absolute bottom-[-2px] right-[-2px] w-[7px] h-[7px] bg-[#158613] rounded-[3.6px] border border-white" />
           </div>
+          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Perfil</span>}
         </button>
       </div>
     </div>
@@ -228,92 +531,134 @@ function SidebarNavItem({
   );
 }
 
-function InboxSidebar() {
-  const [active, setActive] = useState('inbox');
+type InboxScope =
+  | 'search'
+  | 'inbox'
+  | 'mentions'
+  | 'created'
+  | 'all'
+  | 'unassigned'
+  | 'spam'
+  | 'dashboard'
+  | 'fin-all'
+  | 'fin-resolved'
+  | 'fin-escalated'
+  | 'fin-pending'
+  | 'fin-spam'
+  | 'v-messenger'
+  | 'v-email'
+  | 'v-whatsapp'
+  | 'v-phone'
+  | 'v-tickets';
+
+function InboxSidebar({
+  active,
+  onScopeChange,
+  counts,
+}: {
+  active: InboxScope;
+  onScopeChange: (scope: InboxScope) => void;
+  counts: Partial<Record<InboxScope, number>>;
+}) {
+  // 4 expandable sections (Fin para servicio / Inbox para el equipo / Compañeros de equipo / Vistas)
+  // — same expand/collapse pattern as the Fin AI Agent sidebar.
+  const [openFin, setOpenFin] = useState(true);
+  const [openTeamInbox, setOpenTeamInbox] = useState(false);
+  const [openTeammates, setOpenTeammates] = useState(false);
+  const [openVistas, setOpenVistas] = useState(true);
+  // Reusable inline-SVG chevron — guaranteed right→down rotation regardless of asset.
+  // Closed: points right `>` (no rotation). Open: rotate-90 → points down `v`.
+  const Chevron = ({ open }: { open: boolean }) => (
+    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? 'rotate-90' : ''}`}>
+      <path d="M6 4l4 4-4 4z"/>
+    </svg>
+  );
   return (
     <div className="flex flex-col h-full w-[236px] bg-[#f8f8f7] border-r border-[#e9eae6] flex-shrink-0 overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
         <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Inbox</span>
         <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
-          <img src={ICON_PLUS} alt="+" className="w-4 h-4" />
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto pl-3 pr-0 pb-4">
         <div className="flex flex-col gap-0.5">
-          <SidebarNavItem icon={ICON_SEARCH2} label="Buscar" active={active === 'search'} onClick={() => setActive('search')} />
-          <SidebarNavItem icon={AVATAR_ME} label="Tu bandeja de entrada" count={4} active={active === 'inbox'} onClick={() => setActive('inbox')} />
-          <SidebarNavItem icon={ICON_MENTION} label="Menciones" count={0} active={active === 'mentions'} onClick={() => setActive('mentions')} />
-          <SidebarNavItem icon={ICON_CREATED} label="Creado por ti" count={0} active={active === 'created'} onClick={() => setActive('created')} />
-          <SidebarNavItem icon={ICON_ALL} label="Todo" count={4} active={active === 'all'} onClick={() => setActive('all')} />
-          <SidebarNavItem icon={ICON_UNASSIGNED} label="Sin asignar" count={0} active={active === 'unassigned'} onClick={() => setActive('unassigned')} />
-          <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" count={0} active={active === 'spam'} onClick={() => setActive('spam')} />
-          <SidebarNavItem icon={ICON_DASHBOARD} label="Tablero" active={active === 'dashboard'} onClick={() => setActive('dashboard')} />
+          <SidebarNavItem icon={ICON_SEARCH2} label="Buscar" active={active === 'search'} onClick={() => onScopeChange('search')} />
+          <SidebarNavItem icon={AVATAR_ME} label="Tu bandeja de entrada" count={counts.inbox ?? 0} active={active === 'inbox'} onClick={() => onScopeChange('inbox')} />
+          <SidebarNavItem icon={ICON_MENTION} label="Menciones" count={counts.mentions ?? 0} active={active === 'mentions'} onClick={() => onScopeChange('mentions')} />
+          <SidebarNavItem icon={ICON_CREATED} label="Creado por ti" count={counts.created ?? 0} active={active === 'created'} onClick={() => onScopeChange('created')} />
+          <SidebarNavItem icon={ICON_ALL} label="Todo" count={counts.all ?? 0} active={active === 'all'} onClick={() => onScopeChange('all')} />
+          <SidebarNavItem icon={ICON_UNASSIGNED} label="Sin asignar" count={counts.unassigned ?? 0} active={active === 'unassigned'} onClick={() => onScopeChange('unassigned')} />
+          <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" count={counts.spam ?? 0} active={active === 'spam'} onClick={() => onScopeChange('spam')} />
+          <SidebarNavItem icon={ICON_DASHBOARD} label="Tablero" active={active === 'dashboard'} onClick={() => onScopeChange('dashboard')} />
         </div>
 
         <div className="mt-3">
-          <div className="flex items-center justify-between h-8 px-3 cursor-pointer">
+          <button onClick={() => setOpenFin(o => !o)} className="w-full flex items-center justify-between h-8 px-3 cursor-pointer hover:bg-[#ededea]/40 rounded-[6px]">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin para servicio</span>
             <div className="flex items-center gap-1">
-              <button className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)]">
-                <img src={ICON_PLUS} alt="+" className="w-4 h-4" />
-              </button>
-              <button className="w-5 h-4 flex items-center justify-center">
-                <img src={ICON_CHEVRON} alt="" className="w-4 h-4 rotate-90" />
-              </button>
+              <span onClick={(e) => e.stopPropagation()} className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              </span>
+              <span className="w-5 h-4 flex items-center justify-center"><Chevron open={openFin} /></span>
             </div>
-          </div>
-          <div className="flex flex-col gap-0.5 pl-1">
-            <SidebarNavItem icon={ICON_FIN_SVC} label="Todas las conversaciones" active={active === 'fin-all'} onClick={() => setActive('fin-all')} />
-            <SidebarNavItem icon={ICON_RESOLVED} label="Resuelto" active={active === 'fin-resolved'} onClick={() => setActive('fin-resolved')} />
-            <SidebarNavItem icon={ICON_ESCALATED} label="Escalado y transferencia" active={active === 'fin-escalated'} onClick={() => setActive('fin-escalated')} />
-            <SidebarNavItem icon={ICON_PENDING} label="Pendiente" active={active === 'fin-pending'} onClick={() => setActive('fin-pending')} />
-            <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" active={active === 'fin-spam'} onClick={() => setActive('fin-spam')} />
-          </div>
+          </button>
+          {openFin && (
+            <div className="flex flex-col gap-0.5 pl-1 mt-0.5">
+              <SidebarNavItem icon={ICON_FIN_SVC} label="Todas las conversaciones" count={counts['fin-all'] ?? 0} active={active === 'fin-all'} onClick={() => onScopeChange('fin-all')} />
+              <SidebarNavItem icon={ICON_RESOLVED} label="Resuelto" count={counts['fin-resolved'] ?? 0} active={active === 'fin-resolved'} onClick={() => onScopeChange('fin-resolved')} />
+              <SidebarNavItem icon={ICON_ESCALATED} label="Escalado y transferencia" count={counts['fin-escalated'] ?? 0} active={active === 'fin-escalated'} onClick={() => onScopeChange('fin-escalated')} />
+              <SidebarNavItem icon={ICON_PENDING} label="Pendiente" count={counts['fin-pending'] ?? 0} active={active === 'fin-pending'} onClick={() => onScopeChange('fin-pending')} />
+              <SidebarNavItem icon={ICON_SPAM} label="Correo no deseado" count={counts['fin-spam'] ?? 0} active={active === 'fin-spam'} onClick={() => onScopeChange('fin-spam')} />
+            </div>
+          )}
         </div>
 
         <div className="mt-3">
-          <div className="flex items-center justify-between h-8 px-3 cursor-pointer group">
+          <button onClick={() => setOpenTeamInbox(o => !o)} className="w-full flex items-center justify-between h-8 px-3 cursor-pointer hover:bg-[#ededea]/40 rounded-[6px] group">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Inbox para el equipo</span>
             <div className="flex items-center gap-1">
-              <button className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7]">
-                <img src={ICON_PLUS} alt="+" className="w-4 h-4" />
-              </button>
-              <button className="w-5 h-4 flex items-center justify-center opacity-20">
-                <img src={ICON_CHEVRON} alt="" className="w-4 h-4 rotate-90" />
-              </button>
+              <span onClick={(e) => e.stopPropagation()} className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              </span>
+              <span className="w-5 h-4 flex items-center justify-center"><Chevron open={openTeamInbox} /></span>
             </div>
-          </div>
+          </button>
+          {openTeamInbox && (
+            <div className="px-3 py-2 pl-4 mt-0.5 text-[12.5px] text-[#646462] italic">Aún no hay inboxes de equipo.</div>
+          )}
         </div>
 
         <div className="mt-1">
-          <div className="flex items-center justify-between h-8 px-3 cursor-pointer group">
+          <button onClick={() => setOpenTeammates(o => !o)} className="w-full flex items-center justify-between h-8 px-3 cursor-pointer hover:bg-[#ededea]/40 rounded-[6px] group">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Compañeros de equipo</span>
             <div className="flex items-center gap-1">
-              <button className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7]">
-                <img src={ICON_PLUS} alt="+" className="w-4 h-4" />
-              </button>
-              <button className="w-5 h-4 flex items-center justify-center opacity-20">
-                <img src={ICON_CHEVRON} alt="" className="w-4 h-4 rotate-90" />
-              </button>
+              <span onClick={(e) => e.stopPropagation()} className="w-6 h-6 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.15)] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              </span>
+              <span className="w-5 h-4 flex items-center justify-center"><Chevron open={openTeammates} /></span>
             </div>
-          </div>
+          </button>
+          {openTeammates && (
+            <div className="px-3 py-2 pl-4 mt-0.5 text-[12.5px] text-[#646462] italic">Aún no hay compañeros conectados.</div>
+          )}
         </div>
 
         <div className="mt-1">
-          <div className="flex items-center justify-between h-8 px-3 cursor-pointer">
+          <button onClick={() => setOpenVistas(o => !o)} className="w-full flex items-center justify-between h-8 px-3 cursor-pointer hover:bg-[#ededea]/40 rounded-[6px]">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Vistas</span>
-            <button className="w-5 h-4 flex items-center justify-center">
-              <img src={ICON_CHEVRON} alt="" className="w-4 h-4 rotate-90" />
-            </button>
-          </div>
-          <div className="flex flex-col gap-0.5 pl-1">
-            <SidebarNavItem icon={ICON_MESSENGER} label="Messenger" count={1} active={active === 'v-messenger'} onClick={() => setActive('v-messenger')} />
-            <SidebarNavItem icon={ICON_EMAIL2} label="Email" count={1} active={active === 'v-email'} onClick={() => setActive('v-email')} />
-            <SidebarNavItem icon={ICON_WHATSAPP2} label="WhatsApp & Social" count={1} active={active === 'v-whatsapp'} onClick={() => setActive('v-whatsapp')} />
-            <SidebarNavItem icon={ICON_PHONE2} label="Phone & SMS" count={1} active={active === 'v-phone'} onClick={() => setActive('v-phone')} />
-            <SidebarNavItem icon={ICON_TICKETS} label="Tickets" count={0} active={active === 'v-tickets'} onClick={() => setActive('v-tickets')} />
-          </div>
+            <span className="w-5 h-4 flex items-center justify-center"><Chevron open={openVistas} /></span>
+          </button>
+          {openVistas && (
+            <div className="flex flex-col gap-0.5 pl-1 mt-0.5">
+              <SidebarNavItem icon={ICON_MESSENGER} label="Messenger" count={counts['v-messenger'] ?? 0} active={active === 'v-messenger'} onClick={() => onScopeChange('v-messenger')} />
+              <SidebarNavItem icon={ICON_EMAIL2} label="Email" count={counts['v-email'] ?? 0} active={active === 'v-email'} onClick={() => onScopeChange('v-email')} />
+              <SidebarNavItem icon={ICON_WHATSAPP2} label="WhatsApp & Social" count={counts['v-whatsapp'] ?? 0} active={active === 'v-whatsapp'} onClick={() => onScopeChange('v-whatsapp')} />
+              <SidebarNavItem icon={ICON_PHONE2} label="Phone & SMS" count={counts['v-phone'] ?? 0} active={active === 'v-phone'} onClick={() => onScopeChange('v-phone')} />
+              <SidebarNavItem icon={ICON_TICKETS} label="Tickets" count={counts['v-tickets'] ?? 0} active={active === 'v-tickets'} onClick={() => onScopeChange('v-tickets')} />
+            </div>
+          )}
         </div>
 
         <div className="mt-4 border-t border-[#e9eae6] pt-2">
@@ -327,13 +672,197 @@ function InboxSidebar() {
   );
 }
 
-type Conversation = { id: string; channel: string; preview: string; time: string; avatarColor: string; avatarLetter: string; active?: boolean };
+type Conversation = {
+  id: string;
+  channel: string;
+  preview: string;
+  time: string;
+  avatarColor: string;
+  avatarLetter: string;
+  active?: boolean;
+  customerName?: string;
+  customerEmail?: string;
+  company?: string;
+  status?: string;
+  priority?: string;
+  riskLevel?: string;
+  assignee?: string;
+  team?: string;
+  caseNumber?: string;
+  tags?: string[];
+  orderId?: string;
+  sourceChannel?: string;
+  aiSummary?: string;
+  raw?: any;
+};
 const conversations: Conversation[] = [
   { id: "1", channel: "Messenger · [Demo]", preview: "Install Messenger", time: "4 min", avatarColor: "#9ec5fa", avatarLetter: "M", active: true },
   { id: "2", channel: "Email · [Demo]", preview: "This is a demo email. It", time: "4 min", avatarColor: "#85e0d9", avatarLetter: "E" },
   { id: "3", channel: "WhatsApp · [Demo]", preview: "Set up WhatsApp or so", time: "4 min", avatarColor: "#61d65c", avatarLetter: "W" },
   { id: "4", channel: "Phone · [Demo]", preview: "Set up phone or SMS", time: "4 min", avatarColor: "#85e0d9", avatarLetter: "P" },
 ];
+
+function safeArray(value: any): string[] {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean).map(String);
+    } catch {
+      return value ? [value] : [];
+    }
+  }
+  return [];
+}
+
+function titleCase(value?: string | null) {
+  return (value || 'Sin dato')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function relativeTime(value?: string | null) {
+  if (!value) return 'Ahora';
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return 'Ahora';
+  const diff = Date.now() - time;
+  const mins = Math.max(0, Math.floor(diff / 60000));
+  if (mins < 1) return 'Ahora';
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} h`;
+  return `${Math.floor(hours / 24)} d`;
+}
+
+function channelIconLetter(channel?: string | null) {
+  const key = (channel || '').toLowerCase();
+  if (key.includes('email')) return 'E';
+  if (key.includes('whatsapp')) return 'W';
+  if (key.includes('phone') || key.includes('sms')) return 'P';
+  if (key.includes('web') || key.includes('messenger')) return 'M';
+  return 'C';
+}
+
+function channelColor(channel?: string | null) {
+  const key = (channel || '').toLowerCase();
+  if (key.includes('email')) return '#85e0d9';
+  if (key.includes('whatsapp')) return '#61d65c';
+  if (key.includes('phone') || key.includes('sms')) return '#f6d365';
+  if (key.includes('web') || key.includes('messenger')) return '#9ec5fa';
+  return '#e7e2fd';
+}
+
+function mapCaseToPrototypeConversation(c: any): Conversation {
+  const channel = c.sourceChannel || c.source_channel || c.channel_context?.channel || c.channel || 'case';
+  const customerName = c.customerName || c.customer_name || c.customer?.name || 'Visitante anonimo';
+  const orderIds = safeArray(c.orderIds || c.order_ids);
+  const preview = c.latestMessagePreview
+    || c.latest_message_preview
+    || c.aiRecommendedAction
+    || c.ai_recommended_action
+    || c.aiDiagnosis
+    || c.ai_diagnosis
+    || c.type
+    || 'Caso sin ultimo mensaje';
+  return {
+    id: String(c.id),
+    channel: `${titleCase(channel)} · ${customerName}`,
+    preview,
+    time: relativeTime(c.lastActivityAt || c.last_activity_at || c.updatedAt || c.updated_at || c.createdAt || c.created_at),
+    avatarColor: channelColor(channel),
+    avatarLetter: channelIconLetter(channel),
+    customerName,
+    customerEmail: c.customerEmail || c.customer_email || c.customer?.email,
+    company: c.company || c.customerCompany || c.customer_company,
+    status: c.status,
+    priority: c.priority,
+    riskLevel: c.riskLevel || c.risk_level,
+    assignee: c.assignedUserName || c.assigned_user_name,
+    team: c.assignedTeamName || c.assigned_team_name,
+    caseNumber: c.caseNumber || c.case_number,
+    tags: safeArray(c.tags),
+    orderId: orderIds[0],
+    sourceChannel: channel,
+    aiSummary: c.aiDiagnosis || c.ai_diagnosis || c.aiRecommendedAction || c.ai_recommended_action,
+    raw: c,
+  };
+}
+
+function isAssignedToMe(conv: Conversation) {
+  const raw = conv.raw || {};
+  return Boolean(raw.assigned_user_id || conv.assignee);
+}
+
+function isSpamConversation(conv: Conversation) {
+  const haystack = [conv.status, conv.sourceChannel, conv.preview, ...(conv.tags || [])].join(' ').toLowerCase();
+  return haystack.includes('spam') || haystack.includes('correo no deseado');
+}
+
+function matchesInboxScope(conv: Conversation, scope: InboxScope) {
+  const channel = (conv.sourceChannel || conv.channel || '').toLowerCase();
+  const raw = conv.raw || {};
+  const tags = (conv.tags || []).join(' ').toLowerCase();
+  switch (scope) {
+    case 'search':
+    case 'all':
+    case 'dashboard':
+    case 'fin-all':
+      return true;
+    case 'inbox':
+      return isAssignedToMe(conv) && !isSpamConversation(conv);
+    case 'mentions':
+      return tags.includes('mention') || tags.includes('mencion') || String(raw.mentions || '').length > 0;
+    case 'created':
+      return Boolean(raw.created_by_user_id || raw.createdByUserId || raw.created_by || raw.createdBy);
+    case 'unassigned':
+      return !raw.assigned_user_id && !conv.assignee;
+    case 'spam':
+    case 'fin-spam':
+      return isSpamConversation(conv);
+    case 'fin-resolved':
+      return ['resolved', 'closed'].includes(String(conv.status || '').toLowerCase());
+    case 'fin-escalated':
+      return String(conv.status || '').toLowerCase() === 'escalated';
+    case 'fin-pending':
+      return ['waiting', 'pending', 'snoozed'].includes(String(conv.status || '').toLowerCase());
+    case 'v-messenger':
+      return channel.includes('messenger') || channel.includes('web') || channel.includes('chat');
+    case 'v-email':
+      return channel.includes('email');
+    case 'v-whatsapp':
+      return channel.includes('whatsapp') || channel.includes('social');
+    case 'v-phone':
+      return channel.includes('phone') || channel.includes('sms');
+    case 'v-tickets':
+      return channel.includes('ticket') || String(conv.raw?.type || '').toLowerCase().includes('ticket');
+    default:
+      return true;
+  }
+}
+
+function inboxScopeTitle(scope: InboxScope) {
+  const titles: Record<InboxScope, string> = {
+    search: 'Buscar',
+    inbox: 'Tu bandeja de entrada',
+    mentions: 'Menciones',
+    created: 'Creado por ti',
+    all: 'Todo',
+    unassigned: 'Sin asignar',
+    spam: 'Correo no deseado',
+    dashboard: 'Tablero',
+    'fin-all': 'Todas las conversaciones',
+    'fin-resolved': 'Resuelto',
+    'fin-escalated': 'Escalado y transferencia',
+    'fin-pending': 'Pendiente',
+    'fin-spam': 'Correo no deseado',
+    'v-messenger': 'Messenger',
+    'v-email': 'Email',
+    'v-whatsapp': 'WhatsApp & Social',
+    'v-phone': 'Phone & SMS',
+    'v-tickets': 'Tickets',
+  };
+  return titles[scope];
+}
 
 function ConversationCard({ conv, isSelected, onSelect }: { conv: Conversation; isSelected: boolean; onSelect: () => void }) {
   return (
@@ -361,7 +890,24 @@ function ConversationCard({ conv, isSelected, onSelect }: { conv: Conversation; 
   );
 }
 
-function ConversationList({ selectedId, onSelect }: { selectedId: string; onSelect: (id: string) => void }) {
+function ConversationList({
+  selectedId,
+  onSelect,
+  items,
+  loading,
+  error,
+  title,
+  scope,
+}: {
+  selectedId: string;
+  onSelect: (id: string) => void;
+  items: Conversation[];
+  loading?: boolean;
+  error?: string | null;
+  title: string;
+  scope: InboxScope;
+}) {
+  const openCount = items.filter(conv => conv.status !== 'closed' && conv.status !== 'resolved').length;
   return (
     <div className="flex flex-col h-full w-[271px] border-l border-[#e9eae6] bg-[#f8f8f7] flex-shrink-0">
       <div className="flex items-center justify-between px-4 py-4 h-16 sticky top-0">
@@ -369,7 +915,7 @@ function ConversationList({ selectedId, onSelect }: { selectedId: string; onSele
           <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7]">
             <img src={AVATAR_ME} alt="" className="absolute inset-0 w-full h-full object-cover" />
           </div>
-          <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Hector Vidal Sanchez</span>
+          <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">{title}</span>
         </div>
         <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
           <img src={ICON_SEARCH2} alt="" className="w-4 h-4" />
@@ -378,7 +924,7 @@ function ConversationList({ selectedId, onSelect }: { selectedId: string; onSele
 
       <div className="flex items-center justify-between px-3 py-2 flex-shrink-0">
         <button className="bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] px-[9px] py-[5px] rounded-full">
-          4 Abierta
+          {loading ? 'Cargando...' : `${openCount} Abierta`}
         </button>
         <div className="flex items-center gap-1">
           <button className="bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] px-[9px] py-[5px] rounded-full">
@@ -391,7 +937,32 @@ function ConversationList({ selectedId, onSelect }: { selectedId: string; onSele
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-16 flex flex-col gap-0">
-        {conversations.map((conv, i) => (
+        {scope === 'dashboard' && (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {[
+              ['Abiertas', openCount],
+              ['Sin asignar', items.filter(conv => !conv.assignee && !conv.raw?.assigned_user_id).length],
+              ['Alto riesgo', items.filter(conv => ['high', 'critical'].includes(String(conv.riskLevel || '').toLowerCase())).length],
+              ['Escaladas', items.filter(conv => String(conv.status || '').toLowerCase() === 'escalated').length],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl bg-white border border-[#e9eae6] px-3 py-2 shadow-[0px_1px_2px_rgba(20,20,20,0.08)]">
+                <p className="text-[11px] text-[#646462]">{label}</p>
+                <p className="text-[20px] font-semibold text-[#1a1a1a]">{value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {error && (
+          <div className="text-[12.5px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2 mb-2">
+            {error}
+          </div>
+        )}
+        {!loading && items.length === 0 && !error && (
+          <div className="text-[13px] text-[#646462] px-3 py-6 text-center">
+            No hay conversaciones para mostrar.
+          </div>
+        )}
+        {items.map((conv, i) => (
           <div key={conv.id}>
             {i > 0 && <div className="flex justify-center py-0.5"><div className="w-[222px] h-[1px] bg-[#f8f8f7]" /></div>}
             <ConversationCard conv={conv} isSelected={conv.id === selectedId} onSelect={() => onSelect(conv.id)} />
@@ -408,11 +979,46 @@ function ConversationList({ selectedId, onSelect }: { selectedId: string; onSele
 }
 
 type Message = { id: string; from: "user" | "agent" | "bot"; text: string; time: string; senderName?: string };
+type ComposerAttachment = { id: string; name: string; size: number; type: string; dataUrl?: string; file: File };
+const PROTOTYPE_COMMON_EMOJIS = ['😊','😄','😂','😍','🤔','😅','😭','😤','👍','🙏','🎉','✅','🚚','💳','📦','⚠️','❤️','🔥'];
 const messages: Message[] = [
   { id: "1", from: "bot", text: "Hola, soy Fin, el agente de IA de Intercom. Puedo responder preguntas sobre productos, precios, y más. ¿En qué puedo ayudarte hoy?", time: "hace 4 min", senderName: "Fin" },
   { id: "2", from: "user", text: "Install Messenger", time: "hace 4 min" },
   { id: "3", from: "bot", text: "Para instalar el Messenger de Intercom en tu sitio web, ve a Configuración > Messenger > Instalar y sigue las instrucciones paso a paso. Si necesitas ayuda adicional, puedo conectarte con un agente.", time: "hace 4 min", senderName: "Fin" },
 ];
+
+function getInboxLatestDraft(inboxView: any) {
+  return inboxView?.latestDraft || inboxView?.latest_draft || inboxView?.latestDraftReply || null;
+}
+
+function getInboxInternalNotes(inboxView: any) {
+  return inboxView?.internalNotes || inboxView?.internal_notes || [];
+}
+
+function getInboxMessages(inboxView: any) {
+  return Array.isArray(inboxView?.messages) ? inboxView.messages : [];
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function normalizePrototypeMessage(message: any, index: number): Message {
+  const direction = message.direction || message.role || message.from || message.senderType || message.sender_type;
+  const text = message.content || message.text || message.body || message.message || '';
+  const key = String(direction).toLowerCase();
+  const isCustomer = ['customer', 'user', 'inbound'].includes(key);
+  const isAi = ['ai', 'assistant', 'bot', 'fin'].includes(key);
+  return {
+    id: String(message.id || `msg-${index}`),
+    from: isCustomer ? 'user' : isAi ? 'bot' : 'agent',
+    text,
+    time: relativeTime(message.createdAt || message.created_at || message.time || message.timestamp),
+    senderName: message.senderName || message.sender_name || (isAi ? 'Fin' : isCustomer ? undefined : 'Equipo'),
+  };
+}
 
 function ChatMessage({ msg }: { msg: Message }) {
   const isUser = msg.from === "user";
@@ -432,43 +1038,256 @@ function ChatMessage({ msg }: { msg: Message }) {
   );
 }
 
-function ConversationPanel({ selectedConv }: { selectedConv: Conversation }) {
+function PrototypeMergeModal({
+  sourceId,
+  onClose,
+  onMerged,
+  onAction,
+}: {
+  sourceId: string;
+  onClose: () => void;
+  onMerged: () => void;
+  onAction: (message: string, type?: 'success' | 'error') => void;
+}) {
+  const [targetId, setTargetId] = useState('');
+  const [merging, setMerging] = useState(false);
+
+  async function doMerge() {
+    const id = targetId.trim();
+    if (!id) return;
+    setMerging(true);
+    try {
+      await casesApi.merge(id, sourceId);
+      onAction('Casos fusionados');
+      onMerged();
+      onClose();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo fusionar el caso', 'error');
+    } finally {
+      setMerging(false);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div className="w-[360px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5" onClick={event => event.stopPropagation()}>
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Fusionar conversación</h3>
+        <p className="text-[13px] text-[#646462] mb-4">Introduce el ID del caso destino. El caso actual se fusionará dentro de ese caso.</p>
+        <input
+          value={targetId}
+          onChange={event => setTargetId(event.target.value)}
+          placeholder="case_001..."
+          className="w-full h-10 rounded-xl border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+        />
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a]">Cancelar</button>
+          <button onClick={doMerge} disabled={!targetId.trim() || merging} className="h-8 px-4 rounded-full bg-[#222] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">
+            {merging ? 'Fusionando...' : 'Fusionar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConversationPanel({
+  selectedConv,
+  inboxView,
+  onRefresh,
+  onAction,
+}: {
+  selectedConv: Conversation;
+  inboxView: any;
+  onRefresh: () => void;
+  onAction: (message: string, type?: 'success' | 'error') => void;
+}) {
   const [replyTab, setReplyTab] = useState<'responder' | 'nota' | 'datosIA'>('responder');
   const [replyText, setReplyText] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [starred, setStarred] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const latestDraft = getInboxLatestDraft(inboxView);
+  // Real backend messages only — no mock fallback. Empty thread = empty UI.
+  const displayMessages = getInboxMessages(inboxView).map(normalizePrototypeMessage);
+
+  useEffect(() => {
+    setReplyText(latestDraft?.content || '');
+    setReplyTab('responder');
+    setAttachments([]);
+    setShowEmojiPicker(false);
+  }, [selectedConv.id, latestDraft?.id, latestDraft?.content]);
+
+  function handleFiles(files: FileList | null) {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = event => {
+        setAttachments(current => [...current, {
+          id: `att-${Date.now()}-${Math.random()}`,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          dataUrl: typeof event.target?.result === 'string' ? event.target.result : undefined,
+          file,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function insertAtCursor(value: string) {
+    const el = textareaRef.current;
+    if (!el) {
+      setReplyText(current => current + value);
+      return;
+    }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    setReplyText(current => current.slice(0, start) + value + current.slice(end));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + value.length, start + value.length);
+    });
+  }
+
+  function applyComposerFormat(kind: 'bold' | 'italic' | 'link') {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = replyText.slice(start, end) || (kind === 'link' ? 'texto' : 'texto');
+    const wrapped = kind === 'bold' ? `**${selected}**` : kind === 'italic' ? `_${selected}_` : `[${selected}](https://)`;
+    setReplyText(replyText.slice(0, start) + wrapped + replyText.slice(end));
+  }
+
+  async function updateStatus(status: string, label: string) {
+    try {
+      await casesApi.updateStatus(selectedConv.id, status, `Prototype inbox: ${label}`, 'system');
+      onAction(label);
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo actualizar el caso', 'error');
+    } finally {
+      setMenuOpen(false);
+    }
+  }
+
+  async function resolveCase() {
+    try {
+      await casesApi.resolve(selectedConv.id);
+      onAction('Caso resuelto');
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo resolver el caso', 'error');
+    }
+  }
+
+  async function submitReply() {
+    const content = replyText.trim();
+    if (!content && attachments.length === 0) return;
+    const attachmentText = attachments.length
+      ? `\n\n${attachments.map(file => `[${file.name} - ${formatBytes(file.size)}]`).join('\n')}`
+      : '';
+    const finalContent = `${content}${attachmentText}`.trim();
+    try {
+      if (replyTab === 'nota') {
+        await casesApi.addInternalNote(selectedConv.id, finalContent);
+        onAction('Nota interna añadida');
+      } else {
+        await casesApi.reply(selectedConv.id, finalContent, latestDraft?.id);
+        onAction('Respuesta enviada');
+      }
+      setReplyText('');
+      setAttachments([]);
+      onRefresh();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo enviar', 'error');
+    }
+  }
 
   const channelLabel = selectedConv.channel.split('·')[0].trim();
+
+  async function snoozeCase() {
+    await updateStatus('snoozed', 'Caso pospuesto');
+  }
 
   return (
     <div className="flex flex-col h-full flex-1 min-w-[400px] bg-white rounded-2xl shadow-[0px_1px_2px_rgba(20,20,20,0.15)] overflow-hidden">
       <div className="flex flex-col gap-4 pt-4 flex-shrink-0">
-        <div className="flex items-center px-6">
+        <div className="flex items-center px-6 relative">
           <div className="flex-1 min-w-0">
             <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a] truncate">{channelLabel}</h2>
           </div>
           <div className="flex items-center gap-1">
+            {/* Star toggle */}
+            <button onClick={() => setStarred(s => !s)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className={`w-4 h-4 ${starred ? 'fill-[#f59e0b]' : 'fill-none stroke-[#646462]'}`} strokeWidth="1.5"><path d="M8 1l2.2 4.5 4.8.7-3.5 3.4.8 4.9L8 12.2 3.7 14.5l.8-4.9L1 6.2l4.8-.7L8 1z"/></svg>
+            </button>
+            {/* Menu trigger */}
+            <button onClick={() => setMenuOpen(o => !o)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
+            </button>
             <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
               <img src={ICON_SEARCH2} alt="" className="w-4 h-4" />
+            </button>
+            <button onClick={() => setDarkMode(d => !d)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]">{darkMode ? <path d="M11 1c.5 1 .5 2.5 0 3.5s-2 2-3.5 2c-.5 0-1 0-1.5-.2.7 2.4 3 4.2 5.5 4.2 3 0 5.5-2.5 5.5-5.5 0-2.5-1.8-4.8-4-5.5-.7-.1-1.3-.1-2 0z"/> : <><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3" stroke="#646462" strokeWidth="1"/></>}</svg>
             </button>
             <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#e7e2fd] border border-[#c6c9c0] hover:bg-[#d4cffb]">
               <img src={ICON_FIN} alt="" className="w-4 h-4" />
             </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
-              <img src={ICON_KNOWLEDGE} alt="" className="w-4 h-4" />
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
-              <img src={ICON_REPORTS} alt="" className="w-4 h-4" />
-            </button>
-            <button className="h-8 px-4 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] flex items-center gap-1">
+            <button onClick={resolveCase} className="h-8 px-4 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] flex items-center gap-1">
               <img src={ICON_RESOLVED} alt="" className="w-4 h-4 invert" />
               <span>Resolver</span>
             </button>
+            <button onClick={snoozeCase} className="h-8 px-3 bg-[#f8f8f7] text-[#1a1a1a] text-[13px] font-semibold rounded-full hover:bg-[#e9eae6]">
+              Posponer
+            </button>
+            <button onClick={() => setShowMergeModal(true)} className="h-8 px-3 bg-[#f8f8f7] text-[#1a1a1a] text-[13px] font-semibold rounded-full hover:bg-[#e9eae6]">
+              Fusionar
+            </button>
           </div>
+          {/* Dropdown menu (1-124503) */}
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute top-12 right-[170px] z-20 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0px_4px_16px_rgba(20,20,20,0.12)] py-1.5 w-[300px]" data-node-id="1:124503">
+                {[
+                  { icon: '👥', label: 'Administrar participantes', shortcut: '' },
+                  { icon: '⇄', label: 'Fusionar con...', shortcut: 'Ctrl Shift M' },
+                  { icon: '✚', label: 'Nueva conversación', shortcut: '' },
+                  { icon: '↗', label: 'Exportar conversación como texto', shortcut: '' },
+                  { icon: '↗', label: 'Exportar conversación como PDF', shortcut: '' },
+                  { icon: '👁', label: 'Mostrar eventos de conversación', shortcut: 'Ctrl Shift E' },
+                ].map(item => (
+                  <button key={item.label} onClick={() => setMenuOpen(false)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#f3f3f1] text-left">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[14px] text-[#646462] w-4 text-center">{item.icon}</span>
+                      <span className="text-[13px] text-[#1a1a1a]">{item.label}</span>
+                    </div>
+                    {item.shortcut && <span className="text-[11px] text-[#646462]">{item.shortcut}</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
         <div className="h-[1px] bg-[#e9eae6]" />
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-4">
-        {messages.map((msg) => <ChatMessage key={msg.id} msg={msg} />)}
+        {displayMessages.length === 0 && (
+          <div className="text-center py-10 text-[13px] text-[#646462]">
+            No hay mensajes en este caso todavía. Escribe abajo para empezar la conversación.
+          </div>
+        )}
+        {displayMessages.map((msg) => <ChatMessage key={msg.id} msg={msg} />)}
         <div className="bg-[#f8f8f7] rounded-2xl p-4 mb-3">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-5 h-5 rounded-full bg-[#9ec5fa] flex items-center justify-center">
@@ -503,30 +1322,66 @@ function ConversationPanel({ selectedConv }: { selectedConv: Conversation }) {
           ) : (
             <div className={`border rounded-2xl overflow-hidden ${replyTab === 'nota' ? 'border-[#fde68a] bg-[#fffbeb]' : 'border-[#e9eae6]'}`}>
               <textarea
+                ref={textareaRef}
                 value={replyText}
                 onChange={e => setReplyText(e.target.value)}
-                placeholder={replyTab === 'nota' ? 'Escribe una nota interna…' : `Escribe un mensaje a ${selectedConv.avatarLetter}ector...`}
+                placeholder={replyTab === 'nota' ? 'Escribe una nota interna…' : `Escribe un mensaje a ${selectedConv.customerName || 'cliente'}…`}
                 className="w-full px-4 py-3 min-h-[80px] text-[14px] text-[#1a1a1a] bg-transparent resize-none focus:outline-none placeholder:text-[#646462]"
               />
-              <div className="flex items-center justify-between px-3 py-2 border-t border-[#e9eae6]">
-                <div className="flex items-center gap-1">
-                  {[ICON_FIN, ICON_KNOWLEDGE, ICON_REPORTS, ICON_OUTBOUND, ICON_CONTACTS].map((icon, i) => (
-                    <button key={i} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7]">
-                      <img src={icon} alt="" className="w-4 h-4" />
-                    </button>
+              {attachments.length > 0 && (
+                <div className="px-3 pb-2 flex flex-wrap gap-2">
+                  {attachments.map(att => (
+                    <div key={att.id} className="flex items-center gap-2 rounded-full bg-white border border-[#e9eae6] px-2 py-1 text-[12px] text-[#646462]">
+                      {att.dataUrl?.startsWith('data:image') ? (
+                        <img src={att.dataUrl} alt="" className="w-5 h-5 rounded object-cover" />
+                      ) : (
+                        <span>Adj.</span>
+                      )}
+                      <span className="max-w-[140px] truncate">{att.name}</span>
+                      <span>{formatBytes(att.size)}</span>
+                      <button onClick={() => setAttachments(current => current.filter(file => file.id !== att.id))} className="text-[#1a1a1a]">x</button>
+                    </div>
                   ))}
                 </div>
+              )}
+              <div className="flex items-center justify-between px-3 py-2 border-t border-[#e9eae6]">
+                <div className="flex items-center gap-1">
+                  <button onClick={() => applyComposerFormat('bold')} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[13px] font-bold">B</button>
+                  <button onClick={() => applyComposerFormat('italic')} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[13px] italic">I</button>
+                  <button onClick={() => applyComposerFormat('link')} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">Link</button>
+                  <button onClick={() => fileInputRef.current?.click()} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">+</button>
+                  <button onClick={() => setShowEmojiPicker(open => !open)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">:)</button>
+                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={event => handleFiles(event.target.files)} />
+                </div>
                 <button
-                  onClick={() => setReplyText('')}
-                  className="h-7 px-4 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444]"
+                  onClick={submitReply}
+                  disabled={!replyText.trim() && attachments.length === 0}
+                  className="h-7 px-4 bg-[#222] text-white text-[13px] font-semibold rounded-full hover:bg-[#444] disabled:bg-[#e9eae6] disabled:text-[#646462]"
                 >
                   Enviar
                 </button>
               </div>
+              {showEmojiPicker && (
+                <div className="px-3 pb-3 flex flex-wrap gap-1">
+                  {PROTOTYPE_COMMON_EMOJIS.map(emoji => (
+                    <button key={emoji} onClick={() => insertAtCursor(emoji)} className="w-7 h-7 rounded-lg bg-white hover:bg-[#f8f8f7] text-[14px]">
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+      {showMergeModal && (
+        <PrototypeMergeModal
+          sourceId={selectedConv.id}
+          onClose={() => setShowMergeModal(false)}
+          onMerged={onRefresh}
+          onAction={onAction}
+        />
+      )}
     </div>
   );
 }
@@ -554,15 +1409,53 @@ function DetailSection({ title, children }: { title: string; children: React.Rea
   );
 }
 
-function DetailsSidebar({ selectedConv }: { selectedConv: Conversation }) {
-  const [activeTab, setActiveTab] = useState<'detalles' | 'actividad' | 'conversaciones'>('detalles');
+type PrototypeCopilotMessage = { id: string; role: 'user' | 'assistant'; content: string; time: string };
 
-  const channelName = selectedConv.channel.split('·')[0].trim();
+function DetailsSidebar({
+  selectedConv,
+  inboxView,
+  copilotMessages,
+  onSendCopilot,
+  copilotLoading,
+}: {
+  selectedConv: Conversation;
+  inboxView: any;
+  copilotMessages: PrototypeCopilotMessage[];
+  onSendCopilot: (question: string) => void;
+  copilotLoading: boolean;
+}) {
+  const [activeTab, setActiveTab] = useState<'details' | 'copilot'>('details');
+  const [detailSubTab, setDetailSubTab] = useState<'detalles' | 'actividad' | 'conversaciones'>('detalles');
+  const [copilotText, setCopilotText] = useState('');
+
+  const channelName = titleCase(selectedConv.sourceChannel || selectedConv.channel.split('·')[0].trim());
+
+  const caseState = inboxView?.state || selectedConv.raw?.stateSnapshot || {};
+  const internalNotes = getInboxInternalNotes(inboxView);
+  const inboxMessages = getInboxMessages(inboxView);
+  const relatedCases = safeArray(caseState?.related?.linkedCases || caseState?.related?.linked_cases);
+  const operationalLinks = [
+    ...safeArray(caseState?.related?.orders).map((item: any) => ({ type: 'OMS', id: item.id || item.orderId || item.order_id || String(item) })),
+    ...safeArray(caseState?.related?.payments).map((item: any) => ({ type: 'PSP', id: item.id || item.paymentId || item.payment_id || String(item) })),
+    ...safeArray(caseState?.related?.returns).map((item: any) => ({ type: 'RMS', id: item.id || item.returnId || item.return_id || String(item) })),
+  ];
+  const activityItems = [
+    ...inboxMessages.map((message: any, index: number) => ({
+      id: `msg-${message.id || index}`,
+      time: relativeTime(message.createdAt || message.created_at || message.timestamp),
+      text: `${titleCase(message.direction || message.role || 'mensaje')}: ${(message.content || message.text || '').slice(0, 80) || 'Sin contenido'}`,
+    })),
+    ...internalNotes.map((note: any, index: number) => ({
+      id: `note-${note.id || index}`,
+      time: relativeTime(note.createdAt || note.created_at),
+      text: `Nota interna: ${(note.content || note.text || '').slice(0, 80) || 'Sin contenido'}`,
+    })),
+  ];
 
   return (
     <div className="flex flex-col h-full w-[346px] bg-white rounded-2xl shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] flex-shrink-0 overflow-hidden">
       <div className="flex items-center border-b border-[#e9eae6] px-4 flex-shrink-0">
-        {([['detalles', 'Detalles'], ['actividad', 'Actividad'], ['conversaciones', 'Conversaciones']] as const).map(([id, label]) => (
+        {([['details', 'Detalles'], ['copilot', 'Copilot']] as const).map(([id, label]) => (
           <button key={id} onClick={() => setActiveTab(id)}
             className={`text-[13px] h-10 px-2 mr-2 ${activeTab === id ? 'font-semibold text-[#1a1a1a] border-b-2 border-[#1a1a1a]' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>
             {label}
@@ -570,13 +1463,29 @@ function DetailsSidebar({ selectedConv }: { selectedConv: Conversation }) {
         ))}
       </div>
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'detalles' && <>
+        {activeTab === 'details' && (
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#e9eae6]">
+            {([['detalles', 'Detalles'], ['actividad', 'Actividad'], ['conversaciones', 'Conversaciones']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setDetailSubTab(id)}
+                className={`h-7 px-3 rounded-full text-[12.5px] font-semibold ${
+                  detailSubTab === id ? 'bg-[#1a1a1a] text-white' : 'bg-[#f8f8f7] text-[#646462] hover:text-[#1a1a1a]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {activeTab === 'details' && detailSubTab === 'detalles' && <>
           <DetailSection title="Detalles de la conversación">
-            <DetailRow label="Persona asignada" value="Hector Vidal Sanchez" />
-            <DetailRow label="Equipo asignado" value="Sin asignar" />
-            <DetailRow label="Estado" value="Abierta" />
+            <DetailRow label="Persona asignada" value={selectedConv.assignee || "Sin asignar"} />
+            <DetailRow label="Equipo asignado" value={selectedConv.team || "Sin asignar"} />
+            <DetailRow label="Estado" value={titleCase(selectedConv.status)} />
             <DetailRow label="Canal" value={channelName} />
-            <DetailRow label="Prioridad" value="Sin prioridad" />
+            <DetailRow label="Prioridad" value={titleCase(selectedConv.priority)} />
+            <DetailRow label="Etiquetas reales" value={selectedConv.tags?.join(', ') || "Sin etiquetas"} />
             <DetailRow label="Etiquetas" value="Añadir etiqueta..." />
           </DetailSection>
           <DetailSection title="Usuario">
@@ -589,20 +1498,42 @@ function DetailsSidebar({ selectedConv }: { selectedConv: Conversation }) {
                 <p className="text-[12px] text-[#646462]">Nunca visto antes</p>
               </div>
             </div>
-            <DetailRow label="Correo" value="Sin correo" />
+            <DetailRow label="Correo" value={selectedConv.customerEmail || "Sin correo"} />
             <DetailRow label="Localización" value="España" />
             <DetailRow label="Idioma" value="Español" />
             <DetailRow label="Zona horaria" value="Europe/Madrid" />
             <DetailRow label="Creado" value="Hace 4 minutos" />
           </DetailSection>
           <DetailSection title="Empresa">
-            <p className="text-[13px] text-[#646462] py-2">Sin empresa asociada</p>
+            <p className="text-[13px] text-[#646462] py-2">{selectedConv.company || 'Sin empresa asociada'}</p>
           </DetailSection>
           <DetailSection title="Atributos de conversación">
-            <DetailRow label="ID de conversación" value="215474178470870" />
-            <DetailRow label="Iniciada" value="Hace 4 min" />
+            <DetailRow label="ID de conversación" value={selectedConv.id} />
+            <DetailRow label="Iniciada" value={selectedConv.time} />
             <DetailRow label="Primer tiempo resp." value="—" />
             <DetailRow label="Tiempo de resolución" value="—" />
+          </DetailSection>
+          <DetailSection title="Notas internas">
+            <div className="py-2 flex flex-col gap-2">
+              {internalNotes.length === 0 && <p className="text-[13px] text-[#646462]">Sin notas internas.</p>}
+              {internalNotes.slice(0, 4).map((note: any, index: number) => (
+                <div key={note.id || index} className="rounded-xl bg-[#fffbeb] border border-[#fde68a] px-3 py-2">
+                  <p className="text-[13px] text-[#1a1a1a] leading-5">{note.content || note.text || 'Nota sin contenido'}</p>
+                  <p className="text-[11px] text-[#646462] mt-1">{relativeTime(note.createdAt || note.created_at)}</p>
+                </div>
+              ))}
+            </div>
+          </DetailSection>
+          <DetailSection title="Enlaces operativos">
+            <div className="py-2 flex flex-col gap-2">
+              {operationalLinks.length === 0 && <p className="text-[13px] text-[#646462]">Sin pedidos, pagos o devoluciones vinculadas.</p>}
+              {operationalLinks.map((link, index) => (
+                <div key={`${link.type}-${link.id}-${index}`} className="flex items-center justify-between rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2">
+                  <span className="text-[12px] font-semibold text-[#1a1a1a]">{link.type}</span>
+                  <span className="text-[12px] text-[#646462] truncate ml-2">{link.id}</span>
+                </div>
+              ))}
+            </div>
           </DetailSection>
           <DetailSection title="Actividad de Fin">
             <div className="py-2">
@@ -618,14 +1549,14 @@ function DetailsSidebar({ selectedConv }: { selectedConv: Conversation }) {
             </div>
           </DetailSection>
         </>}
-        {activeTab === 'actividad' && (
+        {activeTab === 'details' && detailSubTab === 'actividad' && (
           <div className="px-6 py-4 flex flex-col gap-3">
             <p className="text-[13px] font-semibold text-[#1a1a1a]">Actividad reciente</p>
-            {[
+            {(activityItems.length > 0 ? activityItems : [
               { time: 'Hace 4 min', text: 'Conversación iniciada por visitante anónimo' },
               { time: 'Hace 4 min', text: 'Fin respondió automáticamente' },
               { time: 'Hace 4 min', text: 'Fin cerró la conversación' },
-            ].map((item, i) => (
+            ]).map((item, i) => (
               <div key={i} className="flex items-start gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#3b59f6] mt-1.5 flex-shrink-0" />
                 <div>
@@ -636,10 +1567,62 @@ function DetailsSidebar({ selectedConv }: { selectedConv: Conversation }) {
             ))}
           </div>
         )}
-        {activeTab === 'conversaciones' && (
+        {activeTab === 'details' && detailSubTab === 'conversaciones' && (
           <div className="px-6 py-4">
             <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Otras conversaciones</p>
-            <p className="text-[13px] text-[#646462]">No hay otras conversaciones con este usuario.</p>
+            {relatedCases.length === 0 && <p className="text-[13px] text-[#646462]">No hay otras conversaciones con este usuario.</p>}
+            <div className="flex flex-col gap-2">
+              {relatedCases.map((related: any, index: number) => (
+                <div key={related.id || index} className="rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{related.title || related.subject || related.id || 'Caso relacionado'}</p>
+                  <p className="text-[12px] text-[#646462]">{titleCase(related.status || 'relacionado')}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeTab === 'copilot' && (
+          <div className="flex flex-col min-h-full">
+            <div className="px-5 py-4 border-b border-[#e9eae6]">
+              <p className="text-[13px] font-semibold text-[#1a1a1a]">Copilot del caso</p>
+              <p className="text-[12px] text-[#646462] mt-1">Pregunta sobre estado, riesgo, resumen o siguiente acción.</p>
+            </div>
+            <div className="flex-1 px-4 py-4 flex flex-col gap-3">
+              {copilotMessages.length === 0 && (
+                <div className="rounded-2xl bg-[#f8f8f7] border border-[#e9eae6] p-3 text-[13px] text-[#646462]">
+                  Prueba con: “resume este caso” o “qué debería hacer ahora”.
+                </div>
+              )}
+              {copilotMessages.map(msg => (
+                <div key={msg.id} className={`rounded-2xl px-3 py-2 text-[13px] leading-5 ${
+                  msg.role === 'user' ? 'bg-[#1a1a1a] text-white ml-8' : 'bg-[#f8f8f7] text-[#1a1a1a] mr-8'
+                }`}>
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  <p className={`mt-1 text-[10px] ${msg.role === 'user' ? 'text-white/70' : 'text-[#646462]'}`}>{msg.time}</p>
+                </div>
+              ))}
+              {copilotLoading && <p className="text-[12px] text-[#646462]">Copilot está pensando...</p>}
+            </div>
+            <div className="border-t border-[#e9eae6] p-3">
+              <textarea
+                value={copilotText}
+                onChange={event => setCopilotText(event.target.value)}
+                placeholder="Pregunta a Copilot..."
+                className="w-full min-h-[70px] rounded-xl border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+              />
+              <button
+                onClick={() => {
+                  const question = copilotText.trim();
+                  if (!question) return;
+                  onSendCopilot(question);
+                  setCopilotText('');
+                }}
+                disabled={!copilotText.trim() || copilotLoading}
+                className="mt-2 h-8 px-4 rounded-full bg-[#222] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
+              >
+                Enviar a Copilot
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -647,23 +1630,180 @@ function DetailsSidebar({ selectedConv }: { selectedConv: Conversation }) {
   );
 }
 
+// Read inbox-specific deep-link params from the URL once at mount.
+// Supports: ?scope=<InboxScope>  ?case=<caseId>  (?entityType=case is acknowledged
+// but currently only 'case' is wired to the inbox.)
+function readInitialInboxParams(): { scope: InboxScope; caseId: string } {
+  if (typeof window === 'undefined') return { scope: 'inbox', caseId: '' };
+  const sp = new URLSearchParams(window.location.search);
+  const scopeRaw = sp.get('scope') || '';
+  const knownScopes: InboxScope[] = ['inbox','mentions','created','all','unassigned','spam','dashboard','fin-all','fin-resolved','fin-escalated','fin-pending','fin-spam','v-messenger','v-email','v-whatsapp','v-phone','v-tickets'];
+  const scope = (knownScopes as string[]).includes(scopeRaw) ? (scopeRaw as InboxScope) : 'inbox';
+  return { scope, caseId: sp.get('case') || '' };
+}
+
 function InboxView() {
-  const [selectedConvId, setSelectedConvId] = useState('1');
-  const selectedConv = conversations.find(c => c.id === selectedConvId) ?? conversations[0];
+  const initialParams = readInitialInboxParams();
+  const [selectedConvId, setSelectedConvId] = useState(initialParams.caseId);
+  const [scope, setScope] = useState<InboxScope>(initialParams.scope);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [copilotByCaseId, setCopilotByCaseId] = useState<Record<string, PrototypeCopilotMessage[]>>({});
+  const [copilotLoading, setCopilotLoading] = useState(false);
+  const { data: apiCases, loading, error } = useApi(
+    () => casesApi.list(),
+    [refreshKey],
+    [],
+  );
+  // Real backend data only — no mock fallback. Empty list = empty UI.
+  const liveConversations = useMemo(
+    () => (Array.isArray(apiCases) ? apiCases.map(mapCaseToPrototypeConversation) : []),
+    [apiCases],
+  );
+  const scopedConversations = useMemo(
+    () => liveConversations.filter(conv => matchesInboxScope(conv, scope)),
+    [liveConversations, scope],
+  );
+  const counts = useMemo(() => {
+    const scopes: InboxScope[] = ['inbox', 'mentions', 'created', 'all', 'unassigned', 'spam', 'fin-all', 'fin-resolved', 'fin-escalated', 'fin-pending', 'fin-spam', 'v-messenger', 'v-email', 'v-whatsapp', 'v-phone', 'v-tickets'];
+    return scopes.reduce<Partial<Record<InboxScope, number>>>((acc, key) => {
+      acc[key] = liveConversations.filter(conv => matchesInboxScope(conv, key)).length;
+      return acc;
+    }, {});
+  }, [liveConversations]);
+  const selectedConv = scopedConversations.find(c => c.id === selectedConvId) ?? scopedConversations[0] ?? liveConversations[0];
+  const { data: inboxView } = useApi(
+    () => selectedConv?.id ? casesApi.inboxView(selectedConv.id) : Promise.resolve(null),
+    [selectedConv?.id, refreshKey],
+  );
+
+  useEffect(() => {
+    if (!selectedConvId && liveConversations[0]?.id) setSelectedConvId(liveConversations[0].id);
+  }, [selectedConvId, liveConversations]);
+
+  // Reflect scope + selected case in the URL so deep-links survive reloads
+  // and back/forward navigation. Only writes when something actually changed.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    let dirty = false;
+    if (url.searchParams.get('scope') !== scope) {
+      url.searchParams.set('scope', scope);
+      dirty = true;
+    }
+    const targetCase = selectedConv?.id || '';
+    if (targetCase && url.searchParams.get('case') !== targetCase) {
+      url.searchParams.set('case', targetCase);
+      dirty = true;
+    }
+    if (dirty) window.history.replaceState({}, '', url.toString());
+  }, [scope, selectedConv?.id]);
+
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    setToast({ message, type });
+    window.setTimeout(() => setToast(null), 2500);
+  }
+
+  function changeScope(next: InboxScope) {
+    setScope(next);
+    setSelectedConvId('');
+  }
+
+  async function sendCopilot(question: string) {
+    if (!selectedConv?.id || copilotLoading) return;
+    const caseId = selectedConv.id;
+    const userMsg: PrototypeCopilotMessage = {
+      id: `u-${Date.now()}`,
+      role: 'user',
+      content: question,
+      time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+    };
+    const history = (copilotByCaseId[caseId] || []).map(msg => ({ role: msg.role, content: msg.content }));
+    setCopilotByCaseId(state => ({ ...state, [caseId]: [...(state[caseId] || []), userMsg] }));
+    setCopilotLoading(true);
+    try {
+      const response = await aiApi.copilot(caseId, question, history);
+      const assistantMsg: PrototypeCopilotMessage = {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        content: response?.answer || response?.message || response?.content || 'No he podido generar una respuesta.',
+        time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+      };
+      setCopilotByCaseId(state => ({ ...state, [caseId]: [...(state[caseId] || []), assistantMsg] }));
+    } catch (err: any) {
+      setCopilotByCaseId(state => ({
+        ...state,
+        [caseId]: [...(state[caseId] || []), {
+          id: `e-${Date.now()}`,
+          role: 'assistant',
+          content: err?.message || 'Copilot no ha podido responder.',
+          time: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        }],
+      }));
+    } finally {
+      setCopilotLoading(false);
+    }
+  }
 
   return (
     <div className="flex flex-col flex-1 min-w-0 p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
-        <InboxSidebar />
+        <InboxSidebar active={scope} onScopeChange={changeScope} counts={counts} />
         <div className="relative h-full flex-shrink-0">
-          <ConversationList selectedId={selectedConvId} onSelect={setSelectedConvId} />
+          <ConversationList
+            selectedId={selectedConv?.id || selectedConvId}
+            onSelect={setSelectedConvId}
+            items={scope === 'dashboard' ? liveConversations : scopedConversations}
+            loading={loading}
+            error={error}
+            title={inboxScopeTitle(scope)}
+            scope={scope}
+          />
         </div>
         <div className="flex flex-1 min-w-0 gap-2">
-          <ConversationPanel selectedConv={selectedConv} />
-          <DetailsSidebar selectedConv={selectedConv} />
+          {selectedConv ? (
+            <>
+              <ConversationPanel
+                selectedConv={selectedConv}
+                inboxView={inboxView}
+                onRefresh={() => setRefreshKey(k => k + 1)}
+                onAction={showToast}
+              />
+              <DetailsSidebar
+                selectedConv={selectedConv}
+                inboxView={inboxView}
+                copilotMessages={copilotByCaseId[selectedConv.id] || []}
+                onSendCopilot={sendCopilot}
+                copilotLoading={copilotLoading}
+              />
+            </>
+          ) : (
+            <div className="flex flex-1 min-w-0 items-center justify-center bg-white rounded-2xl shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)]">
+              <div className="text-center max-w-[360px] px-6">
+                <div className="text-[40px] mb-2">📬</div>
+                <h2 className="text-[16px] font-semibold tracking-[-0.4px] text-[#1a1a1a] mb-1">
+                  {loading ? 'Cargando conversaciones…' : error ? 'No hemos podido cargar las conversaciones' : 'Sin conversación seleccionada'}
+                </h2>
+                <p className="text-[13px] text-[#646462] leading-5">
+                  {loading
+                    ? 'Conectando con el backend.'
+                    : error
+                      ? 'Revisa que el backend esté en marcha y vuelve a intentarlo.'
+                      : 'Selecciona una conversación de la lista para verla aquí.'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full text-[13px] font-semibold shadow-lg ${
+          toast.type === 'success' ? 'bg-[#222] text-white' : 'bg-red-600 text-white'
+        }`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
@@ -673,16 +1813,23 @@ function InboxView() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ContactsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const activeItem = view === 'allLeads' ? 'allLeads' : 'contacts';
+  // Local active state — solves the bug where 3 items all using itemView="contacts"
+  // were all highlighted at once. Each item has its own unique id; only one is active.
+  // The view-level navigation maps to: contacts | allLeads | conversations (3 screens),
+  // but the sidebar identifies items individually.
+  type ItemId = 'allUsers' | 'allLeads' | 'active' | 'new' | 'empresas' | 'conversaciones';
+  // Default: 'active' (matches the page header which says "Active") — fixes the sidebar/page mismatch.
+  const initialItem: ItemId = view === 'allLeads' ? 'allLeads' : 'active';
+  const [activeItem, setActiveItem] = useState<ItemId>(initialItem);
 
-  function SidebarItem({ label, count, itemView, opacity50Count = false }: {
-    label: string; count: number; itemView: View; opacity50Count?: boolean;
+  function SidebarItem({ id, label, count, itemView, opacity50Count = false }: {
+    id: ItemId; label: string; count: number; itemView: View; opacity50Count?: boolean;
   }) {
-    const isActive = activeItem === itemView;
+    const isActive = activeItem === id;
     return (
       <button
-        onClick={() => onNavigate(itemView)}
-        className={`flex items-center justify-between w-full px-2 py-[5px] rounded-[8px] ml-2 pl-2 ${
+        onClick={() => { setActiveItem(id); onNavigate(itemView); }}
+        className={`flex items-center justify-between w-full pl-3 pr-4 py-[5px] rounded-[8px] mx-2 ${
           isActive
             ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] border-l border-[#fa7938]"
             : "hover:bg-white/60 border-l border-[#e9eae6]"
@@ -695,7 +1842,7 @@ function ContactsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   }
 
   return (
-    <div className="flex flex-col h-full w-[230px] flex-shrink-0 bg-[#f3f3f1] pt-3 pb-3 px-2 gap-1">
+    <div className="flex flex-col h-full w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] pt-3 pb-3 px-2 gap-1">
       <div className="flex items-center justify-between px-2 py-1 mb-1">
         <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a] leading-tight">Contactos</span>
         <button className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#f8f8f7] hover:bg-white/60">
@@ -708,25 +1855,35 @@ function ContactsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
           <img src={ICON_PERSONAS} alt="" className="w-3.5 h-3.5 opacity-50" />
           <span className="text-[12px] font-medium text-[#646462]">Personas:</span>
         </div>
-        <SidebarItem label="All users" count={4} itemView="contacts" />
-        <SidebarItem label="All leads" count={0} itemView="allLeads" opacity50Count />
-        <SidebarItem label="Active" count={4} itemView="contacts" />
-        <SidebarItem label="New" count={0} itemView="contacts" opacity50Count />
+        <SidebarItem id="allUsers" label="All users" count={4} itemView="contacts" />
+        <SidebarItem id="allLeads" label="All leads" count={0} itemView="allLeads" opacity50Count />
+        <SidebarItem id="active"   label="Active"    count={4} itemView="contacts" />
+        <SidebarItem id="new"      label="New"       count={0} itemView="contacts" opacity50Count />
       </div>
 
       <div className="h-px bg-[#e9eae6] mx-2 my-1" />
 
       <div className="flex flex-col gap-0.5">
-        <button className="flex items-center justify-between w-full px-2 py-1 rounded-[8px] hover:bg-white/60">
-          <span className="text-[12px] font-medium text-[#646462]">Empresas:</span>
+        <button
+          onClick={() => setActiveItem('empresas')}
+          className={`flex items-center justify-between w-full px-2 py-1 rounded-[8px] ${
+            activeItem === 'empresas' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'
+          }`}
+        >
+          <span className={`text-[12px] font-medium text-[#646462] ${activeItem === 'empresas' ? 'font-semibold text-[#1a1a1a]' : ''}`}>Empresas:</span>
           <img src={ICON_CHEVRON} alt="" className="w-3 h-3 opacity-40" />
         </button>
       </div>
 
       <div className="h-px bg-[#e9eae6] mx-2 my-1" />
 
-      <button className="flex items-center gap-1.5 px-2 py-1 rounded-[8px] hover:bg-white/60 w-full">
-        <span className="text-[13px] text-[#1a1a1a]">Conversaciones</span>
+      <button
+        onClick={() => setActiveItem('conversaciones')}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-[8px] w-full ${
+          activeItem === 'conversaciones' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]' : 'hover:bg-white/60'
+        }`}
+      >
+        <span className={`text-[13px] text-[#1a1a1a] ${activeItem === 'conversaciones' ? 'font-semibold' : ''}`}>Conversaciones</span>
       </button>
     </div>
   );
@@ -1123,7 +2280,7 @@ const SETTINGS_NAV_MID = [
   { label: "Integraciones",       hasChevron: true },
 ];
 const INBOX_SUB: { label: string; nav: View | null }[] = [
-  { label: "Inbox para el equipo", nav: null },
+  { label: "Inbox para el equipo", nav: 'inboxTeam' },
   { label: "Asignaciones",         nav: 'assignments' },
   { label: "Macros",               nav: 'macros' },
   { label: "Folios de atención",   nav: 'tickets' },
@@ -1142,8 +2299,8 @@ const DATOS_SUB: { label: string; nav: View | null }[] = [
 const WORKSPACE_SUB: { label: string; nav: View | null; warn?: boolean }[] = [
   { label: "General",                nav: null },
   { label: "Compañeros de equipo",   nav: null },
-  { label: "Horario de atención",    nav: null },
-  { label: "Marcas",                 nav: null },
+  { label: "Horario de atención",    nav: 'workspaceHours' },
+  { label: "Marcas",                 nav: 'workspaceBrands' },
   { label: "Seguridad",              nav: 'workspaceSecurity', warn: true },
   { label: "Multilingüe",            nav: 'workspaceMultilingual' },
 ];
@@ -1192,13 +2349,31 @@ const PERSONAL_SUB: { label: string; nav: View | null }[] = [
 
 function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const isDatos = view === 'settings' || view === 'imports' || view === 'labels' || view === 'people' || view === 'companies';
-  const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla';
+  const isInboxSection = view === 'assignments' || view === 'macros' || view === 'tickets' || view === 'sla' || view === 'inboxTeam';
   const isIASection = view === 'aiInbox' || view === 'automation' || view === 'fin';
   const isIntegSection = view === 'appStore' || view === 'connectors';
-  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual';
+  const isWorkspaceSection = view === 'workspaceSecurity' || view === 'workspaceMultilingual' || view === 'workspaceHours' || view === 'workspaceBrands';
   const isSuscripcionSection = view === 'billing';
   const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
+
+  // Explicit collapse state — initial defaults open the group whose sub is active.
+  // Click on chevron/header now toggles freely (decoupled from navigation).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    workspace:  isWorkspaceSection,
+    suscripcion:isSuscripcionSection,
+    canales:    isCanalesSection,
+    inbox:      isInboxSection,
+    ia:         isIASection,
+    integ:      isIntegSection,
+    datos:      isDatos,
+    personal:   isPersonalSection,
+  });
+  const toggle = (k: string) => setOpenGroups(s => ({ ...s, [k]: !s[k] }));
+  // Chevron icon: rotate-90 when open (down ▼), default right (▶).
+  const Chev = ({ open }: { open: boolean }) => (
+    <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 transition-transform ${open ? 'rotate-90' : ''}`} />
+  );
 
   function SubItems({ items }: { items: typeof DATOS_SUB }) {
     return (
@@ -1237,13 +2412,13 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
 
         {/* Espacio de trabajo section */}
         <button
-          onClick={() => onNavigate('workspaceSecurity')}
+          onClick={() => toggle('workspace')}
           className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
         >
           <span>Espacio de trabajo</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isWorkspaceSection ? 'rotate-90' : ''}`} />
+          <Chev open={openGroups.workspace} />
         </button>
-        {isWorkspaceSection && (
+        {openGroups.workspace && (
           <div className="flex flex-col gap-0.5 pl-3">
             {WORKSPACE_SUB.map((sub) => {
               const active = sub.nav !== null && view === sub.nav;
@@ -1266,61 +2441,46 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
         )}
 
         {/* Suscripción section */}
-        <button
-          onClick={() => onNavigate('billing')}
-          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-        >
+        <button onClick={() => toggle('suscripcion')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
           <span>Suscripción</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isSuscripcionSection ? 'rotate-90' : ''}`} />
+          <Chev open={openGroups.suscripcion} />
         </button>
-        {isSuscripcionSection && <SubItems items={SUSCRIPCION_SUB} />}
+        {openGroups.suscripcion && <SubItems items={SUSCRIPCION_SUB} />}
 
         {/* Canales section */}
-        <button
-          onClick={() => onNavigate('messenger')}
-          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-        >
+        <button onClick={() => toggle('canales')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
           <span>Canales</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isCanalesSection ? 'rotate-90' : ''}`} />
+          <Chev open={openGroups.canales} />
         </button>
-        {isCanalesSection && <SubItems items={CANALES_SUB} />}
+        {openGroups.canales && <SubItems items={CANALES_SUB} />}
 
         {/* Inbox section */}
-        <button
-          onClick={() => onNavigate('assignments')}
-          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-        >
+        <button onClick={() => toggle('inbox')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
           <span>Inbox</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isInboxSection ? 'rotate-90' : ''}`} />
+          <Chev open={openGroups.inbox} />
         </button>
-        {isInboxSection && <SubItems items={INBOX_SUB} />}
+        {openGroups.inbox && <SubItems items={INBOX_SUB} />}
 
         {/* IA y automatización section */}
-        <button
-          onClick={() => onNavigate('aiInbox')}
-          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-        >
+        <button onClick={() => toggle('ia')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
           <span>IA y automatización</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isIASection ? 'rotate-90' : ''}`} />
+          <Chev open={openGroups.ia} />
         </button>
-        {isIASection && <SubItems items={IA_SUB} />}
+        {openGroups.ia && <SubItems items={IA_SUB} />}
 
         {/* Integraciones section */}
-        <button
-          onClick={() => onNavigate('appStore')}
-          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-        >
+        <button onClick={() => toggle('integ')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
           <span>Integraciones</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isIntegSection ? 'rotate-90' : ''}`} />
+          <Chev open={openGroups.integ} />
         </button>
-        {isIntegSection && <SubItems items={INTEG_SUB} />}
+        {openGroups.integ && <SubItems items={INTEG_SUB} />}
 
         {/* Datos section */}
-        <button className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+        <button onClick={() => toggle('datos')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
           <span>Datos</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isDatos ? 'rotate-90' : ''}`} />
+          <Chev open={openGroups.datos} />
         </button>
-        {isDatos && <SubItems items={DATOS_SUB} />}
+        {openGroups.datos && <SubItems items={DATOS_SUB} />}
 
         {SETTINGS_NAV_BOTTOM.map((item) => (
           <button
@@ -1333,14 +2493,11 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
         ))}
 
         {/* Personal section */}
-        <button
-          onClick={() => onNavigate('personal')}
-          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-        >
+        <button onClick={() => toggle('personal')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
           <span>Personal</span>
-          <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 ${isPersonalSection ? 'rotate-90' : ''}`} />
+          <Chev open={openGroups.personal} />
         </button>
-        {isPersonalSection && <SubItems items={PERSONAL_SUB} />}
+        {openGroups.personal && <SubItems items={PERSONAL_SUB} />}
       </div>
     </div>
   );
@@ -1462,13 +2619,189 @@ function SettingsMainContent({ onBack }: { onBack: () => void }) {
   );
 }
 
+type SetIconKind =
+  | 'gear' | 'team' | 'clock' | 'gift' | 'tag' | 'shield' | 'globe' | 'card' | 'chart'
+  | 'chat' | 'mail' | 'phone' | 'whatsapp' | 'hash' | 'discord' | 'sms' | 'social'
+  | 'inbox' | 'redirect' | 'bolt' | 'ticket' | 'timer'
+  | 'sparkle' | 'aibox' | 'wrench'
+  | 'shop' | 'plug' | 'code' | 'flow'
+  | 'user' | 'building' | 'cube' | 'arrows' | 'bars'
+  | 'home' | 'book' | 'plus'
+  | 'bell' | 'flask' | 'brush'
+  | 'pencil' | 'eye' | 'key' | 'lockuser';
+
+function SetIcon({ kind }: { kind: SetIconKind }) {
+  const cls = "w-4 h-4 fill-none stroke-[#1a1a1a]";
+  const sw = "1.5";
+  switch (kind) {
+    case 'gear':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/></svg>;
+    case 'team':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>;
+    case 'clock':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5L10 10" strokeLinecap="round"/></svg>;
+    case 'gift':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><rect x="2" y="6" width="12" height="3" rx="0.5"/><rect x="3" y="9" width="10" height="5" rx="0.5"/><path d="M8 6v8M5.5 6c-1 0-2-1-2-2s1-1.5 2-1c.8.3 1.5 1.5 2.5 3-1.5 0-2 0-2.5 0zM10.5 6c1 0 2-1 2-2s-1-1.5-2-1c-.8.3-1.5 1.5-2.5 3 1.5 0 2 0 2.5 0z"/></svg>;
+    case 'tag':      return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M2.5 7.5l5-5h6v6l-5 5z"/><circle cx="10" cy="6" r="1" fill="#1a1a1a" stroke="none"/></svg>;
+    case 'shield':   return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><path d="M8 1.5l5.5 2v4.5c0 3.2-2.4 5.7-5.5 6.5-3.1-.8-5.5-3.3-5.5-6.5V3.5z"/></svg>;
+    case 'globe':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>;
+    case 'card':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><rect x="1.5" y="3.5" width="13" height="9" rx="1.2"/><path d="M1.5 6.5h13M3.5 10h2"/></svg>;
+    case 'chart':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinecap="round"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>;
+    case 'chat':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><path d="M2.5 7c0-2.5 2.5-4.5 5.5-4.5s5.5 2 5.5 4.5-2.5 4.5-5.5 4.5c-.7 0-1.4-.1-2-.3L3 12.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/></svg>;
+    case 'mail':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4"/></svg>;
+    case 'phone':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z"/></svg>;
+    case 'whatsapp': return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><path d="M2.5 7c0-2.5 2.5-4.5 5.5-4.5s5.5 2 5.5 4.5-2.5 4.5-5.5 4.5c-.7 0-1.4-.1-2-.3L3 12.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/><path d="M6 6.5c.5 1.5 2 2.5 3.5 3" strokeLinecap="round"/></svg>;
+    case 'hash':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinecap="round"><path d="M5.5 1.5L4 14.5M11.5 1.5L10 14.5M1.5 5h13M1 11h13"/></svg>;
+    case 'discord':  return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><path d="M3 4.5c1.5-1 3.5-1.5 5-1.5s3.5.5 5 1.5l1.5 7c-1 .8-2.5 1.5-4 1.7l-.5-1c-.7.2-1.3.3-2 .3s-1.3-.1-2-.3l-.5 1c-1.5-.2-3-.9-4-1.7z"/><circle cx="6" cy="8" r="0.8" fill="#1a1a1a" stroke="none"/><circle cx="10" cy="8" r="0.8" fill="#1a1a1a" stroke="none"/></svg>;
+    case 'sms':      return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><path d="M2.5 4.5c0-.6.4-1 1-1h9c.6 0 1 .4 1 1v6c0 .6-.4 1-1 1H6L3 13.5V4.5z"/><path d="M6 6.5h4M6 8.5h3" strokeLinecap="round"/></svg>;
+    case 'social':   return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="4" cy="4" r="1.7"/><circle cx="12" cy="4" r="1.7"/><circle cx="4" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><path d="M5 5l6 6M11 5l-6 6"/></svg>;
+    case 'inbox':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M2 9V4c0-.6.4-1 1-1h10c.6 0 1 .4 1 1v5z"/><path d="M2 9h3.5l1 1.5h3l1-1.5H14v3c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1z"/></svg>;
+    case 'redirect': return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M2 4h7l3 3-3 3H2M14 9v3"/></svg>;
+    case 'bolt':     return <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M9 1L3 9h4l-1 6 7-9H9z"/></svg>;
+    case 'ticket':   return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><path d="M2 5.5c.8 0 1.5-.7 1.5-1.5h9c0 .8.7 1.5 1.5 1.5v5c-.8 0-1.5.7-1.5 1.5h-9c0-.8-.7-1.5-1.5-1.5z"/><path d="M6 4.5v7M9 5.5v.01M9 7v.01M9 8.5v.01M9 10v.01" strokeLinecap="round"/></svg>;
+    case 'timer':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="8" cy="9" r="5"/><path d="M8 6v3l2 2M6 1.5h4M8 1.5v2.5" strokeLinecap="round"/></svg>;
+    case 'sparkle':  return <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/></svg>;
+    case 'aibox':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M8 5l1 2.5L11.5 8.5 9 9.5 8 12 7 9.5 4.5 8.5 7 7.5z" fill="#1a1a1a" stroke="none"/></svg>;
+    case 'wrench':   return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M11 2.5l3 3-2 2-2.5-.5-5 5L2 9l5-5L6.5 1.5z"/></svg>;
+    case 'shop':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M3 5h10l-.5 8.5h-9zM5 5V3.5a3 3 0 016 0V5"/></svg>;
+    case 'plug':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinecap="round"><path d="M5 1.5v3M11 1.5v3M3.5 4.5h9v3.5c0 1.4-1.1 2.5-2.5 2.5h-4c-1.4 0-2.5-1.1-2.5-2.5z"/><path d="M8 10.5v4"/></svg>;
+    case 'code':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5M9.5 3.5L7 13"/></svg>;
+    case 'flow':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="3" cy="3" r="1.5"/><circle cx="13" cy="8" r="1.5"/><circle cx="3" cy="13" r="1.5"/><path d="M4.5 3.5L11.5 7M4.5 12.5L11.5 9"/></svg>;
+    case 'user':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="8" cy="6" r="2.5"/><path d="M3 13.5c0-2 2.5-3 5-3s5 1 5 3"/></svg>;
+    case 'building': return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><path d="M3 13.5V3.5h7v10M10 13.5V7h3v6.5"/><path d="M5 6.5h.5M5 9h.5M7 6.5h.5M7 9h.5M5 11.5h.5M7 11.5h.5"/></svg>;
+    case 'cube':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M8 1.5l6 3v7l-6 3-6-3v-7z"/><path d="M2 4.5l6 3 6-3M8 7.5v7"/></svg>;
+    case 'arrows':   return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d="M5 2v8M5 10l-2.5-2.5M5 10L7.5 7.5M11 14V6M11 6L8.5 8.5M11 6l2.5 2.5"/></svg>;
+    case 'bars':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinecap="round"><path d="M3 13V8M7 13V4M11 13V10M14 13V6"/></svg>;
+    case 'home':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M2 7L8 2l6 5v6.5h-4V10H6v3.5H2z"/></svg>;
+    case 'book':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>;
+    case 'plus':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth="1.7" strokeLinecap="round"><path d="M8 3v10M3 8h10"/></svg>;
+    case 'bell':     return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M3.5 11.5h9c-1-1-1-2-1-4 0-2-1.5-3.5-3.5-3.5S4.5 5.5 4.5 7.5c0 2 0 3-1 4z"/><path d="M6.5 13.5c.3.5.9.8 1.5.8s1.2-.3 1.5-.8M8 4V2.5"/></svg>;
+    case 'flask':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M6 1.5h4M7 1.5v4.5L3.5 13c-.4.7.1 1.5.9 1.5h7.2c.8 0 1.3-.8.9-1.5L9 6V1.5"/></svg>;
+    case 'brush':    return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M11 2l3 3-7 7H4v-3z"/><path d="M9 4l3 3M3 13.5l-1.5 1"/></svg>;
+    case 'pencil':   return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw} strokeLinejoin="round"><path d="M11 2l3 3-9 9-4 1 1-4z"/><path d="M9 4l3 3"/></svg>;
+    case 'eye':      return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><path d="M1.5 8C3 5 5.5 3.5 8 3.5s5 1.5 6.5 4.5C13 11 10.5 12.5 8 12.5S3 11 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>;
+    case 'key':      return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="5" cy="11" r="2.5"/><path d="M7 9.5l6.5-6.5M11 5l2 2M9.5 6.5l1.5 1.5"/></svg>;
+    case 'lockuser': return <svg viewBox="0 0 16 16" className={cls} strokeWidth={sw}><circle cx="6" cy="5.5" r="2"/><path d="M2.5 13c0-1.7 1.6-3 3.5-3s3.5 1.3 3.5 3"/><rect x="10" y="8" width="5" height="4" rx="0.5"/><path d="M11 8V6.5a1.5 1.5 0 013 0V8"/></svg>;
+  }
+}
+
+function SettingsCardGrid({ title, cards }: {
+  title: string;
+  cards: { icon: SetIconKind; bg: string; name: string; desc: string; badge?: string }[];
+}) {
+  return (
+    <div className="mb-6">
+      <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">{title}</h3>
+      <div className="grid grid-cols-3 gap-3">
+        {cards.map((c, i) => (
+          <button key={i} className="bg-white border border-[#e9eae6] rounded-[10px] p-4 flex items-start gap-3 text-left hover:bg-[#fafaf9]">
+            <span className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: c.bg }}>
+              <SetIcon kind={c.icon} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">{c.name}</span>
+                {c.badge && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#e7e2fd] text-[#5b21b6] font-medium">{c.badge}</span>}
+              </div>
+              {c.desc && <p className="mt-0.5 text-[11.5px] text-[#646462] leading-[15px] line-clamp-3">{c.desc}</p>}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsInicioContent() {
+  return (
+    <div className="flex flex-col flex-1 min-w-0 bg-white rounded-[16px] shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] overflow-hidden">
+      <div className="flex items-center px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M2 7.5L8 2l6 5.5V14H2z"/><path d="M6.5 14V9h3v5"/></svg>
+          <h1 className="text-[20px] font-bold text-[#1a1a1a]">Inicio</h1>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
+        <SettingsCardGrid title="Espacio de trabajo" cards={[
+          { icon: 'gear',   bg: '#f3f3f1', name: 'Generales',            desc: 'Visualiza información básica de tu cuenta, como tu nombre y zona horaria.' },
+          { icon: 'team',   bg: '#dbeafe', name: 'Compañeros de equipo', desc: 'Administra y añade a compañeros de equipo en tu espacio de trabajo.' },
+          { icon: 'clock',  bg: '#fef3c7', name: 'Horario de atención',  desc: 'Configura el horario en el que tu equipo está disponible.' },
+          { icon: 'gift',   bg: '#d1fae5', name: 'Referencias',          badge: 'Gana $200', desc: 'Recomienda Intercom a otras empresas y consigue una bonificación.' },
+          { icon: 'tag',    bg: '#fce7f3', name: 'Marcas',               desc: 'Para tus clientes y agencias.' },
+          { icon: 'shield', bg: '#e0e7ff', name: 'Seguridad',            desc: 'Configura la autenticación y los ajustes de inicio de sesión.' },
+          { icon: 'globe',  bg: '#fef3c7', name: 'Multilingüe',          desc: 'Configura los idiomas en los que opera tu espacio de trabajo.' },
+        ]} />
+        <SettingsCardGrid title="Suscripción" cards={[
+          { icon: 'card',  bg: '#dcfce7', name: 'Facturación', desc: 'Administra tu suscripción y métodos de pago.' },
+          { icon: 'chart', bg: '#fee2e2', name: 'Uso',         desc: 'Monitoriza el uso de tu suscripción y compromiso de Fin.' },
+        ]} />
+        <SettingsCardGrid title="Canales" cards={[
+          { icon: 'chat',     bg: '#fce7f3', name: 'Messenger',              desc: 'Atrae y mantente conectado con clientes a través de tu sitio web o aplicaciones móviles.' },
+          { icon: 'mail',     bg: '#dbeafe', name: 'Correo electrónico',     desc: 'Administra el correo de tu equipo, dominios y autenticación con DKIM.' },
+          { icon: 'phone',    bg: '#fee2e2', name: 'Teléfono',               desc: 'Configura y administra llamadas de voz directamente desde tu Inbox.' },
+          { icon: 'whatsapp', bg: '#dcfce7', name: 'WhatsApp',               desc: 'Habla y configura los números de WhatsApp y comparte tu equipo.' },
+          { icon: 'hash',     bg: '#e9d5ff', name: 'Slack',                  desc: 'Recibe y envía mensajes a tu equipo desde Slack.' },
+          { icon: 'discord',  bg: '#cffafe', name: 'Discord',                desc: 'Recibe y envía mensajes a usuarios de Discord.' },
+          { icon: 'sms',      bg: '#fef3c7', name: 'SMS',                    desc: 'Configura los números de SMS para enviar mensajes a tus usuarios.' },
+          { icon: 'social',   bg: '#fce7f3', name: 'Canales redes sociales', desc: 'Administra mensajes desde plataformas sociales en tu equipo.' },
+          { icon: 'globe',    bg: '#dbeafe', name: 'Todos los canales',      desc: 'Administra y configura los ajustes de todos los canales de tu equipo.' },
+        ]} />
+        <SettingsCardGrid title="Inbox" cards={[
+          { icon: 'inbox',    bg: '#dbeafe', name: 'Inbox para el equipo', desc: 'Crea buzones para tu equipo de compañeros que podrían trabajar juntos.' },
+          { icon: 'redirect', bg: '#fef3c7', name: 'Asignaciones',         desc: 'Especifica cómo se asignan los casos de soporte y cómo se manejan las cargas de trabajo.' },
+          { icon: 'bolt',     bg: '#e9d5ff', name: 'Macros',               desc: 'Crea y edita macros para enviar respuestas comunes con un solo clic.' },
+          { icon: 'ticket',   bg: '#fce7f3', name: 'Tipos de atención',    desc: 'Crea y configura los tipos de tickets y categorías de tu equipo de servicio al cliente.' },
+          { icon: 'timer',    bg: '#fee2e2', name: 'SLA',                  desc: 'Asegúrate de que tu equipo cumple los acuerdos de nivel de servicio prometidos.' },
+        ]} />
+        <SettingsCardGrid title="IA y automatización" cards={[
+          { icon: 'sparkle', bg: '#fef3c7', name: 'Fin AI Agent',   desc: 'Administra tu agente de IA y personalízalo para tus clientes.' },
+          { icon: 'aibox',   bg: '#e0e7ff', name: 'Buzón de IA',    badge: 'New Beta', desc: 'Activa características nuevas de inteligencia artificial en el buzón de tu equipo.' },
+          { icon: 'wrench',  bg: '#fce7f3', name: 'Automatización', desc: 'Crea reglas y flujos de trabajo para automatizar el trabajo en tu Inbox.' },
+        ]} />
+        <SettingsCardGrid title="Integraciones" cards={[
+          { icon: 'shop', bg: '#dbeafe', name: 'Tienda de aplicaciones',     desc: 'Conecta a Intercom todos los servicios y herramientas que ya usas.' },
+          { icon: 'plug', bg: '#dcfce7', name: 'Conectores de datos',        desc: 'Especifica los datos de los sistemas externos que usa tu equipo.' },
+          { icon: 'code', bg: '#fef3c7', name: 'Centro para desarrolladores', desc: 'Crea aplicaciones y servicios personalizados para tu propio negocio.' },
+          { icon: 'flow', bg: '#fce7f3', name: 'Automatizaciones',           desc: 'Crea automatizaciones con cualquier información o paso a paso.' },
+        ]} />
+        <SettingsCardGrid title="Datos" cards={[
+          { icon: 'tag',      bg: '#dbeafe', name: 'Etiquetas',                desc: 'Administra tus etiquetas y agrúpalas en categorías para crear filtros.' },
+          { icon: 'user',     bg: '#dcfce7', name: 'Personas',                 desc: 'Administra atributos, segmentos y eventos de los contactos en tu cuenta.' },
+          { icon: 'building', bg: '#fef3c7', name: 'Empresas',                 desc: 'Administra atributos, segmentos y eventos de las cuentas en tu cuenta.' },
+          { icon: 'chat',     bg: '#fce7f3', name: 'Conversaciones',           desc: 'Crea atributos para los datos que tu equipo necesita en cada conversación.' },
+          { icon: 'cube',     bg: '#e9d5ff', name: 'Objetos personalizados',   desc: 'Importar tipos de objetos para crear y asociar datos personalizados.' },
+          { icon: 'arrows',   bg: '#cffafe', name: 'Importación y exportación', desc: 'Importa o exporta datos de Intercom y otras fuentes.' },
+          { icon: 'bars',     bg: '#fee2e2', name: 'Temas',                    desc: 'Crea categorías generales o más temas conversacionales.' },
+        ]} />
+        <SettingsCardGrid title="Centro de ayuda" cards={[
+          { icon: 'home', bg: '#dbeafe', name: 'Inicio Help Center',         desc: 'Configura el inicio de tu centro de ayuda.' },
+          { icon: 'book', bg: '#dcfce7', name: 'Todos los centros de ayuda', desc: 'Lista todos los centros de ayuda en tu cuenta.' },
+          { icon: 'plus', bg: '#fef3c7', name: 'Nuevo Centro de ayuda',      desc: '' },
+        ]} />
+        <SettingsCardGrid title="Canales salientes" cards={[
+          { icon: 'bell',  bg: '#fce7f3', name: 'Suscripciones',         desc: 'Permite a los clientes administrar las comunicaciones que reciben.' },
+          { icon: 'flask', bg: '#fef3c7', name: 'Pruebas de mensajes',   desc: 'Crea pruebas A/B con mensajes automatizados.' },
+          { icon: 'tag',   bg: '#dcfce7', name: 'Etiquetas de mensajes', desc: 'Clasifica tus mensajes con etiquetas personalizadas.' },
+          { icon: 'brush', bg: '#e9d5ff', name: 'Personalización',       desc: 'Personaliza la apariencia de los mensajes salientes.' },
+        ]} />
+        <SettingsCardGrid title="Personal" cards={[
+          { icon: 'pencil',   bg: '#dbeafe', name: 'Información',            desc: 'Configura tu información personal como tu nombre y avatar.' },
+          { icon: 'shield',   bg: '#fef3c7', name: 'Seguridad de la cuenta', desc: 'Configura ajustes de tu cuenta personal de inicio de sesión.' },
+          { icon: 'bell',     bg: '#fce7f3', name: 'Notificaciones',         desc: 'Configura las preferencias de notificaciones.' },
+          { icon: 'eye',      bg: '#dcfce7', name: 'Visible para ti',        desc: 'Personaliza tu vista de pantalla y disposición.' },
+          { icon: 'key',      bg: '#fee2e2', name: 'Tokens de API',          desc: 'Verifica y configura tus tokens personales de la API.' },
+          { icon: 'lockuser', bg: '#e9d5ff', name: 'Acceso a la cuenta',     desc: 'Administra cuentas asociadas, incluyendo qué espacios de trabajo puedes usar.' },
+          { icon: 'globe',    bg: '#cffafe', name: 'Multilingüe',            desc: 'Configura los ajustes de traducción de tu cuenta.' },
+        ]} />
+      </div>
+    </div>
+  );
+}
+
 function SettingsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v: View) => void; onBack: () => void }) {
+  void onBack;
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-3 overflow-hidden">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <SettingsMainContent onBack={onBack} />
+        <SettingsInicioContent />
       </div>
     </div>
   );
@@ -1743,7 +3076,7 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
               <div className="border border-[#e9eae6] rounded-[10px] mb-4 overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-[14px] border-b border-[#e9eae6]">
                   <span className="text-[14px] font-semibold text-[#1a1a1a]">Perfil público</span>
-                  <button className="text-[13px] font-semibold text-[#81817e] bg-[#f8f8f7] rounded-full px-3 py-[5px] hover:bg-[#efefed]">Guardar</button>
+                  <button className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-3 py-[5px] hover:bg-[#444]">Editar</button>
                 </div>
                 <div className="px-5 py-3">
                   <ProfileRow value="Hector Vidal Sanchez">
@@ -2422,6 +3755,158 @@ function SettingsPromoCard({ title, description, primaryBtn, secondaryBtn, image
 
 // ── AssignmentsView ───────────────────────────────────────────────────────────
 
+// ── AssignmentsGeneralTab (1-70140 / 1-71522): 8 sub-sections ─────────────────
+function AssignmentsGeneralTab() {
+  const [autoAssign, setAutoAssign] = useState<'self' | 'keep'>('self');
+  const [presence, setPresence] = useState(true);
+  const [obligatorio, setObligatorio] = useState(false);
+  const [reasignAct, setReasignAct] = useState(false);
+  const [reasignFar, setReasignFar] = useState(false);
+  return (
+    <div className="px-6 py-6">
+      {/* Promo card "Asegúrate de que las conversaciones lleguen al miembro adecuado" */}
+      <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+        <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+        <div className="flex-1 max-w-[500px]">
+          <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Asegúrate de que las conversaciones lleguen al miembro de equipo adecuado</h2>
+          <p className="text-[13px] text-[#646462] mb-4">Usa las reglas de asignación para enviar conversaciones a las personas correctas según la disponibilidad y la carga de trabajo. Fin AI Agent puede encargarse de las preguntas comunes y pasar cualquier cosa que no pueda administrar.</p>
+          <div className="flex items-center gap-4 flex-wrap">
+            <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">⚙ Configurar asignaciones</button>
+            <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Gestión de carga de trabajo explicada</button>
+            <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">👥 Administrar los permisos del equipo</button>
+          </div>
+        </div>
+        <div className="w-[280px] h-[180px] flex-shrink-0 rounded-[8px] bg-[#f3f0ff] border border-[#e0d7ff] p-3 flex flex-col gap-1">
+          <p className="text-[11px] font-semibold text-[#1a1a1a] mb-1">Assign</p>
+          {['Geraldine Cordero', 'Jacob Antinoff', 'Noah Bennett'].map(n => (
+            <div key={n} className="flex items-center gap-1.5 bg-white rounded-[6px] px-2 py-1.5"><span className="text-[10px] text-[#646462]">Assign to</span><span className="text-[10px] text-[#1a1a1a]">{n}</span></div>
+          ))}
+        </div>
+      </div>
+
+      {/* Persona asignada por defecto */}
+      <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+        <div className="flex-1">
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Persona asignada por defecto</h3>
+          <p className="text-[13px] text-[#646462]">Si un flujo de trabajo no asigna una nueva conversación entrante, se asignará a este buzón del equipo predeterminado o compañero de equipo.</p>
+        </div>
+        <div className="w-[300px] flex-shrink-0">
+          <p className="text-[13px] text-[#1a1a1a] mb-1">Selecciona un buzón del equipo o un compañero de equipo</p>
+          <select className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white"><option>👤 Unassigned</option></select>
+        </div>
+      </div>
+
+      {/* Autoasignar por respuesta */}
+      <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+        <div className="flex-1">
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Autoasignar por respuesta</h3>
+          <p className="text-[13px] text-[#646462]">Elige qué sucede cuando respondes a una conversación que no está asignada o que está asignada a un buzón de equipo. <a href="#" className="text-[#3b59f6] underline">Política de privacidad</a></p>
+        </div>
+        <div className="w-[400px] flex flex-col gap-2 flex-shrink-0">
+          {[
+            { id: 'self' as const, label: 'Asígnamela' },
+            { id: 'keep' as const, label: 'Mantener sin asignar o asignada al buzón de equipo' },
+          ].map(o => (
+            <label key={o.id} onClick={() => setAutoAssign(o.id)} className="flex items-center gap-3 cursor-pointer">
+              <div className={`w-4 h-4 rounded-full border-2 ${autoAssign === o.id ? 'border-[#3b59f6]' : 'border-[#ccc]'} flex items-center justify-center`}>
+                {autoAssign === o.id && <div className="w-2 h-2 rounded-full bg-[#3b59f6]"/>}
+              </div>
+              <span className="text-[13px] text-[#1a1a1a]">{o.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Presencia de compañeros */}
+      <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+        <div className="flex-1">
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Presencia de compañeros de equipo</h3>
+          <p className="text-[13px] text-[#646462] mb-3">Ve si otro compañero está viendo una conversación o un folio de atención. Esto evita la duplicación del trabajo y ayuda al equipo a colaborar.</p>
+        </div>
+        <div className="w-[400px] flex flex-col gap-3 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPresence(v => !v)} className={`w-8 h-[18px] rounded-full relative ${presence ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${presence ? 'right-0.5' : 'left-0.5'}`}/></button>
+            <span className="text-[13px] text-[#1a1a1a]">Mostrar presencia de compañeros de equipo</span>
+          </div>
+          <div className="bg-[#fafaf9] border border-[#e9eae6] rounded-[8px] p-3">
+            <div className="flex items-center justify-between mb-2"><span className="text-[12px] font-semibold text-[#1a1a1a]">Luis Easton</span><span className="bg-[#1a1a1a] text-white text-[10px] px-2 py-0.5 rounded">⊙ Cerrar</span></div>
+            <p className="text-[11px] text-[#646462] mb-2">Jack Smith is looking</p>
+            <div className="bg-white border border-[#e9eae6] rounded-[6px] px-3 py-2 text-[11px] text-[#1a1a1a]">Hello, I have a question</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Asigna conversaciones a Fin AI Agent */}
+      <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+        <div className="flex-1">
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Asigna conversaciones a Fin AI Agent</h3>
+          <p className="text-[13px] text-[#646462]">Usa flujos de trabajo para etiquetar y asignar automáticamente conversaciones a Fin, de modo que responda las preguntas comunes antes de transferirlas. <a href="#" className="text-[#3b59f6] underline">Configurar en flujos de trabajo</a></p>
+        </div>
+        <div className="w-[400px] flex-shrink-0 bg-[#fafaf9] border border-[#e9eae6] rounded-[8px] p-3 text-[11px] text-[#646462]">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-6 h-6 rounded-full bg-[#fef3c7] flex items-center justify-center text-[12px]">⚙</div>
+            <span>Customer sends their first message</span>
+          </div>
+          <div className="bg-white border border-[#e9eae6] rounded-[6px] p-2 mb-1">▦ Branches → Customer is asking billing</div>
+          <div className="bg-white border border-[#e9eae6] rounded-[6px] p-2 mb-1">📨 Assign to → Billing Team</div>
+          <div className="bg-white border border-[#e9eae6] rounded-[6px] p-2">📨 Assign to → Support Team</div>
+        </div>
+      </div>
+
+      {/* Modo Ausente automático */}
+      <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+        <div className="flex-1">
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Modo Ausente automático</h3>
+          <p className="text-[13px] text-[#646462] mb-3">Cambiar automáticamente el estado de un compañero de equipo después de un período de inactividad. El temporizador de inactividad se inicia cuando Intercom no es la pestaña activa del navegador, la pantalla está apagada, la computadora está en reposo o apagada.</p>
+          <button className="bg-[#7c3aed] text-white rounded-full px-3 py-1.5 text-[12px] font-medium hover:bg-[#6d28d9] flex items-center gap-1.5"><span>⚡</span>Get the feature</button>
+        </div>
+        <div className="w-[300px] flex-shrink-0 bg-white border border-[#e9eae6] rounded-[8px] p-3">
+          <div className="flex items-center gap-2 mb-3"><div className="w-7 h-7 rounded-full bg-[#fce7f3] flex items-center justify-center text-[12px]">CF</div><span className="text-[12px] font-semibold text-[#1a1a1a]">Carla Fité</span></div>
+          <div className="flex items-center gap-2 mb-2"><div className="w-8 h-[18px] rounded-full bg-[#f97316] relative"><div className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-white"/></div><span className="text-[12px] text-[#1a1a1a]">Set as away</span></div>
+          <div className="flex items-center gap-2 mb-2"><div className="w-8 h-[18px] rounded-full bg-[#e9eae6] relative"><div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white"/></div><span className="text-[12px] text-[#1a1a1a]">Reassign replies</span></div>
+          <div className="text-[11px] text-[#646462]">Add reason</div>
+        </div>
+      </div>
+
+      {/* Motivos de ausencia */}
+      <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+        <div className="flex-1">
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Motivos de ausencia</h3>
+          <p className="text-[13px] text-[#646462]">Personaliza los motivos que los compañeros de equipo pueden elegir al configurar su estado como "ausente", y decide si es obligatorio elegir uno.</p>
+        </div>
+        <div className="w-[400px] flex flex-col gap-3 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setObligatorio(v => !v)} className={`w-8 h-[18px] rounded-full relative ${obligatorio ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${obligatorio ? 'right-0.5' : 'left-0.5'}`}/></button>
+            <span className="text-[13px] text-[#1a1a1a]">Hacer que los motivos de ausencia sean obligatorios</span>
+          </div>
+          <button className="text-[13px] text-[#3b59f6] hover:underline text-left">Personalice los motivos de ausencia ›</button>
+        </div>
+      </div>
+
+      {/* Reasignar conversaciones sin pausar */}
+      <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
+        <div className="flex-1">
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Reasignar conversaciones sin pausar</h3>
+          <p className="text-[13px] text-[#646462]">Cuando se reactive una conversación y el agente asignado haya alcanzado su capacidad máxima o esté ausente, se marcará automáticamente como no asignada y volverá a la bandeja de entrada del equipo.</p>
+        </div>
+        <div className="w-[400px] flex flex-col gap-3 flex-shrink-0">
+          <div className="flex items-start gap-2">
+            <button onClick={() => setReasignAct(v => !v)} className={`w-8 h-[18px] rounded-full relative mt-0.5 flex-shrink-0 ${reasignAct ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${reasignAct ? 'right-0.5' : 'left-0.5'}`}/></button>
+            <span className="text-[12px] text-[#1a1a1a]">Reasignar automáticamente las conversaciones activas cuando los miembros del equipo hayan alcanzado su capacidad máxima.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <button onClick={() => setReasignFar(v => !v)} className={`w-8 h-[18px] rounded-full relative mt-0.5 flex-shrink-0 ${reasignFar ? 'bg-[#f97316]' : 'bg-[#e9eae6]'}`}><div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow ${reasignFar ? 'right-0.5' : 'left-0.5'}`}/></button>
+            <div className="flex-1 flex items-center justify-between">
+              <span className="text-[12px] text-[#1a1a1a]">Reasignar automáticamente las conversaciones activas cuando los miembros del equipo estén</span>
+              <select className="border border-[#e9eae6] rounded-[6px] px-2 py-1 text-[12px] ml-2"><option>Lejos</option></select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AssignmentsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [tab, setTab] = useState<'general' | 'workload' | 'limits'>('workload');
   const tabs = [
@@ -2484,9 +3969,7 @@ function AssignmentsView({ view, onNavigate }: { view: View; onNavigate: (v: Vie
                 }
               />
             )}
-            {tab === 'general' && (
-              <div className="px-6 py-6 text-[13px] text-[#646462]">Configuración general de asignaciones</div>
-            )}
+            {tab === 'general' && <AssignmentsGeneralTab />}
           </div>
         </div>
       </div>
@@ -3436,10 +4919,20 @@ function EmpresasView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
 // ── WorkspaceSecurityView (1-44080) ───────────────────────────────────────────
 
 function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [tab, setTab] = useState<'enlaces'>('enlaces');
+  const [tab, setTab] = useState<'workspace' | 'datos' | 'messenger' | 'archivos' | 'enlaces' | 'auth' | 'estado'>('enlaces');
   const [untrustedOn, setUntrustedOn] = useState(true);
   const [maliciousOn, setMaliciousOn] = useState(true);
   const [showDefaults, setShowDefaults] = useState(true);
+  // Tab Datos toggles
+  const [redaccion, setRedaccion] = useState(false);
+  const [notifContent, setNotifContent] = useState(true);
+  const [notifLeads, setNotifLeads] = useState(true);
+  const [fusionConv, setFusionConv] = useState(false);
+  const [fusionLeads, setFusionLeads] = useState(false);
+  // Tab Archivos
+  const [permitArch, setPermitArch] = useState(true);
+  const [otrosArch, setOtrosArch] = useState(false);
+  const [tipoEntradas, setTipoEntradas] = useState({ camara: true, imagenes: true, archivos: true, gif: false, voz: false });
   const tabs = [
     { id: 'workspace' as const, label: 'Espacio de trabajo' },
     { id: 'datos'     as const, label: 'Datos' },
@@ -3477,7 +4970,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
           </div>
           <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0 overflow-x-auto">
             {tabs.map(t => (
-              <button key={t.id} onClick={() => t.id === 'enlaces' && setTab('enlaces')}
+              <button key={t.id} onClick={() => setTab(t.id)}
                 className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                   tab === t.id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
                 }`}>
@@ -3486,6 +4979,161 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
             ))}
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
+            {tab === 'datos' && (
+              <div>
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Redacción de contenido</h3>
+                    <p className="text-[13px] text-[#646462]">Redacte automáticamente los datos confidenciales en las conversaciones mediante reglas integradas y personalizadas. El contenido coincidente se reemplazará con asteriscos. <a href="#" className="text-[#3b59f6] underline">Más información</a>.</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Toggle on={redaccion} onToggle={() => setRedaccion(v => !v)} />
+                    <span className="text-[13px] text-[#1a1a1a]">Habilitar la redacción de contenido</span>
+                  </div>
+                </div>
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Notificaciones por correo electrónico</h3>
+                    <p className="text-[13px] text-[#646462]">Esto incluirá el contenido de las conversaciones cuando los usuarios o leads reciban notificaciones de cualquier respuesta. <a href="#" className="text-[#3b59f6] underline">Más información</a></p>
+                  </div>
+                  <div className="flex flex-col gap-2 flex-shrink-0 max-w-[400px]">
+                    <div className="flex items-start gap-2">
+                      <Toggle on={notifContent} onToggle={() => setNotifContent(v => !v)} />
+                      <span className="text-[13px] text-[#1a1a1a]">Incluya el contenido de la conversación en los correos electrónicos de notificación</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Toggle on={notifLeads} onToggle={() => setNotifLeads(v => !v)} />
+                      <span className="text-[13px] text-[#1a1a1a]">Habilitar la identificación de correo electrónico para leads</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 mb-3">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Identificación del correo electrónico de leads</h3>
+                  <p className="text-[13px] text-[#646462]">Si un lead hace clic en su sitio web desde un enlace de su correo electrónico, podemos personalizarlo en su aplicación y continuar conversando.</p>
+                </div>
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Fusionar conversaciones entre diferentes usuarios</h3>
+                    <p className="text-[13px] text-[#646462]">Combina las conversaciones de diferentes usuarios en un solo hilo. Esto ayuda a consolidar casos duplicados, pero puede plantear riesgos de seguridad y privacidad, ya que se fusionarán diferentes identidades de usuario. Úsalo con precaución y revisa antes de fusionar. <a href="#" className="text-[#3b59f6] underline">Más información</a></p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Toggle on={fusionConv} onToggle={() => setFusionConv(v => !v)} />
+                    <span className="text-[13px] text-[#1a1a1a]">Habilitar la fusión de conversaciones entre usuarios</span>
+                  </div>
+                </div>
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Fusión de leads no verificados en usuarios</h3>
+                    <p className="text-[13px] text-[#646462] mb-2">Fusiona leads y usuarios solo en función de la dirección de correo electrónico. Al activar esta opción, los leads se fusionarán con los usuarios, <strong>incluido todo el historial de conversaciones</strong>, cuando tengan la misma dirección de correo electrónico, incluso si no usan el mismo dispositivo o sesión. Nota: Intercom solo fusionará prospectos en usuarios para solicitudes que estén protegidas con verificación de identidad.</p>
+                    <a href="#" className="text-[13px] text-[#3b59f6] underline">Más información</a>
+                    <p className="text-[13px] mt-2"><a href="#" className="text-[#3b59f6] underline">Obtén más información sobre la fusión de usuarios principales</a></p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Toggle on={fusionLeads} onToggle={() => setFusionLeads(v => !v)} />
+                    <span className="text-[13px] text-[#1a1a1a]">Habilitar la fusión de leads no verificados en usuarios</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'messenger' && (
+              <div>
+                <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Seguridad de Messenger</h2>
+                <p className="text-[13px] text-[#646462] mb-2">La seguridad de Messenger evita que terceros se hagan pasar por tus usuarios conectados y vean sus conversaciones. Recomendamos a todos los clientes de Intercom que apliquen la seguridad de Messenger.</p>
+                <a href="#" className="text-[13px] text-[#3b59f6] underline mb-5 inline-block">📖 Más información sobre la seguridad de Messenger</a>
+                <div className="grid grid-cols-3 gap-4 mb-8 mt-4">
+                  {[
+                    { label: 'Mensajero web', icon: '🖥' },
+                    { label: 'Mensajero iOS', icon: '📱' },
+                    { label: 'Mensajero Android', icon: '🤖' },
+                  ].map(p => (
+                    <div key={p.label} className="border border-[#e9eae6] rounded-[12px] p-5">
+                      <div className="flex items-start gap-3 mb-2">
+                        <div className="w-10 h-10 rounded-[8px] bg-[#f3f3f1] flex items-center justify-center text-[18px]">{p.icon}</div>
+                        <div>
+                          <div className="flex items-center gap-2"><p className="text-[14px] font-semibold text-[#1a1a1a]">{p.label}</p><span className="bg-[#fef3c7] text-[#92400e] rounded-full px-2 py-0.5 text-[11px] font-medium">Desactivado</span></div>
+                          <p className="text-[12px] text-[#646462] mt-1">La seguridad de Messenger no está implementada para {p.label.toLowerCase()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Claves secretas</h3>
+                <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444] mb-4">+ Crear nueva</button>
+                <table className="w-full text-[13px]">
+                  <thead><tr className="border-b border-[#e9eae6]">
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Nombre</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Clave</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Creado el</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Plataforma</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Estado</th>
+                    <th className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">Usado por última vez a las</th>
+                  </tr></thead>
+                  <tbody><tr className="border-b border-[#f3f3f1]">
+                    <td className="px-4 py-3 text-[#1a1a1a]">Unified Secret</td>
+                    <td className="px-4 py-3 text-[#646462] flex items-center gap-2"><button className="hover:text-[#1a1a1a]">📋</button><button className="hover:text-[#1a1a1a]">👁</button>****************</td>
+                    <td className="px-4 py-3 text-[#646462]">May 5, 2026 at 8:55AM</td>
+                    <td className="px-4 py-3 text-[#646462]">Todo</td>
+                    <td className="px-4 py-3 text-[#646462]">9:24 a.m.</td>
+                    <td className="px-4 py-3"></td>
+                  </tr></tbody>
+                </table>
+              </div>
+            )}
+
+            {tab === 'archivos' && (
+              <div>
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Permitir archivos adjuntos</h3>
+                    <p className="text-[13px] text-[#646462]">Los leads y los usuarios podrán adjuntar y enviar archivos .gif, .jpeg, .jpg, .mov, .mp4, .pdf, .png, .txt, .heic, .oga, .ogg y .dng.</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Toggle on={permitArch} onToggle={() => setPermitArch(v => !v)} />
+                    <span className="text-[13px] text-[#1a1a1a]">Permitir que los leads y los usuarios envíen archivos adjuntos</span>
+                  </div>
+                </div>
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Otros tipos de archivos</h3>
+                    <p className="text-[13px] text-[#646462] mb-2">Permite que los leads y los usuarios adjunten y envíen otros tipos de archivos al enumerar la extensión para cada tipo a continuación. Para proteger tu cuenta, ciertos tipos de archivos están prohibidos.</p>
+                    <a href="#" className="text-[13px] text-[#3b59f6] underline">📖 Más información.</a>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Toggle on={otrosArch} onToggle={() => setOtrosArch(v => !v)} />
+                    <span className="text-[13px] text-[#1a1a1a]">Permitir que los leads y los usuarios envíen otros tipos de archivos</span>
+                  </div>
+                </div>
+                <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
+                  <div className="flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Tipos de entrada de Messenger</h3>
+                    <p className="text-[13px] text-[#646462]">Controla a qué tipos de entrada tienen acceso los leads y los usuarios en messenger.</p>
+                  </div>
+                  <div className="w-[280px] flex flex-col gap-2 flex-shrink-0">
+                    {[
+                      { key: 'camara' as const, label: 'Acceso a la cámara (SDK móvil)' },
+                      { key: 'imagenes' as const, label: 'Imágenes y videos' },
+                      { key: 'archivos' as const, label: 'Archivos' },
+                      { key: 'gif' as const, label: 'GIF' },
+                      { key: 'voz' as const, label: 'Notas de voz' },
+                    ].map(opt => (
+                      <label key={opt.key} className="flex items-center gap-2 cursor-pointer" onClick={() => setTipoEntradas(s => ({ ...s, [opt.key]: !s[opt.key] }))}>
+                        <span className={`w-4 h-4 rounded-sm border ${tipoEntradas[opt.key] ? 'bg-[#3b59f6] border-[#3b59f6]' : 'border-[#ccc] bg-white'} flex items-center justify-center`}>
+                          {tipoEntradas[opt.key] && <span className="text-white text-[10px]">✓</span>}
+                        </span>
+                        <span className="text-[13px] text-[#1a1a1a]">{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'workspace' && <p className="text-[13px] text-[#646462]">Configuración Espacio de trabajo (próximamente).</p>}
+            {tab === 'auth' && <p className="text-[13px] text-[#646462]">Autenticación de clientes (próximamente).</p>}
+            {tab === 'estado' && <p className="text-[13px] text-[#646462]">Comprobación de estado (próximamente).</p>}
+
+            {tab === 'enlaces' && <>
             <h2 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Seguridad de los enlaces</h2>
             <p className="text-[13px] text-[#646462] mb-5">Controla la configuración de seguridad de los enlaces en las conversaciones</p>
             <div className="grid grid-cols-2 gap-4 mb-8">
@@ -3553,6 +5201,7 @@ function WorkspaceSecurityView({ view, onNavigate }: { view: View; onNavigate: (
             <div className="flex justify-center mt-4">
               <button className="border border-[#e9eae6] rounded-full px-4 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Load more</button>
             </div>
+            </>}
           </div>
         </div>
       </div>
@@ -4503,20 +6152,313 @@ function SocialChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: 
   );
 }
 
+// ── InboxTeamView (1-68756) ───────────────────────────────────────────────────
+
+function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [method, setMethod] = useState<'manual' | 'roundrobin' | 'equilibrio'>('manual');
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Inbox para el equipo</h1>
+            <div className="flex items-center gap-2">
+              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg></button>
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nuevo buzón del equipo</button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {/* Promo card */}
+            <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+              <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+              <div className="flex-1 max-w-[500px]">
+                <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Optimiza tu asistencia con los buzones de equipo</h2>
+                <p className="text-[13px] text-[#646462] mb-4">Cada equipo que creas tiene un espacio separado en tu buzón, por lo que es fácil asignar los mensajes correctos a las personas adecuadas.</p>
+                <div className="flex items-center gap-3">
+                  <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">+ Nuevo buzón del equipo</button>
+                  <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Inbox para el equipo</button>
+                </div>
+              </div>
+              <div className="w-[300px] h-[180px] flex-shrink-0 rounded-[8px] bg-[#fef3c7] flex items-center justify-center text-[12px] text-[#92400e] font-medium border border-[#fde68a]">Help Desk preview</div>
+            </div>
+
+            {/* Buzón del equipo sin título — collapsible card with form */}
+            <div className="border-2 border-[#fa7938] rounded-[12px] overflow-hidden mb-4">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#e9eae6]">
+                <div className="flex items-center gap-2"><span className="text-[#7c3aed]">⚡</span><span className="text-[14px] font-semibold text-[#1a1a1a]">Buzón del equipo sin título</span></div>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
+              </div>
+              <div className="p-6">
+                {/* Agregar compañeros */}
+                <p className="text-[13px] font-semibold text-[#1a1a1a] mb-2">Agregar compañeros de equipo</p>
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="flex-1 max-w-[500px] flex items-center gap-2 border border-[#e9eae6] rounded-[8px] px-3 py-2">
+                    <span className="text-[#646462]">🔍</span>
+                    <input placeholder="Selecciona al menos un compañero de equipo" className="flex-1 outline-none text-[13px] bg-transparent" />
+                  </div>
+                  <button className="text-[13px] text-[#1a1a1a] flex items-center gap-1 px-3 py-2 hover:bg-[#f3f3f1] rounded">+ Invitar a miembros del equipo</button>
+                </div>
+
+                {/* Método de asignación */}
+                <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Elige un método de asignación</p>
+                <div className="grid grid-cols-3 gap-3 mb-6">
+                  {[
+                    { id: 'manual' as const, icon: '↗', name: 'Manual', desc: 'Las conversaciones deben asignarse manualmente a los compañeros de equipo.' },
+                    { id: 'roundrobin' as const, icon: '⚙', name: 'Round robin', desc: 'Las conversaciones se asignan automáticamente a los compañeros de equipo en orden secuencial.' },
+                    { id: 'equilibrio' as const, icon: '⇄', name: 'Equilibrio', desc: 'Las conversaciones se asignan automáticamente al compañero de equipo con el menor número de conversaciones abiertas.', badge: 'Obtener funcionalidad' },
+                  ].map(opt => (
+                    <button key={opt.id} onClick={() => setMethod(opt.id)} className={`border rounded-[10px] p-5 text-center ${method === opt.id ? 'border-[#fa7938] bg-[#fff7f0]' : 'border-[#e9eae6] hover:border-[#c8c9c4]'}`}>
+                      <div className={`text-[20px] mb-2 ${method === opt.id ? 'text-[#fa7938]' : 'text-[#646462]'}`}>{opt.icon}</div>
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <p className="text-[14px] font-semibold text-[#1a1a1a]">{opt.name}</p>
+                        {opt.badge && <span className="bg-[#7c3aed] text-white text-[10px] px-2 py-0.5 rounded-full font-medium">{opt.badge}</span>}
+                      </div>
+                      <p className="text-[11px] text-[#646462] leading-[16px]">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Establecer horario de atención */}
+            <div className="border border-[#e9eae6] rounded-[12px] p-5 mb-3">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Establecer horario de atención del equipo</h3>
+              <p className="text-[13px] text-[#646462] mb-3">Si se asigna una conversación fuera del horario de oficina de tu equipo, esta función le muestra al cliente cuándo volverás, en su zona horaria. Los tiempos de respuesta te permiten indicar a los clientes la rapidez con la que deben esperar las respuestas durante las horas de atención. <a href="#" className="text-[#3b59f6] underline">Más información sobre el horario de atención y los tiempos de respuesta</a>.</p>
+              <button className="bg-[#7c3aed] text-white rounded-full px-3 py-1.5 text-[12px] font-medium hover:bg-[#6d28d9] flex items-center gap-1.5"><span>⚡</span>Obtener la función</button>
+            </div>
+
+            {/* Establecer tiempo de respuesta */}
+            <div className="border border-[#e9eae6] rounded-[12px] p-5 mb-4">
+              <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Establece el tiempo de respuesta del equipo</h3>
+              <p className="text-[13px] text-[#646462] mb-3">Si se asigna una conversación fuera del horario de oficina de tu equipo, esta función le muestra al cliente cuándo volverás, en su zona horaria. Los tiempos de respuesta te permiten indicar a los clientes la rapidez con la que deben esperar las respuestas durante las horas de respuesta. <a href="#" className="text-[#3b59f6] underline">Más información sobre el horario de atención y los tiempos de respuesta</a>.</p>
+              <button className="bg-[#7c3aed] text-white rounded-full px-3 py-1.5 text-[12px] font-medium hover:bg-[#6d28d9] flex items-center gap-1.5"><span>⚡</span>Obtener la función</button>
+            </div>
+
+            {/* Footer actions */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#e9eae6]">
+              <button className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Cancelar</button>
+              <button className="bg-[#1a1a1a] text-white rounded-full px-4 py-[7px] text-[13px] font-semibold hover:bg-[#444]">Crear un buzón para el equipo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── HorarioAtencionView (1-96065) ─────────────────────────────────────────────
+
+function HorarioAtencionView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [tab, setTab] = useState<'general' | 'personalizado'>('general');
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Horario de atención</h1>
+            <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg></button>
+          </div>
+          <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+            {(['general', 'personalizado'] as const).map(id => (
+              <button key={id} onClick={() => setTab(id)}
+                className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  tab === id ? 'border-[#fa7938] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+                }`}>
+                {id === 'general' ? 'General' : 'Horario de atención personalizado'}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {tab === 'general' && <>
+              {/* Promo card */}
+              <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
+                <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
+                <div className="flex-1 max-w-[500px]">
+                  <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Establece siempre las expectativas correctas</h2>
+                  <p className="text-[13px] text-[#646462] mb-4">Los horarios de atención y los tiempos de respuesta permiten a los clientes saber cuándo están disponibles tus equipos y con qué rapidez suelen responder.</p>
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Horario de atención y tiempo de respuesta</button>
+                    <button className="text-[13px] text-[#3b59f6] hover:underline flex items-center gap-1.5">📖 Utiliza Fin AI Agent fuera del horario de oficina</button>
+                  </div>
+                </div>
+                <img src={IMG_OFFICE_HOURS_BANNER} alt="Office hours preview" className="w-[442px] h-[206px] flex-shrink-0 rounded-[8px] object-cover" data-node-id="1:95941" />
+              </div>
+
+              {/* horario predeterminado */}
+              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">horario de oficina predeterminado</h3>
+                  <p className="text-[13px] text-[#646462] mb-2">Esto se aplica a todas las conversaciones en tu espacio de trabajo. Si un cliente inicia una conversación fuera de este horario, verá cuándo volverás a tu zona horaria. También puedes establecer horarios de atención para equipos específicos.</p>
+                  <a href="#" className="text-[13px] text-[#3b59f6] underline">Ver el horario de atención personalizado</a>
+                </div>
+                <div className="w-[400px] flex-shrink-0">
+                  <p className="text-[13px] text-[#646462]">Los horarios se basan en la zona horaria de tu espacio de trabajo (<u>Madrid</u>). Si no se especifica, la disponibilidad predeterminada es 24 horas al día, los 7 días a la semana (siempre activo).</p>
+                  <button className="text-[13px] text-[#fa7938] font-medium mt-2">+ Añadir horas</button>
+                  <p className="text-[14px] font-semibold text-[#1a1a1a] mt-4">Vacaciones y cierres</p>
+                  <p className="text-[13px] text-[#646462] mb-2">Agregue fechas específicas en las que su equipo está cerrado o tiene un horario diferente al horario de atención.</p>
+                  <button className="text-[13px] text-[#fa7938] font-medium">+ Agregar día festivo o cierre</button>
+                </div>
+              </div>
+
+              {/* Tiempos de respuesta */}
+              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6 mb-3">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Tiempos de respuesta</h3>
+                  <p className="text-[13px] text-[#646462] mb-2">Esto se aplica a todas las conversaciones en tu espacio de trabajo. Si un cliente inicia una conversación durante el horario de atención, verá tu tiempo de respuesta habitual. También puedes establecer tiempos de respuesta para equipos específicos.</p>
+                  <a href="#" className="text-[13px] text-[#3b59f6] underline">Consulta los ajustes del equipo.</a>
+                </div>
+                <div className="w-[400px] flex-shrink-0">
+                  <p className="text-[13px] text-[#1a1a1a] mb-2">El equipo suele responder:</p>
+                  <select className="w-full border border-[#e9eae6] rounded-[8px] px-3 py-2 text-[13px] bg-white"><option>We'll reply as soon as we can</option></select>
+                </div>
+              </div>
+
+              {/* Fin AI Agent */}
+              <div className="border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-6">
+                <div className="flex-1">
+                  <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Fin AI Agent</h3>
+                  <p className="text-[13px] text-[#646462]">Cuando tu personal está fuera de línea, Fin puede intervenir y encargarse de las conversaciones de modo que los clientes reciban ayuda oportuna las 24 horas. <a href="#" className="text-[#3b59f6] underline">Configúralo en los flujos de trabajo</a>.</p>
+                </div>
+                <img src={IMG_OFFICE_HOURS_FIN_AI} alt="Fin AI workflow" className="w-[493px] h-[162px] flex-shrink-0 rounded-[8px] object-contain" data-node-id="1:96016" />
+              </div>
+            </>}
+            {tab === 'personalizado' && <p className="text-[13px] text-[#646462]">Horario de atención personalizado por equipo (próximamente).</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MarcasView (1-97215) ──────────────────────────────────────────────────────
+
+function MarcasView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a]">Marcas</h1>
+            <button className="border border-[#e9eae6] rounded-full px-4 py-[7px] text-[13px] font-medium text-[#646462] cursor-not-allowed">+ Nueva marca</button>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            <div className="border border-[#e9eae6] rounded-[12px] p-5 max-w-[400px]">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Acme</p>
+                <span className="bg-[#f3f3f1] text-[#646462] text-[11px] px-2 py-0.5 rounded-full font-medium">Predeterminado</span>
+              </div>
+              <div className="flex items-center gap-2 text-[13px] text-[#646462] mb-1.5"><span>📖</span>Acme Help Center</div>
+              <div className="flex items-center gap-2 text-[13px] text-[#646462]"><span>⚡</span>Fin</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ChannelLogo (real Figma SVG compositions, extracted from 1-67348) ─────────
+
+function ChannelLogo({ channel, size = 48 }: { channel: 'messenger'|'email'|'phone'|'whatsapp'|'instagram'|'facebook'|'slack'|'sms'|'switch'; size?: number }) {
+  const sx = { width: size, height: size };
+  switch (channel) {
+    case 'messenger': return (
+      <div className="overflow-hidden relative" style={sx}>
+        <img src={LOGO_MESSENGER_BG} alt="" className="absolute inset-0 w-full h-full" />
+        <img src={LOGO_MESSENGER_FG} alt="" className="absolute" style={{ inset: '27.09% 27.06% 22.89% 27.09%' }} />
+      </div>
+    );
+    case 'email': return (
+      <div className="overflow-hidden relative" style={sx}>
+        <img src={LOGO_EMAIL_BG} alt="" className="absolute inset-0 w-full h-full" />
+        <img src={LOGO_EMAIL_FG} alt="" className="absolute" style={{ inset: '31.26% 28.1% 31.23% 28.13%' }} />
+      </div>
+    );
+    case 'phone': return (
+      <div className="overflow-hidden relative" style={sx}>
+        <img src={LOGO_PHONE_BG} alt="" className="absolute inset-0 w-full h-full" />
+        <img src={LOGO_PHONE_FG} alt="" className="absolute" style={{ inset: '28.13% 28.11% 28.1% 28.14%' }} />
+      </div>
+    );
+    case 'whatsapp': return (
+      <div className="overflow-hidden relative" style={sx}>
+        <div className="absolute inset-0" style={{ WebkitMaskImage: `url('${LOGO_WHATSAPP_BG}')`, maskImage: `url('${LOGO_WHATSAPP_BG}')`, WebkitMaskSize: 'cover', maskSize: 'cover' }}>
+          <img src={LOGO_WHATSAPP_FG} alt="" className="absolute inset-0 w-full h-full" />
+        </div>
+      </div>
+    );
+    case 'instagram': return (
+      <div className="overflow-hidden relative" style={sx}>
+        <div className="absolute inset-0" style={{ WebkitMaskImage: `url('${LOGO_INSTAGRAM_BG}')`, maskImage: `url('${LOGO_INSTAGRAM_BG}')`, WebkitMaskSize: 'cover', maskSize: 'cover' }}>
+          <img src={LOGO_INSTAGRAM_FG} alt="" className="absolute inset-0 w-full h-full" />
+        </div>
+      </div>
+    );
+    case 'facebook': return (
+      <div className="overflow-hidden relative" style={sx}>
+        <div className="absolute inset-0" style={{ WebkitMaskImage: `url('${LOGO_FACEBOOK_BG}')`, maskImage: `url('${LOGO_FACEBOOK_BG}')`, WebkitMaskSize: 'cover', maskSize: 'cover' }}>
+          <img src={LOGO_FACEBOOK_FG} alt="" className="absolute inset-0 w-full h-full" />
+        </div>
+      </div>
+    );
+    case 'sms': return (
+      <div className="overflow-hidden relative" style={sx}>
+        <img src={LOGO_SMS_BG} alt="" className="absolute inset-0 w-full h-full" />
+        <img src={LOGO_SMS_FG1} alt="" className="absolute" style={{ inset: '25.01% 28.1% 48.15% 43.76%' }} />
+        <img src={LOGO_SMS_FG2} alt="" className="absolute" style={{ inset: '28.13% 43.73% 28.1% 28.13%' }} />
+      </div>
+    );
+    case 'switch': return (
+      <div className="overflow-hidden relative" style={sx}>
+        <img src={LOGO_SWITCH_BG} alt="" className="absolute inset-0 w-full h-full" />
+        <img src={LOGO_SWITCH_FG1} alt="" className="absolute" style={{ inset: '25.01% 28.1% 41.9% 43.76%' }} />
+        <img src={LOGO_SWITCH_FG2} alt="" className="absolute" style={{ inset: '28.13% 43.73% 28.1% 28.13%' }} />
+      </div>
+    );
+    case 'slack': return (
+      <div className="overflow-hidden relative" style={sx}>
+        {/* 14-vector composition extracted from Figma node 1:67260 (multi-color hashtag) */}
+        <img src={LOGO_SLACK_V0} alt="" className="absolute" style={{ inset: '0.58% 52.82% 78.73% 26.24%' }} />
+        <img src={LOGO_SLACK_V1} alt="" className="absolute" style={{ inset: '0.58% 26.46% 52.66% 52.34%' }} />
+        <div className="absolute" style={{ inset: '10.32% 52.54% 78.45% 35.6%', WebkitMaskImage: `url('${LOGO_SLACK_F}'), url('${LOGO_SLACK_F1}')`, maskImage: `url('${LOGO_SLACK_F}'), url('${LOGO_SLACK_F1}')`, WebkitMaskSize: 'cover', maskSize: 'cover' }}>
+          <img src={LOGO_SLACK_F2} alt="" className="absolute inset-0 w-full h-full" />
+        </div>
+        <img src={LOGO_SLACK_V2} alt="" className="absolute" style={{ inset: '26.38% 52.57% 52.66% -0.12%' }} />
+        <img src={LOGO_SLACK_V3} alt="" className="absolute" style={{ inset: '26.39% 0.28% 52.66% 78.72%' }} />
+        <img src={LOGO_SLACK_V4} alt="" className="absolute" style={{ inset: '35.89% 10.2% 52.66% 78.72%' }} />
+        <img src={LOGO_SLACK_V5} alt="" className="absolute" style={{ inset: '52.44% 0.09% 26.59% 52.35%' }} />
+        <img src={LOGO_SLACK_V6} alt="" className="absolute" style={{ inset: '52.43% 78.92% 26.66% -0.12%' }} />
+        <img src={LOGO_SLACK_V7} alt="" className="absolute" style={{ inset: '52.45% 52.82% 0.78% 25.98%' }} />
+        <div className="absolute" style={{ inset: '78.27% 36.31% 10.04% 52.35%', WebkitMaskImage: `url('${LOGO_SLACK_H}'), url('${LOGO_SLACK_F1}')`, maskImage: `url('${LOGO_SLACK_H}'), url('${LOGO_SLACK_F1}')`, WebkitMaskSize: 'cover', maskSize: 'cover' }}>
+          <img src={LOGO_SLACK_H1} alt="" className="absolute inset-0 w-full h-full" />
+        </div>
+        <img src={LOGO_SLACK_V8} alt="" className="absolute" style={{ inset: '78.27% 26.51% 0.79% 52.35%' }} />
+      </div>
+    );
+  }
+}
+
 // ── AllChannelsView (1-67348) ─────────────────────────────────────────────────
 
-const ALL_CHANNELS_RECOMMENDED: { name: string; subtitle: string; desc: string; bg: string; emoji: string; nav: View | null }[] = [
-  { name: 'Messenger',         subtitle: 'Incluido en tu plan', desc: 'Brinda ayuda proactiva, autoservicio y asistencia personal a través del chat en tu sitio web.', bg: '#3b59f6', emoji: '💬', nav: 'messenger' },
-  { name: 'Correo electrónico',subtitle: 'Incluido en tu plan', desc: 'Responde a las consultas de los clientes e inicia conversaciones por correo electrónico.', bg: '#fa7938', emoji: '✉', nav: 'email' },
-  { name: 'Teléfono',          subtitle: 'Facturado por uso',   desc: 'Inicia llamadas telefónicas, videollamadas y pantalla compartida para ayudar rápidamente a tus clientes.', bg: '#22c55e', emoji: '📞', nav: 'phone' },
+type ChannelKey = 'messenger'|'email'|'phone'|'whatsapp'|'instagram'|'facebook'|'slack'|'sms'|'switch';
+const ALL_CHANNELS_RECOMMENDED: { key: ChannelKey; name: string; subtitle: string; desc: string; nav: View | null }[] = [
+  { key: 'messenger', name: 'Messenger',          subtitle: 'Incluido en tu plan', desc: 'Brinda ayuda proactiva, autoservicio y asistencia personal a través del chat en tu sitio web.', nav: 'messenger' },
+  { key: 'email',     name: 'Correo electrónico', subtitle: 'Incluido en tu plan', desc: 'Responde a las consultas de los clientes e inicia conversaciones por correo electrónico.', nav: 'email' },
+  { key: 'phone',     name: 'Teléfono',           subtitle: 'Facturado por uso',   desc: 'Inicia llamadas telefónicas, videollamadas y pantalla compartida para ayudar rápidamente a tus clientes.', nav: 'phone' },
 ];
-const ALL_CHANNELS_OTHER: { name: string; subtitle: string; desc: string; bg: string; emoji: string; nav: View | null; badge?: string }[] = [
-  { name: 'WhatsApp',  subtitle: 'Facturado por uso',   desc: 'Responde a los mensajes de WhatsApp e interactúa con los clientes directamente desde tu Inbox.', bg: '#25D366', emoji: '💚', nav: 'whatsapp' },
-  { name: 'Instagram', subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Instagram e interactúa con los clientes directamente desde tu Inbox.', bg: '#E1306C', emoji: '📷', nav: 'social' },
-  { name: 'Facebook',  subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Facebook e interactúa con los clientes directamente desde tu Inbox.', bg: '#1877F2', emoji: 'f', nav: 'social' },
-  { name: 'Slack',     subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Slack e interactúa con los clientes directamente desde tu Inbox.', bg: '#4A154B', emoji: '#', nav: null },
-  { name: 'SMS',       subtitle: 'Facturado por uso',   desc: 'Responde a las consultas de los clientes e inicia conversaciones con mensajes SMS.', bg: '#22c55e', emoji: '📱', nav: 'sms' },
-  { name: 'Switch',    subtitle: 'Disponible con cambio a un plan de mayor categoría', desc: 'Permite que los clientes pasen de una cola telefónica a una experiencia de chat en Messenger.', bg: '#6366f1', emoji: '⇄', nav: null, badge: 'Obtener funcionalidad' },
+const ALL_CHANNELS_OTHER: { key: ChannelKey; name: string; subtitle: string; desc: string; nav: View | null; badge?: string }[] = [
+  { key: 'whatsapp',  name: 'WhatsApp',  subtitle: 'Facturado por uso',   desc: 'Responde a los mensajes de WhatsApp e interactúa con los clientes directamente desde tu Inbox.', nav: 'whatsapp' },
+  { key: 'instagram', name: 'Instagram', subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Instagram e interactúa con los clientes directamente desde tu Inbox.', nav: 'social' },
+  { key: 'facebook',  name: 'Facebook',  subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Facebook e interactúa con los clientes directamente desde tu Inbox.', nav: 'social' },
+  { key: 'slack',     name: 'Slack',     subtitle: 'Incluido en tu plan', desc: 'Responde a los mensajes de Slack e interactúa con los clientes directamente desde tu Inbox.', nav: null },
+  { key: 'sms',       name: 'SMS',       subtitle: 'Facturado por uso',   desc: 'Responde a las consultas de los clientes e inicia conversaciones con mensajes SMS.', nav: 'sms' },
+  { key: 'switch',    name: 'Switch',    subtitle: 'Disponible con cambio a un plan de mayor categoría', desc: 'Permite que los clientes pasen de una cola telefónica a una experiencia de chat en Messenger.', nav: null, badge: 'Obtener funcionalidad' },
 ];
 
 function AllChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
@@ -4547,7 +6489,7 @@ function AllChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: Vie
               {ALL_CHANNELS_RECOMMENDED.map(c => (
                 <button key={c.name} onClick={() => c.nav && onNavigate(c.nav)} className="border border-[#e9eae6] rounded-[10px] p-6 flex flex-col text-left hover:border-[#c8c9c4] hover:shadow-sm">
                   <div className="flex items-start gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-[20px] flex-shrink-0" style={{background: c.bg}}>{c.emoji}</div>
+                    <ChannelLogo channel={c.key} size={48} />
                     <div><p className="text-[15px] font-semibold text-[#1a1a1a]">{c.name}</p><p className="text-[12px] text-[#646462]">{c.subtitle}</p></div>
                   </div>
                   <p className="text-[13px] text-[#646462]">{c.desc}</p>
@@ -4560,7 +6502,7 @@ function AllChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: Vie
               {ALL_CHANNELS_OTHER.map(c => (
                 <button key={c.name} onClick={() => c.nav && onNavigate(c.nav)} className="border border-[#e9eae6] rounded-[10px] p-6 flex flex-col text-left hover:border-[#c8c9c4] hover:shadow-sm">
                   <div className="flex items-start gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-[20px] flex-shrink-0" style={{background: c.bg}}>{c.emoji}</div>
+                    <ChannelLogo channel={c.key} size={48} />
                     <div className="flex-1">
                       <div className="flex items-center gap-2"><p className="text-[15px] font-semibold text-[#1a1a1a]">{c.name}</p>{c.badge && <span className="bg-[#7c3aed] text-white text-[11px] px-2 py-0.5 rounded-full font-medium">{c.badge}</span>}</div>
                       <p className="text-[12px] text-[#646462]">{c.subtitle}</p>
@@ -4578,11 +6520,5035 @@ function AllChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: Vie
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// OUTBOUND VIEW (Figma nodes 4:30285 — outbound/all, 4:31277 — outbound/series)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type OutboundSubView = 'mensajes' | 'series' | 'ultimo' | 'borradores' | 'ajustes';
+
+function OutboundSidebar({ sub, onSelect }: { sub: OutboundSubView; onSelect: (s: OutboundSubView) => void }) {
+  // Match Inbox sidebar UI: header 20px font-semibold tracking -0.4px, items text-[13px]
+  // with filled bold icons (#1a1a1a), font-semibold + bg-white + shadow on active.
+  const [openVistas, setOpenVistas] = useState(sub === 'ultimo' || sub === 'borradores');
+  // Active item style — same shadow + font-semibold pattern as Inbox SidebarNavItem.
+  const itemCls = (isActive: boolean) =>
+    `relative flex items-center gap-2 h-8 pl-3 pr-3 py-1 rounded-lg cursor-pointer text-[13px] w-full text-left transition-colors ${
+      isActive
+        ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+        : 'hover:bg-[#e9eae6]/40 text-[#1a1a1a]'
+    }`;
+  return (
+    <div className="w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
+      {/* Header — same pattern as Inbox */}
+      <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
+        <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Canales salientes</span>
+      </div>
+      <div className="flex-1 overflow-y-auto pl-3 pr-3 pb-4 flex flex-col gap-0.5">
+        {/* Mensajes — bold filled triangle icon */}
+        <button onClick={() => onSelect('mensajes')} className={itemCls(sub === 'mensajes')}>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M2 4h12L8 13z"/></svg>
+          <span className="flex-1">Mensajes</span>
+        </button>
+        {/* Series — bold filled branching icon */}
+        <button onClick={() => onSelect('series')} className={itemCls(sub === 'series')}>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><circle cx="3.5" cy="3.5" r="1.7"/><circle cx="3.5" cy="12.5" r="1.7"/><circle cx="12.5" cy="8" r="1.7"/><path d="M5 4l6 3.5M5 12l6-3.5" stroke="#1a1a1a" strokeWidth="1.5"/></svg>
+          <span className="flex-1">Series</span>
+        </button>
+        {/* Vistas — collapsible group header (NOT a nav item, doesn't get bold-on-active) */}
+        <button
+          onClick={() => setOpenVistas(o => !o)}
+          className="mt-3 px-3 flex items-center justify-between h-8 rounded-lg hover:bg-[#e9eae6]/40 w-full"
+        >
+          <span className="text-[13px] font-semibold text-[#1a1a1a]">Vistas</span>
+          <div className="flex items-center gap-1">
+            <span onClick={(e) => e.stopPropagation()} className="w-5 h-5 flex items-center justify-center rounded-full bg-white shadow-[0px_1px_2px_rgba(20,20,20,0.1)]">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            </span>
+            <span className="w-5 h-4 flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${openVistas ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+            </span>
+          </div>
+        </button>
+        {openVistas && (
+          <div className="flex flex-col gap-0.5 pl-1">
+            {/* Último — bold filled clock-circle icon */}
+            <button onClick={() => onSelect('ultimo')} className={itemCls(sub === 'ultimo')}>
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8.75 4v3.69l2.6 1.5-.75 1.3L7.25 8.5V4h1.5z"/></svg>
+              <span className="flex-1">Último</span>
+            </button>
+            {/* Borradores recientes — bold filled pencil icon */}
+            <button onClick={() => onSelect('borradores')} className={itemCls(sub === 'borradores')}>
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M11.7 2.3l2 2-7.7 7.7-3 1 1-3 7.7-7.7zM12.5 1.5l1 1 1-1 .5.5-1 1 1 1-.5.5-1-1-1 1-.5-.5 1-1-1-1z"/></svg>
+              <span className="flex-1">Borradores recientes</span>
+            </button>
+          </div>
+        )}
+        {/* Ajustes — outside Vistas group, always visible (matches Figma screenshot) */}
+        <button onClick={() => onSelect('ajustes')} className={`mt-1 ${itemCls(sub === 'ajustes')}`}>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM7 1h2v2.2l1.6.7L12.2 2.5l1.4 1.4L12 5.5l.7 1.6H15v2h-2.2l-.7 1.6 1.6 1.6-1.4 1.4-1.6-1.6L9 12.8V15H7v-2.2l-1.6-.7L3.8 13.5l-1.4-1.4L4 10.5 3.3 8.9H1V7h2.3l.7-1.6L2.4 3.8l1.4-1.4L5.4 4l1.6-.7V1z"/></svg>
+          <span className="flex-1">Ajustes</span>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M5 3h8v8h-2V6.4l-6.3 6.3-1.4-1.4L9.6 5H5z"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OutboundMensajes() {
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M3 4l4 7 4-7M2 4h12"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Mensajes</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nuevo mensaje
+          </button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
+        <div className="flex-1 flex items-center gap-2 border border-[#e9eae6] rounded-full px-4 py-[6px] bg-white max-w-[280px]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+          <input placeholder="Buscar..." className="flex-1 outline-none text-[13px] placeholder:text-[#646462]"/>
+        </div>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 4l4 7 4-7"/></svg>
+          Todos los tipos de contenido
+        </button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Filtrar
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-semibold text-[#1a1a1a]">1 message</p>
+          <button className="flex items-center gap-1 text-[12px] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 9h6M5 11.5h4"/></svg>
+            <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-5 flex items-start gap-4 relative">
+          <div className="flex-1">
+            <h3 className="text-[14px] font-bold text-[#1a1a1a] mb-2">
+              Envía mensajes salientes para mantener informados a los clientes.
+            </h3>
+            <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">
+              Interactivamente a los clientes dondequiera que estén con mensajes salientes segmentados y personalizados. Envíalos en tu producto o por correo electrónico, SMS, WhatsApp y más.
+            </p>
+            <div className="flex items-center gap-4">
+              <a href="#" className="flex items-center gap-1.5 text-[12px] font-medium text-[#1a1a1a] hover:underline">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 2.5v11l5-2.5 5 2.5v-11z"/></svg>
+                Más información sobre los canales salientes
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[12px] font-medium text-[#1a1a1a] hover:underline">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+                Ver precios
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[12px] font-medium text-[#1a1a1a] hover:underline">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+                Probar una demostración
+              </a>
+            </div>
+          </div>
+          <div className="w-[260px] h-[140px] bg-gradient-to-br from-[#fff5e6] to-[#ffd9b3] rounded-[10px] flex items-center justify-center relative flex-shrink-0">
+            <div className="w-12 h-12 rounded-full bg-white/70 flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><path d="M5 3l8 5-8 5z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="grid grid-cols-[24px_1fr_100px_180px_140px_80px_70px_60px] px-5 py-3 border-b border-[#f1f1ee] text-[12px] font-medium text-[#646462] items-center">
+            <div><span className="w-4 h-4 inline-block rounded border border-[#d4d4d2]"/></div>
+            <div>Título</div>
+            <div>Estado</div>
+            <div>Remitente</div>
+            <div>Tipo de contenido</div>
+            <div>Enviado</div>
+            <div>Objetivo</div>
+            <div>Tipo</div>
+          </div>
+          <div className="grid grid-cols-[24px_1fr_100px_180px_140px_80px_70px_60px] px-5 py-3 items-center">
+            <div><span className="w-4 h-4 inline-block rounded border border-[#d4d4d2]"/></div>
+            <div className="text-[13px] font-semibold text-[#1a1a1a]">Sin título</div>
+            <div className="text-[12.5px] text-[#1a1a1a]">Draft</div>
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-[#e9eae6] flex items-center justify-center text-[10px] font-bold text-[#646462]">H</span>
+              <span className="text-[12.5px] text-[#1a1a1a]">Hector Vidal Sanchez</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[12.5px] text-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4h10v8H3z"/><path d="M3 4l5 4 5-4"/></svg>
+              Chat
+            </div>
+            <div className="text-[12.5px] text-[#3b59f6]">0</div>
+            <div className="text-[12.5px] text-[#646462]">—</div>
+            <div className="text-[12.5px] text-[#1a1a1a]">Visit</div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function OutboundSeries() {
+  const templates = [
+    { tag: 'Series', title: 'Onboard new users to drive adoption' },
+    { tag: 'Series', title: 'Announce a new feature to boost adoption' },
+    { tag: 'Series', title: 'Encourage inactive users to re-engage' },
+  ];
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="3.5" cy="3.5" r="1.5"/><circle cx="3.5" cy="12.5" r="1.5"/><circle cx="12.5" cy="8" r="1.5"/><path d="M5 4l6 3.5M5 12l6-3.5"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Serie</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
+            Aprender
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nueva serie
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        <div className="rounded-[12px] bg-[#f5f5f4] border border-[#e9eae6] p-6 flex items-center gap-6">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-1.5">Automatiza tus mensajes con Series</h2>
+            <p className="text-[13px] text-[#646462] mb-3 max-w-[440px]">
+              Crea un recorrido de mensajería fluido para captar a los clientes en todos los canales, ya sea dentro o fuera de tu producto.
+            </p>
+            <div className="flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
+              <button className="flex items-center gap-1 hover:underline">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
+                Más información sobre Series
+              </button>
+              <button className="flex items-center gap-1 hover:underline">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="9" rx="1.5"/><path d="M6.5 6.5l3 2-3 2v-4z" fill="currentColor"/></svg>
+                Hacer un recorrido
+              </button>
+            </div>
+          </div>
+          <div className="relative w-[300px] h-[160px] rounded-[8px] overflow-hidden bg-gradient-to-br from-[#bcd9c8] via-[#f1d49b] to-[#a08bc4] flex-shrink-0">
+            <button className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-white/95 flex items-center justify-center shadow-md">
+              <svg viewBox="0 0 16 16" className="w-5 h-5 fill-[#1a1a1a]"><path d="M5 3l8 5-8 5V3z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-10 mb-4 text-center">
+          <h3 className="text-[15px] font-semibold text-[#1a1a1a]">Comienza con una plantilla popular</h3>
+        </div>
+        <div className="grid grid-cols-3 gap-4 max-w-[900px] mx-auto">
+          {templates.map((t, i) => (
+            <div key={i} className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden hover:border-[#d4d4d2] cursor-pointer">
+              <div className="h-[120px] bg-[#fafaf9] border-b border-[#e9eae6] p-3 flex items-center justify-center">
+                <div className="grid grid-cols-3 gap-1.5 w-full">
+                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
+                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
+                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
+                  <div className="col-span-3 h-3"/>
+                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
+                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
+                  <div className="h-7 rounded-[3px] bg-white border border-[#e9eae6]"/>
+                </div>
+              </div>
+              <div className="p-3">
+                <div className="flex items-center gap-1 mb-1 text-[11px] text-[#646462]">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.5"><circle cx="3.5" cy="3.5" r="1.5"/><circle cx="3.5" cy="12.5" r="1.5"/><circle cx="12.5" cy="8" r="1.5"/><path d="M5 4l6 3.5M5 12l6-3.5"/></svg>
+                  {t.tag}
+                </div>
+                <p className="text-[13px] font-medium text-[#1a1a1a] leading-tight">{t.title}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 text-center">
+          <button className="text-[13px] font-medium text-[#1a1a1a] hover:underline">Ver todo</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function OutboundView() {
+  const [sub, setSub] = useState<OutboundSubView>('mensajes');
+  function renderSub() {
+    switch (sub) {
+      case 'mensajes':   return <OutboundMensajes />;
+      case 'series':     return <OutboundSeries />;
+      case 'ultimo':     return <KnowledgePlaceholder title="Último" subtitle="El último mensaje saliente que has visualizado o editado." />;
+      case 'borradores': return <KnowledgePlaceholder title="Borradores recientes" subtitle="Mensajes salientes en estado borrador para finalizar y enviar." />;
+      case 'ajustes':    return <KnowledgePlaceholder title="Ajustes" subtitle="Configuración de los canales salientes y permisos del equipo." />;
+    }
+  }
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <OutboundSidebar sub={sub} onSelect={setSub} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {renderSub()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REPORTS VIEW (Figma nodes 1:32668, 1:34178, 1:42451, 2:10327, 3:11829,
+// 3:14199, 3:16295, 3:20010, 3:22346, 3:24515, 3:26772, 4:16934, 4:19011,
+// 4:22197, 4:24401, 4:26962, 4:28809)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ReportsSubView =
+  | 'temas' | 'sugerencias' | 'export' | 'horarios'
+  | 'finAgent' | 'copilot'
+  | 'calls' | 'conversations' | 'csat' | 'effectiveness'
+  | 'responsiveness' | 'slas' | 'teamInbox' | 'teammate' | 'tickets'
+  | 'articles' | 'outboundEng' | 'administrar';
+
+type ReportsItemIcon = 'topic' | 'export' | 'schedule' | 'folder' | 'admin'
+  | 'lightbulb' | 'sparkles' | 'fin' | 'copilot' | 'phone' | 'chat' | 'star'
+  | 'zap' | 'clock' | 'sla' | 'inbox' | 'user' | 'ticket' | 'doc' | 'globe';
+
+type ReportsNavGroup = {
+  key?: ReportsSubView;
+  label: string;
+  icon?: ReportsItemIcon;
+  items?: { key: ReportsSubView; label: string; icon?: ReportsItemIcon }[];
+};
+
+function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: ReportsSubView) => void }) {
+  // All groups collapsed by default — user opens what they need via chevron click.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    'Temas de informes': false,
+    'IA y automatización': false,
+    'Soporte humano': false,
+    'Proactivo': false,
+  });
+  const toggleGroup = (label: string) => setOpenGroups(s => ({ ...s, [label]: !s[label] }));
+  const groups: ReportsNavGroup[] = [
+    {
+      label: 'Temas de informes', icon: 'topic',
+      items: [
+        { key: 'temas',       label: 'Temas',       icon: 'lightbulb' },
+        { key: 'sugerencias', label: 'Sugerencias', icon: 'sparkles' },
+      ],
+    },
+    { key: 'export',  label: 'Exportación de conjuntos de datos', icon: 'export' },
+    { key: 'horarios',label: 'Administrar los horarios', icon: 'schedule' },
+    {
+      label: 'IA y automatización', icon: 'folder',
+      items: [
+        { key: 'finAgent', label: 'Fin AI Agent', icon: 'fin' },
+        { key: 'copilot',  label: 'Copilot',      icon: 'copilot' },
+      ],
+    },
+    {
+      label: 'Soporte humano', icon: 'folder',
+      items: [
+        { key: 'calls',          label: 'Llamadas',                  icon: 'phone' },
+        { key: 'conversations',  label: 'Conversaciones',            icon: 'chat' },
+        { key: 'csat',           label: 'CSAT (encuestas)',          icon: 'star' },
+        { key: 'effectiveness',  label: 'Eficacia',                  icon: 'zap' },
+        { key: 'responsiveness', label: 'Capacidad de respuesta',    icon: 'clock' },
+        { key: 'slas',           label: 'SLAs',                      icon: 'sla' },
+        { key: 'teamInbox',      label: 'Rendimiento del Inbox',     icon: 'inbox' },
+        { key: 'teammate',       label: 'Rendimiento de compañeros', icon: 'user' },
+        { key: 'tickets',        label: 'Tickets',                   icon: 'ticket' },
+      ],
+    },
+    {
+      label: 'Proactivo', icon: 'folder',
+      items: [
+        { key: 'articles',    label: 'Artículos',           icon: 'doc' },
+        { key: 'outboundEng', label: 'Información general', icon: 'globe' },
+      ],
+    },
+  ];
+
+  // Filled/bold icons (Inbox-style) — fill #1a1a1a, no stroke. Each `kind` returns a 16x16 SVG.
+  function GroupIcon({ kind }: { kind: NonNullable<ReportsItemIcon> }) {
+    const cls = "w-4 h-4 fill-[#1a1a1a]";
+    switch (kind) {
+      case 'topic':     return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5C5 1.5 2.5 4 2.5 7c0 2 1 3.6 2.5 4.5l.5 2.5h5l.5-2.5C12.5 10.6 13.5 9 13.5 7 13.5 4 11 1.5 8 1.5zM6 14h4v.5a1 1 0 01-1 1H7a1 1 0 01-1-1V14z"/></svg>;
+      case 'export':    return <svg viewBox="0 0 16 16" className={cls}><path d="M7 2h2v6.6l2.3-2.3 1.4 1.4L8 12.4 3.3 7.7l1.4-1.4L7 8.6V2zM2 13.5h12V15H2v-1.5z"/></svg>;
+      case 'schedule':  return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8.75 4v3.69l2.6 1.5-.75 1.3L7.25 8.5V4h1.5z"/></svg>;
+      case 'folder':    return <svg viewBox="0 0 16 16" className={cls}><path d="M2 4a1 1 0 011-1h3.5L8 4.5h5a1 1 0 011 1V12a1 1 0 01-1 1H3a1 1 0 01-1-1V4z"/></svg>;
+      case 'admin':     return <svg viewBox="0 0 16 16" className={cls}><path d="M2 3.5h12v1.5H2zm0 4h12V9H2zm0 4h12V13H2z"/></svg>;
+      case 'lightbulb': return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5a4.5 4.5 0 00-3 7.85V11h6V9.35A4.5 4.5 0 008 1.5zM5.5 12h5v1h-5v-1zm.5 2h4v.5a1 1 0 01-1 1H7a1 1 0 01-1-1V14z"/></svg>;
+      case 'sparkles':  return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1l1.4 4.6L14 7l-4.6 1.4L8 13l-1.4-4.6L2 7l4.6-1.4L8 1zM12.5 9.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z"/></svg>;
+      case 'fin':       return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="8" r="6.5"/><path d="M5.5 7.5a2.5 2.5 0 015 0v1a2.5 2.5 0 01-5 0v-1z" fill="#fff"/></svg>;
+      case 'copilot':   return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5L9.6 6.4 14.5 8 9.6 9.6 8 14.5 6.4 9.6 1.5 8 6.4 6.4 8 1.5z"/></svg>;
+      case 'phone':     return <svg viewBox="0 0 16 16" className={cls}><path d="M2.5 3a1 1 0 011-1h2.5l1 3-1.5 1c.5 1.5 1.5 2.5 3 3l1-1.5 3 1V11a1 1 0 01-1 1A10 10 0 012.5 3z"/></svg>;
+      case 'chat':      return <svg viewBox="0 0 16 16" className={cls}><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H6.5L4 13.5V11H3a1 1 0 01-1-1V3z"/></svg>;
+      case 'star':      return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5l2 4.5 5 .5-3.7 3.4 1 5L8 12.5l-4.3 2.4 1-5L1 6.5l5-.5 2-4.5z"/></svg>;
+      case 'zap':       return <svg viewBox="0 0 16 16" className={cls}><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>;
+      case 'clock':     return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8.75 4v3.69l2.6 1.5-.75 1.3L7.25 8.5V4h1.5z"/></svg>;
+      case 'sla':       return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5l5.5 2.5v4c0 3-2.3 5.7-5.5 6.5C4.8 13.7 2.5 11 2.5 8V4L8 1.5zM6.5 8.7L5.5 9.7l2 2 3.5-4-1-1-2.5 2.7-1-.7z" fill="#fff"/></svg>;
+      case 'inbox':     return <svg viewBox="0 0 16 16" className={cls}><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v6h-3.5l-1 2h-3l-1-2H2V3z"/></svg>;
+      case 'user':      return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="5" r="3"/><path d="M2.5 13c.5-2.5 2.8-4 5.5-4s5 1.5 5.5 4v.5h-11V13z"/></svg>;
+      case 'ticket':    return <svg viewBox="0 0 16 16" className={cls}><path d="M2 5a1 1 0 011-1h10a1 1 0 011 1v2a1 1 0 100 2v2a1 1 0 01-1 1H3a1 1 0 01-1-1V9a1 1 0 100-2V5z"/></svg>;
+      case 'doc':       return <svg viewBox="0 0 16 16" className={cls}><path d="M3 2a1 1 0 011-1h6l3 3v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2zm6.5 0v3h3l-3-3z" fillRule="evenodd"/></svg>;
+      case 'globe':     return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM2.5 8c0-.7.1-1.4.3-2H6c-.1.6-.1 1.3-.1 2 0 .7 0 1.4.1 2H2.8c-.2-.6-.3-1.3-.3-2zm5.5 5.5c-.8 0-1.6-1.5-1.9-3.5h3.8c-.3 2-1.1 3.5-1.9 3.5zM6 6c.3-2 1.1-3.5 1.9-3.5S9.7 4 10 6H6zm5.7 4c.1-.6.1-1.3.1-2 0-.7 0-1.4-.1-2h2.9c.2.6.3 1.3.3 2s-.1 1.4-.3 2h-2.9z"/></svg>;
+    }
+  }
+
+  return (
+    // Match Inbox sidebar UI: same width/bg/header font/item font.
+    <div className="w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
+        <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Informes</span>
+        <button className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#646462]"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto pl-3 pr-3 pb-2 flex flex-col gap-0.5 text-[13px]">
+        {groups.map((g, i) => {
+          // Bug fix: don't auto-expand when child active — only state controls collapse.
+          // This makes "Temas de informes" actually collapsible even with `temas` active.
+          const expanded = openGroups[g.label] === true;
+          const groupActive = g.key !== undefined && sub === g.key;
+          const childActive = (g.items ?? []).some(it => it.key === sub);
+          return (
+            <div key={g.label + i}>
+              <button
+                onClick={() => g.key ? onSelect(g.key) : toggleGroup(g.label)}
+                className={`w-full h-8 flex items-center gap-2 px-3 rounded-lg text-[13px] transition-colors ${
+                  groupActive || (childActive && !g.items) ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]' : 'hover:bg-[#e9eae6]/40'
+                }`}
+              >
+                {g.icon && <GroupIcon kind={g.icon} />}
+                <span className="flex-1 text-left text-[#1a1a1a]">{g.label}</span>
+                {g.items && (
+                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                )}
+              </button>
+              {g.items && expanded && (
+                <div className="flex flex-col pl-7 mt-0.5 mb-1 gap-0.5">
+                  {g.items.map(it => (
+                    <button
+                      key={it.key}
+                      onClick={() => onSelect(it.key)}
+                      className={`h-8 flex items-center gap-2 pl-2 pr-3 rounded-lg text-left text-[13px] transition-colors ${
+                        sub === it.key ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#e9eae6]/40'
+                      }`}
+                    >
+                      {it.icon && <GroupIcon kind={it.icon} />}
+                      <span className="flex-1">{it.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="px-3 pb-3 pt-2 border-t border-[#e9eae6] flex-shrink-0">
+        <button
+          onClick={() => onSelect('administrar')}
+          className={`w-full h-8 flex items-center gap-2 px-3 rounded-lg text-[13px] transition-colors ${
+            sub === 'administrar' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]' : 'hover:bg-[#e9eae6]/40 text-[#1a1a1a]'
+          }`}
+        >
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2 4h12M2 8h12M2 12h12" strokeLinecap="round"/></svg>
+          <span className="flex-1 text-left">Administrar</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReportsTopicsContent() {
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M3 9c0-2.5 2-4.5 4.5-4.5S12 6.5 12 9c0 1.5-.7 2.7-1.7 3.5l.4 2L9 13.4 5.5 14l-.5-2C3.7 11.2 3 10 3 8.5z"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Temas</h1>
+        </div>
+        <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13.5l-5-4.5C1 7 1 4.5 3 3s4.5-.5 5 1.5C8.5 2.5 11 2 12.5 3.5S15 7 13 9z"/></svg>
+        </button>
+      </div>
+      <div className="flex-1 flex items-center justify-center min-h-0 p-6">
+        <div className="flex flex-col items-center max-w-[460px] text-center">
+          <div className="flex items-center justify-center gap-4 mb-6">
+            <div className="w-20 h-20 rounded-full bg-[#cdf3eb] flex items-center justify-center relative">
+              <svg viewBox="0 0 32 32" className="w-10 h-10 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="11" cy="14" r="6"/><circle cx="22" cy="11" r="3"/><path d="M16 18l5-3"/></svg>
+            </div>
+            <div className="w-20 h-20 rounded-full bg-[#cdf3eb] flex items-center justify-center">
+              <svg viewBox="0 0 32 32" className="w-10 h-10 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="16" cy="16" r="2"/><circle cx="9" cy="10" r="2"/><circle cx="23" cy="10" r="2"/><circle cx="9" cy="22" r="2"/><circle cx="23" cy="22" r="2"/><path d="M11 11l4 4M21 11l-4 4M11 21l4-4M21 21l-4-4"/></svg>
+            </div>
+            <div className="w-20 h-20 rounded-full bg-[#cdf3eb] flex items-center justify-center">
+              <svg viewBox="0 0 32 32" className="w-10 h-10 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M16 4c-3 0-5.5 2.5-5.5 5.5 0 2 .8 3.7 2 4.5l-.5 4 4-1 4 1-.5-4c1.2-.8 2-2.5 2-4.5C21.5 6.5 19 4 16 4z"/><path d="M14 24v3M18 24v3M13 28h6"/></svg>
+            </div>
+          </div>
+          <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-2">Comprende y rastrea de forma automática los temas de conversación</h2>
+          <p className="text-[13.5px] text-[#646462] leading-[20px] mb-5">
+            Accede a la información de los datos de tus conversaciones al descubrir o definir los temas que te interesan y rastréalos de forma automática.
+          </p>
+          <div className="flex items-center gap-3">
+            <button className="bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-full px-4 py-[7px] hover:bg-black">Crear tema</button>
+            <button className="bg-white border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] rounded-full px-4 py-[7px] hover:bg-[#f5f5f4]">Más información</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReportsKpiCard({ label, value, delta, sub }: { label: string; value: string; delta?: string; sub?: string }) {
+  return (
+    <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+      <div className="flex items-center gap-1 mb-3">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+        <span className="text-[12.5px] text-[#1a1a1a]">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[28px] font-bold text-[#1a1a1a] leading-none">{value}</span>
+        {delta && <span className="text-[12px] text-[#16a34a] font-medium">▲ {delta}</span>}
+      </div>
+      {sub && <p className="text-[11.5px] text-[#646462] mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+// Shared chrome (header + filter row) used by every custom-report screen.
+// Lets each specialized report (Calls, Conversations, etc.) focus on its body.
+function ReportShellHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 8h6M5 10h4"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a] truncate">{title}</h1>
+        </div>
+        <p className="text-[12.5px] text-[#646462] mt-0.5 truncate">{description}</p>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <span className="text-[12px] text-[#646462]">Propietario: <span className="text-[#1a1a1a]">Intercom</span></span>
+        <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><span className="text-[#646462]">⋯</span></button>
+        <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg>
+        </button>
+        <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+          Compartir
+        </button>
+        <button className="bg-white border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#f5f5f4] flex items-center gap-1">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M2 14l3-1 8.5-8.5-2-2L3 11l-1 3z"/></svg>
+          Editar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReportShellFilters({ extraFilter }: { extraFilter?: { icon?: 'user' | 'team' | 'sla' | 'ticket'; label: string } }) {
+  function FilterIcon({ kind }: { kind: NonNullable<NonNullable<Parameters<typeof ReportShellFilters>[0]['extraFilter']>['icon']> }) {
+    const cls = "w-3.5 h-3.5 fill-none stroke-[#646462]";
+    if (kind === 'user')   return <svg viewBox="0 0 16 16" className={cls} strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>;
+    if (kind === 'team')   return <svg viewBox="0 0 16 16" className={cls} strokeWidth="1.4"><circle cx="6" cy="6" r="2"/><circle cx="11" cy="6.5" r="1.5"/><path d="M2 13c0-2 2-3 4-3s4 1 4 3M9 13c0-1.5 1.4-2.4 3-2.4s3 .9 3 2.4"/></svg>;
+    if (kind === 'sla')    return <svg viewBox="0 0 16 16" className={cls} strokeWidth="1.4"><path d="M3 3h10v10H3z"/><path d="M5.5 8l2 2 3.5-4"/></svg>;
+    return                       <svg viewBox="0 0 16 16" className={cls} strokeWidth="1.4"><path d="M2.5 4h11v8h-11z"/><path d="M5 4V2.5h6V4"/></svg>;
+  }
+  return (
+    <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0 flex-wrap">
+      <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+        Apr 8, 2026 - May 5, 2026
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+      </button>
+      {extraFilter && (
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          {extraFilter.icon && <FilterIcon kind={extraFilter.icon} />}
+          {extraFilter.label}
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+      )}
+      <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[6px] text-[12.5px] text-[#646462]">
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+        Añadir filtro
+      </button>
+      <div className="ml-auto flex items-center gap-1 text-[12px] text-[#646462]">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+        Madrid time (GMT+2) <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+      </div>
+    </div>
+  );
+}
+
+function ReportEmptyChart({ label, span = 1 }: { label: string; span?: 1 | 2 | 3 }) {
+  const colSpan = span === 3 ? 'col-span-3' : span === 2 ? 'col-span-2' : 'col-span-1';
+  return (
+    <div className={`border border-[#e9eae6] rounded-[10px] bg-white p-5 ${colSpan}`}>
+      <div className="flex items-center gap-1 mb-3">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+        <span className="text-[12.5px] text-[#1a1a1a]">{label}</span>
+      </div>
+      <div className="h-[140px] flex flex-col items-center justify-center text-center px-3">
+        <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-[#646462] mb-1" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+        <span className="text-[12px] text-[#1a1a1a]">Este gráfico no tiene datos</span>
+        <span className="text-[11px] text-[#646462] mt-0.5">Para ver los datos aquí, cambia los filtros de informe o los ajustes de este gráfico</span>
+      </div>
+    </div>
+  );
+}
+
+function ReportBarChartCard({ label, span = 1, bars, axis }: { label: string; span?: 1 | 2 | 3; bars: number[]; axis?: string[] }) {
+  const colSpan = span === 3 ? 'col-span-3' : span === 2 ? 'col-span-2' : 'col-span-1';
+  const max = Math.max(...bars, 1);
+  return (
+    <div className={`border border-[#e9eae6] rounded-[10px] bg-white p-5 ${colSpan}`}>
+      <div className="flex items-center gap-1 mb-3">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+        <span className="text-[12.5px] text-[#1a1a1a]">{label}</span>
+      </div>
+      <div className="h-[140px] flex items-end gap-2 px-3">
+        {bars.map((h, i) => (
+          <div key={i} style={{ height: h ? `${(h / max) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+        ))}
+      </div>
+      {axis && (
+        <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
+          {axis.map((a, i) => <span key={i}>{a}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportLineChartCard({ label, span = 1, points, axis, yMax = 5, yLabel }: { label: string; span?: 1 | 2 | 3; points: { i: number; v: number }[]; axis?: string[]; yMax?: number; yLabel?: string }) {
+  const colSpan = span === 3 ? 'col-span-3' : span === 2 ? 'col-span-2' : 'col-span-1';
+  const totalSlots = 28;
+  const w = 100;
+  const h = 100;
+  const xFor = (i: number) => (i / (totalSlots - 1)) * w;
+  const yFor = (v: number) => h - (Math.min(v, yMax) / yMax) * h;
+  return (
+    <div className={`border border-[#e9eae6] rounded-[10px] bg-white p-5 ${colSpan}`}>
+      <div className="flex items-center gap-1 mb-3">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+        <span className="text-[12.5px] text-[#1a1a1a]">{label}</span>
+      </div>
+      <div className="relative h-[140px] px-3">
+        {yLabel && <span className="absolute top-0 left-3 text-[10px] text-[#646462]">{yLabel}</span>}
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-full">
+          <line x1="0" y1={h} x2={w} y2={h} stroke="#e9eae6" strokeWidth="0.4" />
+          {points.length > 1 && (
+            <polyline
+              fill="none"
+              stroke="#3b59f6"
+              strokeWidth="0.7"
+              points={points.map(p => `${xFor(p.i)},${yFor(p.v)}`).join(' ')}
+            />
+          )}
+          {points.map((p, idx) => (
+            <circle key={idx} cx={xFor(p.i)} cy={yFor(p.v)} r="0.9" fill="#3b59f6" />
+          ))}
+        </svg>
+        <span className="absolute bottom-0 left-3 text-[10px] text-[#646462]">0%</span>
+      </div>
+      {axis && (
+        <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
+          {axis.map((a, i) => <span key={i}>{a}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportEmptyTable({ label, columns, height = 160 }: { label: string; columns?: string[]; height?: number }) {
+  return (
+    <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+      <div className="px-5 py-3 flex items-center gap-1">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+        <span className="text-[12.5px] text-[#1a1a1a]">{label}</span>
+      </div>
+      {columns && columns.length > 0 && (
+        <div className="border-t border-b border-[#e9eae6] grid px-5 py-2 bg-[#fafaf9] text-[12px] font-medium text-[#646462]" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
+          {columns.map((c, i) => <div key={i}>{c}</div>)}
+        </div>
+      )}
+      <div className="flex flex-col items-center justify-center text-center px-5" style={{ height }}>
+        <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-[#646462] mb-1" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+        <span className="text-[12px] text-[#1a1a1a]">Esta tabla no tiene datos</span>
+        <span className="text-[11px] text-[#646462] mt-0.5">Para ver los datos aquí, cambia los ajustes del gráfico</span>
+      </div>
+    </div>
+  );
+}
+
+function ReportsCustomReport({ title, description }: { title: string; description: string }) {
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[18px] font-bold text-[#1a1a1a] truncate">{title}</h1>
+          <p className="text-[12.5px] text-[#646462] mt-0.5 truncate">{description}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-[12px] text-[#646462]">Propietario: <span className="text-[#1a1a1a]">Intercom</span></span>
+          <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><span className="text-[#646462]">⋯</span></button>
+          <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+            Compartir
+          </button>
+          <button className="bg-white border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#f5f5f4]">Editar</button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0 flex-wrap">
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+          Apr 8, 2026 - May 5, 2026
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>
+          Compañero de equipo es Cualquiera
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[6px] text-[12.5px] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Añadir filtro
+        </button>
+        <div className="ml-auto flex items-center gap-1 text-[12px] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+          Madrid time (GMT+2) <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <div className="col-span-2"><ReportsKpiCard label="Percentage of conversations using Copilot" value="—" sub="0 de 0" /></div>
+        <ReportsKpiCard label="Copilot questions" value="1" delta="1" />
+        <ReportsKpiCard label="Conversations using Copilot" value="0" />
+        <ReportsKpiCard label="Percentage of conversations with a copied Copilot answer" value="—" sub="0 de 0" />
+        <ReportsKpiCard label="Teammates using Copilot" value="1" delta="1" />
+        <div className="col-span-3 grid grid-cols-2 gap-4">
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Percentage of conversations using Copilot</span>
+          </div>
+          <div className="h-[140px] flex flex-col items-center justify-center text-center px-3">
+            <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-[#646462] mb-1" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+            <span className="text-[12px] text-[#1a1a1a]">Este gráfico no tiene datos</span>
+            <span className="text-[11px] text-[#646462] mt-0.5">Para ver los datos aquí, cambia los filtros de informe o los ajustes de este gráfico</span>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Teammates using Copilot</span>
+          </div>
+          <div className="relative h-[140px] px-3">
+            <div className="absolute left-3 top-0 text-[10px] text-[#646462]">2</div>
+            <div className="absolute left-3 bottom-5 text-[10px] text-[#646462]">0</div>
+            <div className="ml-5 h-full flex items-end gap-1">
+              {Array.from({ length: 28 }, (_, i) => (
+                <div key={i} style={{ height: i === 26 ? '70%' : '0%' }} className={`flex-1 ${i === 26 ? 'bg-[#3b59f6]' : 'bg-transparent'} rounded-t`} />
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-3 ml-5">
+            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
+          </div>
+        </div>
+        </div>
+
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Teammate overview</span>
+          </div>
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr className="border-t border-b border-[#e9eae6] bg-[#fafaf9]">
+                <th className="text-left font-medium text-[#646462] px-5 py-2 w-[24%]">
+                  <div className="flex items-center gap-1">Compañero de equipo<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
+                </th>
+                <th className="text-left font-medium text-[#646462] px-5 py-2 w-[19%]">
+                  <div className="flex items-center gap-1">Tasa de uso de conversaciones de Copilot
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 6v3M8 11h.01"/></svg>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg>
+                  </div>
+                </th>
+                <th className="text-left font-medium text-[#646462] px-5 py-2 w-[19%]">
+                  <div className="flex items-center gap-1">Conversaciones con Copilot
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 6v3M8 11h.01"/></svg>
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg>
+                  </div>
+                </th>
+                <th className="text-left font-medium text-[#646462] px-5 py-2 w-[19%]">
+                  <div className="flex items-center gap-1">Preguntas sobre Copilot
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 6v3M8 11h.01"/></svg>
+                  </div>
+                </th>
+                <th className="text-left font-medium text-[#646462] px-5 py-2 w-[19%]">
+                  <div className="flex items-center gap-1">Tasa de respuestas copiadas de Copilot
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 6v3M8 11h.01"/></svg>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-[#e9eae6]">
+                <td className="px-5 py-3 text-[#1a1a1a]">Hector Vidal Sanchez</td>
+                <td className="px-5 py-3 text-[#646462]">-</td>
+                <td className="px-5 py-3 text-[#1a1a1a]">0</td>
+                <td className="px-5 py-3 text-[#1a1a1a]">1</td>
+                <td className="px-5 py-3 text-[#646462]">-</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-3">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Copilot content performance</span>
+          </div>
+          <div className="h-[200px] flex flex-col items-center justify-center text-center">
+            <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+            <span className="text-[13px] font-medium text-[#1a1a1a]">Esta tabla no tiene datos</span>
+            <span className="text-[12px] text-[#646462] mt-1">Para ver los datos aquí, cambia los ajustes del gráfico</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Per-report custom Reports (Figma 3:16295, 3:20010, 3:22346, 3:24515,
+//    3:26772, 4:16934, 4:19011, 4:22197, 4:24401) ─────────────────────────────
+
+function ReportsCallsContent() {
+  return (
+    <>
+      <ReportShellHeader title="Calls" description="Use the Calls report to visualize and explore your team's calling activity." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <ReportsKpiCard label="Inbound calls" value="0" />
+        <ReportsKpiCard label="Outbound calls" value="0" />
+        <ReportsKpiCard label="Messenger calls" value="0" />
+        <ReportsKpiCard label="Median call duration" value="—" />
+        <ReportsKpiCard label="Median call in queue time" value="—" />
+        <ReportsKpiCard label="Median call talk time" value="—" />
+        <div className="col-span-3 grid grid-cols-2 gap-4">
+          <ReportEmptyChart label="Calls - by direction" />
+          <ReportEmptyChart label="Inbound calls - by time and call state" />
+        </div>
+        <div className="col-span-3 grid grid-cols-2 gap-4">
+          <ReportEmptyChart label="Median call talk time" />
+          <ReportEmptyChart label="Median call in queue time" />
+        </div>
+        <ReportEmptyTable label="Call performance" />
+      </div>
+    </>
+  );
+}
+
+function ReportsConversationsContent() {
+  return (
+    <>
+      <ReportShellHeader title="Conversations" description="Track your new inbound conversations, busiest periods and biggest customer issues, etc." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-4 gap-4">
+        <ReportsKpiCard label="New conversations" value="4" delta="4" />
+        <ReportsKpiCard label="Conversations replied to" value="0" />
+        <ReportsKpiCard label="Replies sent" value="0" />
+        <ReportsKpiCard label="Closed conversations" value="0" />
+        <ReportsKpiCard label="Reopened conversations" value="0" />
+        <ReportsKpiCard label="Open conversations" value="4" delta="4" />
+        <ReportsKpiCard label="Snoozed conversations" value="0" />
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">New conversations - by time</span>
+          </div>
+          <div className="h-[180px] flex items-end gap-1 px-3">
+            {Array.from({ length: 28 }, (_, i) => i === 26 ? 4 : 0).map((h, i) => (
+              <div key={i} style={{ height: h ? `${(h / 4) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
+            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
+          </div>
+          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>30 días anteriores</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#cccaff]"/>Apr 8 - May 5</span>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-2">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">New conversations - by channel</span>
+          </div>
+          <div className="h-[140px] flex items-center justify-center">
+            <div className="relative w-[120px] h-[120px] rounded-full" style={{ background: 'conic-gradient(#3b59f6 0 75%, #fc8a37 75% 100%)' }}>
+              <div className="absolute inset-[18px] rounded-full bg-white" />
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Unknown</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Chat</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#1e40af]"/>Email</span>
+          </div>
+        </div>
+        <ReportEmptyChart label="Replies sent - by time" span={2} />
+        <ReportEmptyChart label="Closed vs. Reopened conversations" span={2} />
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-2">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Open and Snoozed conversations</span>
+          </div>
+          <div className="h-[140px] flex items-end gap-2 px-3">
+            {Array.from({ length: 28 }, (_, i) => i === 26 ? 3 : 0).map((h, i) => (
+              <div key={i} style={{ height: h ? `${(h / 3) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
+            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
+          </div>
+          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Conversaciones abiertas</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Conversaciones pospuestas</span>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Comparison of New Conversations and Replies</span>
+          </div>
+          <div className="h-[140px] flex items-end gap-2 px-3">
+            {Array.from({ length: 28 }, (_, i) => i === 26 ? 4 : 0).map((h, i) => (
+              <div key={i} style={{ height: h ? `${(h / 4) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
+            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
+          </div>
+          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Nuevas conversaciones</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Conversaciones respondidas a</span>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Hourly Distribution of New Conversations</span>
+          </div>
+          <div className="flex">
+            <div className="flex flex-col justify-between pr-2 pt-1 pb-1 text-[10px] text-[#646462] uppercase tracking-wide">
+              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
+                <span key={d} className="leading-none h-[20px] flex items-center">{d}</span>
+              ))}
+            </div>
+            <div className="flex-1">
+              <div className="grid gap-[2px] p-1 bg-[#cfe5ff] rounded-sm" style={{ gridTemplateColumns: 'repeat(24, minmax(0,1fr))' }}>
+                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].flatMap(day => Array.from({ length: 24 }, (_, h) => {
+                  const highlighted = day === 'Tue' && h === 7;
+                  return (
+                    <div
+                      key={`${day}-${h}`}
+                      className="aspect-square rounded-[2px] flex items-center justify-center text-[8px]"
+                      style={{ background: highlighted ? '#2563eb' : '#bfdbff', color: highlighted ? '#fff' : '#1d4ed8' }}
+                    >
+                      {highlighted ? '4' : '0'}
+                    </div>
+                  );
+                }))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-1">
+                {Array.from({ length: 24 }, (_, h) => <span key={h}>{h}</span>)}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <span className="text-[10px] text-[#646462]">0</span>
+            <div className="h-[8px] w-[200px] rounded-full" style={{ background: 'linear-gradient(to right, #cfe5ff, #2563eb)' }} />
+            <span className="text-[10px] text-[#646462]">4</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReportsCsatContent() {
+  return (
+    <>
+      <ReportShellHeader title="Surveyed CSAT" description="See how your customer satisfaction scores and support channels, teammates, e..." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <ReportsKpiCard label="Overall CSAT score" value="—" sub="0 de 0" />
+        <ReportsKpiCard label="Teammate CSAT score" value="—" sub="0 de 0" />
+        <ReportsKpiCard label="Fin Agent CSAT score" value="—" sub="0 de 0" />
+        <ReportEmptyChart label="CSAT score over time" span={3} />
+        <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Conversation ratings and remarks</h3>
+        <div className="col-span-3 grid grid-cols-2 gap-4">
+          <ReportEmptyChart label="Conversation ratings - by conversation rating" />
+          <ReportEmptyChart label="Conversation ratings - by conversation rating" />
+        </div>
+        <ReportsKpiCard label="Positive remarks" value="0" />
+        <ReportsKpiCard label="Neutral remarks" value="0" />
+        <ReportsKpiCard label="Negative remarks" value="0" />
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-3">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Conversation ratings</span>
+          </div>
+          <div className="h-[140px] flex flex-col items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-[#646462] mb-1" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+            <span className="text-[12px] text-[#1a1a1a]">No hay datos disponibles</span>
+            <span className="text-[11px] text-[#646462] mt-0.5">Pruebe los filtros para refinar los datos</span>
+          </div>
+        </div>
+        <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">CSAT survey</h3>
+        <ReportsKpiCard label="CSAT request rate" value="0%" sub="0 de 0" />
+        <ReportsKpiCard label="CSAT response rate" value="0%" sub="0 de 0" />
+        <div className="col-span-1" />
+        <ReportEmptyChart label="CSAT survey request & response rates - by time" span={3} />
+        <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Dissatisfaction drivers</h3>
+        <ReportEmptyChart label="Topics driving dissatisfaction" span={3} />
+        <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Teammate performance</h3>
+        <ReportEmptyTable label="Teammate CSAT performance" />
+      </div>
+    </>
+  );
+}
+
+function ReportsEffectivenessContent() {
+  return (
+    <>
+      <ReportShellHeader title="Effectiveness" description="Measure how effectively your teams handle conversations with the Effectiveness report." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <ReportsKpiCard label="Conversations replied to" value="0" />
+        <ReportsKpiCard label="Closed conversations on first contact rate" value="0%" sub="0 de 4" />
+        <ReportsKpiCard label="Median replies to close a conversation" value="—" />
+        <ReportsKpiCard label="Conversations reassigned" value="0" />
+        <ReportsKpiCard label="Median time to first assignment" value="—" />
+        <ReportsKpiCard label="Median time from first assignment to close" value="—" />
+        <div className="col-span-3 grid grid-cols-2 gap-4">
+          <ReportEmptyChart label="Median replies to close a conversation - by time" />
+          <ReportEmptyChart label="Median time to first assignment" />
+        </div>
+        <ReportLineChartCard label="Closed conversations on first contact rate - by time" span={3} points={[{ i: 26, v: 0 }]} axis={["Apr 8","Apr 13","Apr 20","Apr 27","May 4"]} yMax={5} yLabel="5%" />
+        <div className="col-span-3 grid grid-cols-2 gap-4">
+          <ReportEmptyChart label="Conversations reassigned - by time" />
+          <ReportEmptyChart label="Median time from first assignment to close - by time" />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReportsResponsivenessContent() {
+  return (
+    <>
+      <ReportShellHeader title="Responsiveness" description="See how quickly your team respond to, and close conversations with the Responsiveness report." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <ReportsKpiCard label="Median response time: including time assigned to bot" value="—" />
+        <ReportsKpiCard label="Median first response time: including time assigned to bot" value="—" />
+        <ReportsKpiCard label="Median time to close: including time assigned to bot" value="—" />
+        <ReportEmptyChart label="Median response time: including time assigned to bot - by time" span={3} />
+        <div className="col-span-3 grid grid-cols-2 gap-4">
+          <ReportEmptyChart label="Median first response time: including time assigned to bot - by time" />
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="px-5 py-3 flex items-center gap-1">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">First response time: including time assigned to bot breakdown</span>
+            </div>
+            <div className="grid grid-cols-2 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+              <div>Intervalos de tiempo</div><div>% replies</div>
+            </div>
+            {['< 30s','30s - 2m','2m - 5m','5m - 10m','10m - 30m','30m - 1h','> 1h'].map(row => (
+              <div key={row} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+                <div>{row}</div><div className="text-[#646462]">—</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="col-span-3 grid grid-cols-2 gap-4">
+          <ReportEmptyChart label="Median time to close: including time assigned to bot - by time" />
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="px-5 py-3 flex items-center gap-1">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Time to close: including time assigned to bot breakdown</span>
+            </div>
+            <div className="grid grid-cols-2 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+              <div>Intervalos de tiempo</div><div>% conversations</div>
+            </div>
+            {['< 5m','5m - 15m','15m - 30m','30m - 1h','1h - 3h','3h - 8h','> 8h'].map(row => (
+              <div key={row} className="grid grid-cols-2 px-5 py-2 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+                <div>{row}</div><div className="text-[#646462]">—</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <ReportEmptyChart label="Median hourly distribution of response times: including time assigned to bot" span={3} />
+      </div>
+    </>
+  );
+}
+
+function ReportsSlasContent() {
+  return (
+    <>
+      <ReportShellHeader title="SLAs" description="Review your team's performance against your Service Level Agreements with the SLAs report." />
+      <ReportShellFilters extraFilter={{ icon: 'sla', label: 'SLA (Acuerdo de nivel de servicio) es Cualquiera' }} />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <ReportsKpiCard label="Conversation and ticket SLA miss rate" value="—" sub="0 de 0" />
+        <ReportsKpiCard label="Conversations and tickets with SLA" value="0" />
+        <ReportsKpiCard label="Conversations and tickets with missed SLA" value="0" />
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">SLA performance</span>
+          </div>
+          <div className="grid grid-cols-4 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Tipo de métrica de SLA</div>
+            <div>Tasa de cumplimiento del Acuerdo de Nivel de Servicio</div>
+            <div>SLA incumplidos</div>
+            <div>Promedio Tiempo de respuesta después de un incumplimiento del SLA</div>
+          </div>
+          <div className="grid grid-cols-4 px-5 py-3 text-[12.5px] text-[#1a1a1a]">
+            <div>Resumen</div>
+            <div className="text-[#646462]">—</div>
+            <div>0</div>
+            <div className="text-[#646462]">—</div>
+          </div>
+        </div>
+        <ReportEmptyChart label="Targets hit over time" span={3} />
+        <ReportEmptyChart label="Hourly Distribution of Missed Targets" span={3} />
+      </div>
+    </>
+  );
+}
+
+function ReportsTeamInboxContent() {
+  return (
+    <>
+      <ReportShellHeader title="Team inbox performance" description="Check in on how each team inbox is performing with accurate metrics and insights." />
+      <ReportShellFilters extraFilter={{ icon: 'team', label: 'Equipo es Cualquiera' }} />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <ReportsKpiCard label="Median team assignment to first response" value="—" />
+        <ReportsKpiCard label="Median team assignment to subsequent response" value="—" />
+        <ReportsKpiCard label="Median team assignment to close" value="—" />
+        <ReportsKpiCard label="Conversations assigned" value="0" />
+        <ReportsKpiCard label="Conversations replied to" value="0" />
+        <ReportsKpiCard label="Closed conversations" value="0" />
+        <ReportEmptyChart label="Teammate Activity" span={3} />
+        <ReportEmptyTable label="Comparison of Team inbox performance" />
+      </div>
+    </>
+  );
+}
+
+function ReportsTeammateContent() {
+  return (
+    <>
+      <ReportShellHeader title="Teammate performance" description="Check in on teammate performance with accurate metrics and insights." />
+      <ReportShellFilters extraFilter={{ icon: 'user', label: 'Compañero de equipo es Cualquiera' }} />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <div className="col-span-2"><ReportsKpiCard label="Median teammate handling time" value="—" /></div>
+        <ReportsKpiCard label="Median teammate assignment to close" value="—" />
+        <ReportsKpiCard label="Median teammate assignment to first response" value="—" />
+        <ReportsKpiCard label="Median teammate assignment to subsequent response" value="—" />
+        <ReportsKpiCard label="Conversations closed per active hour" value="—" />
+        <ReportsKpiCard label="Conversations assigned per active hour" value="∞" />
+        <ReportsKpiCard label="Conversations replied to per active hour" value="—" />
+        <div className="col-span-1" />
+        <ReportEmptyChart label="Teammate Productivity" span={3} />
+        <ReportsKpiCard label="Teammate CSAT score" value="—" sub="0 de 0" />
+        <ReportEmptyChart label="Teammate conversation ratings - by conversation rating" span={2} />
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Teammate performance</span>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Compañero de equipo</div>
+            <div>Conversaciones asignadas</div>
+            <div>Conversaciones respondidas a</div>
+            <div>Respuestas enviadas</div>
+            <div>Conversaciones cerradas por compañeros de equipo</div>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-3 text-[12.5px] text-[#1a1a1a] border-b border-[#f1f1ee]">
+            <div>Resumen</div><div>4</div><div>0</div><div>0</div><div>0</div>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-3 text-[12.5px] text-[#1a1a1a]">
+            <div>Hector Vidal Sanchez</div><div>4</div><div>0</div><div>0</div><div>0</div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReportsTicketsContent() {
+  return (
+    <>
+      <ReportShellHeader title="Tickets" description="Explore your tickets report and create your own custom reports using ticket data." />
+      <ReportShellFilters extraFilter={{ icon: 'ticket', label: 'El tipo de ticket es Cualquiera' }} />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-4 gap-4">
+        <ReportsKpiCard label="Median ticket time to resolve" value="—" />
+        <ReportsKpiCard label="Median ticket time in submitted" value="—" />
+        <ReportsKpiCard label="Median ticket time in progress" value="—" />
+        <ReportsKpiCard label="Median ticket time in waiting on customer" value="—" />
+        <div className="col-span-4"><ReportEmptyChart label="Median ticket time to resolve - by time" span={3} /></div>
+        <div className="col-span-2"><ReportEmptyChart label="Median ticket time to resolve - by team assigned" span={3} /></div>
+        <div className="col-span-2"><ReportEmptyChart label="Median ticket time to resolve - by teammate assigned" span={3} /></div>
+        <div className="col-span-2"><ReportsKpiCard label="New tickets" value="0" /></div>
+        <div className="col-span-2"><ReportsKpiCard label="Resolved tickets" value="0" /></div>
+        <div className="col-span-4"><ReportEmptyChart label="Comparison of New and Resolved Tickets" span={3} /></div>
+        <div className="col-span-2"><ReportEmptyChart label="Ticket volume - by team assigned" span={3} /></div>
+        <div className="col-span-2"><ReportEmptyChart label="Ticket volume - by teammate assigned" span={3} /></div>
+      </div>
+    </>
+  );
+}
+
+function ReportsSugerenciasContent() {
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
+            <h1 className="text-[18px] font-bold text-[#1a1a1a]">Sugerencias</h1>
+          </div>
+          <p className="text-[12.5px] text-[#646462] mt-0.5 truncate">Sugerencias generadas por HTML con base en lo que tus clientes hablaron con mayor frecuencia en Messenger en los últimos 365 días</p>
+        </div>
+        <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea] flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg>
+        </button>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-0 p-6 text-center">
+        <div className="relative w-[320px] h-[200px] mb-4">
+          <div className="absolute inset-0 rounded-full bg-[#7ee0d3] opacity-90 mx-8 my-6"/>
+          <div className="absolute left-12 top-8 w-20 h-14 rounded-[12px] bg-white border-2 border-[#1a1a1a] flex items-center justify-center">
+            <span className="flex gap-0.5"><span className="w-1 h-1 rounded-full bg-[#1a1a1a]"/><span className="w-1 h-1 rounded-full bg-[#1a1a1a]"/><span className="w-1 h-1 rounded-full bg-[#1a1a1a]"/></span>
+          </div>
+          <div className="absolute right-14 top-12 w-16 h-12 rounded-[10px] bg-white border-2 border-[#1a1a1a] flex items-center justify-center">
+            <span className="flex gap-0.5"><span className="w-1 h-1 rounded-full bg-[#1a1a1a]"/><span className="w-1 h-1 rounded-full bg-[#1a1a1a]"/><span className="w-1 h-1 rounded-full bg-[#1a1a1a]"/></span>
+          </div>
+          <div className="absolute left-20 bottom-8 w-14 h-10 rounded-[8px] bg-white border-2 border-[#1a1a1a]"/>
+          <div className="absolute right-20 bottom-12 w-12 h-9 rounded-[8px] bg-white border-2 border-[#1a1a1a]"/>
+          <span className="absolute left-3 top-3 text-[14px]">✨</span>
+          <span className="absolute right-4 top-1 text-[14px]">✦</span>
+          <span className="absolute right-2 bottom-3 text-[12px]">✦</span>
+        </div>
+        <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-1">Obtener sugerencias de temas</h2>
+        <p className="text-[13px] text-[#646462] max-w-[440px] mb-4">
+          A medida que tengas más conversaciones con tus clientes, verás sugerencias de temas para rastrear aquí. Agrega un nuevo tema para comenzar.
+        </p>
+        <div className="flex items-center gap-2">
+          <button className="bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-full px-4 py-[7px] hover:bg-black">Agregar un tema</button>
+          <button className="text-[13px] font-medium text-[#1a1a1a] hover:underline">Más información</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReportsExportContent() {
+  const rows = ['215474178470870', '215474178470709', '215474178470505', '215474178470274'];
+  return (
+    <>
+      <div className="px-6 py-3 border-b border-[#e9eae6] bg-[#fafaf9] flex-shrink-0 text-center">
+        <p className="text-[12.5px] text-[#1a1a1a]">
+          <span className="mr-1">🍂</span>
+          Exporta datos más ricos con nuestra experiencia mejorada de exportación de conjuntos de datos. También puedes utilizar la nueva API de exportación de datos de informes para exportar datos. <a className="font-medium underline">Más información</a>
+        </p>
+      </div>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Exportación de conjuntos de datos</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+            Programar
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+            Exportar CSV
+          </button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/></svg>
+          Conjunto de datos Conversation
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+          Apr 8, 2026 - May 5, 2026
+        </button>
+        <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[6px] text-[12.5px] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Añadir filtro
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-3 flex items-center justify-between text-[12.5px] text-[#646462] border-b border-[#e9eae6]">
+          <span><span className="text-[#1a1a1a] font-medium">4 de 4 artículos</span>  Las marcas de tiempo están en la hora Madrid (GMT+2)</span>
+          <button className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea] text-[#646462]">+</button>
+        </div>
+        <table className="w-full text-[12.5px]">
+          <thead>
+            <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+              <th className="text-left font-medium text-[#646462] px-6 py-2">
+                <div className="flex items-center gap-1">ID de conversación<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
+              </th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">
+                <div className="flex items-center gap-1">La conversación comenzó el<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
+              </th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">La conversación se cerró por primera vez el</th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">La conversación se respondió por primera vez e...</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((id) => (
+              <tr key={id} className="border-b border-[#e9eae6]">
+                <td className="px-6 py-3">
+                  <a className="text-[#3b59f6] hover:underline inline-flex items-center gap-1">
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M9 2h5v5M14 2L7 9M11 9v4H3V5h4"/></svg>
+                    {id}
+                  </a>
+                </td>
+                <td className="px-6 py-3 text-[#1a1a1a]">8:55 AM may 5, 2026</td>
+                <td className="px-6 py-3 text-[#646462]">—</td>
+                <td className="px-6 py-3 text-[#646462]">—</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function ReportsHorariosContent() {
+  const [tab, setTab] = useState<'informes' | 'datasets'>('informes');
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Administrar los horarios</h1>
+        </div>
+      </div>
+      <div className="px-6 pt-3 border-b border-[#e9eae6] flex items-center gap-5 flex-shrink-0">
+        <button onClick={() => setTab('informes')} className={`pb-3 text-[13px] ${tab==='informes' ? 'font-semibold text-[#1a1a1a] border-b-2 border-[#ff7849] -mb-px' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>Informes</button>
+        <button onClick={() => setTab('datasets')} className={`pb-3 text-[13px] ${tab==='datasets' ? 'font-semibold text-[#1a1a1a] border-b-2 border-[#ff7849] -mb-px' : 'text-[#646462] hover:text-[#1a1a1a]'}`}>Conjuntos de datos</button>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center min-h-0 p-6 text-center">
+        <div className="w-12 h-12 rounded-full bg-[#f3f3f1] flex items-center justify-center mb-3">
+          <svg viewBox="0 0 24 24" className="w-6 h-6 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l3 2M9 3l-3 3M15 3l3 3"/></svg>
+        </div>
+        <h2 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">No se han creado horarios</h2>
+        <p className="text-[12.5px] text-[#646462] max-w-[460px]">Crea un programa en un informe para entregar automáticamente informes a tu equipo.</p>
+      </div>
+    </>
+  );
+}
+
+function ReportsArticlesContent() {
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 8h6M5 10h4"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Artículo</h1>
+          <span className="text-[12px] text-[#646462]">Anterior</span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <a className="text-[12.5px] font-medium text-[#3b59f6] flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
+            ¿Cómo se elabora este informe?
+          </a>
+          <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg></button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-wrap flex-shrink-0">
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+          Apr 29, 2026 - May 5, 2026
+        </button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>
+          visitantes, Leads y Usuarios
+        </button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">Centro de ayuda y Messenger</button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">Todos los centros de ayuda</button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <ReportsKpiCard label="Personas que vieron un artículo" value="0" delta={undefined} />
+          <ReportsKpiCard label="Total de visualizaciones del artículo" value="0" delta={undefined} />
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Personas vs visualizaciones de tiempo</span>
+            </div>
+            <button className="w-6 h-6 rounded-full hover:bg-[#ededea] flex items-center justify-center text-[#646462]">⋯</button>
+          </div>
+          <div className="h-[200px] flex flex-col items-center justify-center text-center">
+            <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+            <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
+            <span className="text-[12px] text-[#646462] mt-1">Intenta cambiar los filtros en la parte superior de la página</span>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3">
+            <div className="flex items-center gap-1">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Interacción con el artículo</span>
+            </div>
+            <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[5px] text-[11.5px] font-medium text-[#1a1a1a]">
+              Números totales
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          </div>
+          <div className="px-5 pb-3 flex items-center gap-2">
+            <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[5px] text-[12px] text-[#1a1a1a]">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><circle cx="6" cy="6" r="3"/><path d="M14 14l-4-4"/></svg>
+              Visitantes greater than 1C
+            </button>
+            <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[5px] text-[12px] text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+              Añadir filtro
+            </button>
+          </div>
+          <div className="border-t border-[#e9eae6]">
+            <div className="grid grid-cols-7 px-5 py-2 bg-[#fafaf9] border-b border-[#e9eae6] text-[12px] font-medium text-[#646462]">
+              <div>artículo</div>
+              <div>Visitantes</div>
+              <div>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#16a34a]" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.5 10c.7.8 1.5 1.2 2.5 1.2s1.8-.4 2.5-1.2M6 6.5v.01M10 6.5v.01" strokeLinecap="round"/></svg>
+              </div>
+              <div>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#a16207]" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.5 10.5h5M6 6.5v.01M10 6.5v.01" strokeLinecap="round"/></svg>
+              </div>
+              <div>
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#dc2626]" strokeWidth="1.5"><circle cx="8" cy="8" r="6"/><path d="M5.5 11c.7-.8 1.5-1.2 2.5-1.2s1.8.4 2.5 1.2M6 6.5v.01M10 6.5v.01" strokeLinecap="round"/></svg>
+              </div>
+              <div>Conversaciones</div>
+              <div>última actualización</div>
+            </div>
+            <div className="h-[160px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
+            </div>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="px-5 py-3"><span className="text-[12.5px] text-[#1a1a1a]">Busca resultados</span></div>
+          <div className="border-t border-b border-[#e9eae6] grid grid-cols-4 px-5 py-2 bg-[#fafaf9] text-[12px] font-medium text-[#646462]">
+            <div>Palabra clave</div><div>Búsquedas</div><div>Índices de clics</div><div>acción</div>
+          </div>
+          <div className="h-[140px] flex flex-col items-center justify-center text-center">
+            <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+            <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="px-5 py-3"><span className="text-[12.5px] text-[#1a1a1a]">Búsquedas sin resultados</span></div>
+          <div className="border-t border-b border-[#e9eae6] grid grid-cols-3 px-5 py-2 bg-[#fafaf9] text-[12px] font-medium text-[#646462]">
+            <div>Palabra clave</div><div>Búsquedas</div><div>acción</div>
+          </div>
+          <div className="h-[140px] flex flex-col items-center justify-center text-center">
+            <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+            <span className="text-[13px] font-medium text-[#1a1a1a]">No hay datos para mostrar</span>
+          </div>
+        </div>
+        <p className="text-[11.5px] text-[#646462] text-center pt-2">Los informes están en Madrid time (GMT+2)</p>
+      </div>
+    </>
+  );
+}
+
+function ReportsOutboundEngagementContent() {
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Interacción del cliente</h1>
+          <span className="text-[12px] text-[#646462]">Anterior</span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg></button>
+          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+            Exportar CSV
+          </button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+          29 abr 2026 - 5 may 2026
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/></svg>
+          Todos los tipos de mensajes
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Todos los tipos de mensajes</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <p className="text-[12.5px] text-[#1a1a1a] mb-3">Mensajes enviados</p>
+            <div className="text-[14px] text-[#646462]">— —</div>
+          </div>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <p className="text-[12.5px] text-[#1a1a1a] mb-3">Horas de envío de mensajes</p>
+            <div className="text-[14px] text-[#646462]">— —</div>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <p className="text-[12.5px] font-medium text-[#1a1a1a] mb-3">Mensajes enviados por day</p>
+          <div className="h-[180px] relative">
+            <div className="absolute left-0 top-0 bottom-4 w-8 flex flex-col justify-between text-[10px] text-[#646462]">
+              <span>100</span><span>80</span><span>60</span><span>40</span><span>20</span><span>0</span>
+            </div>
+            <div className="ml-8 h-full border-l border-b border-[#e9eae6] relative">
+              {[0,1,2,3,4].map(i => <div key={i} className="absolute left-0 right-0 border-t border-dashed border-[#f0f0ee]" style={{ top: `${20*(i+1)}%` }}/>)}
+            </div>
+            <div className="ml-8 mt-1 flex justify-between text-[10px] text-[#646462]">
+              <span>29 abr</span><span>30 abr</span><span>1 may</span><span>2 may</span><span>3 may</span><span>4 may</span><span>5 may</span>
+            </div>
+          </div>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="px-5 py-3"><span className="text-[12.5px] font-medium text-[#1a1a1a]">Volumen de mensajes por usuario</span></div>
+          <div className="border-t border-b border-[#e9eae6] grid grid-cols-2 px-5 py-2 text-[12px] text-[#646462]">
+            <div>Nombre</div><div className="text-right">Mensajes enviados</div>
+          </div>
+          <div className="h-[100px]"/>
+        </div>
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="px-5 py-3"><span className="text-[12.5px] font-medium text-[#1a1a1a]">Rendimiento del mensaje</span></div>
+          <div className="border-t border-[#e9eae6] grid grid-cols-3 px-5 py-2 text-[12px] text-[#646462]">
+            <div>Título</div><div>Enviado</div><div>Objetivo</div>
+          </div>
+          <div className="h-[80px]"/>
+        </div>
+        <p className="text-[11.5px] text-[#646462] text-center pt-2">Los informes están en Madrid time (GMT+2)</p>
+      </div>
+    </>
+  );
+}
+
+function ReportsView() {
+  const [sub, setSub] = useState<ReportsSubView>('temas');
+  function renderSub() {
+    switch (sub) {
+      case 'temas':         return <ReportsTopicsContent />;
+      case 'sugerencias':   return <ReportsSugerenciasContent />;
+      case 'export':        return <ReportsExportContent />;
+      case 'horarios':      return <ReportsHorariosContent />;
+      case 'finAgent':      return <ReportsCustomReport title="Fin AI Agent" description="Métricas de resolución, calidad y volumen del agente Fin." />;
+      case 'copilot':       return <ReportsCustomReport title="Copilot" description="Analyze and report on how Copilot is used by teammates in your workspace." />;
+      case 'calls':         return <ReportsCallsContent />;
+      case 'conversations': return <ReportsConversationsContent />;
+      case 'csat':          return <ReportsCsatContent />;
+      case 'effectiveness': return <ReportsEffectivenessContent />;
+      case 'responsiveness':return <ReportsResponsivenessContent />;
+      case 'slas':          return <ReportsSlasContent />;
+      case 'teamInbox':     return <ReportsTeamInboxContent />;
+      case 'teammate':      return <ReportsTeammateContent />;
+      case 'tickets':       return <ReportsTicketsContent />;
+      case 'articles':      return <ReportsArticlesContent />;
+      case 'outboundEng':   return <ReportsOutboundEngagementContent />;
+      case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
+    }
+  }
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <ReportsSidebar sub={sub} onSelect={setSub} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {renderSub()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KNOWLEDGE HUB VIEW (Figma nodes 1:25483, 1:26753, 1:28237, 1:29395, 1:31138)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type KnowledgeSubView = 'fuentes' | 'contenido' | 'articulos' | 'centroAyuda';
+
+const KH_PUBLIC_ARTICLES: { provider: string; status: string; action: string; configured: boolean }[] = [
+  { provider: 'Intercom', status: '1 artículo',     action: 'Agregar artículo',       configured: true  },
+  { provider: 'Zendesk',  status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+];
+const KH_INTERNAL_ARTICLES: { provider: string; status: string; action: string; configured: boolean }[] = [
+  { provider: 'Intercom',   status: '1 artículo',     action: 'Agregar artículo',       configured: true  },
+  { provider: 'Guru',       status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+  { provider: 'Notion',     status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+  { provider: 'Confluence', status: 'No configurado', action: 'Sincronizar o importar', configured: false },
+];
+const KH_CONVERSATIONS: { provider: string; status: string; action: string; configured: boolean }[] = [
+  { provider: 'Intercom', status: 'No hay suficientes conversaciones', action: 'Administrar', configured: true },
+  { provider: 'Zendesk',  status: 'Importar los folios de atención de Zendesk (tarda entre 24 y 48 horas)', action: 'Importar', configured: false },
+];
+
+function KhProviderIcon({ name }: { name: string }) {
+  // Brand glyph with Figma-style brand mark on a small square.
+  const cls = "w-5 h-5 rounded-[4px] flex items-center justify-center flex-shrink-0";
+  switch (name) {
+    case 'Intercom':
+      // Intercom mark: stacked vertical bars (book-like)
+      return (
+        <span className={cls} style={{ background: '#1a1a1a' }}>
+          <svg viewBox="0 0 16 16" className="w-3 h-3"><g fill="white"><rect x="2" y="2" width="1.4" height="9" rx="0.4"/><rect x="5" y="3.5" width="1.4" height="7.5" rx="0.4"/><rect x="8" y="2" width="1.4" height="10" rx="0.4"/><rect x="11" y="3.5" width="1.4" height="7.5" rx="0.4"/><rect x="2" y="12" width="10.4" height="1.4" rx="0.5"/></g></svg>
+        </span>
+      );
+    case 'Zendesk':
+      // Zendesk mark: two diagonal triangles
+      return (
+        <span className={cls} style={{ background: '#0e3a3a' }}>
+          <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M2 4l4 5v3H2zM7 12c0-2.5 2-4.5 4.5-4.5h2.5L8 12z" fill="white"/></svg>
+        </span>
+      );
+    case 'Guru':
+      // Guru mark: G letter in stylized form
+      return (
+        <span className={cls} style={{ background: '#a070ff' }}>
+          <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M8 3a5 5 0 100 10 5 5 0 003.5-1.5V8H8" fill="none" stroke="white" strokeWidth="1.6"/></svg>
+        </span>
+      );
+    case 'Notion':
+      // Notion mark: slanted N
+      return (
+        <span className={cls} style={{ background: '#000000' }}>
+          <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M5 3v10M5 3l6 10M11 3v10" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round"/></svg>
+        </span>
+      );
+    case 'Confluence':
+      // Confluence mark: two interlocking arcs
+      return (
+        <span className={cls} style={{ background: '#2563eb' }}>
+          <svg viewBox="0 0 16 16" className="w-3 h-3"><path d="M2 11c2-3 4.5-3 7 0M14 5c-2 3-4.5 3-7 0" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round"/></svg>
+        </span>
+      );
+    default:
+      // Fallback: dark square with first letter
+      return (
+        <span className={cls} style={{ background: '#646462' }}>
+          <span className="text-[10px] font-bold text-white">{name[0]}</span>
+        </span>
+      );
+  }
+}
+
+function KhSection({
+  title, description, items, headerAction,
+}: {
+  title: string;
+  description?: string;
+  items: { provider: string; status: string; action: string; configured: boolean; icon?: ReactNode }[];
+  headerAction?: { label: string; onClick?: () => void };
+}) {
+  const hasItems = items.length > 0;
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[10px]">
+      <div className={`px-5 py-4 ${hasItems ? 'border-b border-[#f1f1ee]' : ''} flex items-start gap-3`}>
+        <div className="w-7 h-7 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 mt-0.5">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5">
+            <rect x="2.5" y="2.5" width="11" height="11" rx="2" />
+            <path d="M2.5 5.5h11" />
+          </svg>
+        </div>
+        <div className="flex-1">
+          <p className="text-[14px] font-semibold text-[#1a1a1a]">{title}</p>
+          {description && <p className="text-[13px] text-[#646462] mt-0.5">{description}</p>}
+        </div>
+        {headerAction && (
+          <button onClick={headerAction.onClick} className="text-[13px] font-medium text-[#1a1a1a] hover:underline flex-shrink-0">
+            {headerAction.label}
+          </button>
+        )}
+      </div>
+      {hasItems && (
+        <div>
+          {items.map((it, idx) => (
+            <div key={`${it.provider}-${idx}`} className={`flex items-center gap-4 px-5 py-3 ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
+              <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                {it.configured
+                  ? <span className="w-4 h-4 rounded-full bg-[#22c55e] flex items-center justify-center"><svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white"><path d="M3 6l2 2 4-4" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round"/></svg></span>
+                  : <span className="w-4 h-4 rounded-full border border-[#d4d4d2]" />
+                }
+              </div>
+              {it.icon ?? <KhProviderIcon name={it.provider} />}
+              <span className="flex-1 text-[13px] text-[#1a1a1a]">{it.provider}</span>
+              <span className="text-[13px] text-[#646462]">{it.status}</span>
+              <button className="text-[13px] font-medium text-[#1a1a1a] hover:underline">{it.action}</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KnowledgeSidebar({ sub, onSelect }: { sub: KnowledgeSubView; onSelect: (s: KnowledgeSubView) => void }) {
+  // Match Inbox sidebar UI: w-236, header 20px font-semibold tracking -0.4px, items text-13.
+  const [openContenido, setOpenContenido] = useState(sub === 'contenido' || sub === 'articulos');
+  const itemCls = (isActive: boolean) =>
+    `relative flex items-center gap-2 h-8 pl-3 pr-3 py-1 rounded-lg cursor-pointer text-[13px] w-full text-left transition-colors ${
+      isActive
+        ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+        : 'hover:bg-[#e9eae6]/40 text-[#1a1a1a]'
+    }`;
+  const Chev = ({ open }: { open: boolean }) => (
+    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? 'rotate-90' : ''}`}>
+      <path d="M6 4l4 4-4 4z"/>
+    </svg>
+  );
+  return (
+    <div className="w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
+      {/* Header — 20px font-semibold tracking -0.4px (matches Inbox) */}
+      <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
+        <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Conocimiento</span>
+      </div>
+      <div className="flex-1 overflow-y-auto pl-3 pr-3 pb-4 flex flex-col gap-0.5">
+        <button onClick={() => onSelect('fuentes')} className={itemCls(sub === 'fuentes')}>
+          <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-13" size={16} /></span>
+          <span className="flex-1">Fuentes</span>
+        </button>
+        {/* Contenido — expandable group */}
+        <button onClick={() => setOpenContenido(o => !o)} className={itemCls(false)}>
+          <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-14" size={16} /></span>
+          <span className="flex-1">Contenido</span>
+          <Chev open={openContenido} />
+        </button>
+        {openContenido && (
+          <div className="flex flex-col pl-7 mt-0.5 mb-0.5 gap-0.5">
+            <button onClick={() => onSelect('articulos')} className={itemCls(sub === 'articulos')}>
+              <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-14" size={16} /></span>
+              <span className="flex-1">Artículos</span>
+            </button>
+          </div>
+        )}
+        <button onClick={() => onSelect('centroAyuda')} className={itemCls(sub === 'centroAyuda')}>
+          <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-20" size={16} /></span>
+          <span className="flex-1">Centro de ayuda</span>
+          <span className="w-4 h-4 flex-shrink-0"><LibraryIcon v="v2-21" size={16} /></span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type KhTab = 'all' | 'ai' | 'copilot' | 'help';
+
+function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
+  if (tab === 'ai') {
+    return (
+      <div className="relative bg-white border border-[#e9eae6] rounded-[10px] flex overflow-hidden">
+        <div className="flex-1 p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[14px] font-bold text-[#1a1a1a]">Fin AI Agent</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#f3f3f1] text-[#646462]">No establecido en vivo</span>
+          </div>
+          <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">Fin utiliza tu contenido de asistencia para responder preguntas a través de Messenger y correo electrónico, para así mejorar la asistencia de autoservicio, la experiencia del cliente y las puntuaciones CSAT.</p>
+          <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
+            <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</a>
+            <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
+          </div>
+        </div>
+        <div className="w-[260px] h-[140px] flex-shrink-0 bg-gradient-to-br from-[#a98a6c] via-[#7a5a3a] to-[#5a4a3a] flex items-center justify-center relative">
+          <div className="bg-white rounded-[10px] shadow p-2.5 max-w-[180px]">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="w-5 h-5 rounded-[5px] bg-[#1a1a1a] flex items-center justify-center">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+              </span>
+              <span className="text-[10px] font-semibold text-[#1a1a1a]">Fin · AI Agent</span>
+            </div>
+            <p className="text-[10px] text-[#1a1a1a] leading-[12px] mb-1.5">Hello, Marina.<br/>We're here to help.</p>
+            <div className="bg-[#ff5f3f] text-white rounded-[6px] px-2 py-1 text-[8.5px]">How many API calls can I make per month?</div>
+          </div>
+        </div>
+        <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+    );
+  }
+  if (tab === 'copilot') {
+    return (
+      <div className="relative bg-white border border-[#e9eae6] rounded-[10px] flex overflow-hidden">
+        <div className="flex-1 p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[14px] font-bold text-[#1a1a1a]">Copilot</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#dcfce7] text-[#15803d]">En vivo</span>
+          </div>
+          <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">Copilot utiliza tu contenido de asistencia para encontrar respuestas rápidamente, dando a cada miembro del equipo un asistente de IA que mejora la eficiencia del equipo y la experiencia del cliente.</p>
+          <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
+            <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Ir a Inbox</a>
+            <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="1.2"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg> Ver guía</a>
+            <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
+          </div>
+        </div>
+        <div className="w-[260px] h-[140px] flex-shrink-0 bg-gradient-to-br from-[#bcd9c8] via-[#dcdcc4] to-[#c4a8e0] flex items-center justify-center p-2 relative">
+          <div className="bg-white rounded-[8px] shadow w-full h-full p-2">
+            <p className="text-[10px] font-semibold text-[#1a1a1a] mb-1">What do I do when a customer has a refund request?</p>
+            <div className="text-[9px] text-[#646462] mb-1.5 leading-[11px]">We understand that sometimes a purchase may not me…</div>
+            <div className="border-t border-[#e9eae6] pt-1">
+              <p className="text-[9px] font-semibold text-[#1a1a1a]">Issuing a refund</p>
+              <p className="text-[8.5px] text-[#646462] leading-[10px]">📄 Public article · Amy Adams · 1d ago</p>
+              <p className="text-[8.5px] text-[#1a1a1a] leading-[10px] mt-1">To process a refund request, follow these steps: 1. Determine Refund Eligibility…</p>
+            </div>
+          </div>
+        </div>
+        <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+    );
+  }
+  // help
+  return (
+    <div className="relative bg-white border border-[#e9eae6] rounded-[10px] flex overflow-hidden">
+      <div className="flex-1 p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[14px] font-bold text-[#1a1a1a]">Centro de ayuda</span>
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#f3f3f1] text-[#646462]">No establecido en vivo</span>
+        </div>
+        <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">El centro de ayuda te permite crear artículos y organizarlos en colecciones para que los clientes encuentren respuestas a preguntas frecuentes rápidamente en tu sitio web o aplicación.</p>
+        <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
+          <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</a>
+          <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
+        </div>
+      </div>
+      <div className="w-[300px] h-[150px] flex-shrink-0 bg-gradient-to-br from-[#a3c4a3] via-[#e0c8a0] to-[#c79a7a] flex items-center justify-center p-3 relative">
+        <div className="grid grid-cols-2 gap-2 w-full h-full">
+          <div className="bg-white rounded-[6px] p-1.5">
+            <div className="h-1.5 w-3/4 bg-[#1a1a1a]/15 rounded mb-1" />
+            <div className="h-1 w-full bg-[#1a1a1a]/10 rounded" />
+            <div className="h-1 w-2/3 bg-[#1a1a1a]/10 rounded mt-0.5" />
+          </div>
+          <div className="bg-white rounded-[6px] p-1.5">
+            <div className="h-1.5 w-3/4 bg-[#ff5f3f]/30 rounded mb-1" />
+            <div className="h-1 w-full bg-[#1a1a1a]/10 rounded" />
+            <div className="h-1 w-2/3 bg-[#1a1a1a]/10 rounded mt-0.5" />
+          </div>
+          <div className="bg-white rounded-[6px] p-1.5 col-span-2">
+            <div className="h-1.5 w-1/3 bg-[#1a1a1a]/15 rounded" />
+          </div>
+        </div>
+      </div>
+      <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+      </button>
+    </div>
+  );
+}
+
+function KhChecklist({ title, items }: { title: string; items: { label: string; done?: boolean }[] }) {
+  return (
+    <div className="relative bg-white border border-[#e9eae6] rounded-[10px] p-4">
+      <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+        <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+      </button>
+      <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">{title}</p>
+      <div className="flex flex-col gap-2">
+        {items.map((it, i) => (
+          <div key={i} className="flex items-start gap-2">
+            {it.done ? (
+              <span className="w-4 h-4 rounded-full bg-[#1a1a1a] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-none stroke-white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6l2 2 4-4"/></svg>
+              </span>
+            ) : (
+              <span className="w-4 h-4 rounded-full border border-[#d4d4d2] flex-shrink-0 mt-0.5" />
+            )}
+            <span className={`text-[12.5px] leading-[16px] ${it.done ? 'line-through text-[#646462]' : 'text-[#1a1a1a]'}`}>{it.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function KnowledgeFuentes() {
+  const [tab, setTab] = useState<KhTab>('all');
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Fuentes</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M3 4h10v2.5l-3 .5-2 4H6l-3-2.5z"/></svg>
+            Aprender
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Nuevo contenido
+          </button>
+        </div>
+      </div>
+      <div className="flex border-b border-[#e9eae6] px-6 flex-shrink-0">
+        {([
+          { id: 'all',     label: 'Todas las fuentes' },
+          { id: 'ai',      label: 'Agente de IA' },
+          { id: 'copilot', label: 'Copilot' },
+          { id: 'help',    label: 'Centro de ayuda' },
+        ] as const).map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-3 pb-3 pt-3 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
+              tab === t.id ? 'border-[#1a1a1a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-4">
+        {tab === 'all' && (
+        <>
+        {/* Promo card */}
+        <div className="relative bg-white border border-[#e9eae6] rounded-[10px] p-5">
+          <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+          </button>
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Optimiza tu contenido para Fin AI Agent, Copilot y el centro de ayuda</h3>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { name: 'Fin',     status: 'No establecido en vivo', desc: 'Fin utiliza tu conocimiento para generar respuestas precisas para los clientes.', cta: 'Configurar ahora', accent: '#ff5f3f' },
+              { name: 'Copilot', status: 'En vivo',                desc: 'Copilot utiliza tus conocimientos para dar a tus compañeros de equipo las respuestas que necesitan.', cta: 'Ir a Inbox',         accent: '#3b59f6' },
+              { name: 'Centro de ayuda', status: 'No establecido en vivo', desc: 'Los clientes utilizan tu conocimiento para encontrar respuestas precisas por sí mismos.', cta: 'Configurar ahora', accent: '#646462' },
+            ].map(c => (
+              <div key={c.name} className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                <div className="h-[100px] bg-gradient-to-br from-[#ededea] to-[#dcdcd8] flex items-center justify-center">
+                  <span className="w-8 h-8 rounded-[8px] flex items-center justify-center" style={{ background: c.accent }}>
+                    <span className="text-[14px] font-bold text-white">{c.name[0]}</span>
+                  </span>
+                </div>
+                <div className="p-3 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-semibold text-[#1a1a1a]">{c.name}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${c.status === 'En vivo' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>{c.status}</span>
+                  </div>
+                  <p className="text-[12px] text-[#646462] leading-[16px]">{c.desc}</p>
+                  <a href="#" className="text-[12px] font-medium text-[#1a1a1a] hover:underline mt-1">{c.cta} ↗</a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <KhSection
+          title="Artículos públicos"
+          description="Permite que Fin AI Agent y Copilot usen artículos públicos de tu centro de ayuda."
+          items={KH_PUBLIC_ARTICLES}
+        />
+        <KhSection
+          title="Artículos internos"
+          description="Proporcione a Fin AI Agent y Copilot el conocimiento interno que solo está disponible para usted y su equipo."
+          items={KH_INTERNAL_ARTICLES}
+        />
+        <KhSection
+          title="Conversaciones"
+          description="Deja que Copilot utilice las conversaciones de tu equipo y los folios de atención de los clientes de los últimos 4 meses."
+          items={KH_CONVERSATIONS}
+        />
+        <KhSection
+          title="Macros"
+          description="Copilot recomendará macros que estén disponibles para tus compañeros de equipo."
+          items={[{ provider: 'Intercom', status: '4 macros', action: 'Administrar', configured: true }]}
+        />
+        <KhSection
+          title="Sitios web"
+          description="Permite que Fin AI Agent y Copilot utilicen cualquier sitio web público."
+          items={[]}
+          headerAction={{ label: 'Sincronizar' }}
+        />
+        <KhSection
+          title="Más fuentes de contenido"
+          description="Proporcione a Fin AI Agent y a Copilot AI fuentes que tus clientes no puedan ver."
+          items={[
+            {
+              provider: 'Fragmentos de texto',
+              status: 'No hay fragmentos de texto',
+              action: 'Agregar fragmento de código',
+              configured: false,
+              icon: (
+                <span className="w-5 h-5 rounded-[4px] bg-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.6"><path d="M5 5L3 8l2 3M11 5l2 3-2 3M9 4l-2 8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </span>
+              ),
+            },
+            {
+              provider: 'Documentos',
+              status: 'Ningún documento',
+              action: 'Cargar documento',
+              configured: false,
+              icon: (
+                <span className="w-5 h-5 rounded-[4px] bg-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.6"><path d="M4 2h6l3 3v9H4z" strokeLinejoin="round"/><path d="M10 2v3h3M6 9h4M6 11.5h3"/></svg>
+                </span>
+              ),
+            },
+          ]}
+        />
+        </>
+        )}
+
+        {tab === 'ai' && (
+          <>
+            <KhProductHero tab="ai" />
+            <div className="grid grid-cols-[1fr_280px] gap-4">
+              <div className="flex flex-col gap-4">
+                <KhSection
+                  title="Artículos públicos"
+                  description="Permite que Fin AI Agent utilice artículos públicos de tu centro de ayuda."
+                  items={[
+                    { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
+                    { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
+                  ]}
+                />
+                <KhSection
+                  title="Sitios web"
+                  description="Permite que Fin AI Agent utilice cualquier sitio web público."
+                  items={[]}
+                  headerAction={{ label: 'Sincronizar' }}
+                />
+                <KhSection
+                  title="Más fuentes de contenido"
+                  description="Ofrece a Fin AI Agent fuentes que tus clientes no puedan ver."
+                  items={[]}
+                />
+              </div>
+              <KhChecklist
+                title="Empezar con Fin AI Agent"
+                items={[
+                  { label: 'Añade al menos una fuente de conocimiento' },
+                  { label: 'Configura Fin AI Agent y actívalo' },
+                  { label: 'Optimiza Fin AI Agent agregando más fuentes' },
+                  { label: 'Configura la asistencia multilingüe de Fin', done: true },
+                ]}
+              />
+            </div>
+          </>
+        )}
+
+        {tab === 'copilot' && (
+          <>
+            <KhProductHero tab="copilot" />
+            <div className="grid grid-cols-[1fr_280px] gap-4">
+              <div className="flex flex-col gap-4">
+                <KhSection
+                  title="Artículos internos"
+                  description="Proporciona a Copilot conocimientos internos que solo están disponibles para ti y tu equipo."
+                  items={KH_INTERNAL_ARTICLES}
+                />
+                <KhSection
+                  title="Conversaciones"
+                  description="Deja que Copilot utilice las conversaciones de tu equipo y los folios de atención de los clientes de los últimos 4 meses."
+                  items={KH_CONVERSATIONS}
+                />
+                <KhSection
+                  title="Macros"
+                  description="Copilot recomendará macros que estén disponibles para tus compañeros de equipo."
+                  items={[{ provider: 'Intercom', status: '4 macros para Copilot', action: 'Administrar', configured: true }]}
+                />
+                <KhSection
+                  title="Artículos públicos"
+                  description="Permite que Copilot utilice los artículos públicos del centro de ayuda."
+                  items={[
+                    { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
+                    { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
+                  ]}
+                />
+                <KhSection
+                  title="Sitios web"
+                  description="Permite que Copilot utilice cualquier sitio web público."
+                  items={[]}
+                  headerAction={{ label: 'Sincronizar' }}
+                />
+                <KhSection
+                  title="Más fuentes de contenido"
+                  description="Proporciona a Copilot fuentes que tus clientes no puedan ver."
+                  items={[
+                    {
+                      provider: 'Fragmentos de texto',
+                      status: 'No hay…',
+                      action: 'Agregar fragmento de código',
+                      configured: false,
+                      icon: (
+                        <span className="w-5 h-5 rounded-[4px] bg-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.6"><path d="M5 5L3 8l2 3M11 5l2 3-2 3M9 4l-2 8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </span>
+                      ),
+                    },
+                    {
+                      provider: 'Documentos',
+                      status: 'Ningún documento…',
+                      action: 'Cargar documento',
+                      configured: false,
+                      icon: (
+                        <span className="w-5 h-5 rounded-[4px] bg-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.6"><path d="M4 2h6l3 3v9H4z" strokeLinejoin="round"/><path d="M10 2v3h3M6 9h4M6 11.5h3"/></svg>
+                        </span>
+                      ),
+                    },
+                  ]}
+                />
+              </div>
+              <KhChecklist
+                title="Comienza a utilizar Copilot"
+                items={[
+                  { label: 'Añade al menos una fuente de conocimiento' },
+                  { label: 'Comienza a utilizar Copilot en el buzón', done: true },
+                  { label: 'Optimiza Copilot agregando más fuentes' },
+                ]}
+              />
+            </div>
+          </>
+        )}
+
+        {tab === 'help' && (
+          <>
+            <KhProductHero tab="help" />
+            <div className="grid grid-cols-[1fr_280px] gap-4">
+              <div className="flex flex-col gap-4">
+                <KhSection
+                  title="Artículos públicos"
+                  description="Comparte artículos públicos en tu Centro de ayuda donde los clientes puedan recibir ayuda por cuenta propia."
+                  items={[
+                    { provider: 'Intercom', status: 'No hay artículos…', action: 'Agregar artículo', configured: false },
+                    { provider: 'Zendesk',  status: 'No configurado',     action: 'Sincronizar o importar', configured: false },
+                  ]}
+                />
+              </div>
+              <KhChecklist
+                title="Empezar con el Centro de ayuda"
+                items={[
+                  { label: 'Crea tu primera colección', done: true },
+                  { label: 'Publicar un artículo en una colección' },
+                  { label: 'Activar tu centro de ayuda' },
+                ]}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function KnowledgeContenido() {
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 9h6M5 11.5h4"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Contenido</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">Vista previa</button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-6">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 flex items-center gap-2 border border-[#e9eae6] rounded-full px-4 py-[7px] bg-white">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
+            <input type="text" placeholder="Buscar..." className="flex-1 outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]" />
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
+          </div>
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[7px] text-[13px] font-medium text-[#1a1a1a]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>
+            Audiencia
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[7px] text-[13px] font-medium text-[#1a1a1a]">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+            Filtros
+          </button>
+        </div>
+
+        <div>
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Agregar contenido</h3>
+          <div className="grid grid-cols-5 gap-3">
+            {[
+              { label: 'Artículo público',         icon: 'doc' },
+              { label: 'Artículo interno',         icon: 'lock' },
+              { label: 'Fragmento de texto',       icon: 'snippet' },
+              { label: 'Sincronización de sitio web', icon: 'web' },
+              { label: 'Ver todo',                 icon: 'more' },
+            ].map(c => (
+              <button key={c.label} className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col items-start gap-2 hover:border-[#c8c9c4] bg-white">
+                <div className="w-8 h-8 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
+                    {c.icon === 'doc' && <path d="M3.5 2h6l3 3v9a0.5 0.5 0 0 1-.5.5h-8.5A0.5 0.5 0 0 1 3 14V2.5z"/>}
+                    {c.icon === 'lock' && <><rect x="3.5" y="6.5" width="9" height="7" rx="1.5"/><path d="M5.5 6.5V5a2.5 2.5 0 0 1 5 0v1.5"/></>}
+                    {c.icon === 'snippet' && <><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M5 7l-1.5 1L5 9M11 7l1.5 1-1.5 1M9 5l-2 6"/></>}
+                    {c.icon === 'web' && <><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></>}
+                    {c.icon === 'more' && <><circle cx="4" cy="8" r="1" fill="#646462" stroke="none"/><circle cx="8" cy="8" r="1" fill="#646462" stroke="none"/><circle cx="12" cy="8" r="1" fill="#646462" stroke="none"/></>}
+                  </svg>
+                </div>
+                <span className="text-[13px] font-medium text-[#1a1a1a]">{c.label}</span>
+              </button>
+            ))}
+            <button className="border border-[#e9eae6] rounded-[10px] p-4 flex flex-col items-start gap-2 hover:border-[#c8c9c4] bg-white relative">
+              <div className="w-8 h-8 rounded-[6px] bg-[#f3f3f1] flex items-center justify-center">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 8h10M8 3v10M5 5l1.5-2M11 5l-1.5-2M5 11l1.5 2M11 11l-1.5 2"/></svg>
+              </div>
+              <span className="text-[13px] font-medium text-[#1a1a1a]">Recomendaciones <span className="ml-1 text-[#646462] font-normal">0</span></span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] absolute top-3 right-3"><path d="M5 3h8v8h-2V6.4l-6.3 6.3-1.4-1.4L9.6 5H5z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Fuente de contenido</h3>
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+            <div className="grid grid-cols-[1fr_120px_140px_80px_80px_80px] px-5 py-3 border-b border-[#f1f1ee] text-[12px] font-medium text-[#646462]">
+              <div className="flex items-center gap-1">Título <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M5 6h6M5 10h6"/></svg></div>
+              <div>estado</div>
+              <div>Centro de ayuda</div>
+              <div>Copilot</div>
+              <div>Servicio</div>
+              <div>Ventas</div>
+            </div>
+            <div className="grid grid-cols-[1fr_120px_140px_80px_80px_80px] px-5 py-3 items-center">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3.5 2h6l3 3v9a0.5 0.5 0 0 1-.5.5h-8.5A0.5 0.5 0 0 1 3 14V2.5z"/></svg>
+                <span className="text-[13px] text-[#1a1a1a] font-medium">Artículos</span>
+                <span className="text-[12px] text-[#646462]">· Fragmentos de código, públicos, internos, documentos</span>
+              </div>
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#22c55e]"/><span className="text-[12px] text-[#1a1a1a]">0 activos</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
+              <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#d4d4d2]"/><span className="text-[12px] text-[#646462]">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function KnowledgePlaceholder({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <h1 className="text-[18px] font-bold text-[#1a1a1a]">{title}</h1>
+      </div>
+      <div className="flex-1 flex items-center justify-center min-h-0">
+        <div className="text-center max-w-[420px]">
+          <p className="text-[18px] font-semibold text-[#1a1a1a] mb-1">{title}</p>
+          <p className="text-[13.5px] text-[#646462]">{subtitle}</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function KnowledgeView() {
+  const [sub, setSub] = useState<KnowledgeSubView>('fuentes');
+  function renderSub() {
+    switch (sub) {
+      case 'fuentes':     return <KnowledgeFuentes />;
+      case 'contenido':   return <KnowledgeContenido />;
+      case 'articulos':   return <KnowledgePlaceholder title="Artículos" subtitle="Gestiona los artículos públicos e internos disponibles para Fin y Copilot." />;
+      case 'centroAyuda': return <KnowledgePlaceholder title="Centro de ayuda" subtitle="Configuración del Help Center y experiencias de cliente autoservicio." />;
+    }
+  }
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <KnowledgeSidebar sub={sub} onSelect={setSub} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {renderSub()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIN AI AGENT VIEW (Figma nodes 1:807, 1:2082, 1:3591, 1:4825, 1:5966, 1:7382,
+// 1:9083, 1:10409, 1:12035, 1:13680, 1:14559, 1:16070, 1:16962, 1:18192,
+// 1:19066, 1:20145, 1:21030)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type FinSubView =
+  | 'allRoles'
+  | 'anaGetStarted'
+  | 'capacitar' | 'capContent' | 'capGuidance' | 'capAttributes' | 'capEscalation' | 'capProcedures'
+  | 'probar' | 'pruebaTesting'
+  | 'desplegar' | 'depChat' | 'depEmail' | 'depPhone'
+  | 'analizar' | 'anaPerformance' | 'anaRecommendations' | 'anaTopicExplorer' | 'anaTopicTrends' | 'anaMonitor'
+  | 'changelog' | 'settings' | 'settingsAudiences'
+  | 'finWorkflows' | 'finSimpleAutomations';
+
+const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | 'rocket' | 'chart'; children?: { key: FinSubView; label: string; badge?: string }[] }[] = [
+  {
+    key: 'capacitar', label: 'Capacitar', icon: 'book',
+    children: [
+      { key: 'capContent',    label: 'Contenido' },
+      { key: 'capGuidance',   label: 'Orientación' },
+      { key: 'capAttributes', label: 'Atributos' },
+      { key: 'capEscalation', label: 'Escalada' },
+      { key: 'capProcedures', label: 'Procedimientos' },
+    ],
+  },
+  {
+    key: 'probar', label: 'Probar', icon: 'play',
+    children: [{ key: 'pruebaTesting', label: 'Pruebas' }],
+  },
+  {
+    key: 'desplegar', label: 'Desplegar', icon: 'rocket',
+    children: [
+      { key: 'depChat',  label: 'Chat' },
+      { key: 'depEmail', label: 'Correo electrónico' },
+      { key: 'depPhone', label: 'Teléfono' },
+    ],
+  },
+  {
+    key: 'analizar', label: 'Analizar', icon: 'chart',
+    children: [
+      { key: 'anaPerformance',     label: 'Desempeño' },
+      { key: 'anaRecommendations', label: 'Recomendaciones' },
+      { key: 'anaTopicExplorer',   label: 'Explorador de Temas' },
+      { key: 'anaTopicTrends',     label: 'Tendencias', badge: 'New' },
+      { key: 'anaMonitor',         label: 'Monitores' },
+    ],
+  },
+];
+
+// Bold/filled icons (Inbox-style) for FinSidebar — fill #1a1a1a, no stroke.
+function FinNavIcon({ kind }: { kind: 'book' | 'play' | 'rocket' | 'chart' }) {
+  const cls = "w-4 h-4 fill-[#1a1a1a]";
+  switch (kind) {
+    case 'book':   return <svg viewBox="0 0 16 16" className={cls}><path d="M2 2.5a1 1 0 011-1h4.5a2 2 0 012 2v10a1 1 0 01-1.7.7 2 2 0 00-1.4-.7H2v-11zm12 0a1 1 0 00-1-1H8.5a2 2 0 00-2 2v10a1 1 0 001.7.7 2 2 0 011.4-.7H14v-11z"/></svg>;
+    case 'play':   return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="8" r="6.5"/><path d="M6.6 5.4l4 2.6-4 2.6z" fill="#fff"/></svg>;
+    case 'rocket': return <svg viewBox="0 0 16 16" className={cls}><path d="M14.5 1.5c-2.5 0-5 1.5-7 3.5L5 8l3 3 3-2.5c2-2 3.5-4.5 3.5-7zM4 11c-1.5 0-3 1-3 3.5C3 14.5 5 13 5 11.5L4 11zm6.5-7a1 1 0 110 2 1 1 0 010-2z"/></svg>;
+    case 'chart':  return <svg viewBox="0 0 16 16" className={cls}><path d="M2 2v12h12v-2H4V2H2zm3 4v6h2V6H5zm3-2v8h2V4H8zm3 3v5h2V7h-2z"/></svg>;
+  }
+}
+
+function FinSidebar({ sub, onSelect }: { sub: FinSubView; onSelect: (s: FinSubView) => void }) {
+  // Per-group expand/collapse state — explicit chevron toggle (not auto-expand).
+  // Default: only auto-open the group whose child is currently active (preserves nav context).
+  const isInGroup = (groupKey: FinSubView, childKeys: FinSubView[]): boolean =>
+    sub === groupKey || childKeys.includes(sub);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    FIN_NAV_ITEMS.forEach(g => {
+      const childKeys = (g.children ?? []).map(c => c.key);
+      init[g.key] = isInGroup(g.key, childKeys);
+    });
+    init['settings'] = sub === 'settings' || sub === 'settingsAudiences';
+    return init;
+  });
+  const toggle = (k: string) => setOpenGroups(s => ({ ...s, [k]: !s[k] }));
+  // Active item style — same shadow + font-semibold pattern as Inbox SidebarNavItem.
+  const itemCls = (isActive: boolean) =>
+    `relative flex items-center gap-2 h-8 pl-3 pr-3 py-1 rounded-lg cursor-pointer text-[13px] w-full text-left transition-colors ${
+      isActive
+        ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+        : 'hover:bg-[#e9eae6]/40 text-[#1a1a1a]'
+    }`;
+  return (
+    <div className="w-[236px] flex-shrink-0 bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] flex flex-col overflow-hidden">
+      {/* Header — same pattern as Inbox */}
+      <div className="flex items-center justify-between px-6 py-4 h-16 flex-shrink-0">
+        <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Fin AI Agent</span>
+      </div>
+      {/* Role dropdown — shows "Todos los roles" on all-roles view, "Servicio" otherwise */}
+      <div className="px-3 pb-2 flex-shrink-0">
+        <button
+          onClick={() => onSelect('allRoles')}
+          className={`w-full h-10 flex items-center gap-3 px-3 rounded-[8px] border ${
+            sub === 'allRoles' ? 'bg-white border-[#e9eae6] shadow-[0px_1px_2px_rgba(20,20,20,0.04)]' : 'border-transparent hover:bg-white/60'
+          }`}
+        >
+          {sub === 'allRoles' ? (
+            <div className="w-4 h-4 rounded-[3px] flex items-center justify-center flex-shrink-0 bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M8 1l5.5 3.2v6.6L8 14 2.5 10.8V4.2z"/></svg>
+            </div>
+          ) : (
+            <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#ff5b16' }}>
+              <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white"><path d="M3 3l6 6M9 3l-6 6" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            </div>
+          )}
+          <span className="flex-1 text-left text-[13px] font-medium text-[#1a1a1a]">{sub === 'allRoles' ? 'Todos los roles' : 'Servicio'}</span>
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z" /></svg>
+        </button>
+      </div>
+      {/* Top-level "Comenzar" — bold filled clock icon */}
+      <div className="px-3 pb-1 flex-shrink-0">
+        <button onClick={() => onSelect('anaGetStarted')} className={itemCls(sub === 'anaGetStarted')}>
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8.75 4v3.69l2.6 1.5-.75 1.3L7.25 8.5V4h1.5z"/></svg>
+          <span className="flex-1">Comenzar</span>
+        </button>
+      </div>
+      {/* Group items */}
+      <div className="flex-1 overflow-y-auto pl-3 pr-3 pb-4">
+        <div className="flex flex-col">
+          {FIN_NAV_ITEMS.map(group => {
+            const expanded = openGroups[group.key] ?? false;
+            return (
+              <div key={group.key}>
+                <button onClick={() => toggle(group.key)} className={itemCls(false)}>
+                  <FinNavIcon kind={group.icon} />
+                  <span className="flex-1">{group.label}</span>
+                  <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+                </button>
+                {expanded && group.children && (
+                  <div className="flex flex-col pl-7 mt-0.5 mb-1 gap-0.5">
+                    {group.children.map(child => (
+                      <button key={child.key} onClick={() => onSelect(child.key)} className={itemCls(sub === child.key)}>
+                        <span className="flex-1 truncate">{child.label}</span>
+                        {child.badge && (
+                          <span className="ml-1 px-1.5 py-[1px] rounded-[4px] bg-[#1a1a1a] text-white text-[10px] font-semibold leading-[14px]">{child.badge}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {/* Bottom miscellaneous items */}
+          <div className="border-t border-[#e9eae6]/70 my-2" />
+          {/* Registro de cambios — bold filled clock with tick */}
+          <button onClick={() => onSelect('changelog')} className={itemCls(sub === 'changelog')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8.75 4v3.69l2.6 1.5-.75 1.3L7.25 8.5V4h1.5z"/></svg>
+            <span className="flex-1">Registro de cambios</span>
+          </button>
+          <div className="border-t border-[#e9eae6]/70 my-2" />
+          {/* Ajustes de Fin — bold filled gear icon, expandable */}
+          <button onClick={() => toggle('settings')} className={itemCls(sub === 'settings' || sub === 'settingsAudiences')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM7 1h2v2.2l1.6.7L12.2 2.5l1.4 1.4L12 5.5l.7 1.6H15v2h-2.2l-.7 1.6 1.6 1.6-1.4 1.4-1.6-1.6L9 12.8V15H7v-2.2l-1.6-.7L3.8 13.5l-1.4-1.4L4 10.5 3.3 8.9H1V7h2.3l.7-1.6L2.4 3.8l1.4-1.4L5.4 4l1.6-.7V1z"/></svg>
+            <span className="flex-1">Ajustes de Fin</span>
+            <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] flex-shrink-0 transition-transform ${openGroups['settings'] ? 'rotate-90' : ''}`}><path d="M6 4l4 4-4 4z"/></svg>
+          </button>
+          {openGroups['settings'] && (
+            <div className="flex flex-col pl-7 mt-0.5 mb-1 gap-0.5">
+              <button onClick={() => onSelect('settings')} className={itemCls(sub === 'settings')}>
+                <span className="flex-1 truncate">General</span>
+              </button>
+              <button onClick={() => onSelect('settingsAudiences')} className={itemCls(sub === 'settingsAudiences')}>
+                <span className="flex-1 truncate">Audiencias</span>
+              </button>
+            </div>
+          )}
+          {/* Flujos de trabajo — bold filled list-with-dot icon */}
+          <button onClick={() => onSelect('finWorkflows')} className={itemCls(sub === 'finWorkflows')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M2 3.5h6v1.5H2zm0 3.75h10v1.5H2zm0 3.75h6v1.5H2z"/><circle cx="11" cy="4.25" r="1.7"/><circle cx="13" cy="11.75" r="1.7"/></svg>
+            <span className="flex-1">Flujos de trabajo</span>
+          </button>
+          {/* Automatizaciones simples — bold filled lightning */}
+          <button onClick={() => onSelect('finSimpleAutomations')} className={itemCls(sub === 'finSimpleAutomations')}>
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M9 1L3 9h4l-2 6 6-8H7l2-6z"/></svg>
+            <span className="flex-1">Automatizaciones simples</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const FIN_FAQS: { q: string; a: string }[] = [
+  { q: '¿Cuáles son los roles de Fin AI Agent?', a: 'Servicio para soporte y Ventas para captación de clientes. Cada rol está optimizado para su etapa concreta del recorrido.' },
+  { q: '¿Los roles chocarán o interferirán entre sí?', a: 'No. Fin elige automáticamente el rol adecuado según el contexto y nunca aplica dos a la vez.' },
+  { q: '¿Necesito configurar cada rol de forma individual?', a: 'Sí. Cada rol se configura por separado para que adaptes el contenido, la voz y los flujos a tu negocio.' },
+  { q: '¿Por qué Fin se está expandiendo más allá de Servicio?', a: 'Porque la IA puede ayudar en cada etapa del ciclo de vida del cliente, no solo en soporte.' },
+];
+
+function FinFaqItem({ q, a, open, onToggle }: { q: string; a: string; open: boolean; onToggle: () => void }) {
+  // Figma 1:758 — bg white, border #e9eae6, rounded 16px, pl-24 pr-16 py-24, gap 16
+  // Title: Inter Semi Bold 14/20. Chevron: Component 1 v20 (down caret asset, rotates open).
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[16px]">
+      <button onClick={onToggle} className="w-full flex items-center pl-[24px] pr-[16px] py-[24px] text-left gap-4">
+        <span className="flex-1 font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a]">{q}</span>
+        <span className={`relative w-4 h-4 overflow-hidden block flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}>
+          <img src={`${FIGMA_CDN}/4ca62eb2-2d55-4470-9e75-a5d54e386cae`} alt="" className="absolute" style={{ inset: '33.75% 22.81%' }} />
+        </span>
+      </button>
+      {open && (
+        <div className="pl-[24px] pr-[16px] pb-[20px] -mt-1">
+          <p className="font-['Inter'] text-[13.5px] text-[#646462] leading-[20px]">{a}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinAllRolesContent() {
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  return (
+    <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[1021px] mx-auto px-14 pt-12 pb-16">
+        {/* Hero */}
+        <div className="flex flex-col items-center text-center">
+          <img src={IMG_FIN_LOGO_MARK} alt="Fin" className="w-8 h-8 mb-4 object-contain" />
+          <h1 className="text-[40px] font-light tracking-[-1.2px] leading-[40px] text-[#1a1a1a] max-w-[420px]">
+            Un agente para todo el<br/>recorrido del cliente
+          </h1>
+          <p className="text-[14px] text-[#646462] leading-[20px] mt-4 max-w-[520px]">
+            Fin cambia entre distintos roles para brindarle asistencia a los clientes en cada etapa.{' '}
+            <a href="#" className="underline">Más información.</a>
+          </p>
+        </div>
+
+        {/* Cards */}
+        <div className="mt-12 flex justify-center">
+          <div className="grid grid-cols-2 gap-4 w-[640px]">
+            <FinRoleCard
+              image={IMG_FIN_SERVICE_AGENT}
+              iconColor="#DE5612"
+              iconKind="service"
+              title="Servicio"
+              tagline="Brindar soporte a sus clientes"
+              bullets={[
+                'Proporcione asistencia inmediata',
+                'Resolver consultas complejas',
+                'En todos los canales',
+              ]}
+            />
+            <FinRoleCard
+              image={IMG_FIN_SALES_AGENT}
+              iconColor="#165FC6"
+              iconKind="sales"
+              title="Ventas"
+              tagline="Consiga nuevos clientes."
+              bullets={[
+                'Capte clientes potenciales B2B',
+                'Guía para el descubrimiento de productos',
+                'Calificar y canalizar clientes potenciales',
+              ]}
+            />
+          </div>
+        </div>
+
+        {/* More roles coming soon — 3 squares (rounded-[8px]) overlapping per Figma 1:741 */}
+        <div className="mt-7 flex items-center justify-center">
+          <div className="w-[640px] flex items-center justify-center bg-white border border-[#e9eae6] rounded-[10px] py-4 px-6 gap-3">
+            <div className="relative w-12 h-6">
+              <span className="absolute left-0 top-0 w-6 h-6 rounded-[8px] bg-[#818F4A] border border-white" />
+              <span className="absolute left-3 top-0 w-6 h-6 rounded-[8px] bg-[#CE78BA] border border-white" />
+              <span className="absolute left-6 top-0 w-6 h-6 rounded-[8px] bg-[#DBDBD6] border border-white" />
+            </div>
+            <span className="text-[14px] font-semibold text-[#1a1a1a]">Más roles próximamente.</span>
+          </div>
+        </div>
+
+        {/* FAQ */}
+        <div className="mt-20">
+          <h2 className="text-center text-[18px] font-bold text-[#1a1a1a] mb-6">Preguntas frecuentes</h2>
+          <div className="max-w-[560px] mx-auto flex flex-col gap-2">
+            {FIN_FAQS.map((f, i) => (
+              <FinFaqItem
+                key={i}
+                q={f.q}
+                a={f.a}
+                open={openFaq === i}
+                onToggle={() => setOpenFaq(openFaq === i ? null : i)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinRoleCard({
+  image, iconColor, iconKind, title, tagline, bullets,
+}: {
+  image: string;
+  iconColor: string;
+  iconKind: 'service' | 'sales';
+  title: string;
+  tagline: string;
+  bullets: string[];
+}) {
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden flex flex-col">
+      <div className="p-2">
+        <div className="rounded-[10px] overflow-hidden h-[166px]">
+          <img src={image} alt="" className="w-full h-full object-cover"/>
+        </div>
+      </div>
+      <div className="px-4 pt-2 pb-4 flex flex-col">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-[8px] flex items-center justify-center" style={{ background: iconColor }}>
+            {iconKind === 'service' ? (
+              <span className="relative w-4 h-4 overflow-hidden block">
+                <img src={`${FIGMA_CDN}/908fa1e8-1a83-49e9-8aa3-7b41b9393b0f`} alt="" className="absolute" style={{ inset: '7.85%' }} />
+              </span>
+            ) : (
+              <span className="relative w-4 h-4 overflow-hidden block">
+                <img src={`${FIGMA_CDN}/e0a66626-9ef9-47c6-b945-faf2303ea538`} alt="" className="absolute" style={{ inset: '12.5% 6.25% 9.88% 6.25%' }} />
+              </span>
+            )}
+          </span>
+          <span className="text-[18px] font-bold text-[#1a1a1a]">{title}</span>
+        </div>
+        <p className="mt-2 text-[13.5px] text-[#1a1a1a]">{tagline}</p>
+        <div className="my-3 border-t border-[#e9eae6]" />
+        <ul className="flex flex-col gap-1 list-disc pl-5 text-[13.5px] text-[#1a1a1a] leading-[21px]">
+          {bullets.map(b => <li key={b}>{b}</li>)}
+        </ul>
+        <div className="mt-4">
+          <button className="bg-[#222] text-white text-[12.5px] font-semibold rounded-full px-4 py-1.5 hover:bg-black">
+            Comenzar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinPlaceholderContent({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="flex-1 flex items-center justify-center min-h-0">
+      <div className="flex flex-col items-center gap-3 text-center max-w-[420px] px-8">
+        <div className="w-12 h-12 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center">
+          <img src={IMG_FIN_LOGO_MARK} alt="" className="w-6 h-6 object-contain" />
+        </div>
+        <p className="text-[18px] font-semibold text-[#1a1a1a]">{title}</p>
+        <p className="text-[13.5px] text-[#646462]">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Contenido (Figma 1:3591) ────────────────────────────────────
+// Card icons mapped to exact Figma assets (Component 13 variants 35-39):
+//   35 Artículo público (1:3442), 36 Artículo interno (1:3450),
+//   37 Fragmento de texto (1:3458), 38 Sincronización de sitio web (1:3466), 39 Ver todo (1:3474).
+const FIN_CONTENIDO_CARDS: { iconAsset: string; iconInset: string; label: string }[] = [
+  { iconAsset: 'c9601f2d-5aed-40b6-b147-705dfec36b3c', iconInset: '0 6.19% 1.42% 0',                    label: 'Artículo público' },
+  { iconAsset: '08e982fa-057f-44fd-b1f7-e0c5dc20a4ff', iconInset: '3.12% 12.5% 12.5% 12.5%',            label: 'Artículo interno' },
+  { iconAsset: 'e8300830-2553-48a0-b6aa-18d1d9005345', iconInset: '12.5%',                              label: 'Fragmento de texto' },
+  { iconAsset: '7f91be75-37f9-46dd-b01c-8e7ad6e1fe10', iconInset: '7.82% 7.75% 7.75% 7.82%',            label: 'Sincronización de sitio web' },
+  { iconAsset: '11afcce0-e840-4d64-badb-7bf005759da3', iconInset: '40.62% 9.37% 40.63% 9.37%',          label: 'Ver todo' },
+];
+
+function FinContenidoContent() {
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+                <path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/>
+                <path d="M8 3.2v9.6"/>
+              </svg>
+            </span>
+            <h1 className="text-[20px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Contenido</h1>
+          </div>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+              <path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/>
+              <path d="M8 3.2v9.6"/>
+            </svg>
+            <span>Aprender</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+        <div className="px-6 h-16 flex items-center gap-3">
+          <div className="flex-1 max-w-[420px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+            <input
+              type="text"
+              placeholder="Buscar..."
+              className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+            />
+          </div>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.2 13c.7-2 2.5-3.2 4.8-3.2s4.1 1.2 4.8 3.2"/></svg>
+            <span>Audiencia</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+            <span>Filtros</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 pt-6 pb-4">
+          {/* Agregar contenido */}
+          <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Agregar contenido</h3>
+          <div className="mt-3 grid grid-cols-3 gap-4">
+            {FIN_CONTENIDO_CARDS.map(c => (
+              <button
+                key={c.label}
+                className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start gap-3 hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
+              >
+                <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
+                  <span className="relative w-4 h-4 overflow-hidden block">
+                    <img src={`${FIGMA_CDN}/${c.iconAsset}`} alt="" className="absolute" style={{ inset: c.iconInset }} />
+                  </span>
+                </span>
+                <span className="font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a] text-left">{c.label}</span>
+              </button>
+            ))}
+            {/* AI suggest card (Component 14 — variants 40 left, 41 right) */}
+            <button className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex items-start justify-between hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors">
+              <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
+                <span className="relative w-4 h-4 overflow-hidden block">
+                  <img src={`${FIGMA_CDN}/885021c5-87b2-4496-a7e3-ad160d9b46e1`} alt="" className="absolute" style={{ inset: '-0.01% -0.12% -0.12% 0' }} />
+                </span>
+              </span>
+              <span className="relative w-4 h-4 overflow-hidden block mt-1">
+                <img src={`${FIGMA_CDN}/32bf7a54-7641-4512-b6e6-3ad14d79ee96`} alt="" className="absolute" style={{ inset: '18.75% 18.75% 15% 15%' }} />
+              </span>
+            </button>
+          </div>
+
+          {/* Fuente de contenido — table Component 16 (1:3502 header + 1:3518 row).
+              4 data columns + 1 sticky chevron column. Exact Figma column widths. */}
+          <h3 className="mt-12 text-[16px] font-semibold text-[#1a1a1a]">Fuente de contenido</h3>
+          <div className="mt-3">
+            {/* Header row */}
+            <div className="grid grid-cols-[1fr_122px_94px_86px_18px] gap-0 px-px pb-[16.98px] pt-[11.01px] border-b border-[#e9eae6]">
+              <div className="flex items-center gap-[3px] font-['Inter'] font-semibold text-[13px] leading-[20px] text-[#646462]">
+                <span>Título</span>
+                {/* Sort arrows — Component 1 v44/v45 */}
+                <span className="relative inline-block w-[8px] h-[10px] ml-1">
+                  <span className="absolute left-0 top-[-1px] w-[8px] h-[5px] overflow-hidden block">
+                    <img src={`${FIGMA_CDN}/0f6a2612-0a12-45e8-8d2d-42b53d6002de`} alt="" className="absolute" style={{ inset: '0.09% 6.25% 10.07% 6.25%' }} />
+                  </span>
+                  <span className="absolute left-0 top-[6px] w-[8px] h-[5px] overflow-hidden block">
+                    <img src={`${FIGMA_CDN}/0f263e45-3398-4b19-9f98-a1537ed99bfe`} alt="" className="absolute" style={{ inset: '10.07% 6.25% 0.09% 6.25%' }} />
+                  </span>
+                </span>
+              </div>
+              <div className="font-['Inter'] font-semibold text-[13px] leading-[20px] text-[#646462]">estado</div>
+              <div className="font-['Inter'] font-semibold text-[13px] leading-[20px] text-[#646462]">Servicio</div>
+              <div className="font-['Inter'] font-semibold text-[13px] leading-[20px] text-[#646462]">Ventas</div>
+              <div />
+            </div>
+            {/* Data row — "Artículos" */}
+            <div className="grid grid-cols-[1fr_122px_94px_86px_18px] gap-0 px-px py-[14px] border-b border-[#e9eae6] items-center">
+              <div className="flex items-center pr-1 truncate">
+                {/* Icon Component 1 v47 */}
+                <span className="w-4 h-4 overflow-hidden relative block flex-shrink-0 mr-2">
+                  <img src={`${FIGMA_CDN}/aa9bbd15-eec7-49fc-8bdb-f309ab1e2b47`} alt="" className="absolute" style={{ inset: '12.5% 9.81% 6.25% 9.75%' }} />
+                </span>
+                <span className="font-['Inter'] text-[14px] leading-[20px] text-[#1a1a1a]">Artículos</span>
+                <span className="font-['Inter'] text-[14px] leading-[20px] text-[#646462] ml-1 truncate">· Fragmentos de código, públicos, internos, documentos</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Green dot — bg #117010 / border 3px #c7f1c6 */}
+                <span className="w-4 h-4 rounded-full bg-[#117010] border-[3px] border-[#c7f1c6]"/>
+                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">0 activos</span>
+              </div>
+              {/* Servicio cell — icon Component 1 v48 + "—" */}
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 overflow-hidden relative block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/b96640e8-d273-42de-a3f8-8b71bf612749`} alt="" className="absolute" style={{ inset: '6.25%' }} />
+                </span>
+                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">—</span>
+              </div>
+              {/* Ventas cell — icon Component 1 v49 + "—" */}
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 overflow-hidden relative block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/b96640e8-d273-42de-a3f8-8b71bf612749`} alt="" className="absolute" style={{ inset: '6.25%' }} />
+                </span>
+                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">—</span>
+              </div>
+              <div />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Pautas / Orientación (Figma 1:4825) ─────────────────────────
+function FinOrientacionContent() {
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 py-6 flex gap-6 items-start">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[18px] font-bold text-[#1a1a1a] leading-[24px]">
+              Personalice la forma en que Fin se comunica y responde
+            </h1>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[600px]">
+              Capacite a Fin para proporcionar respuestas precisas y use su estilo de comunicación, lo que garantiza una asistencia coherente y escalable en todos los flujos de trabajo.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[#1a1a1a]">
+              {/* Figma 1:4581/1:4586/1:4591/1:4596 — real Figma asset icons (variants 27-30) */}
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/ba01950e-55a7-4033-8b44-74d41efa47b8`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
+                </span>
+                <span>Comenzar</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/5eb22453-a361-4c9d-8d28-84057cba8db8`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
+                </span>
+                <span>Prácticas recomendadas</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/4c4f1779-6df5-4a0c-ba20-29c31218fabe`} alt="" className="absolute" style={{ inset: '0 6.25% 1.49% 0' }} />
+                </span>
+                <span>Conceptos básicos de Fin</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/f8f0331f-910e-4e83-bdd3-fd128fab4893`} alt="" className="absolute" style={{ inset: '6.25% 12.5% 0 12.5%' }} />
+                </span>
+                <span>Más información</span>
+              </a>
+            </div>
+          </div>
+          {/* Figma 1:4608 — "Ejemplos de orientación" real image (was dark-green mockup) */}
+          <div className="relative w-[388px] h-[160px] rounded-[10px] overflow-hidden flex-shrink-0">
+            <img src={`${FIGMA_CDN}/03c7cc8d-8744-4ed2-8846-6cd4be6c593d`} alt="Ejemplos de orientación" className="absolute h-full top-0 left-0 w-full" />
+          </div>
+        </div>
+      </div>
+
+      {/* Pautas section header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="1.2"/><path d="M5 5.5h6M5 8h6M5 10.5h4" strokeLinecap="round"/></svg>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Pautas</h2>
+          </div>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+            <span>Aprender</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-4 flex flex-col gap-3">
+          {/* Básicos accordion */}
+          <button className="w-full bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-semibold text-[#1a1a1a]">Básicos</span>
+              <span className="text-[13px] text-[#646462]">Tono amistoso, Longitud estándar</span>
+            </div>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+
+          {/* Search + filtrar */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 max-w-[420px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+              <input
+                type="text"
+                placeholder="Busca la guía por título o contenido"
+                className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+              />
+            </div>
+            <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              <span>Filtrar</span>
+            </button>
+          </div>
+
+          {/* Estilo de comunicación */}
+          <FinPautaCategory
+            title="Estilo de comunicación"
+            description="Crea una guía personalizada sobre el vocabulario y los términos que Fin debe utilizar."
+            icon={
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.5h11v8h-7l-4 3v-11z" strokeLinejoin="round"/></svg>
+            }
+          />
+
+          {/* Contexto y aclaraciones */}
+          <FinPautaCategory
+            title="Contexto y aclaraciones"
+            description="Crea una guía personalizada sobre las preguntas de seguimiento que Fin debe hacer."
+            icon={
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M6.2 6.4c.3-.9 1.1-1.5 2-1.5 1.1 0 2 .8 2 1.8 0 1-.8 1.5-1.7 1.7-.3 0-.5.3-.5.5v.6M8 11.2v.01" strokeLinecap="round"/></svg>
+            }
+          />
+
+          {/* Contenido y fuentes — Figma 1:4719 */}
+          <FinPautaCategory
+            title="Contenido y fuentes"
+            description="Crea una pauta personalizada sobre cuándo y cómo Fin debe utilizar artículos o fuentes específicos en las respuestas."
+            icon={
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
+            }
+          />
+
+          {/* Correo no deseado — Figma 1:4744 */}
+          <FinPautaCategory
+            title="Correo no deseado"
+            description="Cree una guía personalizada sobre cómo Fin debe identificar y manejar los mensajes potenciales de spam."
+            icon={
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4" strokeLinejoin="round"/></svg>
+            }
+          />
+
+          {/* Otros — Figma 1:4768 */}
+          <FinPautaCategory
+            title="Otros"
+            description="Cualquier otra pauta que quieras que Fin siga."
+            icon={
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg>
+            }
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinPautaCategory({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description: string;
+  icon: ReactNode;
+}) {
+  return (
+    <div className="bg-white border border-[#e9eae6] rounded-[12px]">
+      <div className="px-4 py-3 flex items-start justify-between border-b border-[#e9eae6]">
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5">{icon}</span>
+          <div>
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">{title}</p>
+            <p className="text-[13px] text-[#646462] mt-0.5">{description}</p>
+          </div>
+        </div>
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462] mt-1.5"><path d="M4 6l4 4 4-4z"/></svg>
+      </div>
+      <div className="px-4 py-8 text-center text-[13px] text-[#646462] border-b border-[#e9eae6]">
+        Aún no hay pautas. Haz clic en Nuevo para crear uno.
+      </div>
+      <div className="px-4 py-2.5">
+        <button className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+          <span>Nuevo</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Atributos (Figma 1:5966) ────────────────────────────────────
+function FinAtributosContent() {
+  const rows: { name: string; count: number }[] = [
+    { name: 'Sentiment', count: 3 },
+    { name: 'Urgency', count: 3 },
+    { name: 'Complexity', count: 3 },
+  ];
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero card */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 py-6 flex gap-6 items-start">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-[28px] tracking-[-0.2px] max-w-[440px]">
+              Entrena a Fin para detectar atributos clave en cada conversación
+            </h1>
+            <p className="mt-3 text-[13px] text-[#646462] leading-[20px] max-w-[560px]">
+              Fin puede detectar los atributos que tú defines, como el tipo de problema, la actitud o la urgencia, en cada conversación. Estos atributos potencian el enrutamiento, el escalamiento y los informes, ayudan a los clientes a llegar al equipo adecuado más rápido y proporcionan a tu equipo datos fiables y estructurados sin etiquetas manuales ni flujos de trabajo rígidos.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[#1a1a1a]">
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Creación de atributos de Fin</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Cómo usar los atributos Fin</span>
+              </a>
+              <a className="flex items-center gap-1.5 hover:underline" href="#">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 2.5h8v11l-4-2-4 2v-11z"/></svg>
+                <span>Prácticas recomendadas</span>
+              </a>
+            </div>
+          </div>
+          {/* Figma 1:5821/1:5823 — "Categorías de Fin" real image (was dark-green mockup) */}
+          <div className="relative w-[300px] h-[144px] rounded-[12px] overflow-hidden border border-[#e9eae6] flex-shrink-0">
+            <img src={`${FIGMA_CDN}/66f3ed01-c088-4537-a86a-a7bfc1bf2804`} alt="Categorías de Fin" className="absolute h-[103.89%] left-0 max-w-none top-[-1.95%] w-full" />
+          </div>
+        </div>
+      </div>
+
+      {/* Atributos section header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11"/></svg>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Atributos</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <button className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
+            </button>
+            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              <span>Nuevo</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Table — Figma 1:5832 has 5 columns: Atributo / estado / Conversaciones / Resuelto / Escalado */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 pt-4">
+          <div className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 pb-3 border-b border-[#e9eae6] text-[13px] text-[#646462]">
+            <div>Atributo</div>
+            <div>estado</div>
+            <div className="flex items-center gap-1">
+              <span>Conversaciones</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3M8 11h.01" strokeLinecap="round"/></svg>
+            </div>
+            <div>Resuelto</div>
+            <div>Escalado</div>
+          </div>
+          {rows.map(r => (
+            <div key={r.name} className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 py-3.5 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a]">
+              <div className="flex items-center gap-2">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+                <span>{r.name}</span>
+                <span className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462]">{r.count}</span>
+              </div>
+              <div>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">Deshabilitado</span>
+              </div>
+              <div className="text-[#646462]">—</div>
+              <div className="text-[#646462]">—</div>
+              <div className="text-[#646462]">—</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Escalamiento (Figma 1:7382) ─────────────────────────────────
+function FinEscalamientoContent() {
+  const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/b1517b7b-b13a-40c8-83a1-46a7a4839098`;
+  const IMG_ESCALATION_LINK_BOOK = `${FIGMA_CDN}/34e259b7-ba78-42e5-9f7a-f48a3961b433`;
+  const IMG_ESCALATION_CLOSE = `${FIGMA_CDN}/34dfc6d2-2f3f-4639-aa68-6573e7f751a7`;
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero card */}
+      <div className="flex-shrink-0 px-4 pt-4">
+        <div className="relative bg-white rounded-[16px] shadow-[0px_1px_2px_rgba(20,20,20,0.15)] px-6 py-5 flex gap-6 items-start">
+          <div className="flex-1 min-w-0 max-w-[640px] flex flex-col gap-4">
+            <h2 className="text-[20px] font-semibold text-[#1a1a1a] leading-[24px] tracking-[-0.4px]">
+              Indique a Fin cuándo debe escalar
+            </h2>
+            <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
+              Controle cuándo Fin transfiere las conversaciones a su equipo definiendo reglas de escalada deterministas utilizando atributos y datos de los clientes, o creando guías de escalada en lenguaje natural para escenarios más flexibles.
+            </p>
+            <div className="flex flex-wrap gap-x-1 gap-y-2 text-[14px] font-semibold text-[#1a1a1a]">
+              <a className="inline-flex items-center gap-2 px-3 py-[7px] rounded-full hover:bg-[#f8f8f7]" href="#">
+                <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_ESCALATION_LINK_BOOK})`, backgroundSize: 'cover' }} />
+                <span className="leading-[16px]">Cómo configurar escalaciones automáticas</span>
+              </a>
+              <a className="inline-flex items-center gap-2 px-3 py-[7px] rounded-full hover:bg-[#f8f8f7]" href="#">
+                <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_ESCALATION_LINK_BOOK})`, backgroundSize: 'cover' }} />
+                <span className="leading-[16px]">Prácticas recomendadas de pautas</span>
+              </a>
+            </div>
+          </div>
+          <div className="relative w-[388px] h-[192px] rounded-[12px] overflow-hidden flex-shrink-0">
+            <img src={IMG_ESCALATION_BANNER} alt="Escalation examples" className="absolute inset-0 w-full h-full object-cover" />
+          </div>
+          <button aria-label="Cerrar" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+            <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_ESCALATION_CLOSE})`, backgroundSize: 'cover' }} />
+          </button>
+        </div>
+      </div>
+
+      {/* Escalamiento section header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M5 7l3 3 3-3" strokeLinecap="round"/></svg>
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Escalamiento</h2>
+          </div>
+          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+            <span>Aprender</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-4 flex flex-col gap-5">
+          {/* Search + filters */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 max-w-[440px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+              <input
+                type="text"
+                placeholder="Buscar escalaciones por título o contenido"
+                className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+              />
+            </div>
+            <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              <span>Filtros</span>
+            </button>
+          </div>
+
+          {/* Reglas de escalamiento */}
+          <div>
+            <div className="flex items-start gap-2.5">
+              <span className="w-7 h-7 rounded-full bg-white border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M5 4l-3 4 3 4M11 4l3 4-3 4" strokeLinecap="round"/></svg>
+              </span>
+              <div>
+                <button className="flex items-center gap-1 text-[14px] font-semibold text-[#1a1a1a] hover:opacity-80">
+                  <span>Reglas de escalamiento</span>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+                </button>
+                <p className="mt-0.5 text-[13px] text-[#646462] leading-[18px] max-w-[600px]">
+                  Utilice <a href="#" className="text-[#1a1a1a] underline">atributos</a> y otros datos de los clientes para definir de manera determinista las condiciones de escalamiento.
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 ml-9 bg-white border border-[#e9eae6] rounded-[12px]">
+              <button className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40">
+                <div className="text-left">
+                  <p className="text-[13.5px] font-semibold text-[#1a1a1a]">Regla de escalamiento</p>
+                  <p className="text-[12px] text-[#646462] mt-0.5">Usado: <span className="text-[#1a1a1a]">0</span> · Resuelto: — · Escalado: —</p>
+                </div>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">No habilitado</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">Todos en Todos los canales</span>
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
+              </button>
+              <div className="px-4 py-2.5 border-t border-[#e9eae6]">
+                <button className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  <span>Nuevo</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Pautas de escalamiento */}
+          <div>
+            <div className="flex items-start gap-2.5">
+              <span className="w-7 h-7 rounded-full bg-white border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5L10 10" strokeLinecap="round"/></svg>
+              </span>
+              <div>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">Pautas de escalamiento</p>
+                <p className="mt-0.5 text-[13px] text-[#646462] leading-[18px] max-w-[600px]">
+                  Ajuste el comportamiento de escalamiento de Fin en escenarios específicos que no capturan las Reglas de escalamiento.
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 ml-9 flex items-center gap-2 flex-wrap">
+              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                <span>Nuevo</span>
+              </button>
+              <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
+                Transfiere las solicitudes de VPN o de elusión a un nivel superior
+              </span>
+              <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[160px]">
+                Escala las soli…
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Procedimientos (Figma 1:9083) ───────────────────────────────
+function FinProcedimientosContent() {
+  const IMG_PROCEDURES_BANNER = `${FIGMA_CDN}/6888e12d-22f0-4625-92ef-efa11b546d7e`;
+  const IMG_PROCEDURES_LINK_BOOK = `${FIGMA_CDN}/4c9f4d1c-6469-49d8-bb4c-5e6a7ec27a9c`;
+  const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
+  const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
+  const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
+  const procedures: { title: string; status: 'Draft' }[] = [
+    { title: 'Untitled', status: 'Draft' },
+    { title: 'Untitled', status: 'Draft' },
+  ];
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6]">
+        <div className="px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M5 6h6M5 8.5h6M5 11h4" strokeLinecap="round"/></svg>
+            <h1 className="text-[20px] font-bold text-[#1a1a1a] tracking-[-0.2px]">Procedimientos</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+              <span>Nuevo procedimiento</span>
+            </button>
+          </div>
+        </div>
+        <div className="px-6 h-14 flex items-center gap-2">
+          <div className="flex-1 max-w-[280px] h-8 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center px-3 gap-2">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+            <input
+              type="text"
+              placeholder="Buscar..."
+              className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
+            />
+          </div>
+          {(['State is any', 'Primero los activos', 'Etiquetas'] as const).map(label => (
+            <button key={label} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <span>{label}</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-5 flex flex-col gap-5">
+          {/* Hero card peach */}
+          <div className="relative bg-[#ffccb2] rounded-[16px] px-8 pt-[54px] pb-12 flex gap-8 items-start overflow-hidden">
+            <div className="flex-1 min-w-0 max-w-[605px] flex flex-col gap-[15.4px]">
+              <h2 className="text-[40px] text-[#1a1a1a] leading-[40px] tracking-[-1.2px]" style={{ fontFamily: "'Segoe UI', sans-serif" }}>
+                Comience con los procedimientos
+              </h2>
+              <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
+                Los procedimientos le permiten entrenar a Fin para gestionar procesos complejos de varios pasos, como reclamaciones por pedidos dañados o la resolución de problemas de cuentas. Equilibre las instrucciones en lenguaje natural con controles deterministas para que Fin sea adaptable y preciso a la hora de tomar decisiones críticas. Permita que Fin interactúe con sus sistemas empresariales externos, lea datos y tome medidas para resolver las conversaciones de principio a fin.
+              </p>
+              <p className="pt-2 text-[14px] text-[#1a1a1a] leading-[20px]">
+                ¿No sabe por dónde empezar? Utilice IA para generar un procedimiento a partir de una descripción de su proceso.
+              </p>
+              <div className="pt-[8.59px] flex flex-wrap items-center gap-x-4 gap-y-2 text-[14px] font-semibold text-[#1a1a1a]">
+                <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                  <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_PROCEDURES_LINK_BOOK})`, backgroundSize: 'cover' }} />
+                  <span className="leading-[20px]">Más información</span>
+                </a>
+                <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                  <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_PROCEDURES_LINK_PRICING})`, backgroundSize: 'cover' }} />
+                  <span className="leading-[20px]">Precios basados en resultados</span>
+                </a>
+                <a className="inline-flex items-center gap-2 hover:underline" href="#">
+                  <span className="w-4 h-4 inline-block" style={{ backgroundImage: `url(${IMG_PROCEDURES_LINK_CHAT})`, backgroundSize: 'cover' }} />
+                  <span className="leading-[20px]">Chatea con nosotros</span>
+                </a>
+              </div>
+            </div>
+            <div className="relative w-[400px] h-[264px] rounded-[8px] overflow-hidden flex-shrink-0">
+              <img src={IMG_PROCEDURES_BANNER} alt="Procedimientos" className="absolute inset-0 w-full h-full object-cover" />
+            </div>
+            <button aria-label="Cerrar" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+              <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_PROCEDURES_CLOSE})`, backgroundSize: 'cover' }} />
+            </button>
+          </div>
+
+          {/* Procedimientos list */}
+          <div>
+            <h3 className="text-[14px] font-bold text-[#1a1a1a]">Procedimientos</h3>
+            <p className="mt-0.5 text-[13px] text-[#646462]">Automatice las consultas complejas con instrucciones paso a paso para Fin.</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {procedures.map((p, i) => (
+                <div key={i} className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.title}</p>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462]">{p.status}</span>
+                    </div>
+                    <p className="text-[12.5px] text-[#646462] mt-0.5">No se ha añadido ninguna descripción.</p>
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-[#646462]">
+                      <span>Activado: <span className="text-[#1a1a1a]">0</span></span>
+                      <span>Pendiente: <span className="text-[#1a1a1a]">0</span></span>
+                      <span>Resuelto: <span className="text-[#1a1a1a]">0</span></span>
+                      <span>Entregado: <span className="text-[#1a1a1a]">0</span></span>
+                      <span>Escalado: <span className="text-[#1a1a1a]">0</span></span>
+                      <span>Errores: <span className="text-[#1a1a1a]">0</span></span>
+                    </div>
+                  </div>
+                  <button className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Conectar con sistemas externos */}
+          <div className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="text-[13.5px] font-semibold text-[#1a1a1a]">Conectar con sistemas externos</p>
+              <p className="text-[12.5px] text-[#646462] mt-0.5 max-w-[680px]">
+                Fin puede encontrar datos y hacer actualizaciones sencillas en sistemas externos, para que tus clientes obtengan asistencia personalizada.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center -space-x-1.5">
+                <span className="w-6 h-6 rounded-[6px] bg-[#0fb87f] flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-white">S</span>
+                <span className="w-6 h-6 rounded-[6px] bg-[#1a1a1a] flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-white">a</span>
+                <span className="w-6 h-6 rounded-[6px] bg-[#3b9dff] flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-white">T</span>
+                <span className="w-6 h-6 rounded-[6px] bg-[#f1f1ee] border border-[#e9eae6] flex items-center justify-center text-[#646462] text-[10px] font-bold ring-2 ring-white">+</span>
+              </div>
+              <a href="#" className="text-[13px] font-semibold text-[#1a1a1a] hover:underline whitespace-nowrap">Administrar conectores de datos →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Probar / Pruebas (Figma 1:10409) ───────────────────────────────────────
+function FinPruebasContent() {
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Top section header bar */}
+      <div className="flex-shrink-0 h-[50px] px-6 flex items-center justify-between border-b border-[#e9eae6]">
+        <h2 className="text-[14px] font-semibold text-[#1a1a1a]">
+          Prueba por lotes las respuestas de Fin para activarlas con confianza
+        </h2>
+        <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f8f8f7] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4">
+            <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Body: questions list (left) + Evaluar la respuesta (right) */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left column */}
+        <div className="flex-1 min-w-0 flex flex-col border-r border-[#e9eae6] overflow-hidden">
+          {/* Test name + actions */}
+          <div className="flex-shrink-0 px-6 pt-6 pb-2">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <button className="flex items-center gap-2 text-[22px] font-bold text-[#1a1a1a] tracking-[-0.2px] hover:bg-[#f8f8f7] -mx-1 px-1 rounded">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4">
+                    <rect x="2.5" y="2.5" width="11" height="11" rx="1.4" />
+                    <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" strokeLinecap="round" />
+                  </svg>
+                  <span className="truncate">Creado mediante entrada manual</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M4 6l4 4 4-4z" /></svg>
+                </button>
+                <div className="mt-2 flex items-center gap-1.5 text-[12.5px] text-[#646462]">
+                  <span>Actualizado hace hace 10 horas por</span>
+                  <span className="w-4 h-4 rounded-full bg-[#f1c5a8] flex items-center justify-center text-[8px] font-bold text-[#1a1a1a]">H</span>
+                  <span>Hector Vidal Sanchez</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                  <span>Administrar</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
+                </button>
+                <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
+                  <span>Agregar preguntas</span>
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z" /></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Probando como + filter pills */}
+          <div className="flex-shrink-0 px-6 pt-4 pb-3 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[13px] text-[#1a1a1a]">Probando como</span>
+              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.5 13c.6-2 2.3-3.2 4.5-3.2S12 11 12.6 13" strokeLinecap="round"/></svg>
+                <span>Vista previa del usuario</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white border border-[#e9eae6] text-[12.5px] text-[#1a1a1a]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>
+                <span>El estado de la respuesta es <span className="font-semibold">Cualquiera</span></span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white border border-[#e9eae6] text-[12.5px] text-[#1a1a1a]">
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 2.5l1.7 3.5 3.8.5-2.7 2.6.6 3.7L8 11.1l-3.4 1.7.6-3.7L2.5 6.5l3.8-.5z" strokeLinejoin="round"/></svg>
+                <span>La calificación de la respuesta es <span className="font-semibold">Cualquiera</span></span>
+              </span>
+            </div>
+          </div>
+
+          {/* Question count */}
+          <div className="flex-shrink-0 px-6 py-3 text-[13px] text-[#646462]">1 question</div>
+
+          {/* Table */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <table className="w-full text-[13px]">
+              <thead className="sticky top-0 bg-white">
+                <tr className="border-b border-[#e9eae6] text-[12px] text-[#646462]">
+                  <th className="w-10 pl-6 py-3 text-left">
+                    <input type="checkbox" className="w-3 h-3 rounded border-[#cbcbc7]" />
+                  </th>
+                  <th className="py-3 pr-3 text-left font-medium">Pregunta</th>
+                  <th className="py-3 pr-3 text-left font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      Estado de la respuesta
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 7.5v3M8 5.4v.1" strokeLinecap="round"/></svg>
+                    </span>
+                  </th>
+                  <th className="py-3 pr-6 text-left font-medium">
+                    <span className="inline-flex items-center gap-1">
+                      Calificación de respuesta
+                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 7.5v3M8 5.4v.1" strokeLinecap="round"/></svg>
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-[#e9eae6] bg-[#f8f8f7]/50">
+                  <td className="w-10 pl-6 py-4 align-top"><input type="checkbox" className="w-3 h-3 rounded border-[#cbcbc7]" /></td>
+                  <td className="py-4 pr-3 text-[#1a1a1a]">Cómo puedo mejorar mi suscripción?</td>
+                  <td className="py-4 pr-3 text-[#646462]">
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" /></svg>
+                  </td>
+                  <td className="py-4 pr-6">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]">Sin calificación</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Right column: Evaluar la respuesta */}
+        <div className="w-[456px] flex-shrink-0 flex flex-col bg-[#fbfbfa] overflow-hidden">
+          {/* Header */}
+          <div className="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-[#e9eae6]">
+            <h2 className="text-[16px] font-bold text-[#1a1a1a]">Evaluar la respuesta</h2>
+            <div className="flex items-center gap-1">
+              <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f1f1ee] text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M13 6.5A5 5 0 1 0 13 9.5M13 4v3.5h-3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f1f1ee] text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" /></svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Conversation */}
+          <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
+            {/* User question bubble */}
+            <div className="flex justify-end">
+              <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">
+                Cómo puedo mejorar mi suscripción?
+              </div>
+            </div>
+
+            {/* Fin response bubble */}
+            <div className="flex flex-col items-start">
+              <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3">
+                <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+                  <span>Fin</span>
+                  <span className="text-[#646462]">• AI Agent</span>
+                </div>
+                <p className="mt-1.5 text-[13px] leading-[18px] text-[#1a1a1a]">
+                  No he encontrado información específica sobre cómo mejorar tu suscripción. ¿Podrías reformular tu pregunta o te gustaría que te ayude con algo más?
+                </p>
+              </div>
+            </div>
+
+            {/* Esta respuesta utiliza */}
+            <div className="mt-2">
+              <p className="text-[12px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
+              <button className="w-full flex items-center justify-between px-3.5 py-3 bg-white border border-[#e9eae6] rounded-[10px] hover:bg-[#f8f8f7]">
+                <span className="text-[13px] font-medium text-[#1a1a1a]">Pautas (2)</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z" /></svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom: rating */}
+          <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 pt-5 pb-5">
+            <h4 className="text-[14px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</h4>
+            <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">
+              Tu calificación se guardará en la descarga del informe. También puedes agregar una nota para ti o para tu equipo.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-3.5 h-3.5 rounded-full bg-[#0fb87f]" />
+                <span>Buena</span>
+                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">G</span>
+              </button>
+              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-3.5 h-3.5 rounded-full bg-[#f4d35e]" />
+                <span>Aceptable</span>
+                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">A</span>
+              </button>
+              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-3.5 h-3.5 rounded-full bg-[#ff5f3f]" />
+                <span>Malo</span>
+                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">P</span>
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Agregar nota interna"
+              className="mt-3 w-full h-9 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#646462] outline-none focus:border-[#1a1a1a]"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Desplegar / Chat (Figma 1:12035) ────────────────────────────────────────
+function FinDespliegueChatContent() {
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-3">
+        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
+          <div className="flex-1 min-w-0 pr-2">
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+              Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
+            </h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+              Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Activar Fin para chat</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Usa Fin en los flujos de trabajo</span>
+              </a>
+            </div>
+          </div>
+          <div className="relative w-[230px] h-[140px] rounded-[10px] overflow-hidden bg-[#f4d8b0] flex-shrink-0 p-3">
+            <div className="absolute top-3 right-3 left-3 bg-white rounded-[8px] px-2.5 py-1.5 shadow-sm flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded-full bg-[#1a1a1a] flex items-center justify-center">
+                <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-semibold text-[#1a1a1a] leading-[12px]">Fin</p>
+                <p className="text-[9px] text-[#646462] leading-[11px] truncate">The team can also help</p>
+              </div>
+            </div>
+            <div className="absolute top-[42px] right-3 bg-[#ff5f3f] text-white rounded-[8px] rounded-br-[2px] px-2.5 py-1.5 max-w-[140px]">
+              <p className="text-[9px] leading-[12px]">Can I change the date of my reservation?</p>
+            </div>
+            <div className="absolute bottom-3 left-3 right-3 bg-white rounded-[8px] px-2.5 py-1.5 shadow-sm">
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="w-3 h-3 rounded-sm bg-[#1a1a1a] flex items-center justify-center">
+                  <svg viewBox="0 0 16 16" className="w-2 h-2 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+                </span>
+                <p className="text-[8px] font-semibold text-[#1a1a1a]">Fin • AI Agent</p>
+              </div>
+              <p className="text-[8.5px] leading-[10px] text-[#1a1a1a]">Yes, you can change the date of your reservation.</p>
+            </div>
+          </div>
+          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Section divider with title */}
+      <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.5h11v8h-7l-4 3v-11z" strokeLinejoin="round"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Chat</h3>
+      </div>
+
+      {/* Body: form */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
+          <div className="flex items-center gap-3">
+            <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
+            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
+              <span>No establecer en vivo</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          </div>
+          <p className="text-[12.5px] text-[#646462] leading-[18px] -mt-2">
+            Comienza rápidamente: Elige cómo se comportará Fin en Messenger, Slack, WhatsApp, Facebook e Instagram.
+          </p>
+
+          {/* Step 1 */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="w-5 h-5 rounded-full bg-[#f4d35e] flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+            </span>
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Cuando un cliente inicia una conversación</span>
+          </div>
+          {[
+            { l: 'Los clientes ven a Fin', v: 'Users, Leads, and Visitors' },
+            { l: 'En los canales seleccionados', v: 'Web, iOS y Android' },
+            { l: 'Fin se presenta', v: 'Activadas (Todos los idi…)' },
+          ].map((row, i) => (
+            <button key={i} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.l}</span>
+                <span className="text-[12.5px] text-[#646462] truncate">{row.v}</span>
+              </div>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
+            </button>
+          ))}
+
+          {/* Step 2 */}
+          <div className="flex items-center gap-2 mt-3">
+            <span className="w-5 h-5 rounded-[5px] bg-[#1a1a1a] flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+            </span>
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin responde al cliente</span>
+          </div>
+          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[13px] font-semibold text-[#1a1a1a]">Usando contenido de asistencia</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fff1eb] text-[11px] text-[#bf3a1d] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#ed621d]" />
+                Se requiere más contenido
+              </span>
+            </div>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
+          </button>
+          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Siguiendo la guía</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Desplegar / Correo electrónico (Figma 1:13680) ──────────────────────────
+function FinDespliegueEmailContent() {
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Hero card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-3">
+        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
+          <div className="flex-1 min-w-0 pr-2">
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+              Implementa Fin por correo electrónico para obtener respuestas precisas al instante
+            </h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+              Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Aprende cómo Fin responde a los correos electrónicos</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Usa Fin en los flujos de trabajo</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
+                <span>Desplegar Fin por correo electrónico</span>
+              </a>
+            </div>
+          </div>
+          <div className="relative w-[230px] h-[140px] rounded-[10px] overflow-hidden bg-[#cfe4d6] flex-shrink-0 p-3">
+            <div className="absolute top-3 left-3 right-3 bg-white rounded-[8px] px-2.5 py-2 shadow-sm">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[9px] font-semibold text-[#1a1a1a]">Email</span>
+                <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded-full bg-[#1a1a1a] flex items-center justify-center">
+                  <svg viewBox="0 0 16 16" className="w-2.5 h-2.5 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[8.5px] font-semibold text-[#1a1a1a] leading-[10px]">Fin <span className="text-[#646462] font-normal">{'<support@acme.com>'}</span></p>
+                  <p className="text-[8px] text-[#646462] leading-[10px]">to me</p>
+                </div>
+              </div>
+            </div>
+            <div className="absolute bottom-3 left-3 right-3 bg-white rounded-[8px] px-2.5 py-1.5 shadow-sm">
+              <p className="text-[8.5px] leading-[10px] text-[#1a1a1a]">Hi Mark. Yes, you can change the date of your reservation up to seven days in advance.</p>
+            </div>
+          </div>
+          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Section divider with title */}
+      <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Correo electrónico</h3>
+      </div>
+
+      {/* Body: form */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
+          <div className="flex items-center gap-3">
+            <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
+            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
+              <span>No establecer en vivo</span>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+            </button>
+          </div>
+          <p className="text-[12.5px] text-[#646462] leading-[18px] -mt-2">
+            Comienza rápidamente: elige cómo se comportará Fin por correo electrónico.
+          </p>
+
+          {/* Step 1 */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="w-5 h-5 rounded-full bg-[#f4d35e] flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+            </span>
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Cuando un cliente envía su primer mensaje</span>
+          </div>
+          {[
+            { l: 'Fin responderá a', v: 'Users, Leads, and Visitors' },
+            { l: 'A través del canal de correo electrónico', v: '' },
+          ].map((row, i) => (
+            <button key={i} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.l}</span>
+                {row.v && <span className="text-[12.5px] text-[#646462] truncate">{row.v}</span>}
+              </div>
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
+            </button>
+          ))}
+
+          {/* Step 2 */}
+          <div className="flex items-center gap-2 mt-3">
+            <span className="w-5 h-5 rounded-[5px] bg-[#1a1a1a] flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+            </span>
+            <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin responde al cliente</span>
+          </div>
+          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin se presenta</span>
+              <span className="text-[12.5px] text-[#646462] truncate">Activadas (Todos los idi…)</span>
+            </div>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
+          </button>
+          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[13px] font-semibold text-[#1a1a1a]">Usando contenido de asistencia</span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fff1eb] text-[11px] text-[#bf3a1d] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#ed621d]" />
+                Se requiere más contenido
+              </span>
+            </div>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Desplegar / Teléfono (Figma 1:14559) ────────────────────────────────────
+function FinDespliegueTelefonoContent() {
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Top section header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Teléfono</h2>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-6">
+          {/* Green hero */}
+          <div className="bg-[#a3df9a] rounded-[16px] px-7 py-7 flex items-center gap-6 overflow-hidden">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-[0.6px] text-[#1a1a1a] uppercase">
+                <span className="w-2 h-2 bg-[#1a1a1a]" />
+                <span>Disponibilidad gestionada</span>
+              </div>
+              <h2 className="mt-3 text-[26px] font-bold text-[#1a1a1a] leading-[32px] tracking-[-0.4px] max-w-[420px]">
+                Usa Fin Voice para manejar las llamadas de asistencia
+              </h2>
+              <p className="mt-3 text-[13px] text-[#1a1a1a]/85 leading-[20px] max-w-[480px]">
+                Fin responde las llamadas al instante, contesta con precisión y mantiene las conversaciones fluidas con seguimientos relevantes, lo que le ayuda a resolver más problemas en más canales, 24 horas al día, los 7 días de la semana.<br/>
+                La voz de Fin está en <a href="#" className="underline">disponibilidad gestionada.</a>
+              </p>
+              <div className="mt-5 flex items-center gap-4">
+                <button className="h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">
+                  Registre su interés
+                </button>
+                <a href="#" className="text-[13px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1.5">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Más información</span>
+                </a>
+              </div>
+            </div>
+            <div className="relative w-[290px] h-[140px] flex-shrink-0 flex items-center justify-end">
+              {/* Audio waveform */}
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-[2px]">
+                {Array.from({ length: 28 }).map((_, i) => {
+                  const heights = [12, 18, 24, 30, 22, 14, 28, 36, 20, 10, 26, 32, 38, 30, 22, 16, 28, 24, 14, 20, 32, 26, 18, 22, 14, 24, 28, 18];
+                  return <span key={i} className="w-[2px] bg-[#1a1a1a] rounded-full" style={{ height: `${heights[i]}px` }} />;
+                })}
+              </div>
+              {/* Call card */}
+              <div className="relative w-[180px] bg-white rounded-[10px] shadow-md overflow-hidden">
+                <div className="px-3 pt-3 pb-2 flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-full bg-[#f1f1ee] flex items-center justify-center">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h2.5l1.2 3-1.4 1c.7 1.6 2.1 3 3.7 3.7l1-1.4 3 1.2V13c0 .3-.2.5-.5.5C6.5 13.5 2.5 9.5 2.5 3.5 2.5 3.2 2.7 3 3 3z" strokeLinejoin="round"/></svg>
+                  </span>
+                  <div>
+                    <p className="text-[12px] font-semibold text-[#1a1a1a]">Inbound call</p>
+                    <p className="text-[11px] text-[#646462]">3:09</p>
+                  </div>
+                </div>
+                <div className="border-t border-[#e9eae6] px-3 py-2 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-[5px] bg-[#1a1a1a] flex items-center justify-center">
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#ed621d]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+                  </span>
+                  <p className="text-[11px] text-[#1a1a1a]">Call is in progress with Fin</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Comenzar (1:2082) ───────────────────────────────────────────
+function FinComenzarSectionHeader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <span className="w-2 h-2 bg-[#ed621d]" />
+      <span className="text-[11px] font-bold tracking-[1.4px] text-[#646462] uppercase font-mono">{label}</span>
+    </div>
+  );
+}
+
+// Industry tabs — exact Figma assets + insets per node 1:1795/1801/1807/1813/1819.
+const FIN_INDUSTRY_TABS: { label: string; iconAsset: string; iconInset: string; active?: boolean }[] = [
+  { label: 'Generalidades',         iconAsset: 'bd7ec28a-924c-4588-8284-24b7c3096275', iconInset: '7.82% 7.75% 7.75% 7.82%', active: true },
+  { label: 'Software y Tecnología', iconAsset: '090339a6-34cd-47a9-ad38-70fc3d3bff1a', iconInset: '12.5% 0' },
+  { label: 'Juegos y apuestas',     iconAsset: 'fd93e19a-3953-4984-b26c-3e89b61e6b47', iconInset: '0 9.94% -0.06% 8.81%' },
+  { label: 'Comercio electrónico',  iconAsset: 'ca5e91b5-3612-4911-bf0f-2f9a07af11e5', iconInset: '6.25% 7.81% 6.25% 6.06%' },
+  { label: 'Servicios financieros', iconAsset: 'f703656b-8581-4dd8-9698-22db4d8cfaee', iconInset: '18.75% 0' },
+];
+
+function FinComenzarContent() {
+  const [previewTab, setPreviewTab] = useState<'persoTareas' | 'transferencia'>('persoTareas');
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="max-w-[920px] mx-auto px-10 py-10">
+          {/* Hero */}
+          <div className="flex items-start gap-10 mb-10">
+            <div className="flex-1 min-w-0 max-w-[560px]">
+              <img src={IMG_FIN_LOGO_MARK} alt="" className="w-9 h-9 mb-4" />
+              <h1 className="text-[36px] font-serif text-[#1a1a1a] leading-[40px] tracking-[-0.5px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+                Fin ofrece soporte inmediato a los clientes.
+              </h1>
+              <p className="mt-4 text-[14px] text-[#646462] leading-[20px]">
+                Responde a las consultas de los clientes y lleva a cabo acciones complejas para resolver incluso los problemas más difíciles.
+              </p>
+              <button className="mt-6 h-8 px-3 rounded-full bg-[#222] text-[#f8f8f7] text-[14px] font-semibold inline-flex items-center gap-2 hover:bg-black leading-[16px]">
+                <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                  <img src={`${FIGMA_CDN}/e4cc1589-cd85-4651-b069-7cddec16bfff`} alt="" className="absolute" style={{ inset: '12.5% 6.25%' }} />
+                </span>
+                <span>Guía de configuración</span>
+              </button>
+            </div>
+            <div className="w-[350px] flex-shrink-0">
+              {/* Figma 1:1778 — fin-service-agent-video-thumbnail (real image, includes its own play button) */}
+              <div className="relative w-full h-[197px] rounded-[12px] overflow-hidden">
+                <img
+                  src={`${FIGMA_CDN}/388fe38c-99cd-4e8e-8013-fd3a7ffa3bb4`}
+                  alt="Fin Service Agent preview"
+                  className="absolute h-full top-0 max-w-none"
+                  style={{ left: '-0.75%', width: '101.5%' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Seleccione su industria */}
+          <div className="mb-10">
+            <h3 className="text-[20px] font-serif text-[#1a1a1a]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>Seleccione su industria</h3>
+            <p className="mt-2 text-[14px] text-[#646462]">Vea cómo empresas como la suya automatizan con Fin y qué tipo de impacto podría lograr.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {FIN_INDUSTRY_TABS.map(t => (
+                <button
+                  key={t.label}
+                  className={`pt-[6.87px] pb-[7.98px] px-[12px] rounded-full font-['Inter'] font-semibold text-[14px] leading-[16px] inline-flex items-center gap-2 ${
+                    t.active
+                      ? 'bg-[#222] text-[#f8f8f7]'
+                      : 'bg-[#f8f8f7] text-[#1a1a1a] hover:bg-[#ededea]'
+                  }`}
+                >
+                  <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
+                    <img src={`${FIGMA_CDN}/${t.iconAsset}`} alt="" className="absolute" style={{ inset: t.iconInset }} />
+                  </span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Oportunidad de automatización */}
+          <div className="mb-10">
+            <FinComenzarSectionHeader label="OPORTUNIDAD DE AUTOMATIZACIÓN" />
+            <p className="text-[20px] font-serif text-[#1a1a1a] leading-[28px] mb-6 max-w-[660px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+              Según los puntos de referencia de los clientes, Fin puede automatizar hasta el 89 % de las conversaciones.
+            </p>
+            {/* Stacked horizontal bar */}
+            <div className="flex h-8 gap-[2px] overflow-hidden">
+              <div className="bg-[#7c52d8]" style={{ width: '38.7%' }} />
+              <div className="bg-[#9b7be0]" style={{ width: '29.8%' }} />
+              <div className="bg-[#b9a3e8]" style={{ width: '19.9%' }} />
+              <div className="bg-[#a4c34f]" style={{ width: '11%' }} />
+            </div>
+            <div className="mt-3 flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-2 h-2 bg-[#7c52d8]" />
+                    <span className="w-2 h-2 bg-[#9b7be0]" />
+                    <span className="w-2 h-2 bg-[#b9a3e8]" />
+                    <span className="text-[12px] font-mono tracking-[1px] uppercase text-[#1a1a1a]">89 % DE FIN</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                    <span className="w-1.5 h-1.5 bg-[#7c52d8]" /> informativo
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                    <span className="w-1.5 h-1.5 bg-[#9b7be0]" /> personalizado
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                    <span className="w-1.5 h-1.5 bg-[#b9a3e8]" /> tareas
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[12px] text-[#646462]">Conversaciones que Fin podría automatizar</p>
+              </div>
+              <div className="w-[330px] flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 bg-[#a4c34f]" />
+                  <span className="text-[12px] font-mono tracking-[1px] uppercase text-[#1a1a1a]">11% HUMANO/COMPLEJO</span>
+                </div>
+                <p className="mt-1.5 text-[12px] text-[#646462]">Conversaciones que aún requieren un miembro del equipo</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Dónde comenzar */}
+          <div className="mb-10">
+            <FinComenzarSectionHeader label="DÓNDE COMENZAR" />
+            <div className="flex gap-6">
+              <div className="w-[320px] flex-shrink-0">
+                <h3 className="text-[20px] font-serif text-[#1a1a1a] leading-[28px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+                  Configure Fin para que gestione primero las preguntas frecuentes
+                </h3>
+                <p className="mt-3 text-[13px] text-[#1a1a1a] leading-[20px]">
+                  Proporcione a Fin contenido de su centro de ayuda y responderá preguntas frecuentes al instante. Comience poco a poco con algunas consultas informativas, como sus preguntas frecuentes principales. Visite Fin Studio para ver cómo se hace.
+                </p>
+                <button className="mt-5 h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+                  <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4" />
+                  <span>Guía de configuración</span>
+                </button>
+              </div>
+              <div className="flex-1 grid grid-cols-2 border border-[#e9eae6] rounded-[12px] overflow-hidden bg-white">
+                {/* Header row */}
+                <div className="px-4 py-3 border-b border-[#e9eae6] border-r">
+                  <span className="text-[11px] font-mono tracking-[1px] uppercase text-[#646462]">consultas informativas</span>
+                </div>
+                <div className="px-4 py-3 border-b border-[#e9eae6] flex items-center justify-between">
+                  <span className="text-[11px] font-mono tracking-[1px] uppercase text-[#646462]">cantidad ahorrada usando Fin</span>
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 6v4M8 4v.01" strokeLinecap="round"/></svg>
+                </div>
+                <div className="px-4 py-5 border-r border-[#e9eae6]">
+                  <p className="text-[36px] font-mono font-bold text-[#1a1a1a] leading-none">39%</p>
+                  <p className="mt-3 text-[12px] text-[#646462] leading-[16px]">En promedio, las empresas automatizan esta proporción de conversaciones únicamente con acceso al contenido del Centro de Ayuda.</p>
+                </div>
+                <div className="px-4 py-5">
+                  <p className="text-[36px] font-mono font-bold text-[#1a1a1a] leading-none">USD 6,176</p>
+                  <p className="mt-3 text-[12px] text-[#646462] leading-[16px]">En promedio, las empresas ahorran esta cantidad en costos de personal cada mes solo al automatizar consultas informativas.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Vista previa */}
+          <div className="mb-10">
+            <FinComenzarSectionHeader label="VISTA PREVIA" />
+            <p className="text-[14px] text-[#1a1a1a] leading-[20px] mb-6 max-w-[600px]">
+              Esta es una vista previa de cómo Fin respondería a las preguntas reales de los clientes, y cómo hace transferencias a un ser humano cuando es necesario.
+            </p>
+            {/* Figma 1:1972/1:1977 — only 2 tabs, no color dots, regular 400 #646462 */}
+            <div className="flex gap-2 mb-6">
+              <button onClick={() => setPreviewTab('persoTareas')} className={`px-[13.111px] py-[7.111px] rounded-full border border-transparent font-['Inter'] text-[14px] leading-[16px] inline-flex items-center justify-center ${
+                previewTab === 'persoTareas' ? 'bg-[#f8f8f7] text-[#1a1a1a] font-semibold' : 'bg-transparent text-[#646462] font-normal hover:bg-[#f8f8f7]/50'
+              }`}>
+                Personalizado y tareas
+              </button>
+              <button onClick={() => setPreviewTab('transferencia')} className={`px-[13.111px] py-[7.111px] rounded-full border border-transparent font-['Inter'] text-[14px] leading-[16px] inline-flex items-center justify-center ${
+                previewTab === 'transferencia' ? 'bg-[#f8f8f7] text-[#1a1a1a] font-semibold' : 'bg-transparent text-[#646462] font-normal hover:bg-[#f8f8f7]/50'
+              }`}>
+                Transferencia
+              </button>
+            </div>
+            {/* Figma 1:1968 — playground: questions list + messenger preview side-by-side */}
+            <div className="flex gap-4 items-start">
+              {/* Questions list (left) */}
+              <div className="w-[260px] flex-shrink-0 bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[#e9eae6]">
+                  <p className="text-[11px] font-mono tracking-[1px] uppercase text-[#646462]">Preguntas frecuentes</p>
+                </div>
+                {[
+                  '¿Cuál es el horario de su equipo de asistencia?',
+                  '¿Pueden mejorar mis ofertas de tarjetas de crédito?',
+                  '¿Tienen una aplicación móvil?',
+                ].map((q, i) => (
+                  <button key={q} className={`w-full text-left px-4 py-3 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${i < 2 ? 'border-b border-[#e9eae6]' : ''}`}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+              {/* Messenger preview (right) - Figma 1:2007 */}
+              <div className="flex-1 max-w-[400px] bg-white border border-[#f5f5f5] rounded-[15px] overflow-hidden flex flex-col" style={{ boxShadow: '0px 5px 40px 0px rgba(9,14,21,0.16)' }}>
+                {/* Header */}
+                <div className="border-b border-[#f5f5f5] px-[60px] pr-[8px] flex items-center h-[64px]">
+                  <div className="w-8 h-8 rounded-[5.34px] bg-gradient-to-br from-[#222] to-[#1a1a1a] flex items-center justify-center flex-shrink-0">
+                    <img src={IMG_FIN_LOGO_MARK} alt="" className="w-5 h-5" />
+                  </div>
+                  <p className="ml-3 text-[16px] font-semibold text-[#14161a] leading-[20px]">Fin</p>
+                </div>
+                {/* Messages */}
+                <div className="flex-1 px-4 py-2 flex flex-col gap-2 min-h-[400px]">
+                  {/* Intro bubble (light) */}
+                  <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[16px] px-[13px] pt-[16px] pb-[23px] w-[281px]">
+                    <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
+                      Esta es una vista previa de cómo Fin respondería a las preguntas de los clientes que necesitan <span className="font-semibold">contenido de asistencia al cliente.</span>
+                    </p>
+                  </div>
+                  {/* User question (dark, right) */}
+                  <div className="self-end bg-[#222] border border-[#e9eae6] rounded-[16px] px-[13px] pt-[16px] pb-[23px] w-[281px]">
+                    <p className="text-[14px] text-[#f8f8f7] leading-[20px]">Tengo problemas para contactar con alguien, ¿cuándo está disponible su equipo de asistencia?</p>
+                  </div>
+                  {/* Fin response */}
+                  <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[16px] px-[13px] py-[17px] w-[281px]">
+                    <div className="flex items-center gap-2 mb-3">
+                      <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4" />
+                      <span className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px]">Fin • AI Agent</span>
+                    </div>
+                    <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
+                      Nuestra asistencia por chat está disponible las 24 hrs./7 días a la semana. La asistencia telefónica y por correo electrónico está disponible de lunes a viernes durante el horario laboral, por lo que siempre hay alguien disponible cuando necesitas ayuda.
+                    </p>
+                  </div>
+                </div>
+                {/* Composer */}
+                <div className="px-4 pb-4 pt-2 flex justify-center">
+                  <div className="bg-white border border-[#f5f5f5] rounded-[28px] h-[50px] px-[17px] flex items-center w-full max-w-[362px]" style={{ filter: 'drop-shadow(0px 0px 2px rgba(9,14,21,0.16))' }}>
+                    <p className="text-[14px] text-[#646462] leading-[20px]">Seleccione una pregunta a la izquierda</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Desempeño (1:16070) ─────────────────────────────────────────
+function FinDesempenoContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 py-4 flex items-start justify-between">
+        <div>
+          <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">Rendimiento de Support</h2>
+          <div className="mt-2 flex items-center gap-3">
+            <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
+              <span>Apr 8, 2026 - May 5, 2026</span>
+            </button>
+            <button className="h-7 px-2 text-[12px] inline-flex items-center gap-1.5 text-[#646462] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+              <span>Añadir filtro</span>
+            </button>
+          </div>
+        </div>
+        <button className="h-7 px-2.5 text-[12px] inline-flex items-center gap-1.5 text-[#0070c0] hover:underline">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 3h10v8H8l-3 3v-3H3z"/></svg>
+          <span>Dar opinión</span>
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        {/* Pro trial banner */}
+        <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5 flex items-center gap-5 mb-5 relative">
+          <div className="w-[180px] h-[100px] flex-shrink-0 rounded-[8px] overflow-hidden bg-gradient-to-br from-[#fef3c7] via-[#f9d6a8] to-[#e8b478] relative flex items-center justify-center">
+            <div className="absolute inset-3 bg-white rounded-md p-2 flex flex-col gap-1">
+              <div className="text-[6px] font-semibold text-[#1a1a1a]">Recomendaciones</div>
+              <div className="h-[2px] bg-[#7c52d8] w-3/4 rounded" />
+              <div className="h-[2px] bg-[#e9eae6] w-1/2 rounded" />
+              <div className="h-[2px] bg-[#e9eae6] w-2/3 rounded" />
+            </div>
+            <span className="absolute w-8 h-8 rounded-full bg-white/95 flex items-center justify-center shadow"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M5 4l7 4-7 4z"/></svg></span>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[18px] font-bold text-[#1a1a1a]">Su acceso gratis a Pro termina en 14 días</h3>
+            <p className="mt-1.5 text-[13px] text-[#646462]">Esto incluye Optimize, Topics Explorer, Trends y Monitors, impulsados por la puntuación de CX y los temas de IA.</p>
+            <a href="#" className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#0070c0] hover:underline">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+              <span>Más información</span>
+            </a>
+          </div>
+          <button className="absolute top-3 right-3 w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Top KPI row */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {/* Tasa de automatización */}
+          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de automatización</h3>
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+                </div>
+                <p className="mt-1 text-[12px] text-[#646462]">0 conversaciones resueltas por Fin de un volumen total de asistencia de 4</p>
+              </div>
+              <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
+                <span>Recomendaciones</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">0%</p>
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden" />
+            <div className="mt-3 flex items-center gap-4">
+              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                <span className="w-2 h-2 bg-[#a4c34f]" /> RESUELTO
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                <span className="w-2 h-2 bg-[#e9eae6]" /> VOLUMEN TOTAL
+              </span>
+            </div>
+          </div>
+
+          {/* Puntuación CX */}
+          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-[14px] font-bold text-[#1a1a1a]">Puntuación de la experiencia del cliente (CX)</h3>
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+                </div>
+              </div>
+              <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
+                <span>Punto de referencia</span>
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+            <div className="flex items-center justify-center py-6">
+              <div className="text-center">
+                <svg viewBox="0 0 24 16" className="w-8 h-6 mx-auto fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-2 pt-4 border-t border-[#e9eae6]">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-[12px] font-bold text-[#1a1a1a]">Razones para un puntaje CX positivo</h4>
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+                </div>
+                <div className="mt-3 flex flex-col items-center justify-center py-3">
+                  <svg viewBox="0 0 24 16" className="w-6 h-4 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                  <p className="mt-1 text-[11px] text-[#646462]">No hay datos para mostrar</p>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-[12px] font-bold text-[#1a1a1a]">Razones para un puntaje CX negativo</h4>
+                  <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+                </div>
+                <div className="mt-3 flex flex-col items-center justify-center py-3">
+                  <svg viewBox="0 0 24 16" className="w-6 h-4 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                  <p className="mt-1 text-[11px] text-[#646462]">No hay datos para mostrar</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom KPI row */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de participación</h3>
+              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+            </div>
+            <p className="text-[12px] text-[#646462] mb-3">Fin participó en 0 conversaciones de un volumen total de 4</p>
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">0%</p>
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden" />
+            <div className="mt-3 flex items-center gap-4">
+              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                <span className="w-2 h-2 bg-[#7c52d8]" /> PARTICIPACIÓN
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
+                <span className="w-2 h-2 bg-[#e9eae6]" /> VOLUMEN TOTAL
+              </span>
+            </div>
+          </div>
+          <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de resolución</h3>
+              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
+            </div>
+            <div className="flex flex-col items-center justify-center py-10">
+              <svg viewBox="0 0 24 16" className="w-8 h-6 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+              <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Embudo de desempeño */}
+        <div className="border-t border-[#e9eae6] pt-5">
+          <h3 className="text-[16px] font-bold text-[#1a1a1a]">Embudo de desempeño</h3>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Tendencias (1:16962) ────────────────────────────────────────
+function FinTendenciasContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2 12l4-5 3 3 5-6M11 4h2v2"/></svg>
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Tendencias</h2>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 flex items-start justify-center py-12 px-6">
+        <div className="max-w-[640px] w-full text-center">
+          <h3 className="text-[28px] font-serif text-[#1a1a1a] leading-[34px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>
+            Buscando tendencias…
+          </h3>
+          <p className="mt-4 text-[13px] text-[#646462] leading-[20px]">
+            Detectar cambios en el volumen de conversaciones, la calidad y la distribución de temas. <span className="font-semibold text-[#1a1a1a]">Tenga en cuenta que esto puede tardar un par de semanas.</span>
+            <br />
+            Trends está incluido en tu complemento Pro, junto con <a href="#" className="text-[#0070c0] underline">Puntuación de la experiencia del cliente (CX)</a>, <a href="#" className="text-[#0070c0] underline">Recomendaciones</a>, <a href="#" className="text-[#0070c0] underline">Explorador de Temas</a> y <a href="#" className="text-[#0070c0] underline">Monitorear</a>.
+          </p>
+          {/* Trends preview montage */}
+          <div className="mt-8 relative w-full max-w-[480px] mx-auto rounded-[14px] overflow-hidden bg-gradient-to-br from-[#7a5a3a] via-[#a07050] to-[#5a4a3a] aspect-[4/3]">
+            <div className="absolute top-4 left-4 right-4 bg-white/90 rounded-[8px] p-3 backdrop-blur">
+              <div className="flex items-end gap-1 h-[40px]">
+                {[18, 22, 26, 20, 30, 28, 35, 32, 40].map((h, i) => (
+                  <span key={i} className="flex-1 bg-[#0070c0] rounded-t" style={{ height: `${h}px` }} />
+                ))}
+              </div>
+            </div>
+            <div className="absolute top-[42%] left-1/2 -translate-x-1/2 w-[80%] bg-white rounded-[10px] p-4 shadow-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="px-2 py-[2px] rounded bg-[#fef3c7] text-[10px] font-semibold text-[#a06820]">⚠ Anomalía</span>
+                <span className="px-2 py-[2px] rounded bg-[#f1f1ee] text-[10px] font-semibold text-[#646462]">Login difficulties</span>
+              </div>
+              <p className="text-[12px] font-bold text-[#1a1a1a]">Login questions surged due to an authentication issue</p>
+              <p className="mt-1.5 text-[10px] text-[#646462] leading-[14px]">Last week, there was a sharp spike in the number of conversations about "Login difficulties" with the count rising to over 1,100 from a typical weekly average of around 50.</p>
+            </div>
+          </div>
+          <button className="mt-6 h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+            <span>Más información</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analizar / Monitores (1:18192) ─────────────────────────────────────────
+function FinMonitoresContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="1.5" y="3" width="13" height="9" rx="1.5"/><path d="M5 14h6M8 12v2"/></svg>
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Monitores</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="h-8 px-3 rounded-[8px] text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>
+            <span>Tarjetas de puntuación</span>
+          </button>
+          <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+            <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.6"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+            <span>Monitorear</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        {/* Hero card */}
+        <div className="bg-[#f8f8f7] rounded-[12px] border border-[#e9eae6] p-6 flex items-center gap-6 relative mb-6">
+          <div className="w-[260px] h-[140px] flex-shrink-0 rounded-[10px] bg-[#1a1a1a] p-4 flex flex-col gap-1.5">
+            <p className="text-[11px] font-semibold text-white">Score conversation</p>
+            <div className="space-y-1 text-[10px]">
+              <div className="flex items-center justify-between text-[#c4c4c2]"><span>Escalation ease</span><span className="text-[#a4c34f]">✓ Good</span></div>
+              <div className="flex items-center justify-between text-[#c4c4c2]"><span>Clarification</span><span className="text-[#a4c34f]">✓ Good</span></div>
+              <div className="flex items-center justify-between text-[#c4c4c2]"><span>Efficiency</span><span className="text-[#a4c34f]">✓ Good</span></div>
+              <div className="flex items-center justify-between text-[#c4c4c2]"><span>Customer sentiment</span><span className="text-[#a4c34f]">✓ Positive</span></div>
+            </div>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[22px] font-serif text-[#1a1a1a] leading-[28px]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>Supervise y mejore Fin a gran escala</h3>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Marque automáticamente las conversaciones de interés y envíelas a revisores de IA o humanos para el control de calidad.</p>
+            <a href="#" className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#0070c0] hover:underline">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>
+              <span>Más información</span>
+            </a>
+          </div>
+          <button className="absolute top-3 right-3 w-7 h-7 rounded-md hover:bg-white flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-3 mb-5">
+          <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            <span>Mostrar actividad en los últimos 7 días</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            <span>Monitores activos</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+        </div>
+
+        {/* Revisiones de Fin */}
+        <h3 className="text-[14px] text-[#1a1a1a] mb-3">Revisiones de Fin</h3>
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <button className="bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
+            <span className="w-7 h-7 rounded-md bg-[#f1f1ee] flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.01"/></svg>
+            </span>
+            <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Conversaciones sin revisión</span>
+            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">0</span>
+          </button>
+          <button className="bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
+            <span className="w-7 h-7 rounded-md bg-[#fef3c7] flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#a06820]"><path d="M8 1l7 13H1z"/></svg>
+            </span>
+            <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Correcciones necesarias</span>
+            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">0</span>
+          </button>
+          <div />
+        </div>
+
+        {/* Todas las conversaciones de Fin */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-[10px] border border-[#e9eae6] p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Todas las conversaciones de Fin</h4>
+                <p className="mt-0.5 text-[12px] text-[#646462]">Continuo</p>
+              </div>
+              <button className="w-6 h-6 rounded hover:bg-[#f8f8f7] flex items-center justify-center">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
+              </button>
+            </div>
+            <div className="mt-6 flex items-center gap-1 h-[60px] px-1">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <span key={i} className="flex-1 h-px border-t border-dashed border-[#d4d4d2]" />
+              ))}
+            </div>
+            <div className="mt-3 pt-3 border-t border-[#e9eae6]">
+              <p className="text-[11px] text-[#646462]">Conversaciones</p>
+              <p className="text-[18px] font-mono font-bold text-[#1a1a1a]">0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Registro de cambios (1:19066) ──────────────────────────────────────────
+function FinChangelogContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+          <path d="M3 2.5h7.5L13 5v8.5H3z"/><path d="M10 2.5V5h2.5"/><path d="M5 8h6M5 10.5h4"/>
+        </svg>
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Registro de cambios</h2>
+      </div>
+      <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-[#e9eae6]">
+        <div className="relative flex-1 max-w-[320px]">
+          <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
+          <input type="text" placeholder="Buscar elementos..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]" />
+        </div>
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+          <span>Cualquier cambio</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 flex items-start justify-center pt-24 px-6">
+        <div className="text-center max-w-[420px]">
+          <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
+          <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en su agente de IA Fin</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Ajustes de Fin · General (1:20145) ─────────────────────────────────────
+function FinSettingsContent() {
+  type Row = { icon: ReactNode; title: string; desc: string; cta?: string };
+
+  const usoRows: Row[] = [
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M8 2.5l1.6 4 4.4.4-3.4 3 1.1 4.3L8 12l-3.7 2.2L5.4 9.9 2 6.9l4.4-.4z"/></svg>,
+      title: 'Alertas y límites',
+      desc: 'Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto.',
+    },
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>,
+      title: 'Supervisar el uso',
+      desc: 'Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo.',
+      cta: 'Ver uso',
+    },
+  ];
+
+  const personalizacionRows: Row[] = [
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13.5c.7-2.4 2.7-3.7 5-3.7s4.3 1.3 5 3.7"/></svg>,
+      title: 'La identidad de Fin',
+      desc: 'Administra el nombre y avatar que verán tus clientes.',
+    },
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 4l3 3-3 3M7 11h7" strokeLinecap="round"/></svg>,
+      title: 'Botones de respuesta de Fin',
+      desc: 'Elija cómo Fin formula las opciones que les presenta a sus clientes. Disponible en SMS.',
+    },
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.6 1.7 2.4 3.6 2.4 6S9.6 12.3 8 14C6.4 12.3 5.6 10.4 5.6 8S6.4 3.7 8 2z"/></svg>,
+      title: 'Soporte multilingüe de Fin',
+      desc: 'Controla los idiomas en los que responderá Fin.',
+    },
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4"/></svg>,
+      title: 'Respuestas de correo electrónico de Fin',
+      desc: 'Configura cómo Fin firma y formatea los correos electrónicos que envía a tus clientes.',
+    },
+  ];
+
+  function renderRow(r: Row) {
+    return (
+      <button key={r.title} className="w-full bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 text-left hover:bg-[#f8f8f7]">
+        <span className="w-8 h-8 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+          {r.icon}
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[13.5px] font-semibold text-[#1a1a1a]">{r.title}</span>
+          <span className="block mt-0.5 text-[12.5px] text-[#646462] leading-[18px]">{r.desc}</span>
+        </span>
+        {r.cta ? (
+          <span className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1">
+            {r.cta}
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 3l5 5-5 5" strokeLinecap="round"/></svg>
+          </span>
+        ) : (
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/></svg>
+        <h2 className="text-[15px] font-bold text-[#1a1a1a]">Ajustes</h2>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6 max-w-[860px] w-full">
+        <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">Uso</h3>
+        <div className="flex flex-col gap-2">{usoRows.map(renderRow)}</div>
+        <h3 className="mt-7 text-[14px] font-semibold text-[#1a1a1a] mb-3">Personalización</h3>
+        <div className="flex flex-col gap-2">{personalizacionRows.map(renderRow)}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Ajustes de Fin · Audiencias (1:21030) ──────────────────────────────────
+function FinAudiencesContent() {
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">Audiencias</h2>
+        </div>
+        <button className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+          <span>Nuevo</span>
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 max-w-[820px]">
+          <h3 className="text-[16px] font-bold text-[#1a1a1a] leading-[22px]">Segmenta tu contenido y pautas de Fin para usuarios específicos</h3>
+          <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
+            Crea y administra audiencias personalizadas para controlar qué conocimientos utiliza Fin y qué pauta aplica, asegurando que los usuarios obtengan respuestas que siempre sean relevantes.
+          </p>
+          <button className="mt-4 h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
+            <span>Cómo usar las audiencias para segmentar a Fin</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Ajustes de Fin · Flujos de trabajo (Figma 1:22652) ─────────────────────
+function FinFlujosTrabajoContent() {
+  const filterChips = [
+    {
+      label: 'Visitantes, leads o usuarios',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'State is any',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11M5 9h6M5 11h4"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'Cualquier canal',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'El tipo es cualquiera',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
+          <circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>
+        </svg>
+      ),
+    },
+  ];
+
+  const rows = [
+    {
+      title: 'Use Fin AI Agent over Messenger',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+      ),
+    },
+    {
+      title: 'Triage customer conversations before Fin replies',
+      icon: (
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+      ),
+    },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Hero promo card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-4">
+        <div className="relative bg-white border border-[#e9eae6] rounded-[12px] px-5 py-4 flex gap-5">
+          <button className="absolute top-3 right-3 w-6 h-6 rounded-md flex items-center justify-center hover:bg-[#f3f3f1]" aria-label="Cerrar">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+          <div className="flex-1 min-w-0 max-w-[640px]">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] leading-[24px]">Crea flujos de trabajo para automatizar la asistencia a clientes a escala</h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
+              Automatiza más procesos para tus clientes y compañeros de equipo con nuestro generador visual de arrastrar y soltar. Clasifica, etiqueta y canaliza las conversaciones al instante, y añade Fin AI Agent a tus flujos de trabajo para crear una experiencia personalizada para el cliente.
+            </p>
+            <button className="mt-3 h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
+              <span>Explicación de los flujos de trabajo</span>
+            </button>
+          </div>
+          <div className="hidden md:block w-[260px] flex-shrink-0">
+            <div className="relative w-full h-[140px] rounded-[8px] overflow-hidden border border-[#e9eae6]" style={{
+              background: 'linear-gradient(135deg, #d6e1ef 0%, #f3e8d6 100%)',
+            }}>
+              <div className="absolute inset-3 grid grid-cols-2 gap-2">
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1.5 rounded bg-[#1a1a1a]/15 w-3/4 mb-1"/>
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-full"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1.5 rounded bg-[#ed621d]/30 w-1/2 mb-1"/>
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-full"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-2/3"/>
+                </div>
+                <div className="bg-white/80 rounded-[6px] border border-white/70 shadow-sm p-1.5">
+                  <div className="h-1 rounded bg-[#1a1a1a]/10 w-3/5"/>
+                </div>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#1a1a1a]"><path d="M5 3.5l7 4.5-7 4.5z"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section header */}
+      <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2">
+        <h3 className="text-[15px] font-bold text-[#1a1a1a] flex-1">Flujos de trabajo</h3>
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M9.5 2l-1.5 4 4 1-5 7 1-4-4-1z" strokeLinejoin="round"/></svg>
+          <span>Solucionar problemas</span>
+        </button>
+        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+          <span>Aprender</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <button className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+          <span>Nuevo flujo de trabajo</span>
+          <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white"><path d="M3 4.5l3 3 3-3z"/></svg>
+        </button>
+      </div>
+
+      {/* Filters row */}
+      <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2 flex-wrap">
+        <div className="relative w-[220px]">
+          <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
+          <input type="text" placeholder="Buscar..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"/>
+        </div>
+        {filterChips.map(c => (
+          <button key={c.label} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+            {c.icon}<span>{c.label}</span>
+          </button>
+        ))}
+        <button className="h-8 px-2 text-[12.5px] font-semibold text-[#ed621d] hover:underline inline-flex items-center gap-1">
+          <span>+</span><span>Agregar filtro</span>
+        </button>
+      </div>
+
+      {/* Workflow list */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+        <p className="text-[13px] text-[#646462] mb-3">2 flujo de trabajos</p>
+
+        {/* Group header pill */}
+        <button className="h-8 px-3 mb-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm.7 3.2v3.6l2.5 1.5-.6 1L7.5 9V4.7z"/></svg>
+          <span className="font-semibold">Cuando el cliente abre una nueva conversación en Messenger (2)</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+
+        {/* Info bar */}
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[8px] px-4 py-3 mb-4 flex items-start gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0 mt-0.5" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+          <p className="text-[12.5px] text-[#646462] leading-[18px]">
+            Cuando un usuario coincide con varios flujos de trabajo dirigidos al cliente, solo se ejecuta el flujo de trabajo principal que coincida. Se ejecutan todos los flujos de trabajo en segundo plano que coincidan. Más información <a href="#" className="text-[#3b59f6] hover:underline">aquí</a>.
+          </p>
+        </div>
+
+        {/* Highlighted Fin row */}
+        <div className="border-2 border-[#ed621d] rounded-[10px] p-3 flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-md bg-[#fef5ed] flex items-center justify-center flex-shrink-0">
+            <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4 object-contain"/>
+          </div>
+          <span className="flex-1 text-[13px] text-[#1a1a1a]">Permitir que Fin responda automáticamente a la pregunta del cliente</span>
+          <button className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1.5 hover:underline">
+            <span>Configuración simple</span>
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 3l5 5-5 5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Workflow table */}
+        <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
+          <div className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-9 border-b border-[#e9eae6] text-[11.5px] uppercase tracking-wide text-[#a4a4a2]">
+            <span className="text-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#a4a4a2] mx-auto" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>
+            </span>
+            <span><input type="checkbox" className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+            <span>Título</span>
+            <span>Estado</span>
+            <span>Fecha/hora de actualización</span>
+            <span>Actualizado por</span>
+            <span>Enviado</span>
+            <span>Objetivo</span>
+          </div>
+          {rows.map(r => (
+            <div key={r.title} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa]">
+              <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
+              <span><input type="checkbox" className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+              <span className="flex items-center gap-2 min-w-0">
+                {r.icon}
+                <span className="text-[13px] text-[#1a1a1a] truncate">{r.title}</span>
+              </span>
+              <span><span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-[#f3f3f1] text-[11.5px] font-semibold text-[#646462]">Draft</span></span>
+              <span className="text-[12.5px] text-[#646462]">10 hours ago</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center">H</span>
+                <span className="text-[12.5px] text-[#1a1a1a] truncate">Hector Vidal Sanchez</span>
+              </span>
+              <span className="text-[12.5px] text-[#3b59f6]">0</span>
+              <span className="text-[12.5px] text-[#646462]">—</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Ajustes de Fin · Automatizaciones simples (Figma 1:23926) ──────────────
+function FinAutomatizacionesSimplesContent() {
+  const trigger1Items = [
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 5h11M2.5 8h11M2.5 11h11" strokeLinecap="round"/></svg>,
+      label: 'Obtén el contexto de los problemas por adelantado',
+      state: 'Off' as const,
+    },
+    {
+      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>,
+      label: 'Comparte tu tiempo de respuesta habitual',
+      state: 'On' as const,
+    },
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Hero promo card */}
+      <div className="flex-shrink-0 px-6 pt-5 pb-4">
+        <div className="relative bg-white border border-[#e9eae6] rounded-[12px] px-5 py-4 flex gap-5">
+          <button className="absolute top-3 right-3 w-6 h-6 rounded-md flex items-center justify-center hover:bg-[#f3f3f1]" aria-label="Cerrar">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+          <div className="flex-1 min-w-0 max-w-[640px]">
+            <h2 className="text-[18px] font-bold text-[#1a1a1a] leading-[24px]">Crea automatizaciones sencillas para trabajos básicos</h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
+              Simplifica los trabajos comunes como la clasificación y la asignación de nuevas conversaciones. Las automatizaciones sencillas te ayudan a aprender los conceptos básicos de la automatización y a dar el primer paso hacia flujos de trabajo más inteligentes y personalizados.
+            </p>
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+                <span>Comenzar con automatizaciones sencillas</span>
+              </button>
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+                <span>Clientes potenciales vs. usuarios</span>
+              </button>
+              <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <svg viewBox="0 0 12 12" className="w-3 h-3 fill-[#1a1a1a]"><path d="M3 1.5l7 4.5-7 4.5z"/></svg>
+                <span>Ve más allá con los flujos de trabajo</span>
+              </button>
+            </div>
+          </div>
+          <div className="hidden md:block w-[260px] flex-shrink-0">
+            <div className="relative w-full h-[140px] rounded-[8px] overflow-hidden" style={{
+              background: 'linear-gradient(135deg, #ed621d 0%, #f4a261 100%)',
+            }}>
+              <div className="absolute right-3 top-3 w-[150px] bg-white rounded-[8px] shadow-lg overflow-hidden border border-white/40">
+                <div className="px-2 py-1.5 bg-[#ed621d] flex items-center gap-1.5">
+                  <div className="w-5 h-5 rounded-full bg-white/30"/>
+                  <span className="text-white text-[10px] font-semibold">Examply Air</span>
+                </div>
+                <div className="p-2">
+                  <div className="bg-[#f3f3f1] rounded-[4px] px-1.5 py-1 text-[8.5px] text-[#1a1a1a] inline-block">Hi, I have a question</div>
+                </div>
+                <div className="px-2 pb-2">
+                  <div className="bg-[#ed621d] text-white rounded-[4px] px-1.5 py-1 text-[8.5px]">Hey, thanks for the help.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section header */}
+      <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2">
+        <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11"/></svg>
+        <h3 className="text-[15px] font-bold text-[#1a1a1a]">Automatizaciones simples</h3>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+        {/* Audience cards */}
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div className="bg-white border border-[#e9eae6] rounded-[10px] p-4">
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">Usuarios</p>
+            <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">Cualquier persona que se haya registrado e iniciado sesión.</p>
+          </div>
+          <div className="bg-white border border-[#e9eae6] rounded-[10px] p-4">
+            <p className="text-[14px] font-semibold text-[#1a1a1a]">Leads</p>
+            <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">Cualquier persona que inicie una conversación contigo o que responda a un mensaje saliente.</p>
+          </div>
+        </div>
+
+        {/* Group 1: primer mensaje */}
+        <button className="h-8 px-3 mb-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+          <span className="font-semibold">Cuando los usuarios envían su primer mensaje (2)</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+
+        {/* Delay toggle row */}
+        <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] px-4 py-3 mb-3 flex items-center gap-3">
+          <button className="relative w-7 h-4 rounded-full bg-[#d8d8d4] flex-shrink-0" aria-pressed="false">
+            <span className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow"/>
+          </button>
+          <p className="text-[12.5px] text-[#1a1a1a] leading-[18px]">
+            Deja un retraso de 2 minutos antes de activar lo siguiente durante el <a href="#" className="text-[#3b59f6] hover:underline">horario de atención</a>
+          </p>
+        </div>
+
+        {/* Action items */}
+        <div className="flex flex-col gap-2 mb-6">
+          {trigger1Items.map(item => (
+            <button key={item.label} className="w-full bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 flex items-center gap-3 hover:bg-[#fafafa] text-left">
+              <span className="w-7 h-7 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">{item.icon}</span>
+              <span className="flex-1 text-[13px] text-[#1a1a1a]">{item.label}</span>
+              {item.state === 'On' ? (
+                <span className="px-2 py-0.5 rounded-full bg-[#dcf2e3] text-[#1f7a3a] text-[11.5px] font-semibold">On</span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-[#f3f3f1] text-[#646462] text-[11.5px] font-semibold">Off</span>
+              )}
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
+            </button>
+          ))}
+        </div>
+
+        {/* Group 2: cierre conversación */}
+        <button className="h-8 px-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+          <span className="font-semibold">Cuando se cierra una conversación con un usuario (1)</span>
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Vista previa side panel (used by Contenido / Orientación / Atributos / Escalamiento) ───
+function FinVistaPreviaPanel() {
+  return (
+    <div className="w-[360px] flex-shrink-0 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-shrink-0 h-16 px-6 flex items-center justify-between border-b border-[#e9eae6]">
+        <h2 className="text-[16px] font-bold text-[#1a1a1a]">Vista previa</h2>
+        <button className="w-8 h-8 flex items-center justify-center rounded-[7px] hover:bg-[#f8f8f7]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+      <div className="flex-1 relative flex items-center justify-center p-10">
+        <p className="text-center text-[13px] text-[#646462] max-w-[260px] leading-[20px]">
+          Agrega contenido para probar Fin. Luego hazle preguntas para obtener una vista previa de sus respuestas.
+        </p>
+        <div className="absolute bottom-4 right-4 w-12 h-12 rounded-full bg-[#1a1a1a] flex items-center justify-center shadow-lg">
+          <svg viewBox="0 0 16 16" className="w-5 h-5 fill-none stroke-white" strokeWidth="1.4"><path d="M2.5 7.5C2.5 4.5 4.5 3 8 3s5.5 1.5 5.5 4.5S11.5 12 8 12c-.7 0-1.4-.1-2-.2L3 13l.6-2.3c-.7-.8-1.1-1.8-1.1-3z"/></svg>
+          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#ed621d] ring-2 ring-[#1a1a1a]"/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinAiView() {
+  const [sub, setSub] = useState<FinSubView>('allRoles');
+  const showVistaPrevia = sub === 'capContent' || sub === 'capGuidance' || sub === 'capAttributes' || sub === 'capEscalation' || sub === 'desplegar' || sub === 'depChat' || sub === 'depEmail';
+
+  function renderSub() {
+    switch (sub) {
+      case 'allRoles':       return <FinAllRolesContent />;
+      case 'capacitar':      return <FinPlaceholderContent title="Capacitar"   subtitle="Configura el contenido, las atribuciones y los procedimientos que entrenan a Fin." />;
+      case 'capContent':     return <FinContenidoContent />;
+      case 'capGuidance':    return <FinOrientacionContent />;
+      case 'capAttributes':  return <FinAtributosContent />;
+      case 'capEscalation':  return <FinEscalamientoContent />;
+      case 'capProcedures':  return <FinProcedimientosContent />;
+      case 'probar':
+      case 'pruebaTesting':  return <FinPruebasContent />;
+      case 'desplegar':
+      case 'depChat':        return <FinDespliegueChatContent />;
+      case 'depEmail':       return <FinDespliegueEmailContent />;
+      case 'depPhone':       return <FinDespliegueTelefonoContent />;
+      case 'anaGetStarted':  return <FinComenzarContent />;
+      case 'analizar':
+      case 'anaPerformance': return <FinDesempenoContent />;
+      case 'anaRecommendations': return <FinPlaceholderContent title="Recomendaciones" subtitle="Sugerencias de Fin para mejorar la cobertura, el tono y la resolución." />;
+      case 'anaTopicExplorer':   return <FinPlaceholderContent title="Explorador de Temas" subtitle="Explora los temas más frecuentes en las conversaciones gestionadas por Fin." />;
+      case 'anaTopicTrends': return <FinTendenciasContent />;
+      case 'anaMonitor':     return <FinMonitoresContent />;
+      case 'changelog':      return <FinChangelogContent />;
+      case 'settings':       return <FinSettingsContent />;
+      case 'settingsAudiences': return <FinAudiencesContent />;
+      case 'finWorkflows':   return <FinFlujosTrabajoContent />;
+      case 'finSimpleAutomations': return <FinAutomatizacionesSimplesContent />;
+    }
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <FinSidebar sub={sub} onSelect={setSub} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          {renderSub()}
+        </div>
+        {showVistaPrevia && <FinVistaPreviaPanel />}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ROOT
 // ─────────────────────────────────────────────────────────────────────────────
 
+function IconLibraryGalleryV2() {
+  // Render every v2-N entry with its number so we can identify what each one is.
+  const entries: IconVariant[] = Array.from({ length: 91 }, (_, i) => `v2-${i + 1}` as IconVariant);
+  return (
+    <div className="h-full w-full overflow-auto bg-white p-8">
+      <div className="max-w-[1400px] mx-auto">
+        <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">LibraryV2 — 91 variantes</h1>
+        <p className="text-[13px] text-[#646462] mb-6">file: QhrV4aBbAAqTxgWhaK8hGP · node: 3-23460. Cada celda muestra <code>v2-N</code>.</p>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-3">
+          {entries.map((v) => {
+            const def = ICON_LIBRARY[v];
+            return (
+              <div key={v} className="border border-[#e9eae6] rounded-[8px] p-3 flex flex-col items-center gap-2 bg-[#fbfbf9] hover:bg-white transition-colors">
+                <div className="h-12 w-12 flex items-center justify-center">
+                  <LibraryIcon v={v} size={Math.min(def.size, 32)} />
+                </div>
+                <span className="text-[11px] font-mono text-[#1a1a1a]">{v}</span>
+                <span className="text-[10px] text-[#646462]">{def.size}px</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Prototype() {
-  const [view, setView] = useState<View>('inbox');
+  // ?icons=v2 → render the icon-library gallery instead of the app shell.
+  // Computed once per page-load (URL doesn't change without a reload), so the
+  // hook order stays stable for whichever branch we take.
+  const showIconsGallery = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('icons') === 'v2';
+  if (showIconsGallery) return <IconLibraryGalleryV2 />;
+  return <PrototypeApp />;
+}
+
+// Read the initial view + inbox deep-link params from the URL once at mount
+// so links like /?view=inbox&entityType=case&case=<id>&scope=<scope> work.
+function readInitialViewFromUrl(): View {
+  if (typeof window === 'undefined') return 'inbox';
+  const v = new URLSearchParams(window.location.search).get('view');
+  // Allow only known View values; fall back to inbox.
+  const known: View[] = [
+    'inbox','contacts','allLeads','settings','imports','personal','security',
+    'notifications','visible','tokens','accountAccess','multilingual','assignments',
+    'macros','tickets','sla','aiInbox','automation','appStore','connectors','labels',
+    'people','companies','workspaceSecurity','workspaceMultilingual','workspaceHours',
+    'workspaceBrands','billing','messenger','email','phone','whatsapp','discord','sms',
+    'social','allChannels','inboxTeam','fin','knowledge','reports','outbound',
+  ];
+  return v && (known as string[]).includes(v) ? (v as View) : 'inbox';
+}
+
+function PrototypeApp() {
+  const [view, setView] = useState<View>(() => readInitialViewFromUrl());
+
+  // Keep the URL ?view=... in sync with the active view so back/forward and
+  // page reloads land back on the same screen.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('view') !== view) {
+      url.searchParams.set('view', view);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [view]);
 
   function renderView() {
     switch (view) {
@@ -4611,6 +11577,8 @@ export default function Prototype() {
       case 'companies':      return <EmpresasView view={view} onNavigate={setView} />;
       case 'workspaceSecurity':     return <WorkspaceSecurityView view={view} onNavigate={setView} />;
       case 'workspaceMultilingual': return <WorkspaceMultilingualView view={view} onNavigate={setView} />;
+      case 'workspaceHours':        return <HorarioAtencionView view={view} onNavigate={setView} />;
+      case 'workspaceBrands':       return <MarcasView view={view} onNavigate={setView} />;
       case 'billing':        return <BillingView view={view} onNavigate={setView} />;
       case 'messenger':      return <MessengerView view={view} onNavigate={setView} />;
       case 'email':          return <EmailView view={view} onNavigate={setView} />;
@@ -4620,10 +11588,11 @@ export default function Prototype() {
       case 'sms':            return <SmsView view={view} onNavigate={setView} />;
       case 'social':         return <SocialChannelsView view={view} onNavigate={setView} />;
       case 'allChannels':    return <AllChannelsView view={view} onNavigate={setView} />;
-      case 'fin':            return <WIPView label="Fin AI" />;
-      case 'knowledge':return <WIPView label="Knowledge Base" />;
-      case 'reports':  return <WIPView label="Reports" />;
-      case 'outbound': return <WIPView label="Outbound" />;
+      case 'inboxTeam':      return <InboxTeamView view={view} onNavigate={setView} />;
+      case 'fin':            return <FinAiView />;
+      case 'knowledge':return <KnowledgeView />;
+      case 'reports':  return <ReportsView />;
+      case 'outbound': return <OutboundView />;
     }
   }
 
