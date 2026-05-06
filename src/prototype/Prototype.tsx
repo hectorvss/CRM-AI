@@ -581,12 +581,14 @@ function InboxSidebar({
   counts,
   onAction,
   onCollapse,
+  onNewConversation,
 }: {
   active: InboxScope;
   onScopeChange: (scope: InboxScope) => void;
   counts: Partial<Record<InboxScope, number>>;
   onAction?: (message: string, type?: 'success' | 'error') => void;
   onCollapse?: () => void;
+  onNewConversation?: () => void;
 }) {
   const notify = (msg: string) => onAction?.(msg, 'success');
   // 4 expandable sections (Fin para servicio / Inbox para el equipo / Compañeros de equipo / Vistas)
@@ -608,7 +610,7 @@ function InboxSidebar({
         <span className="text-[20px] font-semibold tracking-[-0.4px] text-[#1a1a1a]">Inbox</span>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => notify('Nueva conversación — próximamente')}
+            onClick={() => onNewConversation ? onNewConversation() : notify('Nueva conversación — próximamente')}
             title="Nueva conversación"
             className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f8f8f7] hover:bg-[#e9eae6]"
           >
@@ -1233,6 +1235,143 @@ function PrototypeMergeModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// NewConversationModal — minimal modal to create a case via POST /cases.
+// Lets the agent pick channel/priority/type and optionally jot a first
+// message that posts as the customer's inbound. On success we navigate to
+// the new case via the URL deep-link (?case=<id>) so the rest of the app
+// picks it up immediately.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NEW_CONV_CHANNELS: Array<{ value: string; label: string }> = [
+  { value: 'email',      label: 'Email' },
+  { value: 'web_chat',   label: 'Chat web' },
+  { value: 'whatsapp',   label: 'WhatsApp' },
+  { value: 'sms',        label: 'SMS' },
+  { value: 'messenger',  label: 'Messenger' },
+  { value: 'phone',      label: 'Voz' },
+];
+const NEW_CONV_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
+
+function NewConversationModal({
+  onClose,
+  onCreated,
+  onAction,
+}: {
+  onClose: () => void;
+  onCreated: (id: string) => void;
+  onAction: (message: string, type?: 'success' | 'error') => void;
+}) {
+  const [channel, setChannel] = useState('email');
+  const [priority, setPriority] = useState('medium');
+  const [type, setType] = useState('general');
+  const [tagsInput, setTagsInput] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const tags = tagsInput
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean)
+        .slice(0, 10);
+      const created = await casesApi.create({
+        type: type.trim() || 'general',
+        priority,
+        status: 'open',
+        source_channel: channel,
+        tags,
+      });
+      const newId = created?.id || created?.case?.id;
+      if (!newId) {
+        onAction('Caso creado pero sin id devuelto', 'error');
+        onClose();
+        return;
+      }
+      onAction('Conversación creada');
+      onCreated(newId);
+      onClose();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo crear la conversación', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[440px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5"
+        onClick={event => event.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Nueva conversación</h3>
+        <p className="text-[12.5px] text-[#646462] mb-4">Crea un caso vacío. Después podrás escribir, asignar y vincular pedidos desde el panel.</p>
+
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Canal</label>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {NEW_CONV_CHANNELS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setChannel(opt.value)}
+              className={`h-7 px-3 rounded-full text-[11.5px] font-semibold border ${channel === opt.value ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6] hover:bg-[#ededea]'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Prioridad</label>
+        <div className="flex gap-1.5 mb-3">
+          {NEW_CONV_PRIORITIES.map(opt => (
+            <button
+              key={opt}
+              onClick={() => setPriority(opt)}
+              className={`h-7 px-3 rounded-full text-[11.5px] font-semibold border ${priority === opt ? 'bg-[#1a1a1a] text-white border-[#1a1a1a]' : 'bg-[#f8f8f7] text-[#1a1a1a] border-[#e9eae6] hover:bg-[#ededea]'}`}
+            >
+              {titleCase(opt)}
+            </button>
+          ))}
+        </div>
+
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Tipo</label>
+        <input
+          value={type}
+          onChange={e => setType(e.target.value)}
+          placeholder="general / refund / shipment / billing…"
+          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
+        />
+
+        <label className="block text-[12px] font-semibold text-[#646462] mb-1">Etiquetas (separadas por coma)</label>
+        <input
+          value={tagsInput}
+          onChange={e => setTagsInput(e.target.value)}
+          placeholder="vip, refund, demo"
+          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+        />
+
+        <div className="flex items-center justify-end gap-2 mt-5">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]"
+          >
+            {submitting ? 'Creando…' : 'Crear conversación'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ResolutionPlanModal — fetches the AI-built case resolution plan and lets the
 // agent run individual steps or the whole plan. Each step shows a kind badge
 // (tool / navigate / blocked) and its own Ejecutar button. After execution,
@@ -1657,6 +1796,7 @@ function ConversationPanel({
   setReplyTab,
   panels,
   onTogglePanel,
+  onNewConversation,
 }: {
   selectedConv: Conversation;
   inboxView: any;
@@ -1668,6 +1808,7 @@ function ConversationPanel({
   setReplyTab: Dispatch<SetStateAction<'responder' | 'nota' | 'datosIA'>>;
   panels?: { left: boolean; list: boolean; right: boolean };
   onTogglePanel?: (which: 'left' | 'list' | 'right') => void;
+  onNewConversation?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -1698,6 +1839,24 @@ function ConversationPanel({
   }, [selectedConv.id]);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // Reply snippets / templates — backend has no /macros yet, so we fall back
+  // to a per-browser localStorage list. Each snippet is { id, label, body }.
+  const SNIPPETS_LS_KEY = 'clain.inbox.snippets';
+  type Snippet = { id: string; label: string; body: string };
+  function readSnippets(): Snippet[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(SNIPPETS_LS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.filter(s => s && s.id && s.body) : [];
+    } catch { return []; }
+  }
+  function writeSnippets(arr: Snippet[]) {
+    if (typeof window === 'undefined') return;
+    try { window.localStorage.setItem(SNIPPETS_LS_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+  }
+  const [snippets, setSnippets] = useState<Snippet[]>(() => readSnippets());
+  const [showSnippets, setShowSnippets] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1876,12 +2035,92 @@ function ConversationPanel({
     setMenuOpen(false);
   }
 
+  // Export to PDF via the browser's print pipeline. We open a hidden iframe,
+  // write a self-contained printable HTML document with the case header +
+  // every message, then call print() on the iframe so the user gets the
+  // native "Save as PDF" dialog. No extra dependencies needed.
+  function exportConversationAsPdf() {
+    setMenuOpen(false);
+    if (typeof window === 'undefined') {
+      onAction('Exportación no disponible en este entorno', 'error');
+      return;
+    }
+    const escape = (s: string) => String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    const customer = (selectedConv as any).customerName || '—';
+    const email = (selectedConv as any).customerEmail || '';
+    const messagesHtml = allMessages.map((m: any) => `
+      <div class="msg msg-${escape(m.from || 'agent')}">
+        <div class="meta">${escape(m.senderName || m.from || 'agente')} · ${escape(m.time || '')}</div>
+        <div class="body">${escape(m.text || '').replace(/\n/g, '<br />')}</div>
+      </div>
+    `).join('');
+    const html = `<!doctype html>
+<html lang="es"><head><meta charset="utf-8" />
+<title>Caso ${escape(selectedConv.id)} — ${escape(customer)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, Arial, sans-serif; color: #1a1a1a; margin: 24px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .meta-top { font-size: 12px; color: #646462; margin-bottom: 16px; }
+  .msg { border: 1px solid #e9eae6; border-radius: 12px; padding: 10px 12px; margin: 0 0 8px; page-break-inside: avoid; }
+  .msg-user { background: #f8f8f7; }
+  .msg-agent { background: #fff; }
+  .msg-bot { background: #f4f4ff; }
+  .meta { font-size: 11px; color: #646462; margin-bottom: 4px; }
+  .body { font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
+  @page { size: A4; margin: 18mm; }
+</style></head>
+<body>
+  <h1>Caso ${escape(selectedConv.id)}</h1>
+  <div class="meta-top">
+    Cliente: <strong>${escape(customer)}</strong>${email ? ` · ${escape(email)}` : ''}<br />
+    Canal: ${escape(channelLabel || '—')} · Estado: ${escape(selectedConv.status || '—')} · Prioridad: ${escape(selectedConv.priority || '—')}<br />
+    Exportado: ${escape(new Date().toLocaleString('es-ES'))}
+  </div>
+  ${messagesHtml || '<p style="color:#646462; font-size:13px">Sin mensajes en este caso todavía.</p>'}
+</body></html>`;
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      onAction('No se pudo abrir el cuadro de impresión', 'error');
+      return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    // Wait for fonts/layout, then trigger print. Cleanup the iframe a bit
+    // later so the print dialog stays open in browsers that need the iframe
+    // alive while choosing the destination.
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err: any) {
+        onAction(err?.message || 'No se pudo imprimir', 'error');
+      } finally {
+        setTimeout(() => { try { document.body.removeChild(iframe); } catch { /* removed already */ } }, 1500);
+      }
+    }, 250);
+  }
+
   const menuActions = [
     { icon: '👥', label: 'Asignar a un compañero',    shortcut: '', onClick: () => { setShowAssignModal(true); setMenuOpen(false); } },
     { icon: '⇄', label: 'Fusionar con...',          shortcut: 'Ctrl+Shift+M', onClick: () => { setShowMergeModal(true); setMenuOpen(false); } },
-    { icon: '✚', label: 'Nueva conversación',       shortcut: '', onClick: () => { onAction('Nueva conversación — próximamente'); setMenuOpen(false); } },
+    { icon: '✚', label: 'Nueva conversación',       shortcut: '', onClick: () => { onNewConversation?.(); setMenuOpen(false); } },
     { icon: '↗', label: 'Exportar como texto',      shortcut: '', onClick: exportConversationAsText },
-    { icon: '↗', label: 'Exportar como PDF',        shortcut: '', onClick: () => { onAction('Exportar como PDF — próximamente'); setMenuOpen(false); } },
+    { icon: '↗', label: 'Exportar como PDF',        shortcut: '', onClick: exportConversationAsPdf },
     { icon: '↻', label: 'Reabrir caso',              shortcut: '', onClick: () => { setStatusMode('open');      setMenuOpen(false); } },
     { icon: '⚠', label: 'Escalar caso',              shortcut: '', onClick: () => { setStatusMode('escalated'); setMenuOpen(false); } },
     { icon: '✕', label: 'Cerrar caso',               shortcut: '', onClick: () => { setStatusMode('closed');    setMenuOpen(false); } },
@@ -2110,15 +2349,65 @@ function ConversationPanel({
                   ))}
                 </div>
               )}
-              <div className="flex items-center justify-between px-3 py-2 border-t border-[#e9eae6]">
+              <div className="flex items-center justify-between px-3 py-2 border-t border-[#e9eae6] relative">
                 <div className="flex items-center gap-1">
-                  <button onClick={() => applyComposerFormat('bold')} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[13px] font-bold">B</button>
-                  <button onClick={() => applyComposerFormat('italic')} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[13px] italic">I</button>
-                  <button onClick={() => applyComposerFormat('link')} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">Link</button>
-                  <button onClick={() => fileInputRef.current?.click()} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">+</button>
-                  <button onClick={() => setShowEmojiPicker(open => !open)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">:)</button>
+                  <button onClick={() => applyComposerFormat('bold')} title="Negrita" className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[13px] font-bold">B</button>
+                  <button onClick={() => applyComposerFormat('italic')} title="Cursiva" className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[13px] italic">I</button>
+                  <button onClick={() => applyComposerFormat('link')} title="Enlace" className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">Link</button>
+                  <button onClick={() => fileInputRef.current?.click()} title="Adjuntar archivo" className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">+</button>
+                  <button onClick={() => setShowEmojiPicker(open => !open)} title="Emoji" className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">:)</button>
+                  <button onClick={() => setShowSnippets(s => !s)} title="Plantillas guardadas" className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f8f8f7] text-[12px]">⚡</button>
                   <input ref={fileInputRef} type="file" multiple className="hidden" onChange={event => handleFiles(event.target.files)} />
                 </div>
+                {showSnippets && (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setShowSnippets(false)} />
+                    <div className="absolute bottom-10 left-3 z-30 w-[300px] bg-white border border-[#e9eae6] rounded-xl shadow-[0px_8px_24px_rgba(20,20,20,0.18)] py-1.5 max-h-[280px] overflow-y-auto">
+                      <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#646462]">Plantillas</div>
+                      {snippets.length === 0 && (
+                        <div className="px-3 py-2 text-[12.5px] text-[#646462]">Aún no tienes plantillas. Guarda la respuesta actual con el botón de abajo.</div>
+                      )}
+                      {snippets.map(snip => (
+                        <div key={snip.id} className="flex items-center justify-between px-3 py-1.5 hover:bg-[#f3f3f1] group">
+                          <button
+                            onClick={() => { insertAtCursor(snip.body); setShowSnippets(false); }}
+                            className="flex-1 text-left min-w-0"
+                            title={snip.body}
+                          >
+                            <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{snip.label}</p>
+                            <p className="text-[11px] text-[#646462] truncate">{snip.body.slice(0, 60)}</p>
+                          </button>
+                          <button
+                            onClick={() => {
+                              const next = snippets.filter(s => s.id !== snip.id);
+                              setSnippets(next);
+                              writeSnippets(next);
+                            }}
+                            title="Borrar"
+                            className="ml-2 w-6 h-6 flex items-center justify-center rounded text-[#646462] hover:text-[#b91c1c] hover:bg-[#fef7f7] opacity-0 group-hover:opacity-100"
+                          >×</button>
+                        </div>
+                      ))}
+                      <div className="border-t border-[#e9eae6] mt-1 pt-1">
+                        <button
+                          disabled={!replyText.trim()}
+                          onClick={() => {
+                            const body = replyText.trim();
+                            if (!body) return;
+                            const label = body.split('\n')[0].slice(0, 50);
+                            const next = [...snippets, { id: `s-${Date.now()}`, label, body }];
+                            setSnippets(next);
+                            writeSnippets(next);
+                            onAction('Plantilla guardada');
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#f3f3f1] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          + Guardar respuesta actual como plantilla
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
                 <button
                   onClick={submitReply}
                   disabled={!replyText.trim() && attachments.length === 0}
@@ -2816,12 +3105,34 @@ function DetailsSidebar({
             <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">Otras conversaciones</p>
             {relatedCases.length === 0 && <p className="text-[13px] text-[#646462]">No hay otras conversaciones con este usuario.</p>}
             <div className="flex flex-col gap-2">
-              {relatedCases.map((related: any, index: number) => (
-                <div key={related.id || index} className="rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2">
-                  <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{related.title || related.subject || related.id || 'Caso relacionado'}</p>
-                  <p className="text-[12px] text-[#646462]">{titleCase(related.status || 'relacionado')}</p>
-                </div>
-              ))}
+              {relatedCases.map((related: any, index: number) => {
+                const targetId = related.id || related.case_id;
+                const title = related.title || related.subject || related.case_number || targetId || 'Caso relacionado';
+                if (!targetId) {
+                  return (
+                    <div key={index} className="rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{title}</p>
+                      <p className="text-[12px] text-[#646462]">{titleCase(related.status || 'relacionado')}</p>
+                    </div>
+                  );
+                }
+                return (
+                  <a
+                    key={targetId}
+                    href={`/?view=inbox&scope=all&case=${encodeURIComponent(targetId)}`}
+                    title="Abrir esta conversación"
+                    className="rounded-xl bg-[#f8f8f7] border border-[#e9eae6] px-3 py-2 hover:bg-[#ededea] hover:border-[#d3cec6] block"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{title}</p>
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3 text-[#646462] flex-shrink-0">
+                        <path d="M6 4l4 4-4 4" />
+                      </svg>
+                    </div>
+                    <p className="text-[12px] text-[#646462]">{titleCase(related.status || 'relacionado')}</p>
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}
@@ -2878,6 +3189,9 @@ function InboxView() {
   const [selectedConvId, setSelectedConvId] = useState(initialParams.caseId);
   const [scope, setScope] = useState<InboxScope>(initialParams.scope);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Nueva conversación: opened from the sidebar's "+" button or the dropdown
+  // "Nueva conversación" entry. Global so a single state covers both surfaces.
+  const [showNewConvModal, setShowNewConvModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [copilotByCaseId, setCopilotByCaseId] = useState<Record<string, PrototypeCopilotMessage[]>>({});
   const [copilotLoading, setCopilotLoading] = useState(false);
@@ -3132,7 +3446,7 @@ function InboxView() {
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-2">
         {panels.left ? (
-          <InboxSidebar active={scope} onScopeChange={changeScope} counts={counts} onAction={showToast} onCollapse={() => togglePanel('left')} />
+          <InboxSidebar active={scope} onScopeChange={changeScope} counts={counts} onAction={showToast} onCollapse={() => togglePanel('left')} onNewConversation={() => setShowNewConvModal(true)} />
         ) : (
           <CollapsedRail side="left" label="Mostrar sidebar" onClick={() => togglePanel('left')} />
         )}
@@ -3184,6 +3498,7 @@ function InboxView() {
                 setReplyTab={setReplyTab}
                 panels={panels}
                 onTogglePanel={togglePanel}
+                onNewConversation={() => setShowNewConvModal(true)}
               />
               {panels.right ? (
                 <DetailsSidebar
@@ -3228,6 +3543,20 @@ function InboxView() {
         }`}>
           {toast.message}
         </div>
+      )}
+      {showNewConvModal && (
+        <NewConversationModal
+          onClose={() => setShowNewConvModal(false)}
+          onCreated={(id) => {
+            setRefreshKey(k => k + 1);
+            // Switch to a scope where the new case will be visible, then
+            // pre-select it. 'all' is the safest because new cases land in
+            // 'inbox' too but 'all' guarantees presence.
+            setScope('all');
+            setSelectedConvId(id);
+          }}
+          onAction={showToast}
+        />
       )}
     </div>
   );

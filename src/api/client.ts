@@ -237,6 +237,8 @@ export const casesApi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request<any>(`/cases${qs}`).then(unwrapList);
   },
+  create: (payload: Record<string, any>) =>
+    request<any>('/cases', { method: 'POST', body: JSON.stringify(payload) }),
   get: (id: string) => request<any>(`/cases/${id}`),
   state: (id: string) => request<any>(`/cases/${id}/state`),
   graph: (id: string) => request<any>(`/cases/${id}/graph`),
