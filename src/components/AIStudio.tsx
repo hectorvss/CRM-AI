@@ -370,8 +370,19 @@ const originalCategories = [
   }
 ];
 
-export default function AIStudio() {
-  const [activeTab, setActiveTab] = useState<AIStudioTab>('Overview');
+interface AIStudioProps {
+  /** When provided, controls which tab is initially active. */
+  initialTab?: AIStudioTab;
+  /** When true, hides the outer card chrome and the AI Studio header/tabs strip
+   * so the component can be embedded inside another shell (e.g. Fin AI Agent). */
+  embedded?: boolean;
+}
+
+export default function AIStudio({ initialTab = 'Overview', embedded = false }: AIStudioProps = {}) {
+  const [activeTab, setActiveTab] = useState<AIStudioTab>(initialTab);
+  // Keep the active tab in sync when the parent re-mounts with a different initialTab
+  // (e.g. user navigates between Fin sidebar entries that each map to a tab).
+  useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [agentSearch, setAgentSearch] = useState('');
@@ -815,8 +826,9 @@ export default function AIStudio() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0">
-      <div className="flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card">
+    <div className={embedded ? "flex-1 flex flex-col h-full min-w-0 min-h-0" : "flex-1 flex flex-col h-full min-w-0 bg-background-light dark:bg-background-dark p-2 pl-0"}>
+      <div className={embedded ? "flex-1 flex flex-col overflow-hidden min-h-0" : "flex-1 flex flex-col mx-2 my-2 bg-white dark:bg-card-dark overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800 shadow-card"}>
+      {!embedded && (<>
       {/* Header */}
       <div className="p-6 pb-0 flex-shrink-0 z-20">
         <div className="bg-white dark:bg-card-dark rounded-xl border border-gray-200 dark:border-gray-700 shadow-card">
@@ -863,6 +875,7 @@ export default function AIStudio() {
           </div>
         </div>
       </div>
+      </>)}
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-8">

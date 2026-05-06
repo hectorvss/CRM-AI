@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi } from '../api/client';
 import { useApi } from '../api/hooks';
+import AIStudio from '../components/AIStudio';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
 
@@ -12256,9 +12257,11 @@ type FinSubView =
   | 'desplegar' | 'depChat' | 'depEmail' | 'depPhone'
   | 'analizar' | 'anaPerformance' | 'anaRecommendations' | 'anaTopicExplorer' | 'anaTopicTrends' | 'anaMonitor'
   | 'changelog' | 'settings' | 'settingsAudiences'
-  | 'finWorkflows' | 'finSimpleAutomations';
+  | 'finWorkflows' | 'finSimpleAutomations'
+  // Studio (legacy AIStudio merged into Fin shell)
+  | 'studio' | 'studioOverview' | 'studioAgents' | 'studioPermissions' | 'studioKnowledge' | 'studioReasoning' | 'studioSafety';
 
-const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | 'rocket' | 'chart'; children?: { key: FinSubView; label: string; badge?: string }[] }[] = [
+const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | 'rocket' | 'chart' | 'studio'; children?: { key: FinSubView; label: string; badge?: string }[] }[] = [
   {
     key: 'capacitar', label: 'Capacitar', icon: 'book',
     children: [
@@ -12291,16 +12294,31 @@ const FIN_NAV_ITEMS: { key: FinSubView; label: string; icon: 'book' | 'play' | '
       { key: 'anaMonitor',         label: 'Monitores' },
     ],
   },
+  // Studio — merges all functional AIStudio surface (agents, policy bundles,
+  // permissions, knowledge, reasoning, safety) into the Fin shell.
+  {
+    key: 'studio', label: 'Studio', icon: 'studio',
+    children: [
+      { key: 'studioOverview',    label: 'Resumen' },
+      { key: 'studioAgents',      label: 'Agentes' },
+      { key: 'studioPermissions', label: 'Permisos' },
+      { key: 'studioKnowledge',   label: 'Conocimiento' },
+      { key: 'studioReasoning',   label: 'Razonamiento' },
+      { key: 'studioSafety',      label: 'Seguridad' },
+    ],
+  },
 ];
 
 // Bold/filled icons (Inbox-style) for FinSidebar — fill #1a1a1a, no stroke.
-function FinNavIcon({ kind }: { kind: 'book' | 'play' | 'rocket' | 'chart' }) {
+function FinNavIcon({ kind }: { kind: 'book' | 'play' | 'rocket' | 'chart' | 'studio' }) {
   const cls = "w-4 h-4 fill-[#1a1a1a]";
   switch (kind) {
     case 'book':   return <svg viewBox="0 0 16 16" className={cls}><path d="M2 2.5a1 1 0 011-1h4.5a2 2 0 012 2v10a1 1 0 01-1.7.7 2 2 0 00-1.4-.7H2v-11zm12 0a1 1 0 00-1-1H8.5a2 2 0 00-2 2v10a1 1 0 001.7.7 2 2 0 011.4-.7H14v-11z"/></svg>;
     case 'play':   return <svg viewBox="0 0 16 16" className={cls}><circle cx="8" cy="8" r="6.5"/><path d="M6.6 5.4l4 2.6-4 2.6z" fill="#fff"/></svg>;
     case 'rocket': return <svg viewBox="0 0 16 16" className={cls}><path d="M14.5 1.5c-2.5 0-5 1.5-7 3.5L5 8l3 3 3-2.5c2-2 3.5-4.5 3.5-7zM4 11c-1.5 0-3 1-3 3.5C3 14.5 5 13 5 11.5L4 11zm6.5-7a1 1 0 110 2 1 1 0 010-2z"/></svg>;
     case 'chart':  return <svg viewBox="0 0 16 16" className={cls}><path d="M2 2v12h12v-2H4V2H2zm3 4v6h2V6H5zm3-2v8h2V4H8zm3 3v5h2V7h-2z"/></svg>;
+    // Studio — sparkle/spark mark for the agent-orchestration surface.
+    case 'studio': return <svg viewBox="0 0 16 16" className={cls}><path d="M8 1l1.6 4.4L14 7l-4.4 1.6L8 13l-1.6-4.4L2 7l4.4-1.6L8 1zm5 9l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z"/></svg>;
   }
 }
 
@@ -14802,9 +14820,37 @@ function FinVistaPreviaPanel() {
   );
 }
 
+// Read ?sub= once at mount so deep-links land on the right Fin sub-view.
+function readInitialFinSubFromUrl(): FinSubView {
+  if (typeof window === 'undefined') return 'allRoles';
+  const s = new URLSearchParams(window.location.search).get('sub');
+  const known: FinSubView[] = [
+    'allRoles','anaGetStarted',
+    'capacitar','capContent','capGuidance','capAttributes','capEscalation','capProcedures',
+    'probar','pruebaTesting',
+    'desplegar','depChat','depEmail','depPhone',
+    'analizar','anaPerformance','anaRecommendations','anaTopicExplorer','anaTopicTrends','anaMonitor',
+    'changelog','settings','settingsAudiences',
+    'finWorkflows','finSimpleAutomations',
+    'studio','studioOverview','studioAgents','studioPermissions','studioKnowledge','studioReasoning','studioSafety',
+  ];
+  return s && (known as string[]).includes(s) ? (s as FinSubView) : 'allRoles';
+}
+
 function FinAiView() {
-  const [sub, setSub] = useState<FinSubView>('allRoles');
+  const [sub, setSub] = useState<FinSubView>(() => readInitialFinSubFromUrl());
   const showVistaPrevia = sub === 'capContent' || sub === 'capGuidance' || sub === 'capAttributes' || sub === 'capEscalation' || sub === 'desplegar' || sub === 'depChat' || sub === 'depEmail';
+  const isStudio = sub === 'studio' || sub === 'studioOverview' || sub === 'studioAgents' || sub === 'studioPermissions' || sub === 'studioKnowledge' || sub === 'studioReasoning' || sub === 'studioSafety';
+
+  // Sync ?sub= with current state so back/forward + reload work.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('sub') !== sub) {
+      url.searchParams.set('sub', sub);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [sub]);
 
   function renderSub() {
     switch (sub) {
@@ -14833,6 +14879,15 @@ function FinAiView() {
       case 'settingsAudiences': return <FinAudiencesContent />;
       case 'finWorkflows':   return <FinFlujosTrabajoContent />;
       case 'finSimpleAutomations': return <FinAutomatizacionesSimplesContent />;
+      // Studio — embed legacy AIStudio with the requested tab so the policy/agent/
+      // knowledge/reasoning/safety surface is fully functional inside the Fin shell.
+      case 'studio':
+      case 'studioOverview':    return <AIStudio embedded initialTab="Overview" />;
+      case 'studioAgents':      return <AIStudio embedded initialTab="Agents" />;
+      case 'studioPermissions': return <AIStudio embedded initialTab="Permissions" />;
+      case 'studioKnowledge':   return <AIStudio embedded initialTab="Knowledge" />;
+      case 'studioReasoning':   return <AIStudio embedded initialTab="Reasoning" />;
+      case 'studioSafety':      return <AIStudio embedded initialTab="Safety" />;
     }
   }
 
