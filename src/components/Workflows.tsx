@@ -1697,7 +1697,7 @@ const edgeTypes = { workflowEdge: WorkflowEdgeButton };
 export default function Workflows({ onNavigate: _onNavigate, focusWorkflowId, initialView, createNewOnMount }: WorkflowsProps) {
   const onNavigate = _onNavigate;
   const [view, setView] = useState<WorkflowView>(initialView ?? 'list');
-  const [activeTab, setActiveTab] = useState<WorkflowTab>('overview');
+  const [activeTab, setActiveTab] = useState<WorkflowTab>('builder');
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [librarySection, setLibrarySection] = useState<WorkflowLibrarySection>('workflows');
   const [query, setQuery] = useState('');
@@ -2572,7 +2572,6 @@ function loadBuilderState(workflow: Workflow) {
     if (actionDialog.kind === 'description') {
       const next = actionDialog.value.trim();
       await persistWorkflowDraft({ description: next });
-      setActiveTab('overview');
       setMessage('Workflow description updated.');
       setActionDialog(null);
       return;
@@ -2640,7 +2639,14 @@ function loadBuilderState(workflow: Workflow) {
   const addSections = useMemo(() => getAddPanelSections(addCategory, catalog, addSearch), [catalog, addCategory, addSearch]);
 
   if (loading && workflows.length === 0) {
-    return <LoadingState title="Loading workflows" message="Fetching workflow definitions from Supabase." />;
+    return (
+      <div className="flex items-center justify-center h-full text-[#646462] bg-white">
+        <div className="flex items-center gap-3">
+          <div className="w-4 h-4 border-2 border-[#e9eae6] border-t-[#1a1a1a] rounded-full animate-spin" />
+          <span className="text-[13px]">Cargando flujos de trabajo…</span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -3897,26 +3903,25 @@ function WorkflowEditorTopbar(props: {
     { label: 'Resume', action: runAndClose(props.onResume) },
     { label: 'Cancel', action: runAndClose(props.onCancel) },
     { label: 'Rollback', action: runAndClose(props.onRollback) },
-    { label: 'Settings', action: () => { closeMenu(); props.setActiveTab('overview'); } },
     { label: 'Archive', action: runAndClose(props.onArchive), danger: true },
   ];
 
   return (
-    <div className="flex-shrink-0 border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
-      <div className="flex h-16 items-center justify-between px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <button onClick={props.onBack} className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Workflows</button>
-          <span className="text-gray-300 dark:text-gray-600">/</span>
-          <input value={props.workflow?.name ?? ''} onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, name: event.target.value } : workflow)} className="min-w-[260px] bg-transparent text-sm font-semibold text-gray-900 outline-none dark:text-white" />
-          <span className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-400">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
+    <div className="flex-shrink-0 border-b border-[#e9eae6] bg-white">
+      <div className="flex h-14 items-center justify-between px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <button onClick={props.onBack} className="text-[13px] font-medium text-[#646462] hover:text-[#1a1a1a]">Workflows</button>
+          <span className="text-[#e9eae6]">/</span>
+          <input value={props.workflow?.name ?? ''} onChange={(event) => props.setWorkflow((workflow) => workflow ? { ...workflow, name: event.target.value } : workflow)} className="min-w-[260px] bg-transparent text-[14px] font-semibold text-[#1a1a1a] outline-none" />
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase bg-[#f1f1ee] border border-[#e9eae6] text-[#646462]">{props.workflow?.currentVersion?.status ?? 'draft'}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={menuRef}>
             <div className="flex items-center gap-2">
-              <button onClick={() => setMenuOpen((value) => value === 'edit' ? null : 'edit')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen === 'edit'} aria-label="Edit workflow actions">
+              <button onClick={() => setMenuOpen((value) => value === 'edit' ? null : 'edit')} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]" aria-haspopup="menu" aria-expanded={menuOpen === 'edit'} aria-label="Edit workflow actions">
                 Edit
               </button>
-              <button onClick={() => setMenuOpen((value) => value === 'run' ? null : 'run')} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50" aria-haspopup="menu" aria-expanded={menuOpen === 'run'} aria-label="Run workflow actions">
+              <button onClick={() => setMenuOpen((value) => value === 'run' ? null : 'run')} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f8f8f7]" aria-haspopup="menu" aria-expanded={menuOpen === 'run'} aria-label="Run workflow actions">
                 Run
               </button>
             </div>
@@ -3957,17 +3962,19 @@ function WorkflowEditorTopbar(props: {
               </div>
             )}
           </div>
-          <button onClick={props.onPublish} className="rounded-lg bg-black px-4 py-1.5 text-xs font-bold text-white hover:opacity-90">Publish</button>
+          <button onClick={props.onPublish} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Publish</button>
         </div>
       </div>
-      <div className="-mb-px flex justify-center">
-        <div className="rounded-t-lg bg-gray-200 p-1">
-          {EDITOR_TABS.map((tab) => (
-            <button key={tab.id} onClick={() => props.setActiveTab(tab.id)} className={`rounded-md px-4 py-2 text-xs font-semibold ${props.activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="-mb-px flex px-5">
+        {EDITOR_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => props.setActiveTab(tab.id)}
+            className={`h-10 px-3 text-[13px] font-medium border-b-2 transition-colors ${props.activeTab === tab.id ? 'border-[#1a1a1a] text-[#1a1a1a]' : 'border-transparent text-[#646462] hover:text-[#1a1a1a]'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
     </div>
   );

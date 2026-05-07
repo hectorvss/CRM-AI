@@ -21272,10 +21272,10 @@ function FinFlujosTrabajoContent() {
   if (builderId !== null) {
     return (
       <div className="flex flex-col h-full min-h-0 bg-white">
-        <div className="flex-shrink-0 h-12 border-b border-[#e9eae6] px-4 flex items-center gap-2">
+        <div className="flex-shrink-0 h-11 border-b border-[#e9eae6] px-4 flex items-center">
           <button
             onClick={() => setBuilderId(null)}
-            className="h-8 px-3 rounded-md hover:bg-[#f8f8f7] text-[13px] font-medium text-[#1a1a1a] flex items-center gap-1.5"
+            className="h-8 px-2.5 -ml-1 rounded-md hover:bg-[#f8f8f7] text-[13px] font-medium text-[#1a1a1a] flex items-center gap-1.5"
           >
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Volver a flujos de trabajo
