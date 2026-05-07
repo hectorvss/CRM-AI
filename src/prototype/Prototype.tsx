@@ -13231,11 +13231,176 @@ function KnowledgeArticleEditor({
   // viewport (no slice of the underlying view remains visible on the left).
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   // Auto-focus the title field on first mount when creating a new article.
   useEffect(() => {
     if (!initial?.id) titleInputRef.current?.focus();
   }, [initial?.id]);
+
+  // ── Toolbar insertion helpers ────────────────────────────────────────────
+  // Insert text at the current cursor position (or replace selection) and
+  // restore caret afterwards. caretOffset positions the cursor relative to
+  // the inserted text — handy for putting it inside the brackets after a
+  // [link]() insert, or in the first table cell.
+  function insertAtCursor(text: string, caretOffset?: number) {
+    const ta = bodyRef.current;
+    if (!ta) {
+      // Fallback when ref not bound yet — append at end.
+      setContent(c => (c ? `${c}\n${text}` : text));
+      return;
+    }
+    const start = ta.selectionStart ?? content.length;
+    const end = ta.selectionEnd ?? content.length;
+    const before = content.slice(0, start);
+    const after = content.slice(end);
+    // If we're not at the start of a line and the snippet starts with a
+    // block-level marker (bullet, heading, code fence, etc.), prepend a
+    // newline so we don't mangle the previous line.
+    const startsAtLineStart = start === 0 || before.endsWith('\n');
+    const needsLeadingNl = !startsAtLineStart && /^[-*\d+#>|`!]/.test(text);
+    const finalText = needsLeadingNl ? `\n${text}` : text;
+    const next = `${before}${finalText}${after}`;
+    setContent(next);
+    // Restore cursor on next tick once React has flushed the new value.
+    requestAnimationFrame(() => {
+      const cursor = before.length + finalText.length + (caretOffset ?? 0);
+      try {
+        ta.focus();
+        ta.setSelectionRange(
+          caretOffset != null ? before.length + finalText.length + caretOffset : cursor,
+          caretOffset != null ? before.length + finalText.length + caretOffset : cursor,
+        );
+      } catch { /* ignore */ }
+    });
+  }
+  // Wrap selected text in `prefix` + `suffix`. If nothing is selected, just
+  // insert the prefix+suffix and place the caret in between. Used by the
+  // bold / italic / inline-code buttons (and link with surrounded text).
+  function wrapSelection(prefix: string, suffix: string = prefix) {
+    const ta = bodyRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart ?? content.length;
+    const end = ta.selectionEnd ?? content.length;
+    const selected = content.slice(start, end);
+    const before = content.slice(0, start);
+    const after = content.slice(end);
+    const next = `${before}${prefix}${selected}${suffix}${after}`;
+    setContent(next);
+    requestAnimationFrame(() => {
+      try {
+        ta.focus();
+        if (selected) {
+          ta.setSelectionRange(before.length + prefix.length, before.length + prefix.length + selected.length);
+        } else {
+          const caret = before.length + prefix.length;
+          ta.setSelectionRange(caret, caret);
+        }
+      } catch { /* ignore */ }
+    });
+  }
+  // Toolbar action implementations.
+  async function uploadImage(file: File) {
+    if (!file.type.startsWith('image/')) {
+      onAction('Selecciona un archivo de imagen', 'error');
+      return;
+    }
+    try {
+      // Read as base64 data URL so attachmentsApi.upload can persist it.
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result: any = await attachmentsApi.upload({ name: file.name, type: file.type, dataUrl });
+      const imgUrl = result?.url || result?.signedUrl || result?.publicUrl || dataUrl;
+      const alt = file.name.replace(/\.[^.]+$/, '');
+      insertAtCursor(`![${alt}](${imgUrl})\n`);
+      onAction(`Imagen insertada: ${file.name}`);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo subir la imagen', 'error');
+    } finally {
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  }
+  function insertVideo() {
+    const url = typeof window !== 'undefined' ? window.prompt('URL del vídeo (YouTube, Vimeo o MP4):') : null;
+    if (!url || !/^https?:\/\//i.test(url.trim())) return;
+    insertAtCursor(`\n[Vídeo](${url.trim()})\n`);
+  }
+  function insertTable() {
+    insertAtCursor(
+      '\n| Columna 1 | Columna 2 | Columna 3 |\n| --- | --- | --- |\n|   |   |   |\n|   |   |   |\n',
+    );
+  }
+  function insertParagraphBreak() {
+    insertAtCursor('\n\n');
+  }
+  async function insertAiSuggestion() {
+    if (!title.trim()) {
+      onAction('Pon un título para que la IA pueda generar contenido', 'error');
+      return;
+    }
+    try {
+      onAction('Generando con IA…');
+      const prompt = `Eres un experto redactando artículos de Centro de ayuda. Redacta una sección breve (3-5 frases) sobre: "${title.trim()}". Devuelve sólo el texto en español, sin encabezados.`;
+      const response: any = await aiApi.copilot('article-editor', prompt, []);
+      const text = response?.answer || response?.message || response?.content || '';
+      if (text.trim()) {
+        insertAtCursor(`\n${text.trim()}\n`);
+        onAction('Sugerencia insertada');
+      } else {
+        onAction('La IA no devolvió contenido', 'error');
+      }
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo generar con IA', 'error');
+    }
+  }
+  function insertQuote() {
+    insertAtCursor('\n> ', 0);
+  }
+  function insertCodeBlock() {
+    // Place caret between the fences.
+    insertAtCursor('\n```\n\n```\n', -5);
+  }
+  function insertList(ordered = false) {
+    insertAtCursor(ordered ? '\n1. ' : '\n- ', 0);
+  }
+  function insertLink() {
+    if (typeof window === 'undefined') return;
+    const url = window.prompt('URL del vínculo (https://…):');
+    if (!url || !/^https?:\/\//i.test(url.trim())) return;
+    const ta = bodyRef.current;
+    const selected = ta ? content.slice(ta.selectionStart ?? 0, ta.selectionEnd ?? 0) : '';
+    if (selected) {
+      // Wrap the selected text as the link label.
+      wrapSelection('[', `](${url.trim()})`);
+    } else {
+      const text = window.prompt('Texto del vínculo:', url.trim()) || url.trim();
+      insertAtCursor(`[${text}](${url.trim()})`);
+    }
+  }
+  async function uploadAttachment(file: File) {
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result: any = await attachmentsApi.upload({ name: file.name, type: file.type, dataUrl });
+      const fileUrl = result?.url || result?.signedUrl || result?.publicUrl || dataUrl;
+      const sizeKb = Math.max(1, Math.round(file.size / 1024));
+      insertAtCursor(`\n📎 [${file.name} · ${sizeKb} KB](${fileUrl})\n`);
+      onAction(`Adjuntado: ${file.name}`);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo subir el archivo', 'error');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
   // Close on Esc unless the user is typing in a field.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -13518,54 +13683,88 @@ function KnowledgeArticleEditor({
                 className="w-full text-[15px] text-[#646462] leading-[22px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent"
               />
               <textarea
+                ref={bodyRef}
                 value={content}
                 onChange={e => setContent(e.target.value)}
+                onKeyDown={e => {
+                  // Markdown power-shortcuts that work like Notion/Slack.
+                  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+                    const k = e.key.toLowerCase();
+                    if (k === 'b') { e.preventDefault(); wrapSelection('**'); return; }
+                    if (k === 'i') { e.preventDefault(); wrapSelection('*'); return; }
+                    if (k === 'k') { e.preventDefault(); insertLink(); return; }
+                  }
+                }}
                 placeholder="Start writing..."
                 className="w-full min-h-[400px] text-[15px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
               />
             </div>
           </div>
-          {/* Bottom toolbar */}
+          {/* Bottom toolbar — every button is wired to a real action.
+              Image / Attachment upload through attachmentsApi, Link / Video
+              prompt for URL, AI sparkle calls aiApi.copilot, Table inserts a
+              real markdown table, Quote / List / Code / Lists insert at the
+              cursor (not the end). Cmd/Ctrl+B/I/K work as power-shortcuts. */}
           <div className="flex-shrink-0 border-t border-[#e9eae6] bg-white px-5 py-2 flex items-center gap-1">
-            <button onClick={() => fileInputRef.current?.click()} title="Imagen / archivo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={() => imageInputRef.current?.click()} title="Insertar imagen" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="7" r="1"/><path d="M2 11l3-3 3 3 3-3 3 3"/></svg>
             </button>
-            <button onClick={() => setContent(c => c + '\n[Vídeo]\n')} title="Vídeo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={insertVideo} title="Insertar vídeo (URL)" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M7 6l3 2-3 2z" fill="currentColor"/></svg>
             </button>
-            <button onClick={() => setContent(c => c + '\n| Columna 1 | Columna 2 |\n| --- | --- |\n| | |\n')} title="Tabla" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={insertTable} title="Tabla 3×3" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 7h12M6 3v10M10 3v10"/></svg>
             </button>
-            <button onClick={() => setContent(c => c + '\n\n')} title="Salto de párrafo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={insertParagraphBreak} title="Salto de párrafo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4h10M3 8h6M3 12h10"/></svg>
             </button>
-            <button onClick={() => onAction('Sugerencia IA — próximamente.', 'error')} title="Sugerir con IA" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={insertAiSuggestion} title="Sugerir con IA (basado en el título)" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4z"/></svg>
             </button>
-            <button onClick={() => setContent(c => c + '\n> ')} title="Cita" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={insertQuote} title="Cita" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4v8M5 4h7M5 8h5M5 12h7"/></svg>
             </button>
-            <button onClick={() => setContent(c => c + '\n```\n\n```\n')} title="Bloque de código" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={insertCodeBlock} title="Bloque de código" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M5 5L2 8l3 3M11 5l3 3-3 3"/></svg>
             </button>
-            <button onClick={() => setContent(c => c + '\n- ')} title="Lista" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={() => insertList(false)} title="Lista" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><circle cx="3" cy="4" r="0.8" fill="currentColor"/><circle cx="3" cy="8" r="0.8" fill="currentColor"/><circle cx="3" cy="12" r="0.8" fill="currentColor"/><path d="M6 4h8M6 8h8M6 12h8"/></svg>
             </button>
-            <button onClick={() => setContent(c => c + '\n1. ')} title="Lista numerada" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={() => insertList(true)} title="Lista numerada" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M2 3v3M2 9v3M6 4h8M6 8h8M6 12h8"/></svg>
             </button>
-            <button onClick={() => onAction('Pega una URL en el cuerpo para crear un vínculo.', 'success')} title="Vínculo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <button onClick={insertLink} title="Insertar vínculo (Cmd/Ctrl+K)" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M6 10l4-4M5 8l-1 1a2.5 2.5 0 003.5 3.5L9 11M11 8l1-1a2.5 2.5 0 00-3.5-3.5L7 5"/></svg>
             </button>
-            <button onClick={() => fileInputRef.current?.click()} title="Adjuntar archivo (PDF/Markdown)" disabled={importing} className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462] disabled:opacity-50">
+            <button onClick={() => fileInputRef.current?.click()} title="Adjuntar archivo" disabled={importing} className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462] disabled:opacity-50">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M11.5 4.5l-6 6a2.5 2.5 0 003.5 3.5l6-6a4 4 0 00-5.7-5.7L3 8"/></svg>
             </button>
+            {/* Hidden file inputs — image (insert via attachmentsApi.upload),
+                attachment (insert as link), and the legacy importer kept for
+                "Importar PDF / Markdown" via the Avanzado section. */}
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); }}
+            />
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.md,.markdown,.txt,text/markdown,application/pdf,text/plain"
               className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleImport(f); }}
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                // PDF / markdown / txt → import as body content; anything
+                // else → upload + insert as a download link.
+                const ext = (f.name.split('.').pop() || '').toLowerCase();
+                if (['pdf', 'md', 'markdown', 'txt'].includes(ext) || /pdf|markdown|plain/.test(f.type)) {
+                  handleImport(f);
+                } else {
+                  uploadAttachment(f);
+                }
+              }}
             />
           </div>
         </div>
