@@ -3,6 +3,7 @@ import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
 import { supabase } from '../../api/supabase';
 import LoadingState from '../LoadingState';
+import { DetailSection, DetailRow } from './sections';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 
@@ -19,240 +20,326 @@ const FALLBACK_USER = {
   created_at: new Date().toISOString(),
   memberships: [],
   context: { role_id: 'workspace_admin', permissions: ['*'] },
+  preferences: {},
 };
+
+function parsePreferences(prefs: any): Record<string, any> {
+  if (!prefs) return {};
+  if (typeof prefs === 'string') {
+    try { return JSON.parse(prefs); } catch { return {}; }
+  }
+  return prefs;
+}
+
+// Reusable inline editable text input that matches the Inbox detail-rail
+// style — flat, no border by default, focus shows a 1px Fin border.
+function InlineInput({
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  readOnly = false,
+}: {
+  value: string;
+  onChange?: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  readOnly?: boolean;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange?.(e.target.value)}
+      placeholder={placeholder}
+      readOnly={readOnly}
+      className={`w-full h-7 text-[13px] px-2 rounded-md border border-transparent bg-transparent ${
+        readOnly
+          ? 'text-[#646462] cursor-not-allowed'
+          : 'text-[#1a1a1a] hover:bg-[#f8f8f7] focus:border-[#1a1a1a] focus:bg-white'
+      } focus:outline-none`}
+    />
+  );
+}
+
+function InlineSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="w-full h-7 text-[13px] px-2 rounded-md border border-transparent bg-transparent text-[#1a1a1a] hover:bg-[#f8f8f7] focus:border-[#1a1a1a] focus:bg-white focus:outline-none"
+    >
+      {options.map(opt => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  );
+}
+
+function ToggleRow({
+  value,
+  onChange,
+}: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}
+    >
+      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value ? 'translate-x-5' : 'translate-x-1'}`} />
+    </button>
+  );
+}
+
+const TIMEZONES = [
+  '(GMT-08:00) Pacific Time',
+  '(GMT-05:00) Eastern Time',
+  '(GMT+00:00) UTC',
+  '(GMT+01:00) Madrid',
+  '(GMT+02:00) Berlin',
+];
+
+const LANGUAGES = [
+  { value: 'es', label: 'Español' },
+  { value: 'en', label: 'English' },
+  { value: 'fr', label: 'Français' },
+  { value: 'pt', label: 'Português' },
+];
+
+const TONES = [
+  { value: 'neutral',     label: 'Neutral' },
+  { value: 'friendly',    label: 'Cercano' },
+  { value: 'professional', label: 'Profesional' },
+  { value: 'concise',     label: 'Conciso' },
+];
+
+const STYLES = [
+  { value: 'short',    label: 'Respuestas cortas' },
+  { value: 'detailed', label: 'Respuestas detalladas' },
+  { value: 'bullets',  label: 'Viñetas' },
+];
 
 export default function ProfileTab({ onSaveReady }: ProfileTabProps) {
   const { data: user, loading } = useApi<any>(iamApi.me);
   const currentUser = user || FALLBACK_USER;
-  const [name, setName] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
+  const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
+  const profilePrefs = preferences.profile || {};
+
+  const [name, setName]               = useState('');
+  const [phone, setPhone]             = useState('');
+  const [language, setLanguage]       = useState('es');
+  const [timezone, setTimezone]       = useState(TIMEZONES[3]);
+  const [bio, setBio]                 = useState('');
+  const [jobTitle, setJobTitle]       = useState('');
+  const [team, setTeam]               = useState('');
+  const [avatarUrl, setAvatarUrl]     = useState('');
+  const [aiTone, setAiTone]           = useState('neutral');
+  const [aiStyle, setAiStyle]         = useState('short');
+  const [autoTranslate, setAutoTranslate] = useState(false);
   const [sessionMeta, setSessionMeta] = useState<any>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Hydrate state from server. parsePreferences is null-safe so this is fine
+  // even when preferences is missing entirely.
   useEffect(() => {
     if (!currentUser) return;
     setName(currentUser.name || '');
     setAvatarUrl(currentUser.avatar_url || '');
+    setPhone(profilePrefs.phone || '');
+    setLanguage(profilePrefs.language || 'es');
+    setTimezone(profilePrefs.timezone || TIMEZONES[3]);
+    setBio(profilePrefs.bio || '');
+    setJobTitle(profilePrefs.jobTitle || '');
+    setTeam(profilePrefs.team || currentUser?.memberships?.[0]?.team_name || '');
+    setAiTone(profilePrefs.aiTone || 'neutral');
+    setAiStyle(profilePrefs.aiStyle || 'short');
+    setAutoTranslate(Boolean(profilePrefs.autoTranslate));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   useEffect(() => {
     let cancelled = false;
     supabase.auth.getSession().then(({ data }) => {
-      if (!cancelled) {
-        setSessionMeta(data.session);
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        setSessionMeta(null);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+      if (!cancelled) setSessionMeta(data.session);
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
-  const workspace = useMemo(() => {
-    return currentUser?.memberships && currentUser.memberships.length > 0 ? currentUser.memberships[0] : null;
-  }, [currentUser]);
-  const authProvider = sessionMeta?.user?.app_metadata?.provider || sessionMeta?.user?.app_metadata?.providers?.[0] || 'local';
-  const loginMethodLabel = authProvider === 'email' || authProvider === 'local'
-    ? 'Email & password'
-    : String(authProvider).replace(/_/g, ' ');
-  const emailVerified = Boolean(sessionMeta?.user?.email_confirmed_at);
   const handleAvatarUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setStatusMessage('Please choose an image file for the profile photo.');
-      return;
-    }
-
+    if (!file.type.startsWith('image/')) return;
     const reader = new FileReader();
     reader.onload = () => {
       setAvatarUrl(typeof reader.result === 'string' ? reader.result : '');
-      setStatusMessage(`Profile photo ready to save: ${file.name}`);
     };
-    reader.onerror = () => setStatusMessage('Unable to read the selected profile image.');
     reader.readAsDataURL(file);
     event.target.value = '';
   }, []);
 
   const handleSave = useCallback(async () => {
-    setIsSaving(true);
-    setStatusMessage(null);
-    try {
-      await iamApi.updateMe({
-        name,
-        avatar_url: avatarUrl || null,
-      });
-      setStatusMessage('Profile changes saved.');
-    } catch (saveError: any) {
-      setStatusMessage(saveError?.message || 'Unable to save profile changes.');
-      throw saveError;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [avatarUrl, name]);
+    await iamApi.updateMe({
+      name,
+      avatar_url: avatarUrl || null,
+      preferences: {
+        ...preferences,
+        profile: {
+          ...profilePrefs,
+          phone,
+          language,
+          timezone,
+          bio,
+          jobTitle,
+          team,
+          aiTone,
+          aiStyle,
+          autoTranslate,
+        },
+      },
+    });
+  }, [name, avatarUrl, preferences, profilePrefs, phone, language, timezone, bio, jobTitle, team, aiTone, aiStyle, autoTranslate]);
+
+  // Track whether anything has actually changed so the floating bar only
+  // shows on edits, not just on tab open.
+  const hasChanges = useMemo(() => {
+    return (
+      name !== (currentUser.name || '') ||
+      avatarUrl !== (currentUser.avatar_url || '') ||
+      phone !== (profilePrefs.phone || '') ||
+      language !== (profilePrefs.language || 'es') ||
+      timezone !== (profilePrefs.timezone || TIMEZONES[3]) ||
+      bio !== (profilePrefs.bio || '') ||
+      jobTitle !== (profilePrefs.jobTitle || '') ||
+      team !== (profilePrefs.team || currentUser?.memberships?.[0]?.team_name || '') ||
+      aiTone !== (profilePrefs.aiTone || 'neutral') ||
+      aiStyle !== (profilePrefs.aiStyle || 'short') ||
+      autoTranslate !== Boolean(profilePrefs.autoTranslate)
+    );
+  }, [name, avatarUrl, phone, language, timezone, bio, jobTitle, team, aiTone, aiStyle, autoTranslate, currentUser, profilePrefs]);
 
   useEffect(() => {
-    onSaveReady?.(handleSave);
+    if (hasChanges) {
+      onSaveReady?.(handleSave);
+    } else {
+      onSaveReady?.(null);
+    }
     return () => onSaveReady?.(null);
-  }, [handleSave, onSaveReady]);
+  }, [hasChanges, handleSave, onSaveReady]);
 
-  if (loading) return <LoadingState title="Loading profile data" message="Fetching your account details and memberships." compact />;
+  if (loading) return <LoadingState title="Cargando perfil" message="Recuperando tus datos." compact />;
+
+  const emailVerified = Boolean(sessionMeta?.user?.email_confirmed_at);
 
   return (
-    <div className="space-y-8">
-      {statusMessage && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
-          {statusMessage}
-        </div>
-      )}
+    <div className="py-3">
+      {/* ── Información personal ──────────────────────────────────────── */}
+      <DetailSection title="Información personal">
+        <DetailRow label="Nombre">
+          <InlineInput value={name} onChange={setName} placeholder="Tu nombre" />
+        </DetailRow>
+        <DetailRow label="Email">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-[#1a1a1a] truncate">{currentUser.email}</span>
+            <span className={`inline-flex items-center h-5 px-2 rounded-full text-[10.5px] font-semibold ${
+              emailVerified
+                ? 'bg-[#dcfce7] text-[#166534]'
+                : 'bg-[#fef3c7] text-[#92400e]'
+            }`}>
+              {emailVerified ? 'Verificado' : 'Pendiente'}
+            </span>
+          </div>
+        </DetailRow>
+        <DetailRow label="Teléfono">
+          <InlineInput value={phone} onChange={setPhone} placeholder="+34 600 000 000" />
+        </DetailRow>
+        <DetailRow label="Idioma">
+          <InlineSelect value={language} onChange={setLanguage} options={LANGUAGES} />
+        </DetailRow>
+        <DetailRow label="Zona horaria">
+          <InlineSelect
+            value={timezone}
+            onChange={setTimezone}
+            options={TIMEZONES.map(tz => ({ value: tz, label: tz }))}
+          />
+        </DetailRow>
+        <DetailRow label="Miembro desde" value={currentUser.created_at ? new Date(currentUser.created_at).toLocaleDateString() : '—'} />
+      </DetailSection>
 
-      {/* Personal Info */}
-      <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Personal Information</h2>
-          <span className="material-symbols-outlined text-gray-400">person</span>
-        </div>
-        <div className="p-6 space-y-6">
-          <div className="flex items-center gap-6">
-            <div className="relative">
-              <img src={avatarUrl || currentUser.avatar_url || 'https://i.pravatar.cc/150?img=11'} alt="User" className="w-20 h-20 rounded-2xl border-2 border-gray-200 dark:border-gray-700 object-cover" />
-              <button type="button" onClick={() => uploadInputRef.current?.click()} className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center shadow-card">
-                <span className="material-symbols-outlined text-[14px]">edit</span>
+      {/* ── Contexto de identidad ─────────────────────────────────────── */}
+      <DetailSection title="Contexto de identidad">
+        <div className="flex items-start gap-4 py-2">
+          <div className="w-16 h-16 rounded-full overflow-hidden bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="material-symbols-outlined text-[#646462]">person</span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[12.5px] text-[#646462] mb-2">Tu foto se mostrará en conversaciones, comentarios y menciones.</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => uploadInputRef.current?.click()}
+                className="h-7 px-3 rounded-md border border-[#e9eae6] text-[12px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                Subir nueva
               </button>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Profile Photo</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">This will be displayed on your profile and in conversations.</p>
-              <button type="button" onClick={() => uploadInputRef.current?.click()} className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Upload new</button>
+              {avatarUrl && (
+                <button
+                  type="button"
+                  onClick={() => setAvatarUrl('')}
+                  className="h-7 px-3 rounded-md text-[12px] font-semibold text-[#646462] hover:text-[#b91c1c]"
+                >
+                  Quitar
+                </button>
+              )}
               <input ref={uploadInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={event => setName(event.target.value)}
-                className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Work Email</label>
-              <input
-                type="email"
-                value={currentUser.email}
-                readOnly
-                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Avatar URL</label>
-              <input
-                type="url"
-                value={avatarUrl}
-                onChange={event => setAvatarUrl(event.target.value)}
-                placeholder="https://..."
-                className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Joined At</label>
-              <input
-                type="text"
-                value={new Date(currentUser.created_at).toLocaleDateString()}
-                readOnly
-                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-500 outline-none cursor-not-allowed"
-              />
-            </div>
+        </div>
+        <DetailRow label="Cargo">
+          <InlineInput value={jobTitle} onChange={setJobTitle} placeholder="Customer Success Manager" />
+        </DetailRow>
+        <DetailRow label="Equipo">
+          <InlineInput value={team} onChange={setTeam} placeholder="Soporte L1" />
+        </DetailRow>
+        <div className="flex items-start py-1.5 w-full min-w-0">
+          <span className="w-[113px] flex-shrink-0 text-[13px] text-[#646462] truncate pt-0.5">Bio</span>
+          <div className="flex-1 min-w-0">
+            <textarea
+              value={bio}
+              maxLength={280}
+              onChange={e => setBio(e.target.value)}
+              placeholder="Escribe una breve presentación (280 caracteres)"
+              className="w-full min-h-[60px] text-[13px] px-2 py-1.5 rounded-md border border-[#e9eae6] bg-white text-[#1a1a1a] focus:outline-none focus:border-[#1a1a1a] resize-none"
+            />
+            <p className="text-[11px] text-[#646462] mt-1">{bio.length}/280</p>
           </div>
         </div>
-      </section>
+      </DetailSection>
 
-      <div className="grid grid-cols-2 gap-8">
-        {/* Account Summary */}
-        <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Account Summary</h2>
-            <span className="material-symbols-outlined text-gray-400">info</span>
-          </div>
-          <div className="p-6 space-y-4">
-            <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Workspace</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">{workspace ? workspace.workspace_name : 'No Workspace'}</span>
-            </div>
-            <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Role</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{currentUser.role}</span>
-            </div>
-            <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Status</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 border-green-100 dark:border-green-800/30">
-                {workspace ? workspace.status : 'Active'}
-              </span>
-            </div>
-            <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Member Since</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white">{new Date(currentUser.created_at).toLocaleDateString()}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Login Method</span>
-              <div className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[14px] text-gray-400">password</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{loginMethodLabel}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Quick Identity Context */}
-        <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Identity Context</h2>
-            <span className="material-symbols-outlined text-gray-400">badge</span>
-          </div>
-          <div className="p-6 space-y-4">
-            <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-sm text-gray-500 dark:text-gray-400">User ID</span>
-              <span className="text-xs font-mono text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{currentUser.id}</span>
-            </div>
-            <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Member ID</span>
-              <span className="text-xs font-mono text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{workspace ? workspace.id : 'N/A'}</span>
-            </div>
-            <div className="flex justify-between items-center pb-3 border-b border-gray-50 dark:border-gray-800/50">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Identity Provider</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{String(authProvider).replace(/_/g, ' ')}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Email Status</span>
-              <div className={`flex items-center gap-1.5 ${emailVerified ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                <span className="material-symbols-outlined text-[16px]">{emailVerified ? 'verified' : 'pending'}</span>
-                <span className="text-sm font-medium">{emailVerified ? 'Verified' : 'Pending verification'}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">{isSaving ? 'Saving profile changes...' : 'Changes are saved to your profile record.'}</span>
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={isSaving}
-          className="hidden"
-          aria-hidden="true"
-        >
-          Save
-        </button>
-      </div>
+      {/* ── Preferencias de IA ─────────────────────────────────────────── */}
+      <DetailSection title="Preferencias de IA" helper="Cómo el copilot redacta y traduce respuestas en tu nombre.">
+        <DetailRow label="Tono de voz">
+          <InlineSelect value={aiTone} onChange={setAiTone} options={TONES} />
+        </DetailRow>
+        <DetailRow label="Estilo de respuesta">
+          <InlineSelect value={aiStyle} onChange={setAiStyle} options={STYLES} />
+        </DetailRow>
+        <DetailRow label="Auto-traducir">
+          <ToggleRow value={autoTranslate} onChange={setAutoTranslate} />
+        </DetailRow>
+      </DetailSection>
     </div>
   );
 }

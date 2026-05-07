@@ -2,276 +2,188 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useApi } from '../../api/hooks';
 import { iamApi } from '../../api/client';
 import LoadingState from '../LoadingState';
+import { DetailSection, DetailRow } from './sections';
 
 type SaveHandler = (() => Promise<void> | void) | null;
 type Props = { onSaveReady?: (handler: SaveHandler) => void };
 
-const FALLBACK_USER = {
-  preferences: {},
-  name: 'System',
-  email: 'system@crm-ai.local',
-};
+const FALLBACK_USER = { preferences: {}, name: '', email: '' };
 
-function parsePreferences(preferences: any) {
-  if (!preferences) return {};
-  if (typeof preferences === 'string') {
-    try {
-      return JSON.parse(preferences);
-    } catch {
-      return {};
-    }
+function parsePreferences(prefs: any): Record<string, any> {
+  if (!prefs) return {};
+  if (typeof prefs === 'string') {
+    try { return JSON.parse(prefs); } catch { return {}; }
   }
-  return preferences;
+  return prefs;
 }
+
+function ToggleRow({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${value ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}
+    >
+      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${value ? 'translate-x-5' : 'translate-x-1'}`} />
+    </button>
+  );
+}
+
+function InlineSelect({
+  value, onChange, options,
+}: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="w-full h-7 text-[13px] px-2 rounded-md border border-transparent bg-transparent text-[#1a1a1a] hover:bg-[#f8f8f7] focus:border-[#1a1a1a] focus:bg-white focus:outline-none"
+    >
+      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+    </select>
+  );
+}
+
+const THEMES = [
+  { value: 'light',  label: 'Claro' },
+  { value: 'dark',   label: 'Oscuro' },
+  { value: 'system', label: 'Sistema' },
+];
+const DENSITIES = [
+  { value: 'comfortable', label: 'Cómoda' },
+  { value: 'compact',     label: 'Compacta' },
+];
+const LANGUAGES = [
+  { value: 'es', label: 'Español' },
+  { value: 'en', label: 'English' },
+  { value: 'fr', label: 'Français' },
+  { value: 'pt', label: 'Português' },
+];
+const DATE_FORMATS = [
+  { value: 'DD/MM/YYYY', label: 'DD/MM/AAAA (31/12/2026)' },
+  { value: 'MM/DD/YYYY', label: 'MM/DD/AAAA (12/31/2026)' },
+  { value: 'YYYY-MM-DD', label: 'AAAA-MM-DD (2026-12-31)' },
+];
+const TIME_FORMATS = [
+  { value: '24h', label: '24 horas (14:30)' },
+  { value: '12h', label: '12 horas (2:30 PM)' },
+];
+const FIRST_DAYS = [
+  { value: 'monday', label: 'Lunes' },
+  { value: 'sunday', label: 'Domingo' },
+];
+
+const VISIBLE_SHORTCUTS = [
+  ['⌘ + K',         'Abrir buscador'],
+  ['⌘ + /',         'Abrir Copilot'],
+  ['G luego I',     'Ir a Inbox'],
+  ['G luego R',     'Ir a Reports'],
+  ['E',             'Editar caso enfocado'],
+  ['Esc',           'Cerrar diálogo'],
+];
 
 export default function PreferencesTab({ onSaveReady }: Props) {
   const { data: user, loading } = useApi<any>(iamApi.me);
   const currentUser = user || FALLBACK_USER;
   const preferences = useMemo(() => parsePreferences(currentUser?.preferences), [currentUser]);
-  const [language, setLanguage] = useState('English (US)');
-  const [timezone, setTimezone] = useState('(GMT-05:00) Eastern Time');
-  const [dateFormat, setDateFormat] = useState('MMM DD, YYYY');
-  const [timeFormat, setTimeFormat] = useState('12-hour (AM/PM)');
-  const [startOfWeek, setStartOfWeek] = useState('Monday');
-  const [displayDensity, setDisplayDensity] = useState('Comfortable');
-  const [theme, setTheme] = useState('system');
-  const [defaultLandingPage, setDefaultLandingPage] = useState('Case Graph (Home)');
-  const [defaultInboxView, setDefaultInboxView] = useState('Assigned to Me');
-  const [quietStart, setQuietStart] = useState('10:00 PM');
-  const [quietEnd, setQuietEnd] = useState('07:00 AM');
-  const [allowDrafting, setAllowDrafting] = useState(true);
-  const [autoSummarize, setAutoSummarize] = useState(true);
-  const [showCitations, setShowCitations] = useState(true);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const ui = preferences.ui || {};
+
+  const [theme, setTheme]               = useState('system');
+  const [density, setDensity]           = useState('comfortable');
+  const [language, setLanguage]         = useState('es');
+  const [dateFormat, setDateFormat]     = useState('DD/MM/YYYY');
+  const [timeFormat, setTimeFormat]     = useState('24h');
+  const [firstDayOfWeek, setFirstDay]   = useState('monday');
+  const [shortcutsEnabled, setShortcuts] = useState(true);
 
   useEffect(() => {
-    setLanguage(preferences.profile?.language || 'English (US)');
-    setTimezone(preferences.profile?.timezone || '(GMT-05:00) Eastern Time');
-    setDateFormat(preferences.profile?.dateFormat || 'MMM DD, YYYY');
-    setTimeFormat(preferences.profile?.timeFormat || '12-hour (AM/PM)');
-    setStartOfWeek(preferences.profile?.startOfWeek || 'Monday');
-    setDisplayDensity(preferences.profile?.displayDensity || 'Comfortable');
-    setTheme(preferences.profile?.theme || 'system');
-    setDefaultLandingPage(preferences.profile?.defaultLandingPage || 'Case Graph (Home)');
-    setDefaultInboxView(preferences.profile?.defaultInboxView || 'Assigned to Me');
-    setQuietStart(preferences.profile?.quietHours?.start || '10:00 PM');
-    setQuietEnd(preferences.profile?.quietHours?.end || '07:00 AM');
-    setAllowDrafting(preferences.profile?.allowDrafting ?? true);
-    setAutoSummarize(preferences.profile?.autoSummarize ?? true);
-    setShowCitations(preferences.profile?.showCitations ?? true);
-  }, [preferences]);
+    setTheme(ui.theme || 'system');
+    setDensity(ui.density || 'comfortable');
+    setLanguage(ui.language || preferences.profile?.language || 'es');
+    setDateFormat(ui.dateFormat || 'DD/MM/YYYY');
+    setTimeFormat(ui.timeFormat || '24h');
+    setFirstDay(ui.firstDayOfWeek || 'monday');
+    setShortcuts(ui.shortcutsEnabled ?? true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
   const handleSave = useCallback(async () => {
-    setIsSaving(true);
-    setStatusMessage(null);
-    try {
-      await iamApi.updateMe({
-        preferences: {
-          ...preferences,
-          profile: {
-            language,
-            timezone,
-            dateFormat,
-            timeFormat,
-            startOfWeek,
-            displayDensity,
-            theme,
-            defaultLandingPage,
-            defaultInboxView,
-            quietHours: { start: quietStart, end: quietEnd },
-            allowDrafting,
-            autoSummarize,
-            showCitations,
-          },
+    await iamApi.updateMe({
+      preferences: {
+        ...preferences,
+        ui: {
+          ...ui,
+          theme,
+          density,
+          language,
+          dateFormat,
+          timeFormat,
+          firstDayOfWeek,
+          shortcutsEnabled,
         },
-      });
-      setStatusMessage('Interface preferences saved.');
-    } catch (saveError: any) {
-      setStatusMessage(saveError?.message || 'Unable to save interface preferences.');
-      throw saveError;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [
-    allowDrafting,
-    autoSummarize,
-    dateFormat,
-    defaultInboxView,
-    defaultLandingPage,
-    displayDensity,
-    language,
-    preferences,
-    quietEnd,
-    quietStart,
-    showCitations,
-    startOfWeek,
-    theme,
-    timeFormat,
-    timezone,
-  ]);
+      },
+    });
+  }, [preferences, ui, theme, density, language, dateFormat, timeFormat, firstDayOfWeek, shortcutsEnabled]);
+
+  const hasChanges = useMemo(() => {
+    return (
+      theme !== (ui.theme || 'system') ||
+      density !== (ui.density || 'comfortable') ||
+      language !== (ui.language || preferences.profile?.language || 'es') ||
+      dateFormat !== (ui.dateFormat || 'DD/MM/YYYY') ||
+      timeFormat !== (ui.timeFormat || '24h') ||
+      firstDayOfWeek !== (ui.firstDayOfWeek || 'monday') ||
+      shortcutsEnabled !== (ui.shortcutsEnabled ?? true)
+    );
+  }, [theme, density, language, dateFormat, timeFormat, firstDayOfWeek, shortcutsEnabled, ui, preferences]);
 
   useEffect(() => {
-    onSaveReady?.(handleSave);
+    onSaveReady?.(hasChanges ? handleSave : null);
     return () => onSaveReady?.(null);
-  }, [handleSave, onSaveReady]);
+  }, [hasChanges, handleSave, onSaveReady]);
 
-  if (loading) return <LoadingState title="Loading preferences" message="Fetching your profile defaults and UI preferences." compact />;
+  if (loading) return <LoadingState title="Cargando preferencias" message="Recuperando tus ajustes." compact />;
 
   return (
-    <div className="space-y-8">
-      {statusMessage && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/15 dark:text-emerald-300">
-          {statusMessage}
+    <div className="py-3">
+      <DetailSection title="Apariencia">
+        <DetailRow label="Tema">
+          <InlineSelect value={theme} onChange={setTheme} options={THEMES} />
+        </DetailRow>
+        <DetailRow label="Densidad">
+          <InlineSelect value={density} onChange={setDensity} options={DENSITIES} />
+        </DetailRow>
+      </DetailSection>
+
+      <DetailSection title="Idioma y región">
+        <DetailRow label="Idioma">
+          <InlineSelect value={language} onChange={setLanguage} options={LANGUAGES} />
+        </DetailRow>
+        <DetailRow label="Formato de fecha">
+          <InlineSelect value={dateFormat} onChange={setDateFormat} options={DATE_FORMATS} />
+        </DetailRow>
+        <DetailRow label="Formato de hora">
+          <InlineSelect value={timeFormat} onChange={setTimeFormat} options={TIME_FORMATS} />
+        </DetailRow>
+        <DetailRow label="Primer día">
+          <InlineSelect value={firstDayOfWeek} onChange={setFirstDay} options={FIRST_DAYS} />
+        </DetailRow>
+      </DetailSection>
+
+      <DetailSection title="Atajos de teclado" helper="Acelera tu trabajo con accesos rápidos.">
+        <DetailRow label="Habilitar atajos">
+          <ToggleRow value={shortcutsEnabled} onChange={setShortcuts} />
+        </DetailRow>
+        <div className="mt-2 grid grid-cols-2 gap-y-1.5 gap-x-4">
+          {VISIBLE_SHORTCUTS.map(([key, desc]) => (
+            <div key={key} className="flex items-center gap-2 min-w-0">
+              <code className="inline-flex items-center h-5 px-1.5 rounded border border-[#e9eae6] bg-[#f8f8f7] text-[10.5px] font-mono text-[#1a1a1a] flex-shrink-0">
+                {key}
+              </code>
+              <span className="text-[12.5px] text-[#646462] truncate">{desc}</span>
+            </div>
+          ))}
         </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-8">
-        <div className="space-y-8">
-          <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Display Preferences</h2>
-              <span className="material-symbols-outlined text-gray-400">desktop_windows</span>
-            </div>
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Language</label>
-                  <select value={language} onChange={e => setLanguage(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                    <option>English (US)</option>
-                    <option>Spanish</option>
-                    <option>French</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Timezone</label>
-                  <select value={timezone} onChange={e => setTimezone(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                    <option>(GMT-05:00) Eastern Time</option>
-                    <option>(GMT+00:00) UTC</option>
-                    <option>(GMT+01:00) Europe/Madrid</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Date Format</label>
-                  <select value={dateFormat} onChange={e => setDateFormat(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                    <option>MMM DD, YYYY</option>
-                    <option>DD/MM/YYYY</option>
-                    <option>MM/DD/YYYY</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Time Format</label>
-                  <select value={timeFormat} onChange={e => setTimeFormat(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                    <option>12-hour (AM/PM)</option>
-                    <option>24-hour</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Start of Week</label>
-                  <select value={startOfWeek} onChange={e => setStartOfWeek(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                    <option>Monday</option>
-                    <option>Sunday</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Display Density</label>
-                  <select value={displayDensity} onChange={e => setDisplayDensity(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                    <option>Comfortable</option>
-                    <option>Compact</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Theme</label>
-                <select value={theme} onChange={e => setTheme(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                  <option>system</option>
-                  <option>light</option>
-                  <option>dark</option>
-                </select>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <div className="space-y-8">
-          <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Working Preferences</h2>
-              <span className="material-symbols-outlined text-gray-400">work</span>
-            </div>
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Default Landing Page</label>
-                <select value={defaultLandingPage} onChange={e => setDefaultLandingPage(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                  <option>Case Graph (Home)</option>
-                  <option>Inbox</option>
-                  <option>Approvals</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Default Inbox View</label>
-                <select value={defaultInboxView} onChange={e => setDefaultInboxView(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                  <option>Assigned to Me</option>
-                  <option>Unassigned</option>
-                  <option>High Risk</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Notification Quiet Hours</label>
-                <div className="flex items-center gap-2">
-                  <select value={quietStart} onChange={e => setQuietStart(e.target.value)} className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                    <option>10:00 PM</option>
-                    <option>09:00 PM</option>
-                  </select>
-                  <span className="text-gray-500">to</span>
-                  <select value={quietEnd} onChange={e => setQuietEnd(e.target.value)} className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm outline-none appearance-none">
-                    <option>07:00 AM</option>
-                    <option>08:00 AM</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-white dark:bg-card-dark rounded-2xl border border-gray-200 dark:border-gray-700 shadow-card overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Personal AI Preferences</h2>
-              <span className="material-symbols-outlined text-gray-400">auto_awesome</span>
-            </div>
-            <div className="p-6 space-y-4">
-              {[
-                ['Allow AI drafting by default', 'AI will pre-draft responses when you open a case', allowDrafting, setAllowDrafting],
-                ['Auto-summarize cases', 'Show a brief summary at the top of long threads', autoSummarize, setAutoSummarize],
-                ['Show citations', 'Display knowledge base links used by AI', showCitations, setShowCitations],
-              ].map(([label, desc, value, setter]) => (
-                <label key={String(label)} className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={Boolean(value)} onChange={() => (setter as React.Dispatch<React.SetStateAction<boolean>>)((current) => !current)} className="mt-1 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                  <div>
-                    <span className="block text-sm font-medium text-gray-900 dark:text-white">{label as string}</span>
-                    <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc as string}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </section>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-500">{isSaving ? 'Saving personal preferences...' : 'Personal preferences are stored in your profile record.'}</span>
-        <button type="button" onClick={() => void handleSave().catch(() => undefined)} disabled={isSaving} className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold">
-          Save preferences
-        </button>
-      </div>
+      </DetailSection>
     </div>
   );
 }
