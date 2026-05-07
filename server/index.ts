@@ -40,6 +40,7 @@ import reconciliationRouter from './routes/reconciliation.js';
 import superAgentRouter from './routes/superAgent.js';
 import onboardingRouter from './routes/onboarding.js';
 import publicConfigRouter from './routes/publicConfig.js';
+import tagsRouter from './routes/tags.js';
 import { oauthConnectorsRouter } from './routes/oauthConnectors.js';
 import { shopifyOAuthRouter } from './routes/shopifyOAuth.js';
 import { stripeOAuthRouter } from './routes/stripeOAuth.js';
@@ -166,6 +167,7 @@ app.use((req, _res, next) => {
 // ── API Routes ────────────────────────────────────────────
 app.use('/api/cases', casesRouter);
 app.use('/api/macros', macrosRouter);
+app.use('/api/tags', tagsRouter);
 app.use('/api/attachments', attachmentsRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/customers', customersRouter);

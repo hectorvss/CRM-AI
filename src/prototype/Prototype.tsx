@@ -9546,6 +9546,9 @@ function SocialChannelsView({ view, onNavigate }: { view: View; onNavigate: (v: 
 
 function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [method, setMethod] = useState<'manual' | 'roundrobin' | 'equilibrio'>('manual');
+  const { data: teams, loading: teamsLoading } = useApi(() => iamApi.teams(), [], []);
+  const { data: members } = useApi(() => iamApi.members(), [], []);
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -9560,6 +9563,27 @@ function InboxTeamView({ view, onNavigate }: { view: View; onNavigate: (v: View)
             </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            {/* Existing teams list */}
+            {teams.length > 0 && (
+              <div className="mb-6">
+                <h2 className="text-[15px] font-semibold text-[#1a1a1a] mb-3">Buzones del equipo ({teams.length})</h2>
+                <div className="flex flex-col gap-2">
+                  {teams.map((t: any) => {
+                    const teamMembers = members.filter((m: any) => m.teamId === t.id || m.team_id === t.id);
+                    return (
+                      <div key={t.id} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
+                        <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[18px]">👥</div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-semibold text-[#1a1a1a]">{t.name ?? t.label ?? t.id}</p>
+                          <p className="text-[12px] text-[#646462]">{teamMembers.length > 0 ? `${teamMembers.length} miembros` : t.description ?? 'Sin descripción'}</p>
+                        </div>
+                        <button className="text-[13px] text-[#646462] border border-[#e9eae6] rounded-full px-3 py-1.5 hover:bg-[#f3f3f1]">Editar</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {/* Promo card */}
             <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 flex items-center gap-6 mb-6 relative">
               <button className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>
