@@ -11018,27 +11018,80 @@ function ReportsCustomReport({ title, description }: { title: string; descriptio
 // ── Per-report custom Reports (Figma 3:16295, 3:20010, 3:22346, 3:24515,
 //    3:26772, 4:16934, 4:19011, 4:22197, 4:24401) ─────────────────────────────
 
-function ReportsCallsContent() {
+function ReportsCallsContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.calls(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 30 }, (_, i) => ({ day: i, count: 0 }));
+  const byDirection: { direction: string; count: number }[] = data?.byDirection ?? [];
+  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
+  const isEmpty = data?.isEmpty !== false;
+  const days = timeSeries.length;
+
   return (
     <>
       <ReportShellHeader title="Calls" description="Use the Calls report to visualize and explore your team's calling activity." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Inbound calls" value="0" />
-        <ReportsKpiCard label="Outbound calls" value="0" />
-        <ReportsKpiCard label="Messenger calls" value="0" />
-        <ReportsKpiCard label="Median call duration" value="—" />
-        <ReportsKpiCard label="Median call in queue time" value="—" />
-        <ReportsKpiCard label="Median call talk time" value="—" />
+        <ReportsKpiCard label="Inbound calls" value={loading ? '…' : String(kpis.inbound_calls ?? 0)} />
+        <ReportsKpiCard label="Outbound calls" value={loading ? '…' : String(kpis.outbound_calls ?? 0)} />
+        <ReportsKpiCard label="Messenger calls" value={loading ? '…' : String(kpis.messenger_calls ?? 0)} />
+        <ReportsKpiCard label="Median call duration" value={kpis.median_call_duration ?? '—'} />
+        <ReportsKpiCard label="Median call in queue time" value={kpis.median_queue_time ?? '—'} />
+        <ReportsKpiCard label="Median call talk time" value={kpis.median_talk_time ?? '—'} />
+        {/* Call volume time series */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Calls - by time</span>
+          </div>
+          {isEmpty ? (
+            <div className="h-[160px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M11 2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1l1-1h2l1 1z"/><path d="M8 7v4M8 6h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin actividad de llamadas</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Conecta un canal de voz para ver métricas de llamadas.</span>
+            </div>
+          ) : (
+            <>
+              <div className="h-[140px] flex items-end gap-0.5 px-2">
+                {timeSeries.map((t, i) => (
+                  <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                <span>Día 1</span><span>Día {Math.floor(days / 3)}</span><span>Día {Math.floor(2 * days / 3)}</span><span>Día {days}</span>
+              </div>
+            </>
+          )}
+        </div>
+        {/* By direction donut */}
         <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Calls - by direction" />
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Calls - by direction</span>
+            </div>
+            {isEmpty || byDirection.length === 0 ? (
+              <div className="h-[120px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos de dirección</div>
+            ) : (
+              <div className="space-y-2 pt-2">
+                {byDirection.map(d => {
+                  const maxD = Math.max(...byDirection.map(x => x.count), 1);
+                  const COLORS: Record<string, string> = { inbound: '#3b59f6', outbound: '#fc8a37', messenger: '#7c3aed' };
+                  return (
+                    <div key={d.direction} className="flex items-center gap-2">
+                      <span className="text-[11px] text-[#646462] w-[70px] capitalize">{d.direction}</span>
+                      <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                        <div className="h-2 rounded-full" style={{ width: `${(d.count / maxD) * 100}%`, background: COLORS[d.direction] ?? '#3b59f6' }} />
+                      </div>
+                      <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{d.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <ReportEmptyChart label="Inbound calls - by time and call state" />
         </div>
-        <div className="col-span-3 grid grid-cols-2 gap-4">
-          <ReportEmptyChart label="Median call talk time" />
-          <ReportEmptyChart label="Median call in queue time" />
-        </div>
-        <ReportEmptyTable label="Call performance" />
       </div>
     </>
   );
@@ -11379,20 +11432,55 @@ function ReportsSlasContent({ period, channel }: { period: string; channel: stri
   );
 }
 
-function ReportsTeamInboxContent() {
+function ReportsTeamInboxContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.teamInbox(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const inboxBreakdown: { inbox: string; assigned: number; replied: number; closed: number; medianClose: string }[] = data?.inboxBreakdown ?? [];
+  const isEmpty = data?.isEmpty !== false;
+
   return (
     <>
       <ReportShellHeader title="Team inbox performance" description="Check in on how each team inbox is performing with accurate metrics and insights." />
       <ReportShellFilters extraFilter={{ icon: 'team', label: 'Equipo es Cualquiera' }} />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Median team assignment to first response" value="—" />
-        <ReportsKpiCard label="Median team assignment to subsequent response" value="—" />
-        <ReportsKpiCard label="Median team assignment to close" value="—" />
-        <ReportsKpiCard label="Conversations assigned" value="0" />
-        <ReportsKpiCard label="Conversations replied to" value="0" />
-        <ReportsKpiCard label="Closed conversations" value="0" />
+        <ReportsKpiCard label="Median team assignment to first response" value={kpis.median_assign_to_first_response ?? '—'} />
+        <ReportsKpiCard label="Median team assignment to subsequent response" value={kpis.median_assign_to_subsequent_response ?? '—'} />
+        <ReportsKpiCard label="Median team assignment to close" value={loading ? '…' : kpis.median_assign_to_close ?? '—'} />
+        <ReportsKpiCard label="Conversations assigned" value={loading ? '…' : String(kpis.conversations_assigned ?? 0)} />
+        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.conversations_replied ?? 0)} />
+        <ReportsKpiCard label="Closed conversations" value={loading ? '…' : String(kpis.closed_conversations ?? 0)} />
+        {/* Inbox breakdown table */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Team inbox performance</span>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Inbox / Assignee</div>
+            <div>Assigned</div>
+            <div>Replied</div>
+            <div>Closed</div>
+            <div>Median close time</div>
+          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : isEmpty || inboxBreakdown.length === 0 ? (
+            <div className="h-[120px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Sin datos de inbox por equipo</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Asigna conversaciones a agentes para ver métricas aquí.</span>
+            </div>
+          ) : inboxBreakdown.map((row, i) => (
+            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium truncate">{row.inbox}</div>
+              <div>{row.assigned}</div>
+              <div>{row.replied}</div>
+              <div>{row.closed}</div>
+              <div className="text-[#646462]">{row.medianClose}</div>
+            </div>
+          ))}
+        </div>
         <ReportEmptyChart label="Teammate Activity" span={3} />
-        <ReportEmptyTable label="Comparison of Team inbox performance" />
       </div>
     </>
   );
@@ -11624,87 +11712,6 @@ function ReportsSugerenciasContent() {
   );
 }
 
-function ReportsExportContent() {
-  const rows = ['215474178470870', '215474178470709', '215474178470505', '215474178470274'];
-  return (
-    <>
-      <div className="px-6 py-3 border-b border-[#e9eae6] bg-[#fafaf9] flex-shrink-0 text-center">
-        <p className="text-[12.5px] text-[#1a1a1a]">
-          <span className="mr-1">🍂</span>
-          Exporta datos más ricos con nuestra experiencia mejorada de exportación de conjuntos de datos. También puedes utilizar la nueva API de exportación de datos de informes para exportar datos. <a className="font-medium underline">Más información</a>
-        </p>
-      </div>
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
-          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Exportación de conjuntos de datos</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
-            Programar
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
-          </button>
-          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
-            Exportar CSV
-          </button>
-        </div>
-      </div>
-      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/></svg>
-          Conjunto de datos Conversation
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-        </button>
-        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-          Apr 8, 2026 - May 5, 2026
-        </button>
-        <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[6px] text-[12.5px] text-[#646462]">
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
-          Añadir filtro
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-6 py-3 flex items-center justify-between text-[12.5px] text-[#646462] border-b border-[#e9eae6]">
-          <span><span className="text-[#1a1a1a] font-medium">4 de 4 artículos</span>  Las marcas de tiempo están en la hora Madrid (GMT+2)</span>
-          <button className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea] text-[#646462]">+</button>
-        </div>
-        <table className="w-full text-[12.5px]">
-          <thead>
-            <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
-              <th className="text-left font-medium text-[#646462] px-6 py-2">
-                <div className="flex items-center gap-1">ID de conversación<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
-              </th>
-              <th className="text-left font-medium text-[#646462] px-6 py-2">
-                <div className="flex items-center gap-1">La conversación comenzó el<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
-              </th>
-              <th className="text-left font-medium text-[#646462] px-6 py-2">La conversación se cerró por primera vez el</th>
-              <th className="text-left font-medium text-[#646462] px-6 py-2">La conversación se respondió por primera vez e...</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((id) => (
-              <tr key={id} className="border-b border-[#e9eae6]">
-                <td className="px-6 py-3">
-                  <a className="text-[#3b59f6] hover:underline inline-flex items-center gap-1">
-                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M9 2h5v5M14 2L7 9M11 9v4H3V5h4"/></svg>
-                    {id}
-                  </a>
-                </td>
-                <td className="px-6 py-3 text-[#1a1a1a]">8:55 AM may 5, 2026</td>
-                <td className="px-6 py-3 text-[#646462]">—</td>
-                <td className="px-6 py-3 text-[#646462]">—</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
 function ReportsHorariosContent() {
   const [tab, setTab] = useState<'informes' | 'datasets'>('informes');
   return (
@@ -11850,17 +11857,24 @@ function ReportsArticlesContent({ period, channel }: { period: string; channel: 
   );
 }
 
-function ReportsOutboundEngagementContent() {
+function ReportsOutboundEngagementContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.outbound(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 30 }, (_, i) => ({ day: i, count: 0 }));
+  const byUser: { name: string; count: number }[] = data?.byUser ?? [];
+  const performance: { title: string; sent: number; goal: number }[] = data?.performance ?? [];
+  const isEmpty = data?.isEmpty !== false;
+  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
+  const days = timeSeries.length;
+
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
         <div className="flex items-center gap-2">
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5.5 7h5M5.5 10h3"/></svg>
           <h1 className="text-[18px] font-bold text-[#1a1a1a]">Interacción del cliente</h1>
-          <span className="text-[12px] text-[#646462]">Anterior</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-[#ededea]"><svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M8 13S2 9.5 2 5.5C2 3.5 3.5 2 5.5 2c1.2 0 2 .7 2.5 1.5C8.5 2.7 9.3 2 10.5 2 12.5 2 14 3.5 14 5.5 14 9.5 8 13 8 13z"/></svg></button>
           <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
             Exportar CSV
@@ -11870,7 +11884,7 @@ function ReportsOutboundEngagementContent() {
       <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-          29 abr 2026 - 5 may 2026
+          Período: {period}
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
@@ -11882,43 +11896,227 @@ function ReportsOutboundEngagementContent() {
         <h2 className="text-[15px] font-bold text-[#1a1a1a]">Todos los tipos de mensajes</h2>
         <div className="grid grid-cols-2 gap-4">
           <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <p className="text-[12.5px] text-[#1a1a1a] mb-3">Mensajes enviados</p>
-            <div className="text-[14px] text-[#646462]">— —</div>
+            <p className="text-[12.5px] text-[#1a1a1a] mb-2">Mensajes enviados</p>
+            <p className="text-[24px] font-bold text-[#1a1a1a]">{loading ? '…' : String(kpis.total_sent ?? 0)}</p>
           </div>
           <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-            <p className="text-[12.5px] text-[#1a1a1a] mb-3">Horas de envío de mensajes</p>
-            <div className="text-[14px] text-[#646462]">— —</div>
+            <p className="text-[12.5px] text-[#1a1a1a] mb-2">Horas de envío de mensajes</p>
+            <p className="text-[24px] font-bold text-[#646462]">{kpis.send_hours ?? '—'}</p>
           </div>
         </div>
+        {/* Time series */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
-          <p className="text-[12.5px] font-medium text-[#1a1a1a] mb-3">Mensajes enviados por day</p>
-          <div className="h-[180px] relative">
-            <div className="absolute left-0 top-0 bottom-4 w-8 flex flex-col justify-between text-[10px] text-[#646462]">
-              <span>100</span><span>80</span><span>60</span><span>40</span><span>20</span><span>0</span>
+          <p className="text-[12.5px] font-medium text-[#1a1a1a] mb-3">Mensajes enviados por día</p>
+          {isEmpty ? (
+            <div className="h-[160px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin mensajes salientes</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Configura campañas o mensajes proactivos para ver datos aquí.</span>
             </div>
-            <div className="ml-8 h-full border-l border-b border-[#e9eae6] relative">
-              {[0,1,2,3,4].map(i => <div key={i} className="absolute left-0 right-0 border-t border-dashed border-[#f0f0ee]" style={{ top: `${20*(i+1)}%` }}/>)}
-            </div>
-            <div className="ml-8 mt-1 flex justify-between text-[10px] text-[#646462]">
-              <span>29 abr</span><span>30 abr</span><span>1 may</span><span>2 may</span><span>3 may</span><span>4 may</span><span>5 may</span>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="h-[140px] flex items-end gap-0.5 px-2">
+                {timeSeries.map((t, i) => (
+                  <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#fc8a37]' : 'bg-[#f3f3f1]'} rounded-t`} />
+                ))}
+              </div>
+              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-2">
+                <span>Día 1</span><span>Día {Math.floor(days / 3)}</span><span>Día {Math.floor(2 * days / 3)}</span><span>Día {days}</span>
+              </div>
+            </>
+          )}
         </div>
+        {/* Volume by user */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
           <div className="px-5 py-3"><span className="text-[12.5px] font-medium text-[#1a1a1a]">Volumen de mensajes por usuario</span></div>
           <div className="border-t border-b border-[#e9eae6] grid grid-cols-2 px-5 py-2 text-[12px] text-[#646462]">
             <div>Nombre</div><div className="text-right">Mensajes enviados</div>
           </div>
-          <div className="h-[100px]"/>
+          {byUser.length === 0 ? (
+            <div className="h-[80px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
+          ) : byUser.map((u, i) => (
+            <div key={i} className="grid grid-cols-2 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium truncate">{u.name}</div>
+              <div className="text-right text-[#646462]">{u.count}</div>
+            </div>
+          ))}
         </div>
+        {/* Message performance */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
           <div className="px-5 py-3"><span className="text-[12.5px] font-medium text-[#1a1a1a]">Rendimiento del mensaje</span></div>
           <div className="border-t border-[#e9eae6] grid grid-cols-3 px-5 py-2 text-[12px] text-[#646462]">
             <div>Título</div><div>Enviado</div><div>Objetivo</div>
           </div>
-          <div className="h-[80px]"/>
+          {performance.length === 0 ? (
+            <div className="h-[60px] flex items-center justify-center text-[12px] text-[#646462]">Sin campañas configuradas</div>
+          ) : performance.map((p, i) => (
+            <div key={i} className="grid grid-cols-3 px-5 py-2.5 border-t border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="truncate">{p.title}</div>
+              <div>{p.sent}</div>
+              <div className="text-[#646462]">{p.goal ?? '—'}</div>
+            </div>
+          ))}
         </div>
-        <p className="text-[11.5px] text-[#646462] text-center pt-2">Los informes están en Madrid time (GMT+2)</p>
+        <p className="text-[11.5px] text-[#646462] text-center pt-2">Los informes están en zona horaria del servidor</p>
+      </div>
+    </>
+  );
+}
+
+function ReportsCopilotContent({ period, channel }: { period: string; channel: string }) {
+  // Copilot usage is derived from AI agent runs — we reuse the agents endpoint
+  const { data, loading } = useApi(() => reportsApi.agents(period, channel), [period, channel], null);
+  const agents: any[] = data?.agents ?? [];
+  const totalRuns = agents.reduce((s, a) => s + (a.totalRuns ?? 0), 0);
+  const totalTokens = agents.reduce((s, a) => s + (a.tokensUsed ?? 0), 0);
+  const avgSuccessRate = agents.length > 0
+    ? Math.round(agents.reduce((s, a) => s + Number.parseFloat(String(a.successRate ?? '0')), 0) / agents.length)
+    : 0;
+  const copilotAgents = agents.filter(a => (a.name ?? '').toLowerCase().includes('copilot') || (a.slug ?? '').toLowerCase().includes('copilot'));
+  const displayAgents = copilotAgents.length > 0 ? copilotAgents : agents;
+  const isEmpty = agents.length === 0;
+
+  return (
+    <>
+      <ReportShellHeader title="Copilot" description="Analyze how Copilot is used by teammates in your workspace to assist conversations." />
+      <ReportShellFilters />
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        <ReportsKpiCard label="AI agent runs" value={loading ? '…' : String(totalRuns)} sub={`${agents.length} agentes activos`} />
+        <ReportsKpiCard label="Tokens consumidos" value={loading ? '…' : Number(totalTokens).toLocaleString()} />
+        <ReportsKpiCard label="Tasa de éxito media" value={loading ? '…' : `${avgSuccessRate}%`} />
+        {/* Agent table */}
+        <div className="col-span-3 border border-[#e9eae6] rounded-[10px] bg-white overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Actividad de agentes de IA / Copilot</span>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Agente</div>
+            <div>Ejecuciones</div>
+            <div>Éxito</div>
+            <div>Fallos</div>
+            <div>Tokens</div>
+          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : isEmpty ? (
+            <div className="h-[140px] flex flex-col items-center justify-center text-center">
+              <svg viewBox="0 0 16 16" className="w-7 h-7 fill-none stroke-[#646462] mb-2" strokeWidth="1.4"><path d="M4 4h8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H8L5 14v-2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a] font-medium">Sin actividad de Copilot</span>
+              <span className="text-[11.5px] text-[#646462] mt-0.5">Las métricas aparecen cuando los agentes procesan conversaciones.</span>
+            </div>
+          ) : displayAgents.map((a: any, i: number) => (
+            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium truncate">{a.name ?? a.slug ?? 'Agente'}</div>
+              <div>{a.totalRuns ?? 0}</div>
+              <div className={Number.parseFloat(String(a.successRate ?? '0').replace('%','')) >= 80 ? 'text-[#16a34a]' : 'text-[#dc2626]'}>
+                {a.successRate ?? '—'}
+              </div>
+              <div className="text-[#646462]">{a.failedRuns ?? 0}</div>
+              <div className="text-[#646462]">{Number(a.tokensUsed ?? 0).toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+        <ReportEmptyChart label="Uso de Copilot por tiempo" span={3} />
+      </div>
+    </>
+  );
+}
+
+function ReportsExportContent({ period, channel }: { period: string; channel: string }) {
+  const { data: casesData, loading } = useApi(() => casesApi.list({ limit: 50, status: undefined }), [], null);
+  const cases: any[] = Array.isArray((casesData as any)?.items) ? (casesData as any).items : Array.isArray(casesData) ? casesData as any[] : [];
+  const total = (casesData as any)?.total ?? cases.length;
+
+  return (
+    <>
+      <div className="px-6 py-3 border-b border-[#e9eae6] bg-[#fafaf9] flex-shrink-0 text-center">
+        <p className="text-[12.5px] text-[#1a1a1a]">
+          <span className="mr-1">🍂</span>
+          Exporta datos más ricos con nuestra experiencia mejorada de exportación de conjuntos de datos. También puedes utilizar la nueva API de exportación de datos de informes para exportar datos. <a className="font-medium underline">Más información</a>
+        </p>
+      </div>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+          <h1 className="text-[18px] font-bold text-[#1a1a1a]">Exportación de conjuntos de datos</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+            Programar
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 6l4 4 4-4z"/></svg>
+          </button>
+          <button className="flex items-center gap-1.5 bg-[#1a1a1a] text-white rounded-full px-3 py-[6px] text-[13px] font-semibold hover:bg-black">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+            Exportar CSV
+          </button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0">
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12"/></svg>
+          Conjunto de datos: Conversation
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+          Período: {period}
+        </button>
+        <button className="flex items-center gap-1 border border-dashed border-[#d4d4d2] rounded-full px-3 py-[6px] text-[12.5px] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg>
+          Añadir filtro
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="px-6 py-3 flex items-center justify-between text-[12.5px] text-[#646462] border-b border-[#e9eae6]">
+          <span>
+            {loading ? 'Cargando...' : <><span className="text-[#1a1a1a] font-medium">{cases.length} de {total} artículos</span>  Las marcas de tiempo están en la zona horaria del servidor</>}
+          </span>
+          <button className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#ededea] text-[#646462]">+</button>
+        </div>
+        <table className="w-full text-[12.5px]">
+          <thead>
+            <tr className="bg-[#fafaf9] border-b border-[#e9eae6]">
+              <th className="text-left font-medium text-[#646462] px-6 py-2">
+                <div className="flex items-center gap-1">ID de conversación<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
+              </th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">
+                <div className="flex items-center gap-1">La conversación comenzó el<svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M5 7l3-3 3 3M5 9l3 3 3-3"/></svg></div>
+              </th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">Canal</th>
+              <th className="text-left font-medium text-[#646462] px-6 py-2">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={4} className="px-6 py-8 text-center text-[#646462]">Cargando...</td></tr>
+            ) : cases.length === 0 ? (
+              <tr><td colSpan={4} className="px-6 py-8 text-center text-[#646462]">No se encontraron conversaciones</td></tr>
+            ) : cases.map((c: any) => (
+              <tr key={c.id} className="border-b border-[#e9eae6] hover:bg-[#fafaf9]">
+                <td className="px-6 py-3">
+                  <span className="text-[#3b59f6] inline-flex items-center gap-1">
+                    <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M9 2h5v5M14 2L7 9M11 9v4H3V5h4"/></svg>
+                    {String(c.id).slice(0, 18)}
+                  </span>
+                </td>
+                <td className="px-6 py-3 text-[#1a1a1a]">
+                  {c.created_at ? new Date(c.created_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                </td>
+                <td className="px-6 py-3 text-[#646462] capitalize">{c.source_channel ?? '—'}</td>
+                <td className="px-6 py-3">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    c.status === 'resolved' || c.status === 'closed' ? 'bg-[#dcfce7] text-[#16a34a]' :
+                    c.status === 'open' ? 'bg-[#dbeafe] text-[#1d4ed8]' : 'bg-[#f3f3f1] text-[#646462]'
+                  }`}>
+                    {c.status ?? '—'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </>
   );
@@ -11940,24 +12138,24 @@ function ReportsView() {
       // ── Temas & misc ────────────────────────────────────────────────────
       case 'temas':         return <ReportsTopicsContent />;
       case 'sugerencias':   return <ReportsSugerenciasContent />;
-      case 'export':        return <ReportsExportContent />;
+      case 'export':        return <ReportsExportContent period={period} channel={channel} />;
       case 'horarios':      return <ReportsHorariosContent />;
       // ── IA y automatización ─────────────────────────────────────────────
       case 'finAgent':      return <ReportsFinAgentContent period={period} channel={channel} />;
-      case 'copilot':       return <ReportsCustomReport title="Copilot" description="Analyze and report on how Copilot is used by teammates in your workspace." />;
+      case 'copilot':       return <ReportsCopilotContent period={period} channel={channel} />;
       // ── Soporte humano ──────────────────────────────────────────────────
-      case 'calls':         return <ReportsCallsContent />;
+      case 'calls':         return <ReportsCallsContent period={period} channel={channel} />;
       case 'conversations': return <ReportsConversationsContent period={period} channel={channel} />;
       case 'csat':          return <ReportsCsatContent period={period} channel={channel} />;
       case 'effectiveness': return <ReportsEffectivenessContent period={period} channel={channel} />;
       case 'responsiveness':return <ReportsResponsivenessContent period={period} channel={channel} />;
       case 'slas':          return <ReportsSlasContent period={period} channel={channel} />;
-      case 'teamInbox':     return <ReportsTeamInboxContent />;
+      case 'teamInbox':     return <ReportsTeamInboxContent period={period} channel={channel} />;
       case 'teammate':      return <ReportsTeammateContent period={period} channel={channel} />;
       case 'tickets':       return <ReportsTicketsContent period={period} channel={channel} />;
       // ── Proactivo ───────────────────────────────────────────────────────
       case 'articles':      return <ReportsArticlesContent period={period} channel={channel} />;
-      case 'outboundEng':   return <ReportsOutboundEngagementContent />;
+      case 'outboundEng':   return <ReportsOutboundEngagementContent period={period} channel={channel} />;
       case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
     }
   }

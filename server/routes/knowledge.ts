@@ -308,13 +308,15 @@ router.get('/articles', async (req: MultiTenantRequest, res) => {
 
 router.post('/articles', async (req: MultiTenantRequest, res) => {
   try {
-    const { title, content } = req.body ?? {};
-    if (!title || !content) {
-      return res.status(400).json({ error: 'title and content are required' });
+    // Drafts can have empty bodies — the editor lets users save mid-write,
+    // so only `title` is strictly required here. Backend defaults the rest.
+    const { title } = req.body ?? {};
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ error: 'title is required' });
     }
     const article = await knowledgeRepository.createArticle(
       { tenantId: req.tenantId!, workspaceId: req.workspaceId!, userId: req.userId },
-      req.body,
+      { ...req.body, content: req.body?.content ?? '' },
     );
     return res.status(201).json(article);
   } catch (error) {
