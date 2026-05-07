@@ -965,7 +965,17 @@ function buildSimulatedNodeResult(node: any, config: Record<string, any>, contex
   return { status: 'completed', output };
 }
 
-async function executeWorkflowNode(scope: { tenantId: string; workspaceId: string; userId?: string }, node: any, context: any) {
+// Note: `services` is OPTIONAL and only consumed by pilot node handlers
+// (`flow.loop`, `notification.email`). All other handlers fall back to
+// inline imports — see server/runtime/workflowServices.ts for the
+// migration plan. Marked `export` so the workflow-runtime test harness
+// can drive node execution without spinning up the HTTP stack.
+export async function executeWorkflowNode(
+  scope: { tenantId: string; workspaceId: string; userId?: string },
+  node: any,
+  context: any,
+  services?: import('../runtime/workflowServices.js').WorkflowServices,
+) {
   if (node.disabled) {
     return { status: 'skipped', output: { reason: 'Node is disabled' } };
   }
@@ -1972,7 +1982,9 @@ Write ONLY the reply text, no subject line, no JSON.`;
     const subject = resolveTemplateValue(config.subject || 'Update from support', context);
     const content = resolveTemplateValue(config.content || config.body || config.message || '', context);
     if (!to) return { status: 'failed', error: 'notification.email: no recipient — set "to" or ensure customer.email is in context' };
-    const result = await sendEmail(to, subject, content, config.ref || context.case?.id || 'workflow').catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
+    // Pilot node: prefer injected sender (testable); fall back to module import in production.
+    const emailSender = services?.channels?.email ?? sendEmail;
+    const result = await emailSender(to, subject, content, config.ref || context.case?.id || 'workflow').catch((err: any) => ({ messageId: null, simulated: false, error: String(err?.message ?? err) }));
     if ((result as any).error) return { status: 'failed', error: `Email send failed: ${(result as any).error}` };
     return { status: 'completed', output: { to, subject, messageId: result.messageId, simulated: result.simulated } };
   }
