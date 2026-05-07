@@ -1573,14 +1573,127 @@ export async function executeWorkflowNode(
   }
 
   if (node.key === 'core.idempotency_check') {
-    const key = String(config.key || config.idempotencyKey || `${node.id}:${context.case?.id ?? context.order?.id ?? context.trigger?.id ?? 'manual'}`);
+    const rawKey = String(config.key || config.idempotencyKey || `${node.id}:${context.case?.id ?? context.order?.id ?? context.trigger?.id ?? 'manual'}`);
+    const ttlSeconds = Number(config.ttlSeconds ?? config.ttl_seconds ?? 86400);
+
+    if (services?.supabase) {
+      const crypto = await import('node:crypto');
+      const hashed = crypto
+        .createHash('sha256')
+        .update(`${scope.tenantId}:${scope.workspaceId}:${rawKey}`)
+        .digest('hex');
+      const now = services.clock?.now?.() ?? new Date();
+      const expiresAt = new Date(now.getTime() + ttlSeconds * 1000).toISOString();
+      const { error } = await services.supabase.from('workflow_runtime_state').insert({
+        tenant_id: scope.tenantId,
+        workspace_id: scope.workspaceId,
+        key_namespace: 'idempotency',
+        key: hashed,
+        value: { run_id: context.runId ?? null, step_id: node.id, completed_at: null },
+        expires_at: expiresAt,
+      });
+      if (error && (error as any).code === '23505') {
+        return {
+          status: 'blocked',
+          error: {
+            code: 'IDEMPOTENT_DUPLICATE',
+            message: 'Esta clave de idempotencia ya está siendo procesada o se procesó recientemente.',
+          },
+        };
+      }
+      if (error) {
+        return {
+          status: 'failed',
+          error: { code: 'IDEMPOTENCY_STORE_ERROR', message: (error as any).message ?? String(error) },
+        };
+      }
+      return { status: 'completed', output: { idempotency_key: hashed, first_seen: true } };
+    }
+
+    // Fallback: per-run only (production scheduler not yet migrated).
+    console.warn('[workflow] cross-run idempotency/rate-limit requires services injection; running in per-run mode');
     context.idempotency = context.idempotency ?? {};
-    if (context.idempotency[key]) return { status: 'skipped', output: { duplicate: true, key } };
-    context.idempotency[key] = true;
-    return { status: 'completed', output: { duplicate: false, key } };
+    if (context.idempotency[rawKey]) return { status: 'skipped', output: { duplicate: true, key: rawKey } };
+    context.idempotency[rawKey] = true;
+    return { status: 'completed', output: { duplicate: false, key: rawKey } };
   }
 
   if (node.key === 'core.rate_limit') {
+    const rawKey = String(config.key || config.bucket || node.id);
+    const max = Number(config.max ?? config.limit ?? 10);
+    const windowSeconds = Number(config.window ?? config.windowSeconds ?? config.window_seconds ?? 60);
+
+    if (services?.supabase) {
+      const crypto = await import('node:crypto');
+      const hashed = crypto
+        .createHash('sha256')
+        .update(`${scope.tenantId}:${scope.workspaceId}:${rawKey}`)
+        .digest('hex');
+      const now = services.clock?.now?.() ?? new Date();
+      const nowMs = now.getTime();
+
+      const { data: existing } = await services.supabase
+        .from('workflow_runtime_state')
+        .select('value')
+        .eq('tenant_id', scope.tenantId)
+        .eq('workspace_id', scope.workspaceId)
+        .eq('key_namespace', 'rate_limit')
+        .eq('key', hashed)
+        .maybeSingle();
+
+      const value = existing?.value as
+        | { tokens?: number; refilled_at?: string; max?: number; window_seconds?: number }
+        | undefined;
+      const refilledAt = value?.refilled_at ? new Date(value.refilled_at).getTime() : 0;
+      const expired = !value || nowMs - refilledAt > windowSeconds * 1000;
+
+      if (expired) {
+        const newValue = {
+          tokens: max - 1,
+          refilled_at: now.toISOString(),
+          max,
+          window_seconds: windowSeconds,
+        };
+        await services.supabase.from('workflow_runtime_state').upsert({
+          tenant_id: scope.tenantId,
+          workspace_id: scope.workspaceId,
+          key_namespace: 'rate_limit',
+          key: hashed,
+          value: newValue,
+          expires_at: new Date(nowMs + windowSeconds * 1000).toISOString(),
+        });
+        return { status: 'completed', output: { tokens_remaining: newValue.tokens, max, window_seconds: windowSeconds } };
+      }
+
+      const tokens = Number(value?.tokens ?? 0);
+      if (tokens <= 0) {
+        return {
+          status: 'blocked',
+          error: {
+            code: 'RATE_LIMITED',
+            message: 'Límite de frecuencia alcanzado para este nodo. Espera unos segundos y vuelve a intentarlo.',
+          },
+        };
+      }
+
+      const newValue = {
+        tokens: tokens - 1,
+        refilled_at: value?.refilled_at ?? now.toISOString(),
+        max,
+        window_seconds: windowSeconds,
+      };
+      await services.supabase
+        .from('workflow_runtime_state')
+        .update({ value: newValue, updated_at: now.toISOString() })
+        .eq('tenant_id', scope.tenantId)
+        .eq('workspace_id', scope.workspaceId)
+        .eq('key_namespace', 'rate_limit')
+        .eq('key', hashed);
+      return { status: 'completed', output: { tokens_remaining: newValue.tokens, max, window_seconds: windowSeconds } };
+    }
+
+    // Fallback: per-run only (production scheduler not yet migrated).
+    console.warn('[workflow] cross-run idempotency/rate-limit requires services injection; running in per-run mode');
     const limit = Number(config.limit || 1);
     const bucket = String(config.bucket || node.id);
     context.rateLimits = context.rateLimits ?? {};

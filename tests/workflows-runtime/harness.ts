@@ -42,33 +42,68 @@ import type { WorkflowServices, ChannelSendResultLite } from '../../server/runti
 // pilot nodes touch. Phase B will need to grow this.
 function buildMockSupabase(): any {
   const tables = new Map<string, any[]>();
+  // Per-table primary key spec — used to simulate Postgres 23505 PK conflicts.
+  const pkSpec: Record<string, string[]> = {
+    workflow_runtime_state: ['tenant_id', 'workspace_id', 'key_namespace', 'key'],
+  };
+  const matchesPk = (existing: any, row: any, pk: string[]) =>
+    pk.every((col) => existing[col] === row[col]);
+
   const queryBuilder = (tableName: string) => {
-    const ops: Array<{ kind: string; args: any[] }> = [];
+    const filters: Array<{ col: string; val: any }> = [];
+    let pendingUpdate: any = null;
+    let pendingSelect = false;
+    let pendingDelete = false;
     const proxy: any = {
       _tableName: tableName,
       insert(row: any) {
         const list = tables.get(tableName) ?? [];
         const rows = Array.isArray(row) ? row : [row];
+        const pk = pkSpec[tableName];
+        if (pk) {
+          for (const r of rows) {
+            if (list.some((existing) => matchesPk(existing, r, pk))) {
+              return Promise.resolve({
+                data: null,
+                error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+              });
+            }
+          }
+        }
         list.push(...rows);
         tables.set(tableName, list);
         return Promise.resolve({ data: rows, error: null });
       },
       upsert(row: any) {
-        return proxy.insert(row);
+        const list = tables.get(tableName) ?? [];
+        const rows = Array.isArray(row) ? row : [row];
+        const pk = pkSpec[tableName];
+        if (pk) {
+          for (const r of rows) {
+            const idx = list.findIndex((existing) => matchesPk(existing, r, pk));
+            if (idx >= 0) list[idx] = { ...list[idx], ...r };
+            else list.push(r);
+          }
+        } else {
+          list.push(...rows);
+        }
+        tables.set(tableName, list);
+        return Promise.resolve({ data: rows, error: null });
       },
       update(patch: any) {
-        ops.push({ kind: 'update', args: [patch] });
+        pendingUpdate = patch;
         return proxy;
       },
       delete() {
-        ops.push({ kind: 'delete', args: [] });
+        pendingDelete = true;
         return proxy;
       },
       select(_cols?: string) {
-        ops.push({ kind: 'select', args: [_cols] });
+        pendingSelect = true;
         return proxy;
       },
-      eq(_col: string, _val: any) {
+      eq(col: string, val: any) {
+        filters.push({ col, val });
         return proxy;
       },
       neq(_col: string, _val: any) {
@@ -84,13 +119,33 @@ function buildMockSupabase(): any {
         return proxy;
       },
       single() {
-        return Promise.resolve({ data: null, error: null });
+        const list = tables.get(tableName) ?? [];
+        const matches = list.filter((r) => filters.every((f) => r[f.col] === f.val));
+        return Promise.resolve({ data: matches[0] ?? null, error: null });
       },
       maybeSingle() {
-        return Promise.resolve({ data: null, error: null });
+        const list = tables.get(tableName) ?? [];
+        const matches = list.filter((r) => filters.every((f) => r[f.col] === f.val));
+        return Promise.resolve({ data: matches[0] ?? null, error: null });
       },
       then(resolve: any) {
-        return resolve({ data: tables.get(tableName) ?? [], error: null });
+        const list = tables.get(tableName) ?? [];
+        const matches = filters.length
+          ? list.filter((r) => filters.every((f) => r[f.col] === f.val))
+          : list;
+        if (pendingUpdate) {
+          for (const row of matches) Object.assign(row, pendingUpdate);
+          return resolve({ data: matches, error: null });
+        }
+        if (pendingDelete) {
+          const remaining = list.filter((r) => !matches.includes(r));
+          tables.set(tableName, remaining);
+          return resolve({ data: matches, error: null });
+        }
+        if (pendingSelect) {
+          return resolve({ data: matches, error: null });
+        }
+        return resolve({ data: matches, error: null });
       },
     };
     return proxy;
