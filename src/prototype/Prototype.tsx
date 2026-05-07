@@ -12024,7 +12024,7 @@ function ReportsCopilotContent({ period, channel }: { period: string; channel: s
 }
 
 function ReportsExportContent({ period, channel }: { period: string; channel: string }) {
-  const { data: casesData, loading } = useApi(() => casesApi.list({ limit: 50, status: undefined }), [], null);
+  const { data: casesData, loading } = useApi(() => casesApi.list({ limit: '50' }), [], null);
   const cases: any[] = Array.isArray((casesData as any)?.items) ? (casesData as any).items : Array.isArray(casesData) ? casesData as any[] : [];
   const total = (casesData as any)?.total ?? cases.length;
 
