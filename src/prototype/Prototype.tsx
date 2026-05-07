@@ -9673,9 +9673,8 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
   );
 }
 
-// ── BillingView — landing-style upgrade page ────────────────────────────────
+// ── BillingView ──────────────────────────────────────────────────────────────
 
-// Shared design tokens (matches public-landing-v2/pricing.jsx)
 const LC = {
   text:    '#111111',
   text60:  'rgba(17,17,17,0.6)',
@@ -9686,325 +9685,323 @@ const LC = {
   accent:  '#0007cb',
 } as const;
 
-function LandingCornerDots({ color = LC.accent }: { color?: string }) {
+function LandingCornerDots({ size = 8, color = LC.border }: { size?: number; color?: string }) {
+  const s: React.CSSProperties = { position: 'absolute', width: size, height: size, background: color };
   return (
-    <div className="absolute inset-[16px] pointer-events-none">
-      {[['left-0 top-0'], ['right-0 top-0'], ['left-0 bottom-0'], ['right-0 bottom-0']].map(([cls], i) => (
-        <div key={i} className={`absolute size-[7px] ${cls}`} style={{ background: color }} />
-      ))}
-    </div>
+    <>
+      <span style={{ ...s, top: 0, left: 0 }} />
+      <span style={{ ...s, top: 0, right: 0 }} />
+      <span style={{ ...s, bottom: 0, left: 0 }} />
+      <span style={{ ...s, bottom: 0, right: 0 }} />
+    </>
   );
 }
 
 function LandingBullet({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex gap-[10px] items-start list-none">
-      <span className="size-[4px] mt-[8px] shrink-0 rounded-full" style={{ background: 'rgba(17,17,17,0.35)' }} />
-      <span className="text-[13px] leading-[20px]" style={{ color: LC.text }}>{children}</span>
-    </li>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+      <span style={{ color: LC.accent, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>
+      <span style={{ fontSize: 13, color: LC.text80, lineHeight: '1.5' }}>{children}</span>
+    </div>
   );
 }
 
 const PLANS = [
   {
-    id: 'starter', name: 'Starter', subtitle: 'Incluye Clain AI Agent',
-    description: 'El plan de atención al cliente para individuos, startups y pequeñas empresas.',
-    originalPrice: '€149', priceAnnual: '€42', priceMonthly: '€49', seatLabel: 'por equipo/mes',
-    cta: 'Actualizar a Starter', featuresLabel: 'FUNCIONES PRINCIPALES',
-    features: ['Clain AI Agent (autónomo)', '5.000 créditos AI/mes — workspace total', 'Inbox con vistas compartidas', 'Knowledge Hub', '3 puestos incluidos'],
+    id: 'starter',
+    name: 'Starter',
+    subtitle: 'Incluye Clain AI Agent',
+    desc: 'El plan de soporte al cliente para particulares, startups y pequeñas empresas.',
+    originalPrice: 149,
+    monthlyPrice: 49,
+    annualPrice: 42,
+    seatLabel: 'por equipo/mes',
+    cta: 'Actualizar a Starter',
+    badge: null,
+    featuresLabel: 'FUNCIONES PRINCIPALES',
+    features: [
+      'Clain AI Agent (autónomo)',
+      '5.000 créditos AI/mes — total del workspace',
+      'Bandeja de entrada con vistas compartidas',
+      'Knowledge Hub',
+      '3 puestos incluidos',
+    ],
   },
   {
-    id: 'growth', name: 'Growth', subtitle: 'Incluye Clain AI Agent',
-    description: 'Herramientas de automatización potentes y funciones IA para equipos en crecimiento.',
-    originalPrice: '€399', priceAnnual: '€109', priceMonthly: '€129', seatLabel: 'por equipo/mes',
-    cta: 'Actualizar a Growth', featuresLabel: 'TODO LO DE STARTER, MÁS',
-    features: ['20.000 créditos AI/mes — workspace total', 'Tickets y monitoreo SLA', 'Constructor de flujos de trabajo', 'Asignación round robin', 'Reportes + AI Insights', '8 puestos incluidos'],
+    id: 'growth',
+    name: 'Growth',
+    subtitle: 'Incluye Clain AI Agent',
+    desc: 'Potentes herramientas de automatización y funciones de IA para equipos de soporte en crecimiento.',
+    originalPrice: 399,
+    monthlyPrice: 129,
+    annualPrice: 109,
+    seatLabel: 'por equipo/mes',
+    cta: 'Actualizar a Growth',
+    badge: 'Más popular',
+    featuresLabel: 'TODO LO DE STARTER, MÁS',
+    features: [
+      '20.000 créditos AI/mes — total del workspace',
+      'Tickets y monitorización SLA',
+      'Constructor de flujos de automatización',
+      'Asignación round-robin',
+      'Informes + AI Insights',
+      '8 puestos incluidos',
+    ],
   },
   {
-    id: 'scale', name: 'Scale', subtitle: 'Incluye Clain AI Agent',
-    description: 'Colaboración, seguridad y funciones multimarca para grandes equipos de soporte.',
-    originalPrice: '€899', priceAnnual: '€254', priceMonthly: '€299', seatLabel: 'por equipo/mes',
-    cta: 'Actualizar a Scale', featuresLabel: 'TODO LO DE GROWTH, MÁS',
-    features: ['60.000 créditos AI/mes — workspace total', 'SSO y gestión de identidad', 'Soporte HIPAA', 'Acuerdos de nivel de servicio (SLA)', 'Help Center multimarca', '20 puestos incluidos'],
+    id: 'scale',
+    name: 'Scale',
+    subtitle: 'Incluye Clain AI Agent',
+    desc: 'Funciones de colaboración, seguridad y multimarca para grandes equipos de soporte.',
+    originalPrice: 899,
+    monthlyPrice: 299,
+    annualPrice: 254,
+    seatLabel: 'por equipo/mes',
+    cta: 'Actualizar a Scale',
+    badge: null,
+    featuresLabel: 'TODO LO DE GROWTH, MÁS',
+    features: [
+      '60.000 créditos AI/mes — total del workspace',
+      'SSO y gestión de identidad',
+      'Soporte HIPAA',
+      'Acuerdos de nivel de servicio (SLA)',
+      'Centro de ayuda multimarca',
+      '20 puestos incluidos',
+    ],
   },
-] as const;
+];
 
 const BUSINESS_PLAN = {
-  id: 'business', name: 'Business', subtitle: 'Plan personalizado, contacta a ventas',
-  description: 'Para organizaciones con necesidades personalizadas de capacidad, gobernanza, seguridad y cumplimiento.',
-  cta: 'Hablar con ventas', featuresLabel: 'TODO LO DE SCALE, MÁS',
-  features: ['Créditos AI personalizados', 'Puestos personalizados', 'Seguridad y cumplimiento enterprise', 'Trae tu propio modelo (BYOM)', 'SLA personalizado y garantías de uptime', 'Onboarding y success manager dedicado'],
+  name: 'Business',
+  subtitle: 'Plan personalizado, habla con ventas',
+  desc: 'Para organizaciones con necesidades personalizadas de capacidad, gobernanza, seguridad y cumplimiento.',
+  featuresLabel: 'TODO LO DE SCALE, MÁS',
+  features: [
+    'Asignación personalizada de créditos AI',
+    'Asignación personalizada de puestos',
+    'Seguridad y cumplimiento de nivel empresarial',
+    'Bring Your Own Model (BYOM)',
+    'SLA personalizado y garantías de disponibilidad',
+    'Onboarding personalizado y gestor de éxito dedicado',
+  ],
 };
 
 const FAQS = [
-  { q: '¿Cómo funciona el precio de Clain?', a: 'El precio de Clain tiene dos componentes: Puestos (pagas por compañero según tu plan) y Uso (pagas por lo que consumes: créditos AI, canales, etc.). Todos los planes incluyen acceso al helpdesk y al Clain AI Agent.' },
-  { q: '¿Cómo se paga el Clain AI Agent?', a: 'Está incluido en todos los planes con una cuota mensual de créditos. Un crédito = una interacción resuelta. Uso flexible a €0,012 por resultado.' },
-  { q: '¿Puedo usar Clain con mi helpdesk actual?', a: 'Sí. Clain se integra con Zendesk, HubSpot, Salesforce, Freshdesk y otros mediante API.' },
-  { q: '¿Qué es un puesto (Full vs Lite)?', a: 'Un puesto Full es un compañero con acceso completo. Los puestos Lite son colaboradores de solo lectura, incluidos gratis en cada plan.' },
-  { q: '¿Hay cargos adicionales por uso?', a: 'Solo si superas la cuota mensual de créditos con el uso flexible activado.' },
-  { q: '¿Hay prueba gratuita?', a: 'Sí — 14 días, acceso completo, sin tarjeta.' },
+  { q: '¿Cómo funciona el precio de Clain?', a: 'El precio de Clain tiene dos componentes — Puestos: pagas por compañero de equipo según tu plan (Starter, Growth, Scale). Uso: pagas por lo que usas (p. ej. resultados de Clain, canales de mensajería). Todos los planes incluyen acceso al helpdesk de Clain y a Clain AI Agent.' },
+  { q: '¿Cómo se cobra Clain AI Agent?', a: 'Clain AI Agent está incluido en todos los planes con una asignación mensual de créditos. Un crédito = una interacción resuelta. Uso flexible a €0,012 por resultado.' },
+  { q: '¿Puedo usar Clain con mi helpdesk actual?', a: 'Sí. Clain se integra con Zendesk, HubSpot, Salesforce, Freshdesk y otros a través de API.' },
+  { q: '¿Qué planes ofrece Clain?', a: 'Starter, Growth, Scale en autoservicio + Business empresarial. Todos incluyen AI Agent e integraciones ilimitadas.' },
+  { q: '¿Qué es un puesto (Full vs Lite)?', a: 'Un puesto Full es un compañero de equipo con acceso completo de inicio de sesión. Los puestos Lite son colaboradores de solo lectura incluidos gratis en cada plan.' },
+  { q: '¿Hay cargos adicionales por uso?', a: 'Solo si superas la asignación mensual de créditos con el uso flexible activado.' },
+  { q: '¿Necesito firmar un contrato?', a: 'No. Autoservicio mensual/anual, sin compromiso. Business utiliza MSA + DPA.' },
+  { q: '¿Cuál es el mínimo para empezar?', a: 'Prueba gratuita de 14 días, sin tarjeta requerida.' },
+  { q: '¿Hay una prueba gratuita?', a: 'Sí — 14 días, acceso completo, sin tarjeta.' },
+  { q: '¿Cómo cambio mi plan o puestos?', a: 'Autoservicio en Facturación → Suscripción.' },
+  { q: '¿Hay descuentos disponibles?', a: '20% de descuento anual. Las startups de menos de 2 años obtienen un 50% de descuento el primer año.' },
 ];
 
-function BillingView({ view: _view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [isAnnual, setIsAnnual] = useState(true);
-  // Launch-price toggle — when active, shows the 73%-off launch pricing
-  // (currently the same as priceAnnual; expires 31 dic 2026).
-  const [isLaunch, setIsLaunch] = useState(false);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [activeTestimonial, setActiveTestimonial] = useState(0);
-  const { data: sub } = useApi(() => billingApi.subscription('org_default'), [], null);
-  const currentPlanId = (sub as any)?.plan_id ?? (sub as any)?.planId ?? 'starter';
+function BillingFaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderTop: `1px solid ${LC.border}` }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+      >
+        <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>{q}</span>
+        <span style={{ fontSize: 18, color: LC.text60, transform: open ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0, marginLeft: 12 }}>+</span>
+      </button>
+      {open && (
+        <p style={{ fontSize: 14, color: LC.text80, lineHeight: '1.6', paddingBottom: 16, margin: 0 }}>{a}</p>
+      )}
+    </div>
+  );
+}
 
-  const testimonials = [
-    { tab: 'LINKTREE', quote: '"En seis días, Clain resolvió autónomamente el 42% de las conversaciones. Ha superado mis expectativas."', author: 'Dane Burgess', role: 'Director de Atención al Cliente en Linktree' },
-    { tab: 'ROBIN',    quote: '"El agente de Clain gestiona las consultas repetitivas que nuestro equipo evitaba. Recuperamos 20 horas a la semana."', author: 'Camila Vives', role: 'Lead CX en Robin' },
-    { tab: 'SYNTHESIA', quote: '"Conectamos Clain a nuestro stack y el AI empezó a resolver tickets desde el primer día."', author: 'Marco Ribeiro', role: 'Head of Support en Synthesia' },
-  ];
+function BillingPlanCard({ plan, billing, current, isLaunch }: { plan: typeof PLANS[0]; billing: 'monthly' | 'annual'; current: string; isLaunch: boolean }) {
+  // Launch mode pins the discounted annual rate regardless of billing cadence
+  const price = isLaunch ? plan.annualPrice : (billing === 'annual' ? plan.annualPrice : plan.monthlyPrice);
+  const isCurrent = current.toLowerCase().includes(plan.id);
+  return (
+    <div style={{ position: 'relative', border: `1px solid ${plan.badge ? LC.accent : LC.border}`, background: plan.badge ? LC.bg2 : LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <LandingCornerDots color={plan.badge ? LC.accent : LC.border} />
+      {plan.badge && (
+        <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: LC.accent, color: '#fff', fontSize: 11, fontWeight: 700, padding: '2px 10px', whiteSpace: 'nowrap' }}>
+          {plan.badge}
+        </div>
+      )}
+      <div style={{ padding: '24px 24px 20px', borderBottom: `1px solid ${plan.badge ? LC.accent : LC.border}` }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{plan.name}</p>
+        <p style={{ fontSize: 12, color: LC.text60, marginBottom: 20, minHeight: 36, lineHeight: '1.5' }}>{plan.desc}</p>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+          <span style={{ fontSize: 36, fontWeight: 800, color: LC.text }}>€{price}</span>
+          <span style={{ fontSize: 13, color: LC.text60 }}>/mes</span>
+        </div>
+        {billing === 'annual' && (
+          <p style={{ fontSize: 11, color: LC.text60 }}>Facturado anualmente. €{plan.monthlyPrice}/mes si factura mensual.</p>
+        )}
+      </div>
+      <div style={{ padding: '20px 24px', flex: 1 }}>
+        {plan.features.map(f => <LandingBullet key={f}>{f}</LandingBullet>)}
+      </div>
+      <div style={{ padding: '0 24px 24px' }}>
+        <button
+          style={{ width: '100%', padding: '10px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${isCurrent ? LC.border : LC.accent}`, background: isCurrent ? LC.bg2 : LC.accent, color: isCurrent ? LC.text60 : '#fff', transition: 'opacity 0.15s' }}
+        >
+          {isCurrent ? 'Plan actual' : plan.cta}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [billing, setBilling] = useState<'monthly' | 'annual'>('annual');
+  // Launch-pricing toggle: when on, all plans show their 73%-off launch rate
+  // until 31 dic 2026. Independent from monthly/annual billing cadence.
+  const [isLaunch, setIsLaunch] = useState(false);
+  const { data: sub } = useApi(() => billingApi.subscription('org_default'), [], null);
+  const currentPlan = sub?.planId ?? sub?.plan_id ?? sub?.plan?.name ?? 'growth';
 
   return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-y-auto" style={{ background: '#ffffff', fontFamily: "'Inter', sans-serif" }}>
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: LC.bg }}>
       <TrialBanner />
-
-      {/* ═══ Section 1 — Hero + Plan Cards ═══════════════════════════════════ */}
-      <div className="relative w-full" style={{ background: '#ffffff' }}>
-        <div className="max-w-[1280px] mx-auto px-8 pt-16 pb-10 relative">
-          <LandingCornerDots color="rgba(17,17,17,0.08)" />
-
-          {/* Heading row */}
-          <div className="flex items-start justify-between gap-8">
-            <h1 className="m-0 text-[42px] leading-[46px] tracking-[-1.4px] max-w-[680px] font-normal" style={{ color: LC.text }}>
-              Obtén Clain AI Agent y la plataforma completa por un único precio integrado
-            </h1>
-            <button onClick={() => onNavigate('featuresComparison')} className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-xl border transition-colors hover:bg-[#f5f5f4]" style={{ border: `1px solid ${LC.border}`, color: LC.text }}>
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M2 4h12M2 8h8M2 12h5"/></svg>
-              Ver comparativa de funciones
-            </button>
-          </div>
-
-          {/* Toggle + launch-price tab */}
-          <div className="mt-10 flex items-center gap-3 flex-wrap">
-            <div className="inline-flex items-center gap-1.5 p-1.5" style={{ border: `1px solid ${LC.border}`, background: '#fff' }}>
-              <button onClick={() => { setIsAnnual(true); setIsLaunch(false); }} className="px-3 py-1.5 text-[13px] rounded-[4px] transition-all" style={{ background: isAnnual && !isLaunch ? LC.bg2 : 'transparent', color: LC.text, fontWeight: isAnnual && !isLaunch ? 600 : 400 }}>Facturación anual</button>
-              <button onClick={() => { setIsAnnual(false); setIsLaunch(false); }} className="px-3 py-1.5 text-[13px] rounded-[4px] transition-all" style={{ background: !isAnnual && !isLaunch ? LC.bg2 : 'transparent', color: LC.text, fontWeight: !isAnnual && !isLaunch ? 600 : 400 }}>Facturación mensual</button>
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        {/* Hero */}
+        <div style={{ borderBottom: `1px solid ${LC.border}`, padding: '48px 64px 40px', position: 'relative' }}>
+          <LandingCornerDots />
+          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>Facturación &amp; Planes</p>
+          <h1 style={{ fontSize: 36, fontWeight: 800, color: LC.text, marginBottom: 12, lineHeight: '1.15' }}>
+            El plan perfecto<br />para tu equipo
+          </h1>
+          <p style={{ fontSize: 15, color: LC.text60, marginBottom: 32, maxWidth: 480 }}>
+            Empieza gratis y escala cuando lo necesites. Sin contratos, sin sorpresas.
+          </p>
+          {/* Billing toggle + launch-price tab */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', border: `1px solid ${LC.border}`, background: LC.bg2, padding: 3 }}>
+              {(['monthly', 'annual'] as const).map(b => (
+                <button key={b} onClick={() => setBilling(b)}
+                  style={{ padding: '6px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: billing === b ? '#fff' : 'transparent', color: billing === b ? LC.text : LC.text60, boxShadow: billing === b ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}
+                >
+                  {b === 'monthly' ? 'Mensual' : 'Anual'}{b === 'annual' ? ' (-15%)' : ''}
+                </button>
+              ))}
             </div>
-
-            {/* Square launch-price tab — next to the monthly/annual toggle */}
+            {/* Square launch-price tab — sits next to the monthly/annual toggle */}
             <button
               onClick={() => setIsLaunch(v => !v)}
-              className="inline-flex items-center gap-2.5 px-4 py-2.5 transition-all"
               style={{
+                display: 'inline-flex', alignItems: 'center', gap: 10,
+                padding: '8px 16px',
                 border: `1px solid ${isLaunch ? LC.accent : LC.border}`,
                 background: isLaunch ? LC.accent : '#fff',
                 color: isLaunch ? '#fff' : LC.text,
                 cursor: 'pointer',
               }}
             >
-              <span className="text-[11px] uppercase tracking-[0.6px] font-bold">Precio lanzamiento</span>
-              <span className="size-[3px] rounded-full" style={{ background: isLaunch ? '#fff' : LC.text }} />
-              <span className="text-[13px] font-medium">Hasta 31 dic 2026</span>
-              <span className="size-[3px] rounded-full" style={{ background: isLaunch ? '#fff' : LC.text }} />
-              <span className="text-[13px] font-bold">Ahorra 73%</span>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Precio lanzamiento</span>
+              <span style={{ width: 3, height: 3, borderRadius: '50%', background: isLaunch ? '#fff' : LC.text }} />
+              <span style={{ fontSize: 13 }}>Hasta 31 dic 2026</span>
+              <span style={{ width: 3, height: 3, borderRadius: '50%', background: isLaunch ? '#fff' : LC.text }} />
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Ahorra 73%</span>
             </button>
           </div>
+        </div>
 
-          {/* Plans row */}
-          <div className="flex gap-6 items-stretch mt-10">
-            {/* 3 platform plans */}
-            <div className="flex flex-col flex-1" style={{ border: `1px solid ${LC.border}` }}>
-              <div className="px-6 py-2.5" style={{ background: LC.bg, borderBottom: `1px solid ${LC.border}` }}>
-                <span className="text-[13px]" style={{ color: LC.text }}>Nuestros planes con Clain AI Agent</span>
-              </div>
-              <div className="flex flex-1">
-                {PLANS.map((plan, i) => {
-                  // Launch pricing shows the same 73%-off annual rate regardless of billing toggle
-                  const price = isLaunch ? plan.priceAnnual : isAnnual ? plan.priceAnnual : plan.priceMonthly;
-                  const isCurrent = currentPlanId === plan.id;
-                  return (
-                    <div key={plan.id} className="flex flex-col flex-1 p-6" style={{ borderLeft: i > 0 ? `1px solid ${LC.border}` : 'none' }}>
-                      {/* Top fixed block */}
-                      <div style={{ minHeight: 210 }}>
-                        <h3 className="m-0 text-[20px] tracking-[-0.4px] font-medium" style={{ color: LC.text }}>{plan.name}</h3>
-                        <p className="m-0 mt-2 text-[13px] leading-[20px]" style={{ color: LC.text }}>{plan.subtitle}</p>
-                        <p className="m-0 mt-3 text-[13px] leading-[20px]" style={{ color: LC.text60 }}>{plan.description}</p>
-                        <div className="mt-4 flex items-start justify-between">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[14px] font-semibold" style={{ color: LC.text }}>Desde</span>
-                            <span className="text-[13px] line-through" style={{ color: LC.text60 }}>{plan.originalPrice}/mes</span>
-                          </div>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span className="text-[30px] leading-[32px] tracking-[-0.5px] font-bold" style={{ color: LC.text }}>{price}</span>
-                            <span className="text-[12px]" style={{ color: LC.text80 }}>{plan.seatLabel}</span>
-                          </div>
-                        </div>
-                      </div>
-                      {/* CTA */}
-                      <button className="w-full h-[42px] rounded-lg text-[13px] font-semibold transition-opacity hover:opacity-85 mt-2" style={{ background: isCurrent ? LC.bg2 : LC.text, color: isCurrent ? LC.text : '#fff', border: isCurrent ? `1px solid ${LC.border}` : 'none', cursor: isCurrent ? 'default' : 'pointer' }}>
-                        {isCurrent ? 'Plan actual' : plan.cta}
-                      </button>
-                      {/* Features */}
-                      <div className="mt-5 flex-1">
-                        <p className="m-0 text-[10px] uppercase tracking-[0.6px]" style={{ color: LC.text }}>{plan.featuresLabel}</p>
-                        <ul className="p-0 m-0 mt-5 flex flex-col gap-3">
-                          {plan.features.map((f, fi) => <LandingBullet key={fi}>{f}</LandingBullet>)}
-                        </ul>
-                      </div>
-                      <button onClick={() => onNavigate('featuresComparison')} className="mt-6 self-start bg-transparent border-0 p-0 text-[13px] underline cursor-pointer" style={{ color: LC.text }}>Ver todas las funciones →</button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Business card */}
-            <div className="flex flex-col" style={{ width: 272, border: `1px solid ${LC.border}` }}>
-              <div className="px-6 py-2.5" style={{ background: LC.bg, borderBottom: `1px solid ${LC.border}` }}>
-                <span className="text-[13px]" style={{ color: LC.text }}>¿Necesitas más? Contacta a ventas</span>
-              </div>
-              <div className="flex flex-col p-6 flex-1">
-                <div style={{ minHeight: 210 }}>
-                  <h3 className="m-0 text-[20px] tracking-[-0.4px] font-medium" style={{ color: LC.text }}>{BUSINESS_PLAN.name}</h3>
-                  <p className="m-0 mt-2 text-[13px] leading-[20px]" style={{ color: LC.text }}>{BUSINESS_PLAN.subtitle}</p>
-                  <p className="m-0 mt-3 text-[13px] leading-[20px]" style={{ color: LC.text60 }}>{BUSINESS_PLAN.description}</p>
-                  <div className="mt-4 flex items-start justify-between">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[14px] font-semibold" style={{ color: LC.text }}>Precio</span>
-                      <span className="text-[13px]" style={{ color: LC.text60 }}>por contrato</span>
-                    </div>
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-[30px] leading-[32px] tracking-[-0.5px] font-bold" style={{ color: LC.text }}>Custom</span>
-                      <span className="text-[12px]" style={{ color: LC.text80 }}>negociado</span>
-                    </div>
+        {/* Plans grid */}
+        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
+          <div style={{ display: 'flex', gap: 0, border: `1px solid ${LC.border}` }}>
+            {PLANS.map((plan, i) => (
+              <Fragment key={plan.id}>
+                {i > 0 && <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />}
+                <BillingPlanCard plan={plan} billing={billing} current={currentPlan} isLaunch={isLaunch} />
+              </Fragment>
+            ))}
+            {/* Business column */}
+            <div style={{ width: 1, background: LC.border, flexShrink: 0 }} />
+            <div style={{ position: 'relative', border: 'none', background: LC.bg, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <LandingCornerDots color={LC.border} />
+              <div style={{ padding: '24px 24px 20px', borderBottom: `1px solid ${LC.border}` }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{BUSINESS_PLAN.name}</p>
+                <p style={{ fontSize: 12, color: LC.text60, marginBottom: 20, minHeight: 36, lineHeight: '1.5' }}>{BUSINESS_PLAN.desc}</p>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', height: 56 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: LC.text }}>Precio</span>
+                    <span style={{ fontSize: 15, color: LC.text60 }}>por contrato</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                    <span style={{ fontSize: 32, fontWeight: 700, color: LC.text, letterSpacing: '-0.6px' }}>Custom</span>
+                    <span style={{ fontSize: 13, color: LC.text80 }}>negociado</span>
                   </div>
                 </div>
-                <button className="w-full h-[42px] rounded-lg text-[13px] font-semibold transition-opacity hover:opacity-85 mt-2" style={{ background: LC.text, color: '#fff' }}>{BUSINESS_PLAN.cta}</button>
-                <div className="mt-5 flex-1">
-                  <p className="m-0 text-[10px] uppercase tracking-[0.6px]" style={{ color: LC.text }}>{BUSINESS_PLAN.featuresLabel}</p>
-                  <ul className="p-0 m-0 mt-5 flex flex-col gap-3">
-                    {BUSINESS_PLAN.features.map((f, fi) => <LandingBullet key={fi}>{f}</LandingBullet>)}
-                  </ul>
-                </div>
+              </div>
+              <div style={{ padding: '16px 24px' }}>
+                <button style={{ width: '100%', height: 44, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: 'none', background: LC.text, color: '#fff' }}>
+                  Hablar con ventas
+                </button>
+              </div>
+              <div style={{ padding: '4px 24px', flex: 1 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 20 }}>{BUSINESS_PLAN.featuresLabel}</p>
+                {BUSINESS_PLAN.features.map(f => (
+                  <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 16 }}>
+                    <span style={{ width: 4, height: 4, marginTop: 8, flexShrink: 0, background: 'rgba(17,17,17,0.3)', display: 'inline-block' }} />
+                    <span style={{ fontSize: 13, color: LC.text, lineHeight: '1.6' }}>{f}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Footer note */}
-          <p className="mt-8 text-[13px] leading-[20px] max-w-[600px]" style={{ color: LC.text }}>
-            Todos los planes incluyen chat en vivo ilimitado, email de soporte, chats in-app, banners y tooltips gratuitos. Pago por uso para campañas de email, SMS, WhatsApp y Teléfono.
-          </p>
-
-          {/* Credits & Seats section */}
-          <div className="mt-8" style={{ border: `1px solid ${LC.border}` }}>
-            <div className="px-6 py-2.5" style={{ background: LC.bg, borderBottom: `1px solid ${LC.border}` }}>
-              <span className="text-[13px]" style={{ color: LC.text }}>Cómo funcionan los créditos y los puestos</span>
-            </div>
-            <div className="flex">
-              {/* Credits */}
-              <div className="flex-1 p-6 flex flex-col" style={{ borderRight: `1px solid ${LC.border}` }}>
-                <h3 className="m-0 text-[20px] tracking-[-0.4px] font-medium" style={{ color: LC.text }}>Créditos AI</h3>
-                <p className="m-0 mt-2 text-[13px] leading-[20px]" style={{ color: LC.text }}>La inteligencia que impulsa tu workspace</p>
-                <p className="m-0 mt-3 text-[13px] leading-[20px]" style={{ color: LC.text60 }}>Cada plan incluye una cuota mensual de créditos AI — <strong style={{ color: LC.text }}>compartida por todo el equipo</strong>, no por puesto. Un crédito cubre una unidad de trabajo IA. Añadir puestos <strong style={{ color: LC.text }}>no añade créditos</strong>; para ampliar la cuota, compra packs de créditos por separado.</p>
-                <p className="mt-5 m-0 text-[10px] uppercase tracking-[0.6px]" style={{ color: LC.text }}>CUOTA MENSUAL POR PLAN</p>
-                <ul className="p-0 m-0 mt-3 flex flex-col gap-2.5">
-                  <LandingBullet>Starter — 5.000 créditos/mes</LandingBullet>
-                  <LandingBullet>Growth — 20.000 créditos/mes</LandingBullet>
-                  <LandingBullet>Scale — 60.000 créditos/mes</LandingBullet>
-                  <LandingBullet>Top-ups disponibles; se consumen tras la cuota mensual</LandingBullet>
-                </ul>
-                <button className="mt-auto pt-6 self-start px-4 py-2 rounded-lg text-[13px] font-semibold" style={{ background: LC.text, color: '#fff' }}>Comprar packs de créditos</button>
-              </div>
-              {/* Seats */}
-              <div className="flex-1 p-6 flex flex-col">
-                <h3 className="m-0 text-[20px] tracking-[-0.4px] font-medium" style={{ color: LC.text }}>Puestos</h3>
-                <p className="m-0 mt-2 text-[13px] leading-[20px]" style={{ color: LC.text }}>Un puesto por compañero con acceso completo</p>
-                <p className="m-0 mt-3 text-[13px] leading-[20px]" style={{ color: LC.text60 }}>Cada plan incluye un número base de puestos. Añade más en cualquier momento — la facturación se prorratea automáticamente. <strong style={{ color: LC.text }}>Añadir un puesto no incrementa tus créditos AI</strong> — los créditos son compartidos por el workspace. Los puestos Lite para colaboradores de solo lectura están incluidos gratis.</p>
-                <p className="mt-5 m-0 text-[10px] uppercase tracking-[0.6px]" style={{ color: LC.text }}>PUESTOS INCLUIDOS POR PLAN</p>
-                <ul className="p-0 m-0 mt-3 flex flex-col gap-2.5">
-                  <LandingBullet>Starter — 3 puestos (€25/puesto extra)</LandingBullet>
-                  <LandingBullet>Growth — 8 puestos (€22/puesto extra)</LandingBullet>
-                  <LandingBullet>Scale — 20 puestos (€19/puesto extra)</LandingBullet>
-                  <LandingBullet>Colaboradores Lite — ilimitados, gratis</LandingBullet>
-                </ul>
-                <button className="mt-auto pt-6 self-start px-4 py-2 rounded-lg text-[13px] font-semibold" style={{ background: LC.text, color: '#fff' }}>Gestionar puestos</button>
-              </div>
-            </div>
+          {/* Features comparison link */}
+          <div style={{ marginTop: 20, textAlign: 'center' }}>
+            <button
+              onClick={() => onNavigate('featuresComparison')}
+              style={{ fontSize: 13, color: LC.accent, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: 600 }}
+            >
+              Ver comparación completa de funciones →
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* ═══ Section 2 — Estimate ════════════════════════════════════════════ */}
-      <div className="relative w-full" style={{ background: '#fff' }}>
-        <div className="max-w-[1280px] mx-auto px-8 py-16 relative">
-          <LandingCornerDots color="rgba(17,17,17,0.08)" />
-          <h2 className="m-0 text-[38px] leading-[42px] tracking-[-1.2px] max-w-[600px] font-normal" style={{ color: LC.text }}>
-            <span style={{ color: LC.text60 }}>Obtén una estimación </span>basada en tus necesidades
-          </h2>
-          <div className="grid grid-cols-2 gap-6 mt-10">
+        {/* Credits & Seats */}
+        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 20 }}>Créditos AI &amp; Puestos</p>
+          <div style={{ display: 'flex', gap: 0, border: `1px solid ${LC.border}` }}>
             {[
-              { title: 'Encuentra el plan adecuado para tu equipo', desc: 'Obtén un coste estimado de la plataforma de Clain basado en el tamaño de tu equipo, resultados AI esperados y más.', cta: 'Estimar coste' },
-              { title: 'Calcula el impacto ROI que Clain podría tener en tu negocio', desc: 'Estima cuánto tiempo y dinero podría ahorrar Clain a tu equipo, basado en tu volumen de soporte actual y futuro.', cta: 'Ver ROI' },
-            ].map(card => (
-              <div key={card.title} className="relative p-10 flex flex-col" style={{ background: LC.bg2 }}>
-                <LandingCornerDots color="rgba(17,17,17,0.12)" />
-                <h3 className="m-0 text-[24px] leading-[28px] tracking-[-0.4px] max-w-[280px] font-medium" style={{ color: LC.text }}>{card.title}</h3>
-                <p className="m-0 mt-4 text-[13px] leading-[20px] max-w-[360px]" style={{ color: LC.text60 }}>{card.desc}</p>
-                <button className="mt-6 self-start px-4 py-2 rounded text-[13px] font-medium border-0" style={{ background: LC.text, color: '#fff' }}>{card.cta}</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ═══ Section 3 — Testimonials ════════════════════════════════════════ */}
-      <div className="relative w-full" style={{ background: LC.bg }}>
-        <div className="max-w-[1280px] mx-auto px-8 py-16 relative">
-          <LandingCornerDots color="rgba(17,17,17,0.08)" />
-          <h2 className="m-0 text-[38px] leading-[42px] tracking-[-1.2px] font-normal max-w-[700px]" style={{ color: LC.text }}>
-            Miles de empresas ya han obtenido <span style={{ color: LC.text60 }}>resultados transformadores</span>
-          </h2>
-          <div className="mt-8 flex" style={{ borderBottom: `1px solid ${LC.border}` }}>
-            {testimonials.map((t, i) => (
-              <button key={t.tab} onClick={() => setActiveTestimonial(i)} className="flex-1 border-0 px-6 py-3 text-left text-[11px] uppercase tracking-[0.6px] cursor-pointer transition-colors" style={{ fontFamily: "'Inter', sans-serif", color: LC.text, background: i === activeTestimonial ? LC.bg2 : 'transparent' }}>{t.tab}</button>
-            ))}
-          </div>
-          <div className="relative p-12" style={{ background: LC.bg2 }}>
-            <LandingCornerDots color={LC.accent} />
-            <p className="m-0 text-[24px] leading-[32px] tracking-[-0.3px] font-medium" style={{ color: LC.text }}>{testimonials[activeTestimonial].quote}</p>
-            <div className="mt-10">
-              <p className="m-0 text-[13px] font-semibold" style={{ color: LC.text }}>{testimonials[activeTestimonial].author}</p>
-              <p className="m-0 text-[13px]" style={{ color: LC.text60 }}>{testimonials[activeTestimonial].role}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ═══ Section 4 — FAQs ════════════════════════════════════════════════ */}
-      <div className="relative w-full" style={{ background: '#fff' }}>
-        <div className="max-w-[1280px] mx-auto px-8 py-16 relative">
-          <LandingCornerDots color="rgba(17,17,17,0.08)" />
-          <div className="grid gap-16" style={{ gridTemplateColumns: '1fr 2fr' }}>
-            <h2 className="m-0 text-[38px] leading-[42px] tracking-[-1.2px] font-normal" style={{ color: LC.text }}>FAQs</h2>
-            <div className="flex flex-col">
-              {FAQS.map((faq, i) => (
-                <div key={i} style={{ borderTop: `1px solid ${LC.border}` }}>
-                  <button onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full flex items-center justify-between gap-4 py-4 bg-transparent border-0 cursor-pointer text-left">
-                    <span className="text-[14px] leading-[22px] font-medium" style={{ color: LC.text }}>{faq.q}</span>
-                    <svg className={`shrink-0 transition-transform ${openFaq === i ? 'rotate-180' : ''}`} width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1.5L6 6.5L11 1.5" stroke={LC.text} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  {openFaq === i && <div className="pb-4"><p className="m-0 text-[13px] leading-[20px]" style={{ color: LC.text60 }}>{faq.a}</p></div>}
+              { title: 'Créditos AI', desc: 'Cada interacción con AI Copilot o Fin AI consume créditos. Los créditos se renuevan mensualmente según tu plan.', price: '+€19', unit: '/1.000 créditos extra' },
+              { title: 'Puestos adicionales', desc: 'Añade puestos para más agentes en cualquier momento. El coste se prorratea hasta tu próxima fecha de renovación.', price: '+€29', unit: '/puesto/mes' },
+            ].map((item, i) => (
+              <Fragment key={item.title}>
+                {i > 0 && <div style={{ width: 1, background: LC.border }} />}
+                <div style={{ flex: 1, padding: '24px', position: 'relative' }}>
+                  <LandingCornerDots />
+                  <p style={{ fontSize: 14, fontWeight: 700, color: LC.text, marginBottom: 8 }}>{item.title}</p>
+                  <p style={{ fontSize: 13, color: LC.text60, marginBottom: 20, lineHeight: '1.5' }}>{item.desc}</p>
+                  <p style={{ fontSize: 28, fontWeight: 800, color: LC.text }}>{item.price} <span style={{ fontSize: 12, fontWeight: 400, color: LC.text60 }}>{item.unit}</span></p>
                 </div>
-              ))}
-              <div style={{ borderTop: `1px solid ${LC.border}` }} />
-            </div>
+              </Fragment>
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* ═══ Section 5 — Final CTA ═══════════════════════════════════════════ */}
-      <div className="relative w-full" style={{ background: LC.bg }}>
-        <div className="max-w-[1280px] mx-auto px-8 py-24 relative flex flex-col items-center text-center">
-          <LandingCornerDots color="rgba(17,17,17,0.12)" />
-          <h2 className="m-0 text-[52px] leading-[56px] tracking-[-1.8px] max-w-[700px] font-normal" style={{ color: LC.text }}>Experiencias perfectas para tus clientes, impulsadas por Clain</h2>
-          <button className="mt-8 px-7 py-3 rounded-lg text-[14px] font-semibold transition-opacity hover:opacity-85 border-0" style={{ background: LC.text, color: '#fff' }}>Empezar con Clain</button>
+        {/* FAQs */}
+        <div style={{ padding: '40px 64px', borderBottom: `1px solid ${LC.border}` }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 24 }}>Preguntas frecuentes</p>
+          <div style={{ maxWidth: 680 }}>
+            {FAQS.map(f => <BillingFaqItem key={f.q} q={f.q} a={f.a} />)}
+            <div style={{ borderTop: `1px solid ${LC.border}` }} />
+          </div>
+        </div>
+
+        {/* Final CTA */}
+        <div style={{ padding: '48px 64px', position: 'relative', textAlign: 'center' }}>
+          <LandingCornerDots />
+          <p style={{ fontSize: 24, fontWeight: 800, color: LC.text, marginBottom: 12 }}>¿Tienes preguntas?</p>
+          <p style={{ fontSize: 14, color: LC.text60, marginBottom: 24 }}>Nuestro equipo está disponible para ayudarte a elegir el plan adecuado.</p>
+          <button style={{ padding: '12px 32px', fontSize: 14, fontWeight: 700, background: LC.accent, color: '#fff', border: 'none', cursor: 'pointer' }}>
+            Hablar con ventas
+          </button>
         </div>
       </div>
     </div>
@@ -10015,173 +10012,172 @@ function BillingView({ view: _view, onNavigate }: { view: View; onNavigate: (v: 
 
 const FEATURE_SECTIONS = [
   {
-    title: 'Inbox y conversaciones',
+    title: 'Bandeja de entrada',
     rows: [
-      { feature: 'Inbox compartido',                    starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Vistas personalizadas',               starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Asignación automática',               starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Round robin',                         starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'SLA y monitoreo',                     starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Tickets',                             starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Macros y respuestas rápidas',         starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Etiquetas y categorías',              starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Prioridad y urgencia',                starter: false, growth: true,  scale: true,  business: true  },
+      { feature: 'Bandeja de entrada compartida', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Reglas de asignación automática', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Vistas personalizadas', starter: '3', growth: 'Ilimitadas', scale: 'Ilimitadas', business: 'Ilimitadas' },
+      { feature: 'Mención de compañeros', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Notas internas', starter: true, growth: true, scale: true, business: true },
     ],
   },
   {
-    title: 'Clain AI Agent',
+    title: 'AI & Automatización',
     rows: [
-      { feature: 'AI Agent autónomo',                   starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Créditos AI/mes (workspace)',         starter: '5K',  growth: '20K', scale: '60K', business: 'Custom' },
-      { feature: 'Uso flexible (€0,012/resultado)',     starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Personalización del agente',          starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Múltiples agentes IA',                starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'Trae tu propio modelo (BYOM)',        starter: false, growth: false, scale: false, business: true  },
+      { feature: 'AI Copilot', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Fin AI Agent', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Créditos AI incluidos', starter: '0', growth: '500/mes', scale: '2.000/mes', business: 'Personalizado' },
+      { feature: 'Flujos de trabajo automatizados', starter: '5', growth: 'Ilimitados', scale: 'Ilimitados', business: 'Ilimitados' },
+      { feature: 'Resolución automática con AI', starter: false, growth: false, scale: true, business: true },
     ],
   },
   {
-    title: 'Knowledge Hub',
+    title: 'Centro de ayuda',
     rows: [
-      { feature: 'Base de conocimiento',                starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Help Center público',                 starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Help Center multimarca',              starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'Artículos con IA',                   starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Control de versiones',                starter: false, growth: false, scale: true,  business: true  },
-    ],
-  },
-  {
-    title: 'Automatización y flujos',
-    rows: [
-      { feature: 'Reglas de automatización básicas',   starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Constructor visual de flujos',        starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Webhooks y acciones HTTP',            starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Flujos multi-paso con condiciones',   starter: false, growth: false, scale: true,  business: true  },
-    ],
-  },
-  {
-    title: 'Reportes e IA',
-    rows: [
-      { feature: 'Reportes básicos',                    starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Reportes avanzados',                  starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'AI Insights',                         starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'CSAT y satisfacción del cliente',     starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Dashboard personalizable',            starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'Exportación de datos',                starter: false, growth: true,  scale: true,  business: true  },
+      { feature: 'Centro de ayuda público', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Múltiples centros de ayuda', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Artículos ilimitados', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Personalización avanzada', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Búsqueda por IA', starter: false, growth: true, scale: true, business: true },
     ],
   },
   {
     title: 'Canales',
     rows: [
-      { feature: 'Chat en vivo',                        starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Email de soporte',                    starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'WhatsApp',                            starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'SMS',                                 starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Teléfono / Voz',                      starter: false, growth: true,  scale: true,  business: true  },
-      { feature: 'Canales sociales',                    starter: false, growth: true,  scale: true,  business: true  },
+      { feature: 'Chat en vivo (web)', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Correo electrónico', starter: true, growth: true, scale: true, business: true },
+      { feature: 'WhatsApp', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Instagram', starter: false, growth: true, scale: true, business: true },
+      { feature: 'SMS', starter: false, growth: false, scale: true, business: true },
     ],
   },
   {
-    title: 'Seguridad y cumplimiento',
+    title: 'Informes',
     rows: [
-      { feature: 'SSO (Google)',                        starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'SAML / SSO enterprise',               starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'Autenticación 2FA obligatoria',       starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'HIPAA',                               starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'SOC 2 Type II',                       starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'Logs de auditoría',                   starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'DPA personalizado',                   starter: false, growth: false, scale: false, business: true  },
+      { feature: 'Informes básicos', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Informes personalizados', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Exportación de datos (CSV)', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Panel de rendimiento de agentes', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Informes de CSAT', starter: false, growth: true, scale: true, business: true },
     ],
   },
   {
-    title: 'Puestos e integraciones',
+    title: 'Seguridad & Acceso',
     rows: [
-      { feature: 'Puestos incluidos',                   starter: '3',   growth: '8',   scale: '20',  business: 'Custom' },
-      { feature: 'Puestos Lite (solo lectura)',          starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'API pública',                         starter: true,  growth: true,  scale: true,  business: true  },
-      { feature: 'Integraciones nativas (Salesforce, Jira…)', starter: false, growth: true, scale: true, business: true },
-      { feature: 'Conectores de datos personalizados',  starter: false, growth: false, scale: true,  business: true  },
-      { feature: 'SLA contractual de uptime',           starter: false, growth: false, scale: false, business: true  },
-      { feature: 'Onboarding dedicado',                 starter: false, growth: false, scale: false, business: true  },
+      { feature: 'SSO / SAML', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Roles personalizados', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Log de auditoría', starter: false, growth: false, scale: false, business: true },
+      { feature: '2FA obligatorio', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Revisión de seguridad avanzada', starter: false, growth: false, scale: false, business: true },
     ],
   },
-] as const;
+  {
+    title: 'Integraciones',
+    rows: [
+      { feature: 'Slack', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Salesforce', starter: false, growth: true, scale: true, business: true },
+      { feature: 'HubSpot', starter: false, growth: true, scale: true, business: true },
+      { feature: 'API pública', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Webhooks', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Límite de velocidad API', starter: '100/min', growth: '500/min', scale: '2.000/min', business: 'Personalizado' },
+    ],
+  },
+  {
+    title: 'Soporte',
+    rows: [
+      { feature: 'Centro de ayuda', starter: true, growth: true, scale: true, business: true },
+      { feature: 'Soporte por chat', starter: false, growth: true, scale: true, business: true },
+      { feature: 'Soporte prioritario', starter: false, growth: false, scale: true, business: true },
+      { feature: 'Gestor de cuenta dedicado', starter: false, growth: false, scale: false, business: true },
+      { feature: 'Implementación guiada', starter: false, growth: false, scale: false, business: true },
+    ],
+  },
+];
+
+function FcCell({ value }: { value: boolean | string }) {
+  if (value === true)  return <span style={{ color: LC.accent, fontSize: 16, fontWeight: 700 }}>✓</span>;
+  if (value === false) return <span style={{ color: LC.border, fontSize: 16, fontWeight: 700 }}>—</span>;
+  return <span style={{ fontSize: 12, color: LC.text80 }}>{value}</span>;
+}
 
 function FeaturesComparisonView({ view: _view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const CheckIco = () => (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mx-auto" style={{ color: LC.text }}><path d="M2 8l4 4 8-8"/></svg>
-  );
-  const MinusIco = () => (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="w-4 h-4 mx-auto" style={{ color: LC.border }}><path d="M4 8h8"/></svg>
-  );
-
-  const CellVal = ({ val }: { val: boolean | string }) => {
-    if (typeof val === 'string') return <span className="text-[12.5px] font-semibold" style={{ color: LC.text }}>{val}</span>;
-    return val ? <CheckIco /> : <MinusIco />;
-  };
-
-  const PLAN_NAMES = ['Starter', 'Growth', 'Scale', 'Business'];
-  const PLAN_PRICES_MONTHLY = ['€49', '€129', '€299', 'Custom'];
+  const cols = ['2fr', '1fr', '1fr', '1fr', '1fr'];
+  const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: cols.join(' ') };
+  const PLANS_FC = ['Starter', 'Growth', 'Scale', 'Business'];
+  const planKeys: Array<'starter' | 'growth' | 'scale' | 'business'> = ['starter', 'growth', 'scale', 'business'];
 
   return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-y-auto" style={{ background: '#fff', fontFamily: "'Inter', sans-serif" }}>
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: LC.bg }}>
       <TrialBanner />
-
-      {/* Top bar */}
-      <div className="flex items-center gap-4 px-8 py-5 flex-shrink-0 sticky top-0 z-10" style={{ background: '#fff', borderBottom: `1px solid ${LC.border}` }}>
-        <button onClick={() => onNavigate('billing')} className="w-8 h-8 rounded-full flex items-center justify-center border transition-colors hover:bg-[#f8f8f7]" style={{ border: `1px solid ${LC.border}` }}>
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="w-3.5 h-3.5" style={{ color: LC.text60 }}><path d="M10 3L5 8l5 5"/></svg>
-        </button>
-        <div>
-          <h1 className="text-[20px] font-semibold tracking-[-0.3px] m-0" style={{ color: LC.text }}>Comparativa de funciones</h1>
-          <p className="m-0 text-[13px]" style={{ color: LC.text60 }}>Elige el plan que mejor se adapta a tu equipo</p>
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        {/* Header */}
+        <div style={{ borderBottom: `1px solid ${LC.border}`, padding: '32px 64px 28px', position: 'relative', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <LandingCornerDots />
+          <button
+            onClick={() => onNavigate('billing')}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: LC.text60, background: 'none', border: `1px solid ${LC.border}`, padding: '6px 14px', cursor: 'pointer', flexShrink: 0 }}
+          >
+            ← Volver a planes
+          </button>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: LC.text60, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Comparativa completa</p>
+            <h1 style={{ fontSize: 28, fontWeight: 800, color: LC.text, lineHeight: '1.15' }}>Funciones por plan</h1>
+          </div>
         </div>
-      </div>
 
-      {/* Sticky plan header */}
-      <div className="sticky z-[9] px-8 pt-6 pb-0" style={{ top: 73, background: '#fff' }}>
-        <div className="grid" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr' }}>
-          <div />
-          {PLAN_NAMES.map((name, i) => (
-            <div key={name} className="flex flex-col items-center pb-4 px-3" style={{ borderBottom: `2px solid ${i < 3 ? LC.border : LC.text}` }}>
-              <span className="text-[14px] font-bold tracking-[-0.2px]" style={{ color: LC.text }}>{name}</span>
-              <span className="text-[12px] mt-0.5" style={{ color: LC.text60 }}>{PLAN_PRICES_MONTHLY[i]}/mes</span>
-              <button className="mt-3 w-full h-[34px] rounded text-[12px] font-semibold transition-opacity hover:opacity-85 border-0" style={{ background: i === 3 ? LC.text : LC.bg2, color: i === 3 ? '#fff' : LC.text, border: i < 3 ? `1px solid ${LC.border}` : 'none' }}>
-                {i === 3 ? 'Hablar con ventas' : `Elegir ${name}`}
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Feature rows */}
-      <div className="px-8 pb-16">
-        {FEATURE_SECTIONS.map(section => (
-          <div key={section.title} className="mt-8">
-            {/* Section header */}
-            <div className="grid py-2 mb-1" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', borderBottom: `1px solid ${LC.border}` }}>
-              <span className="text-[11px] font-bold uppercase tracking-[0.6px]" style={{ color: LC.text }}>{section.title}</span>
-            </div>
-            {/* Rows */}
-            {(section.rows as readonly { feature: string; starter: boolean | string; growth: boolean | string; scale: boolean | string; business: boolean | string }[]).map((row, ri) => (
-              <div key={ri} className="grid items-center py-2.5" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', borderBottom: `1px solid ${LC.border}20` }}>
-                <span className="text-[13px]" style={{ color: LC.text }}>{row.feature}</span>
-                <div className="flex items-center justify-center"><CellVal val={row.starter} /></div>
-                <div className="flex items-center justify-center"><CellVal val={row.growth} /></div>
-                <div className="flex items-center justify-center"><CellVal val={row.scale} /></div>
-                <div className="flex items-center justify-center"><CellVal val={row.business} /></div>
+        {/* Sticky plan header */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 10, background: LC.bg, borderBottom: `1px solid ${LC.border}` }}>
+          <div style={{ ...gridStyle, padding: '0 64px' }}>
+            <div style={{ padding: '16px 0' }} />
+            {PLANS_FC.map((p, i) => (
+              <div key={p} style={{ padding: '16px 12px', textAlign: 'center', borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent' }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: i === 3 ? '#fff' : LC.text, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{p}</p>
               </div>
             ))}
           </div>
-        ))}
+        </div>
 
-        {/* Bottom CTA */}
-        <div className="mt-12 relative p-12 flex flex-col items-center text-center" style={{ background: LC.bg2 }}>
-          <LandingCornerDots color="rgba(17,17,17,0.12)" />
-          <h2 className="m-0 text-[32px] leading-[36px] tracking-[-0.8px] font-normal max-w-[500px]" style={{ color: LC.text }}>¿No estás seguro de qué plan elegir?</h2>
-          <p className="m-0 mt-4 text-[14px]" style={{ color: LC.text60 }}>Habla con nuestro equipo de ventas o empieza con una prueba gratuita de 14 días.</p>
-          <div className="mt-6 flex gap-3">
-            <button className="px-6 py-2.5 rounded-lg text-[13px] font-semibold border-0 transition-opacity hover:opacity-85" style={{ background: LC.text, color: '#fff' }}>Empezar gratis</button>
-            <button className="px-6 py-2.5 rounded-lg text-[13px] font-medium transition-colors hover:bg-[#e8e4dc]" style={{ background: LC.bg, color: LC.text, border: `1px solid ${LC.border}` }}>Hablar con ventas</button>
+        {/* Feature sections */}
+        <div style={{ padding: '0 64px 64px' }}>
+          {FEATURE_SECTIONS.map(section => (
+            <div key={section.title} style={{ marginTop: 32 }}>
+              {/* Section header */}
+              <div style={{ ...gridStyle, borderBottom: `2px solid ${LC.text}`, paddingBottom: 8, marginBottom: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: LC.text, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{section.title}</p>
+                {PLANS_FC.map((p, i) => (
+                  <div key={p} style={{ borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent' }} />
+                ))}
+              </div>
+              {/* Rows */}
+              {section.rows.map((row, ri) => (
+                <div key={row.feature} style={{ ...gridStyle, borderBottom: `1px solid ${LC.border}`, background: ri % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)' }}>
+                  <div style={{ padding: '12px 0', fontSize: 13, color: LC.text80 }}>{row.feature}</div>
+                  {planKeys.map((k, i) => (
+                    <div key={k} style={{ padding: '12px', textAlign: 'center', borderLeft: `1px solid ${LC.border}`, background: i === 3 ? '#111' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <FcCell value={row[k]} />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {/* Bottom CTA */}
+          <div style={{ marginTop: 48, border: `1px solid ${LC.border}`, padding: '40px', position: 'relative', textAlign: 'center' }}>
+            <LandingCornerDots />
+            <p style={{ fontSize: 20, fontWeight: 800, color: LC.text, marginBottom: 8 }}>¿Listo para empezar?</p>
+            <p style={{ fontSize: 14, color: LC.text60, marginBottom: 24 }}>Prueba cualquier plan gratis durante 14 días, sin tarjeta de crédito.</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                onClick={() => onNavigate('billing')}
+                style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, background: LC.accent, color: '#fff', border: 'none', cursor: 'pointer' }}
+              >
+                Ver planes y precios
+              </button>
+              <button style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, background: 'transparent', color: LC.text, border: `1.5px solid ${LC.border}`, cursor: 'pointer' }}>
+                Hablar con ventas
+              </button>
+            </div>
           </div>
         </div>
       </div>
