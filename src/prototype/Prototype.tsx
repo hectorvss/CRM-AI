@@ -13862,6 +13862,364 @@ function KnowledgeArticleEditor({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeWebsiteSyncWizard — 4-step drawer wizard for the
+// "Sincronización de sitio web" card. Persists the sync as a knowledge
+// article of type='website' so it shows up in the article list and Fin
+// can index it like any other piece of content.
+// ─────────────────────────────────────────────────────────────────────────────
+function KnowledgeWebsiteSyncWizard({
+  onClose,
+  onSaved,
+  onAction,
+}: {
+  onClose: () => void;
+  onSaved: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  type Step = 'connect' | 'pages' | 'segmentation' | 'review';
+  const STEPS: { id: Step; label: string }[] = [
+    { id: 'connect',      label: 'Conectar' },
+    { id: 'pages',        label: 'Páginas' },
+    { id: 'segmentation', label: 'Segmentación' },
+    { id: 'review',       label: 'Revisar' },
+  ];
+  const [step, setStep] = useState<Step>('connect');
+  const [url, setUrl] = useState('');
+  const [pages, setPages] = useState<Array<{ url: string; selected: boolean }>>([]);
+  const [audience, setAudience] = useState<string[]>(['users', 'leads', 'visitors']);
+  const [busy, setBusy] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  function isValidUrl(u: string) {
+    try {
+      const x = new URL(u.trim());
+      return x.protocol === 'http:' || x.protocol === 'https:';
+    } catch { return false; }
+  }
+
+  // Heuristic page discovery — produces a sensible list of common
+  // help-center routes anchored on the user's URL so the Páginas step
+  // is something they can edit before persisting.
+  function discoverPages() {
+    if (!isValidUrl(url)) return;
+    const base = url.replace(/\/+$/, '');
+    const guesses = ['', '/faq', '/getting-started', '/account', '/billing', '/troubleshooting', '/api', '/changelog'];
+    setPages(guesses.map(p => ({ url: `${base}${p}`, selected: true })));
+  }
+
+  function next() {
+    if (step === 'connect') {
+      if (!isValidUrl(url)) { onAction('Introduce una URL válida (https://…)', 'error'); return; }
+      discoverPages();
+      setStep('pages');
+    } else if (step === 'pages') setStep('segmentation');
+    else if (step === 'segmentation') setStep('review');
+    else if (step === 'review') void persist();
+  }
+  function back() {
+    if (step === 'pages') setStep('connect');
+    else if (step === 'segmentation') setStep('pages');
+    else if (step === 'review') setStep('segmentation');
+  }
+  function toggleAudience(token: string) {
+    setAudience(prev => {
+      const next = prev.includes(token) ? prev.filter(t => t !== token) : [...prev, token];
+      return next.length === 0 ? prev : next;
+    });
+  }
+  function togglePage(idx: number) {
+    setPages(prev => prev.map((p, i) => i === idx ? { ...p, selected: !p.selected } : p));
+  }
+  async function persist() {
+    if (busy) return;
+    const selectedPages = pages.filter(p => p.selected);
+    if (selectedPages.length === 0) {
+      onAction('Selecciona al menos una página para sincronizar', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      const lines = ['# Sincronización de sitio web', '', `Origen: ${url}`, '', '## Páginas sincronizadas'];
+      for (const p of selectedPages) lines.push(`- ${p.url}`);
+      await knowledgeApi.createArticle({
+        title: `Sincronización: ${url.replace(/^https?:\/\//, '')}`,
+        content: lines.join('\n'),
+        description: `Sitio web sincronizado con ${selectedPages.length} página${selectedPages.length === 1 ? '' : 's'}.`,
+        type: 'website',
+        visibility: 'public',
+        helpcenter_status: 'draft',
+        helpcenter_audience: audience,
+        fin_audience: audience,
+        copilot_enabled: true,
+        fin_service: true,
+        tags: ['website-sync'],
+      });
+      onAction(`Sincronizado: ${url}`);
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo crear la sincronización', 'error');
+    } finally { setBusy(false); }
+  }
+
+  // Esc closes when not typing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (!inEditable) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const stepIdx = STEPS.findIndex(s => s.id === step);
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen ? 'w-full max-w-none border-l-0' : 'w-[70%] min-w-[920px] max-w-[1500px]'
+        }`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-4">
+          <h2 className="flex-1 text-[15px] font-bold text-[#1a1a1a]">Sincronizar sitio web</h2>
+          <a href="#" className="inline-flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:underline">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+            <span>Más información</span>
+          </a>
+          <button onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
+              {isFullscreen
+                ? <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/>
+                : <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/>}
+            </svg>
+          </button>
+          <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex-shrink-0 border-b border-[#e9eae6] flex items-center px-6 gap-6">
+          {STEPS.map((s, idx) => {
+            const active = s.id === step;
+            const reached = idx <= stepIdx;
+            return (
+              <button
+                key={s.id}
+                onClick={() => reached && setStep(s.id)}
+                disabled={!reached}
+                className={`relative h-[44px] text-[13.5px] ${active ? 'text-[#1a1a1a] font-semibold' : reached ? 'text-[#1a1a1a] hover:text-black' : 'text-[#a4a4a2]'}`}
+              >
+                {s.label}
+                {active && <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#1a1a1a] rounded-full"/>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {step === 'connect' && (
+            <div className="max-w-[620px] mx-auto px-8 py-10 flex flex-col gap-6">
+              <div className="rounded-[12px] overflow-hidden bg-gradient-to-br from-[#f9d6e0] via-[#f3e0d6] to-[#e6d4c4] aspect-[16/8] relative p-6 flex items-center justify-center">
+                <div className="w-full max-w-[420px] flex flex-col gap-2">
+                  <div className="bg-white rounded-full px-3 py-1.5 flex items-center gap-2 shadow-sm">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12"/></svg>
+                    <span className="text-[12px] font-mono text-[#1a1a1a]">app.com/help</span>
+                  </div>
+                  {['/faq', '/account', '/billing'].map(p => (
+                    <div key={p} className="ml-8 bg-white/80 rounded-full px-3 py-1.5 flex items-center gap-2 shadow-sm">
+                      <span className="text-[#646462]">↳</span>
+                      <span className="text-[12px] font-mono text-[#1a1a1a]">app.com/help{p}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Enlace al sitio web principal</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">
+                  La URL de nivel superior de tu Centro de ayuda o de tu documentación. Se sincronizarán esta página y todas las subpáginas. <a href="#" className="underline">Ver consejos.</a>
+                </p>
+                <div className="h-10 rounded-lg border border-[#e9eae6] bg-white flex items-center px-3 gap-2 focus-within:border-[#1a1a1a]">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12"/></svg>
+                  <input
+                    autoFocus
+                    type="url"
+                    value={url}
+                    onChange={e => setUrl(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && isValidUrl(url)) next(); }}
+                    placeholder="https://app.com/help"
+                    className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 'pages' && (
+            <div className="max-w-[720px] mx-auto px-8 py-10">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Páginas detectadas</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">
+                {pages.length} páginas serán sincronizadas. Desmarca las que no quieras importar.
+              </p>
+              <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
+                {pages.map((p, idx) => (
+                  <label key={p.url} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-[#fafafa] ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
+                    <input type="checkbox" checked={p.selected} onChange={() => togglePage(idx)} className="w-4 h-4 accent-[#1a1a1a]"/>
+                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] flex-shrink-0" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12"/></svg>
+                    <span className="text-[13px] font-mono text-[#1a1a1a] truncate">{p.url}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 'segmentation' && (
+            <div className="max-w-[620px] mx-auto px-8 py-10">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">¿A quién sirve este contenido?</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">
+                Fin AI Agent y el Centro de ayuda usarán este sitio web para responder a las audiencias seleccionadas.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(['users', 'leads', 'visitors'] as const).map(t => {
+                  const active = audience.includes(t);
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => toggleAudience(t)}
+                      className={`h-9 px-4 rounded-full text-[13px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+                    >
+                      {t === 'users' ? 'Usuarios' : t === 'leads' ? 'Leads' : 'Visitantes'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {step === 'review' && (
+            <div className="max-w-[620px] mx-auto px-8 py-10">
+              <h3 className="text-[16px] font-semibold text-[#1a1a1a]">Revisar y sincronizar</h3>
+              <p className="text-[12.5px] text-[#646462] leading-[18px] mt-1 mb-4">Comprueba la configuración antes de iniciar la sincronización.</p>
+              <dl className="bg-white border border-[#e9eae6] rounded-[10px] divide-y divide-[#f1f1ee] text-[13px]">
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">URL principal</dt>
+                  <dd className="text-[#1a1a1a] font-mono truncate">{url}</dd>
+                </div>
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">Páginas a sincronizar</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{pages.filter(p => p.selected).length} de {pages.length}</dd>
+                </div>
+                <div className="flex items-start justify-between px-4 py-3 gap-4">
+                  <dt className="text-[#646462]">Audiencia</dt>
+                  <dd className="text-[#1a1a1a]">{audience.length === 3 ? 'Users, Leads, Visitors' : audience.join(', ')}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t border-[#e9eae6] flex items-center justify-between px-6 h-[60px]">
+          <button
+            onClick={back}
+            disabled={step === 'connect' || busy}
+            className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-40"
+          >Atrás</button>
+          <button
+            onClick={next}
+            disabled={busy || (step === 'connect' && !isValidUrl(url))}
+            className="h-8 px-5 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]"
+          >
+            {busy ? 'Sincronizando…' : step === 'review' ? 'Sincronizar' : 'Siguiente'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeExternalSourcePicker — small centered modal that lists every
+// external source provider Fin can ingest. Picking one routes to the
+// /connectors flow with that provider pre-selected.
+// ─────────────────────────────────────────────────────────────────────────────
+function KnowledgeExternalSourcePicker({
+  onClose,
+  onAction,
+}: {
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  type Source = { id: string; label: string; icon: ReactNode; provider: string };
+  const sources: Source[] = [
+    { id: 'zendesk',     label: 'Desde Zendesk',     provider: 'zendesk',     icon: <span className="text-[14px] font-bold text-[#03363d]">Z</span> },
+    { id: 'guru',        label: 'Desde Guru',        provider: 'guru',        icon: <span className="w-4 h-4 rounded-full bg-[#ff595a] flex items-center justify-center text-white text-[10px] font-bold">G</span> },
+    { id: 'notion',      label: 'Desde Notion',      provider: 'notion',      icon: <span className="text-[14px] font-bold text-[#1a1a1a]">N</span> },
+    { id: 'confluence',  label: 'Desde Confluence',  provider: 'confluence',  icon: <span className="w-4 h-4 rounded-sm bg-[#0052cc] flex items-center justify-center text-white text-[9px] font-bold">C</span> },
+    { id: 'document',    label: 'Cargar un documento', provider: 'upload',    icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M4 2h6l3 3v9H4z"/><path d="M10 2v3h3"/><path d="M8 7v4M6 9l2-2 2 2" strokeLinecap="round"/></svg> },
+    { id: 'salesforce',  label: 'Desde Salesforce',  provider: 'salesforce',  icon: <span className="text-[12px] text-[#00a1e0] font-bold">SF</span> },
+    { id: 'box',         label: 'De Box',            provider: 'box',         icon: <span className="w-4 h-4 rounded-sm bg-[#0061d5] flex items-center justify-center text-white text-[9px] font-bold">B</span> },
+    { id: 'document360', label: 'Document360',       provider: 'document360', icon: <span className="w-4 h-4 rounded-full bg-[#ec1944] flex items-center justify-center text-white text-[9px] font-bold">D</span> },
+    { id: 'freshdesk',   label: 'De Freshdesk',      provider: 'freshdesk',   icon: <span className="w-4 h-4 rounded-sm bg-[#25c16f] flex items-center justify-center text-white text-[9px] font-bold">F</span> },
+    { id: 'shopify',     label: 'Desde Shopify',     provider: 'shopify',     icon: <span className="w-4 h-4 rounded-sm bg-[#95bf47] flex items-center justify-center text-white text-[9px] font-bold">S</span> },
+  ];
+  function pick(s: Source) {
+    onAction(`Conectando con ${s.label.replace(/^Desde |^De /, '')}…`);
+    onClose();
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'connectors');
+      url.searchParams.set('provider', s.provider);
+      window.location.href = url.toString();
+    }
+  }
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/35 flex items-center justify-center" onClick={onClose}>
+      <div
+        className="w-[760px] max-w-[92vw] max-h-[88vh] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_24px_60px_rgba(20,20,20,0.28)] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex-shrink-0 px-6 py-4 flex items-center justify-between border-b border-[#e9eae6]">
+          <h3 className="text-[15px] font-bold text-[#1a1a1a]">Conecte el contenido de la aplicación externa</h3>
+          <button onClick={onClose} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#ed621d]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0 p-6">
+          <div className="grid grid-cols-3 gap-3">
+            {sources.map(s => (
+              <button
+                key={s.id}
+                onClick={() => pick(s)}
+                className="h-[52px] bg-white border border-[#e9eae6] rounded-[10px] px-4 flex items-center gap-3 hover:bg-[#f8f8f7]/60 hover:border-[#cfd0cb] transition-colors text-left"
+              >
+                <span className="w-7 h-7 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                  {s.icon}
+                </span>
+                <span className="text-[13px] font-semibold text-[#1a1a1a] truncate">{s.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // KnowledgeArticulos — list + filter + create + publish, optionally scoped to a folder.
 function KnowledgeArticulos({
   onAction,
@@ -14976,9 +15334,12 @@ const FIN_CONTENIDO_CARDS: { iconAsset: string; iconInset: string; label: string
 ];
 
 function FinContenidoContent() {
-  // Real article inventory feeds the "Fuente de contenido" table at the bottom
-  // of the screen — same data Conocimiento uses, so counts stay in sync.
-  const { data: articles } = useApi(() => knowledgeApi.listArticles(), [], []);
+  // Real article inventory feeds the "Fuente de contenido" table — same
+  // data Conocimiento uses, so counts stay in sync.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: articles } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
+  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [], []);
+  const domains = Array.isArray(domainsData) ? domainsData : [];
   const counts = useMemo(() => {
     const list = Array.isArray(articles) ? articles : [];
     const total = list.length;
@@ -14986,12 +15347,43 @@ function FinContenidoContent() {
     return { total, published };
   }, [articles]);
   const [search, setSearch] = useState('');
+  // Modal state — three flavours of "Agregar contenido": the article editor
+  // for Artículo público / interno / Fragmento, the website-sync wizard for
+  // "Sincronización de sitio web", and the external-source picker for the
+  // multi-icon card on the right of the row.
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorPrefill, setEditorPrefill] = useState<any>(null);
+  const [websiteSyncOpen, setWebsiteSyncOpen] = useState(false);
+  const [externalPickerOpen, setExternalPickerOpen] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToast({ msg, type });
+    window.setTimeout(() => setToast(null), 2800);
+  }
+  function openCreateEditor(opts: { type?: string; visibility?: 'public' | 'internal' } = {}) {
+    const visibility = opts.visibility || 'public';
+    setEditorPrefill({
+      type: opts.type || 'ARTICLE',
+      visibility,
+      fin_service: visibility === 'public',
+      copilot_enabled: true,
+    });
+    setEditorOpen(true);
+  }
   function jumpToKnowledge() {
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('view', 'knowledge');
       window.location.href = url.toString();
     }
+  }
+  function handleCardClick(label: string) {
+    if (label === 'Artículo público')          openCreateEditor({ type: 'ARTICLE', visibility: 'public' });
+    else if (label === 'Artículo interno')     openCreateEditor({ type: 'ARTICLE', visibility: 'internal' });
+    else if (label === 'Fragmento de texto')   openCreateEditor({ type: 'SNIPPET', visibility: 'internal' });
+    else if (label === 'Sincronización de sitio web') setWebsiteSyncOpen(true);
+    else if (label === 'Ver todo')             jumpToKnowledge();
+    else openCreateEditor();
   }
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -15049,7 +15441,7 @@ function FinContenidoContent() {
             {FIN_CONTENIDO_CARDS.map(c => (
               <button
                 key={c.label}
-                onClick={jumpToKnowledge}
+                onClick={() => handleCardClick(c.label)}
                 className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start gap-3 hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
               >
                 <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
@@ -15060,16 +15452,20 @@ function FinContenidoContent() {
                 <span className="font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a] text-left">{c.label}</span>
               </button>
             ))}
-            {/* AI suggest card (Component 14 — variants 40 left, 41 right) */}
-            <button className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex items-start justify-between hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors">
-              <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
-                <span className="relative w-4 h-4 overflow-hidden block">
-                  <img src={`${FIGMA_CDN}/885021c5-87b2-4496-a7e3-ad160d9b46e1`} alt="" className="absolute" style={{ inset: '-0.01% -0.12% -0.12% 0' }} />
-                </span>
-              </span>
-              <span className="relative w-4 h-4 overflow-hidden block mt-1">
-                <img src={`${FIGMA_CDN}/32bf7a54-7641-4512-b6e6-3ad14d79ee96`} alt="" className="absolute" style={{ inset: '18.75% 18.75% 15% 15%' }} />
-              </span>
+            {/* External sources card — opens the connector picker (Zendesk,
+                Notion, Confluence, Document upload, Salesforce, etc.). */}
+            <button
+              onClick={() => setExternalPickerOpen(true)}
+              title="Conectar contenido de aplicaciones externas"
+              className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start justify-between hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
+            >
+              <div className="flex items-center -space-x-1">
+                <span className="w-7 h-7 rounded-[6px] bg-[#03363d] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">Z</span>
+                <span className="w-7 h-7 rounded-[6px] bg-[#1a1a1a] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">N</span>
+                <span className="w-7 h-7 rounded-[6px] bg-[#0052cc] flex items-center justify-center text-white text-[11px] font-bold ring-2 ring-white">C</span>
+                <span className="w-7 h-7 rounded-[6px] bg-[#f3f3f1] border border-[#e9eae6] flex items-center justify-center text-[#646462] text-[11px] font-bold ring-2 ring-white">…</span>
+              </div>
+              <span className="font-['Inter'] font-semibold text-[14px] leading-[20px] text-[#1a1a1a] text-left">Conectar app externa</span>
             </button>
           </div>
 
@@ -15130,6 +15526,36 @@ function FinContenidoContent() {
           </div>
         </div>
       </div>
+
+      {/* In-place modals — article editor, website-sync wizard, external
+          source picker. None of them navigate the user away from Fin. */}
+      {editorOpen && (
+        <KnowledgeArticleEditor
+          initial={editorPrefill}
+          domains={domains}
+          onClose={() => { setEditorOpen(false); setEditorPrefill(null); }}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
+          onAction={showToast}
+        />
+      )}
+      {websiteSyncOpen && (
+        <KnowledgeWebsiteSyncWizard
+          onClose={() => setWebsiteSyncOpen(false)}
+          onSaved={() => { setRefreshKey(k => k + 1); }}
+          onAction={showToast}
+        />
+      )}
+      {externalPickerOpen && (
+        <KnowledgeExternalSourcePicker
+          onClose={() => setExternalPickerOpen(false)}
+          onAction={showToast}
+        />
+      )}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-full shadow-lg text-[12.5px] font-medium ${toast.type === 'error' ? 'bg-[#fef2f2] text-[#b91c1c] border border-[#fecaca]' : 'bg-[#1a1a1a] text-white'}`}>
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
