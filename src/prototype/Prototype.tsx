@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, workflowsApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, auditApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, operationsApi, reportsApi, workflowsApi, workspacesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -3784,9 +3784,26 @@ function InboxView() {
   function togglePanel(which: keyof PanelState) {
     setPanels(p => ({ ...p, [which]: !p[which] }));
   }
+  // Server-side filters — sent as query params to GET /cases. The legacy
+  // Inbox supported these so the prototype matches feature parity. The
+  // sidebar scope filtering still runs client-side on top of the result.
+  const [serverFilters, setServerFilters] = useState<{ status?: string; priority?: string; risk_level?: string; q?: string }>({});
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  function applyFilter(key: keyof typeof serverFilters, value: string | undefined) {
+    setServerFilters(prev => {
+      const next = { ...prev };
+      if (!value) delete next[key]; else next[key] = value;
+      return next;
+    });
+  }
+  function clearFilters() { setServerFilters({}); }
   const { data: apiCases, loading, error } = useApi(
-    () => casesApi.list(),
-    [refreshKey],
+    () => {
+      const params: Record<string, string> = {};
+      Object.entries(serverFilters).forEach(([k, v]) => { if (v) params[k] = String(v); });
+      return casesApi.list(Object.keys(params).length ? params : undefined);
+    },
+    [refreshKey, serverFilters],
     [],
   );
   // Real backend data only — no mock fallback. Empty list = empty UI.
@@ -4054,7 +4071,56 @@ function InboxView() {
                 </p>
               </div>
             )}
-            <div className={scope === 'search' ? 'pt-[88px] h-full' : 'h-full'}>
+            {/* Server-side filter bar — always rendered so the Filtros button
+                is reachable (Cmd+K shortcut targets it). Keys status /
+                priority / risk_level / q map straight to GET /cases params. */}
+            <div className={`absolute ${scope === 'search' ? 'top-[88px]' : 'top-0'} left-0 right-0 z-10 bg-white border-b border-[#e9eae6] px-3 py-2 flex flex-wrap items-center gap-1.5`}>
+              <button
+                title="Filtros"
+                onClick={() => setShowFilterPanel(s => !s)}
+                className={`h-7 px-2.5 rounded-[6px] border text-[12px] inline-flex items-center gap-1 ${showFilterPanel || Object.keys(serverFilters).length > 0 ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+              >
+                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2 4h12M4 8h8M6 12h4" strokeLinecap="round"/></svg>
+                <span>Filtros</span>
+                {Object.keys(serverFilters).length > 0 && <span className="ml-1 px-1.5 rounded-full bg-white/20 text-[11px]">{Object.keys(serverFilters).length}</span>}
+              </button>
+              {showFilterPanel && (['status','priority','risk_level'] as const).map(field => {
+                const opts =
+                  field === 'status'    ? ['', 'open', 'pending', 'resolved'] :
+                  field === 'priority'  ? ['', 'low', 'normal', 'high', 'urgent'] :
+                                          ['', 'low', 'medium', 'high'];
+                return (
+                  <select
+                    key={field}
+                    value={serverFilters[field] || ''}
+                    onChange={e => applyFilter(field, e.target.value || undefined)}
+                    className="h-7 px-2 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a]"
+                  >
+                    <option value="">{field === 'status' ? 'Cualquier estado' : field === 'priority' ? 'Cualquier prioridad' : 'Cualquier riesgo'}</option>
+                    {opts.filter(Boolean).map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                );
+              })}
+              {showFilterPanel && (
+                <input
+                  type="text"
+                  value={serverFilters.q || ''}
+                  onChange={e => applyFilter('q', e.target.value || undefined)}
+                  placeholder="Texto…"
+                  className="h-7 px-2 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a] w-[140px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              )}
+              {Object.keys(serverFilters).length > 0 && (
+                <button onClick={clearFilters} className="h-7 px-2 rounded-[6px] text-[12px] text-[#b91c1c] hover:bg-[#fef2f2]">Limpiar</button>
+              )}
+              {!showFilterPanel && Object.entries(serverFilters).map(([k, v]) => (
+                <span key={k} className="h-7 px-2 rounded-[6px] bg-[#f3f3f1] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a] inline-flex items-center gap-1">
+                  <span className="text-[#646462]">{k === 'q' ? 'texto' : k}:</span>{v}
+                  <button onClick={() => applyFilter(k as any, undefined)} className="text-[#646462] hover:text-[#1a1a1a]">×</button>
+                </span>
+              ))}
+            </div>
+            <div className={`${scope === 'search' ? 'pt-[132px]' : 'pt-[44px]'} h-full`}>
               <ConversationList
                 selectedId={selectedConv?.id || selectedConvId}
                 onSelect={setSelectedConvId}
@@ -4454,6 +4520,37 @@ function ContactProfileScreen({
   const [savingSegment, setSavingSegment] = useState(false);
   const [savingRisk, setSavingRisk] = useState(false);
   const [localMsg, setLocalMsg] = useState<string | null>(null);
+  // Merge another contact into this one — calls customersApi.merge on the
+  // server, which canonicalises the source customer onto target and moves
+  // every case/note/identity over. Backed by /customers/:targetId/merge.
+  const [showMerge, setShowMerge] = useState(false);
+  const [mergeQuery, setMergeQuery] = useState('');
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const { data: customersList } = useApi(() => customersApi.list(), [], []);
+  const mergeCandidates = useMemo(() => {
+    const list = Array.isArray(customersList) ? customersList : [];
+    const q = mergeQuery.trim().toLowerCase();
+    const filtered = list.filter((c: any) => c.id !== contactId);
+    return q
+      ? filtered.filter((c: any) => [c.canonicalName, c.canonicalEmail, c.name, c.email, c.id]
+          .filter(Boolean).join(' ').toLowerCase().includes(q))
+      : filtered.slice(0, 8);
+  }, [customersList, mergeQuery, contactId]);
+  async function mergeFrom(sourceId: string) {
+    if (mergeBusy) return;
+    setMergeBusy(true);
+    setLocalMsg(null);
+    try {
+      await customersApi.merge(contactId, sourceId);
+      setLocalMsg('Contactos fusionados — los datos del origen se han canonicalizado en este contacto.');
+      setShowMerge(false);
+      setMergeQuery('');
+      refetchState();
+      onUpdated?.();
+    } catch (err: any) {
+      setLocalMsg(err?.message || 'No se pudo fusionar el contacto');
+    } finally { setMergeBusy(false); }
+  }
 
   // Reset tab + transient state whenever a different contact opens
   useEffect(() => { setTab('all_activity'); setLocalMsg(null); }, [contactId]);
@@ -4556,7 +4653,58 @@ function ContactProfileScreen({
             </div>
           </div>
         </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setShowMerge(true)}
+            title="Fusionar con otro contacto"
+            className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7] inline-flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 3h4l3 5-3 5H3M13 3l-3 5 3 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span>Fusionar</span>
+          </button>
+        </div>
       </div>
+
+      {/* Merge modal */}
+      {showMerge && (
+        <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={() => !mergeBusy && setShowMerge(false)}>
+          <div className="w-[480px] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-1">Fusionar con otro contacto</h3>
+            <p className="text-[12.5px] text-[#646462] mb-4">Elige el contacto <strong>origen</strong>. Sus casos, notas e identidades pasarán a <strong>{name}</strong> y el origen se archivará. La operación es destructiva.</p>
+            <input
+              autoFocus
+              value={mergeQuery}
+              onChange={e => setMergeQuery(e.target.value)}
+              placeholder="Buscar contacto…"
+              className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13px] focus:outline-none focus:border-[#1a1a1a] mb-3"
+            />
+            <div className="max-h-[280px] overflow-y-auto flex flex-col gap-1">
+              {mergeCandidates.length === 0 ? (
+                <p className="text-[12.5px] text-[#646462] py-3 text-center">Sin coincidencias.</p>
+              ) : mergeCandidates.map((c: any) => (
+                <button
+                  key={c.id}
+                  disabled={mergeBusy}
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && !window.confirm(`¿Fusionar "${c.canonicalName || c.canonicalEmail || c.id}" en este contacto? La operación es irreversible.`)) return;
+                    mergeFrom(c.id);
+                  }}
+                  className="text-left px-3 py-2 rounded-lg hover:bg-[#f8f8f7] flex items-center gap-2 disabled:opacity-60"
+                >
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[12px] font-semibold flex-shrink-0" style={{ backgroundColor: pickContactColor(c.id) }}>{((c.canonicalName || c.canonicalEmail || '?')[0] || '?').toUpperCase()}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[13px] font-medium text-[#1a1a1a] truncate">{c.canonicalName || c.canonicalEmail || c.id}</span>
+                    {c.canonicalEmail && <span className="block text-[11.5px] text-[#646462] truncate">{c.canonicalEmail}</span>}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button onClick={() => setShowMerge(false)} disabled={mergeBusy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto min-h-0">
@@ -13612,7 +13760,23 @@ const FIN_CONTENIDO_CARDS: { iconAsset: string; iconInset: string; label: string
 ];
 
 function FinContenidoContent() {
-
+  // Real article inventory feeds the "Fuente de contenido" table at the bottom
+  // of the screen — same data Conocimiento uses, so counts stay in sync.
+  const { data: articles } = useApi(() => knowledgeApi.listArticles(), [], []);
+  const counts = useMemo(() => {
+    const list = Array.isArray(articles) ? articles : [];
+    const total = list.length;
+    const published = list.filter((a: any) => String(a.status || '').toLowerCase() === 'published').length;
+    return { total, published };
+  }, [articles]);
+  const [search, setSearch] = useState('');
+  function jumpToKnowledge() {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'knowledge');
+      window.location.href = url.toString();
+    }
+  }
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -13641,16 +13805,19 @@ function FinContenidoContent() {
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
             <input
               type="text"
-              placeholder="Buscar..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') jumpToKnowledge(); }}
+              placeholder="Buscar artículos en Conocimiento…"
               className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#646462]"
             />
           </div>
-          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.4"/><path d="M3.2 13c.7-2 2.5-3.2 4.8-3.2s4.1 1.2 4.8 3.2"/></svg>
             <span>Audiencia</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
           </button>
-          <button className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
+          <button onClick={jumpToKnowledge} className="h-8 px-3 rounded-[8px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center gap-2 text-[13px] text-[#1a1a1a] hover:bg-[#ededea]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
             <span>Filtros</span>
           </button>
@@ -13666,6 +13833,7 @@ function FinContenidoContent() {
             {FIN_CONTENIDO_CARDS.map(c => (
               <button
                 key={c.label}
+                onClick={jumpToKnowledge}
                 className="h-[98px] bg-white border border-[#e9eae6] rounded-[16px] p-[17.111px] flex flex-col items-start gap-3 hover:bg-[#f8f8f7]/40 hover:border-[#cfd0cb] transition-colors"
               >
                 <span className="w-8 h-8 rounded-[7px] bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center">
@@ -13724,8 +13892,8 @@ function FinContenidoContent() {
               </div>
               <div className="flex items-center gap-2">
                 {/* Green dot — bg #117010 / border 3px #c7f1c6 */}
-                <span className="w-4 h-4 rounded-full bg-[#117010] border-[3px] border-[#c7f1c6]"/>
-                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">0 activos</span>
+                <span className={`w-4 h-4 rounded-full ${counts.published > 0 ? 'bg-[#117010] border-[3px] border-[#c7f1c6]' : 'bg-[#d4d4d2] border-[3px] border-[#f1f1ee]'}`}/>
+                <span className="font-['Inter'] text-[13px] leading-[20px] text-[#1a1a1a]">{counts.published} {counts.published === 1 ? 'activo' : 'activos'} · {counts.total} total</span>
               </div>
               {/* Servicio cell — icon Component 1 v48 + "—" */}
               <div className="flex items-center gap-2">
@@ -14307,6 +14475,69 @@ function FinProcedimientosContent() {
 
 // ─── Probar / Pruebas (Figma 1:10409) ───────────────────────────────────────
 function FinPruebasContent() {
+  // Live test bench: questions stored client-side, but each "Probar" hits
+  // knowledgeApi.test() (same endpoint Conocimiento › Probar uses) so
+  // configuration here is real, persistent, end-to-end.
+  type TestQ = { id: string; q: string; rating?: 'good' | 'ok' | 'bad' | null; result?: any; status?: 'idle' | 'running' | 'done' | 'error'; error?: string };
+  const [questions, setQuestions] = useState<TestQ[]>([
+    { id: 'q1', q: 'Cómo puedo mejorar mi suscripción?', status: 'idle', rating: null },
+  ]);
+  const [selectedId, setSelectedId] = useState<string>('q1');
+  const [newQ, setNewQ] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [note, setNote] = useState('');
+  const { data: agentsData } = useApi(() => agentsApi.list(), [], []);
+  const finAgent = useMemo(() => {
+    const list = Array.isArray(agentsData) ? agentsData : [];
+    return list.find((a: any) => String(a.slug || a.id || '').toLowerCase().includes('fin')) || list[0] || null;
+  }, [agentsData]);
+  const selected = questions.find(q => q.id === selectedId) || questions[0];
+
+  async function runOne(id: string) {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'running', error: undefined } : q));
+    const target = questions.find(q => q.id === id);
+    if (!target) return;
+    try {
+      const result = await knowledgeApi.test({
+        question: target.q,
+        agent_id: finAgent?.id,
+        agent_slug: finAgent?.slug,
+      });
+      setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'done', result } : q));
+    } catch (err: any) {
+      setQuestions(prev => prev.map(q => q.id === id ? { ...q, status: 'error', error: err?.message || 'Error' } : q));
+    }
+  }
+  async function runBatch() {
+    if (batchRunning) return;
+    setBatchRunning(true);
+    try {
+      for (const q of questions) await runOne(q.id);
+    } finally { setBatchRunning(false); }
+  }
+  function addQuestion() {
+    const q = newQ.trim();
+    if (!q) return;
+    const id = `q${Date.now()}`;
+    setQuestions(prev => [...prev, { id, q, status: 'idle', rating: null }]);
+    setNewQ(''); setShowAdd(false); setSelectedId(id);
+  }
+  function removeQuestion(id: string) {
+    setQuestions(prev => {
+      const next = prev.filter(q => q.id !== id);
+      if (id === selectedId && next.length > 0) setSelectedId(next[0].id);
+      return next;
+    });
+  }
+  function rate(id: string, rating: 'good' | 'ok' | 'bad') {
+    setQuestions(prev => prev.map(q => q.id === id ? { ...q, rating } : q));
+  }
+  const ratingLabel = (r?: 'good' | 'ok' | 'bad' | null) =>
+    r === 'good' ? { txt: 'Buena',     dot: '#0fb87f' } :
+    r === 'ok'   ? { txt: 'Aceptable', dot: '#f4d35e' } :
+    r === 'bad'  ? { txt: 'Malo',      dot: '#ff5f3f' } :
+    null;
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Top section header bar */}
@@ -14314,11 +14545,21 @@ function FinPruebasContent() {
         <h2 className="text-[14px] font-semibold text-[#1a1a1a]">
           Prueba por lotes las respuestas de Fin para activarlas con confianza
         </h2>
-        <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f8f8f7] text-[#646462]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4">
-            <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={runBatch}
+            disabled={batchRunning || questions.length === 0}
+            className="h-7 px-3 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:bg-[#a4a4a2]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M5 3l8 5-8 5z"/></svg>
+            {batchRunning ? 'Ejecutando…' : `Probar todas (${questions.length})`}
+          </button>
+          <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#f8f8f7] text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4">
+              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Body: questions list (left) + Evaluar la respuesta (right) */}
@@ -14345,16 +14586,29 @@ function FinPruebasContent() {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                  <span>Administrar</span>
+                  <span>{finAgent?.name || finAgent?.slug || 'Fin'}</span>
                   <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z" /></svg>
                 </button>
-                <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+                <button onClick={() => setShowAdd(s => !s)} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   <span>Agregar preguntas</span>
                   <svg viewBox="0 0 16 16" className="w-3 h-3 fill-white"><path d="M4 6l4 4 4-4z" /></svg>
                 </button>
               </div>
             </div>
+            {showAdd && (
+              <div className="mt-3 flex gap-2">
+                <input
+                  autoFocus
+                  value={newQ}
+                  onChange={e => setNewQ(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && newQ.trim()) addQuestion(); if (e.key === 'Escape') { setShowAdd(false); setNewQ(''); } }}
+                  placeholder="Escribe una pregunta para probar Fin…"
+                  className="flex-1 h-9 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] outline-none focus:border-[#1a1a1a]"
+                />
+                <button onClick={addQuestion} disabled={!newQ.trim()} className="h-9 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#a4a4a2]">Añadir</button>
+              </div>
+            )}
           </div>
 
           {/* Probando como + filter pills */}
@@ -14380,42 +14634,55 @@ function FinPruebasContent() {
           </div>
 
           {/* Question count */}
-          <div className="flex-shrink-0 px-6 py-3 text-[13px] text-[#646462]">1 question</div>
+          <div className="flex-shrink-0 px-6 py-3 text-[13px] text-[#646462]">{questions.length} {questions.length === 1 ? 'pregunta' : 'preguntas'}</div>
 
           {/* Table */}
           <div className="flex-1 overflow-y-auto min-h-0">
             <table className="w-full text-[13px]">
               <thead className="sticky top-0 bg-white">
                 <tr className="border-b border-[#e9eae6] text-[12px] text-[#646462]">
-                  <th className="w-10 pl-6 py-3 text-left">
-                    <input type="checkbox" className="w-3 h-3 rounded border-[#cbcbc7]" />
-                  </th>
+                  <th className="w-10 pl-6 py-3 text-left"></th>
                   <th className="py-3 pr-3 text-left font-medium">Pregunta</th>
-                  <th className="py-3 pr-3 text-left font-medium">
-                    <span className="inline-flex items-center gap-1">
-                      Estado de la respuesta
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 7.5v3M8 5.4v.1" strokeLinecap="round"/></svg>
-                    </span>
-                  </th>
-                  <th className="py-3 pr-6 text-left font-medium">
-                    <span className="inline-flex items-center gap-1">
-                      Calificación de respuesta
-                      <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 7.5v3M8 5.4v.1" strokeLinecap="round"/></svg>
-                    </span>
-                  </th>
+                  <th className="py-3 pr-3 text-left font-medium">Estado de la respuesta</th>
+                  <th className="py-3 pr-6 text-left font-medium">Calificación de respuesta</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-[#e9eae6] bg-[#f8f8f7]/50">
-                  <td className="w-10 pl-6 py-4 align-top"><input type="checkbox" className="w-3 h-3 rounded border-[#cbcbc7]" /></td>
-                  <td className="py-4 pr-3 text-[#1a1a1a]">Cómo puedo mejorar mi suscripción?</td>
-                  <td className="py-4 pr-3 text-[#646462]">
-                    <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" /></svg>
-                  </td>
-                  <td className="py-4 pr-6">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]">Sin calificación</span>
-                  </td>
-                </tr>
+                {questions.map(q => {
+                  const rl = ratingLabel(q.rating);
+                  const isSel = q.id === selectedId;
+                  return (
+                    <tr
+                      key={q.id}
+                      onClick={() => setSelectedId(q.id)}
+                      className={`border-b border-[#e9eae6] cursor-pointer ${isSel ? 'bg-[#f8f8f7]' : 'hover:bg-[#fafafa]'}`}
+                    >
+                      <td className="w-10 pl-6 py-4 align-top">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); runOne(q.id); }}
+                          title="Probar de nuevo"
+                          className="w-5 h-5 rounded hover:bg-[#e9eae6] flex items-center justify-center"
+                        >
+                          {q.status === 'running'
+                            ? <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-[#646462] animate-spin" strokeWidth="1.6"><path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round"/></svg>
+                            : <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#1a1a1a]"><path d="M5 3l8 5-8 5z"/></svg>}
+                        </button>
+                      </td>
+                      <td className="py-4 pr-3 text-[#1a1a1a]">{q.q}</td>
+                      <td className="py-4 pr-3 text-[#646462]">
+                        {q.status === 'done' && <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0fb87f]"/>Respondida</span>}
+                        {q.status === 'running' && <span className="text-[12px]">Ejecutando…</span>}
+                        {q.status === 'error' && <span className="inline-flex items-center gap-1.5 text-[#b91c1c]"><span className="w-2 h-2 rounded-full bg-[#b91c1c]"/>Error</span>}
+                        {(!q.status || q.status === 'idle') && <span className="text-[12px]">Pendiente</span>}
+                      </td>
+                      <td className="py-4 pr-6">
+                        {rl
+                          ? <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]"><span className="w-2 h-2 rounded-full" style={{ background: rl.dot }}/>{rl.txt}</span>
+                          : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white border border-[#e9eae6] text-[12px] text-[#1a1a1a]">Sin calificación</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -14438,62 +14705,105 @@ function FinPruebasContent() {
 
           {/* Conversation */}
           <div className="flex-1 overflow-y-auto min-h-0 px-5 py-5 flex flex-col gap-3">
-            {/* User question bubble */}
-            <div className="flex justify-end">
-              <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">
-                Cómo puedo mejorar mi suscripción?
-              </div>
-            </div>
-
-            {/* Fin response bubble */}
-            <div className="flex flex-col items-start">
-              <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3">
-                <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#1a1a1a]">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
-                  <span>Fin</span>
-                  <span className="text-[#646462]">• AI Agent</span>
+            {selected ? (
+              <>
+                {/* User question bubble */}
+                <div className="flex justify-end">
+                  <div className="max-w-[78%] bg-[#1a1a1a] text-white text-[13px] leading-[18px] px-3.5 py-2.5 rounded-[14px] rounded-tr-[4px]">
+                    {selected.q}
+                  </div>
                 </div>
-                <p className="mt-1.5 text-[13px] leading-[18px] text-[#1a1a1a]">
-                  No he encontrado información específica sobre cómo mejorar tu suscripción. ¿Podrías reformular tu pregunta o te gustaría que te ayude con algo más?
-                </p>
-              </div>
-            </div>
 
-            {/* Esta respuesta utiliza */}
-            <div className="mt-2">
-              <p className="text-[12px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
-              <button className="w-full flex items-center justify-between px-3.5 py-3 bg-white border border-[#e9eae6] rounded-[10px] hover:bg-[#f8f8f7]">
-                <span className="text-[13px] font-medium text-[#1a1a1a]">Pautas (2)</span>
-                <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z" /></svg>
-              </button>
-            </div>
+                {/* Fin response bubble */}
+                {selected.status === 'running' && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462]">
+                      Ejecutando knowledgeApi.test contra Fin…
+                    </div>
+                  </div>
+                )}
+                {selected.status === 'error' && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-[88%] bg-[#fef2f2] border border-[#fecaca] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#b91c1c]">
+                      {selected.error}
+                    </div>
+                  </div>
+                )}
+                {selected.status === 'done' && selected.result && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-[88%] bg-white border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3">
+                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#1a1a1a]">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>
+                        <span>Fin</span>
+                        <span className="text-[#646462]">• AI Agent</span>
+                      </div>
+                      <p className="mt-1.5 text-[13px] leading-[18px] text-[#1a1a1a] whitespace-pre-wrap">
+                        {selected.result.answer || selected.result.message || selected.result.content || JSON.stringify(selected.result, null, 2)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {(!selected.status || selected.status === 'idle') && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-[88%] bg-[#f8f8f7] border border-[#e9eae6] rounded-[14px] rounded-tl-[4px] px-3.5 py-3 text-[12.5px] text-[#646462]">
+                      Pulsa ▶ en la fila o «Probar todas» para evaluar la respuesta de Fin a esta pregunta.
+                    </div>
+                  </div>
+                )}
+
+                {/* Sources used */}
+                {selected.status === 'done' && selected.result?.sources?.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[12px] text-[#646462] mb-2">Esta respuesta utiliza:</p>
+                    <div className="flex flex-col gap-1.5">
+                      {selected.result.sources.map((s: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between px-3.5 py-2 bg-white border border-[#e9eae6] rounded-[10px]">
+                          <span className="text-[13px] font-medium text-[#1a1a1a] truncate">{s.title || s.id || 'Fuente'}</span>
+                          {typeof s.score === 'number' && <span className="text-[11px] text-[#646462]">{Math.round(s.score * 100)}%</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-[13px] text-[#646462]">Añade preguntas con el botón de arriba para empezar a probar Fin.</p>
+            )}
           </div>
 
           {/* Bottom: rating */}
           <div className="flex-shrink-0 border-t border-[#e9eae6] px-5 pt-5 pb-5">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Califica la respuesta de Fin</h4>
             <p className="mt-1 text-[12.5px] text-[#646462] leading-[18px]">
-              Tu calificación se guardará en la descarga del informe. También puedes agregar una nota para ti o para tu equipo.
+              La calificación se guarda en este lote de pruebas. También puedes agregar una nota para ti o tu equipo.
             </p>
             <div className="mt-3 flex gap-2">
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#0fb87f]" />
-                <span>Buena</span>
-                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">G</span>
-              </button>
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#f4d35e]" />
-                <span>Aceptable</span>
-                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">A</span>
-              </button>
-              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-                <span className="w-3.5 h-3.5 rounded-full bg-[#ff5f3f]" />
-                <span>Malo</span>
-                <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">P</span>
-              </button>
+              {([
+                { id: 'good' as const, label: 'Buena',     color: '#0fb87f', key: 'G' },
+                { id: 'ok' as const,   label: 'Aceptable', color: '#f4d35e', key: 'A' },
+                { id: 'bad' as const,  label: 'Malo',      color: '#ff5f3f', key: 'P' },
+              ]).map(r => {
+                const active = selected?.rating === r.id;
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => selected && rate(selected.id, r.id)}
+                    className={`h-8 px-3 rounded-[8px] border flex items-center gap-1.5 text-[13px] text-[#1a1a1a] ${active ? 'bg-[#f8f8f7] border-[#1a1a1a]' : 'bg-white border-[#e9eae6] hover:bg-[#f8f8f7]'}`}
+                  >
+                    <span className="w-3.5 h-3.5 rounded-full" style={{ background: r.color }} />
+                    <span>{r.label}</span>
+                    <span className="text-[11px] text-[#646462] px-1.5 py-0.5 rounded bg-[#f1f1ee] border border-[#e9eae6]">{r.key}</span>
+                  </button>
+                );
+              })}
+              {selected && (
+                <button onClick={() => removeQuestion(selected.id)} className="ml-auto h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#b91c1c] hover:bg-[#fef2f2]">Eliminar</button>
+              )}
             </div>
             <input
               type="text"
+              value={note}
+              onChange={e => setNote(e.target.value)}
               placeholder="Agregar nota interna"
               className="mt-3 w-full h-9 px-3 rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] placeholder:text-[#646462] outline-none focus:border-[#1a1a1a]"
             />
@@ -14999,6 +15309,48 @@ function FinComenzarContent() {
 
 // ─── Analizar / Desempeño (1:16070) ─────────────────────────────────────────
 function FinDesempenoContent() {
+  // Live numbers — pull stats + cases so we can compute Fin-specific KPIs
+  // (automation %, engagement %, resolution %) without faking anything.
+  const { data: stats } = useApi(() => aiApi.stats(), [], null);
+  const { data: cases } = useApi(() => casesApi.list(), [], []);
+  const { data: overview } = useApi(() => reportsApi.overview('30d', 'all'), [], null);
+  const totals = useMemo(() => {
+    const list = Array.isArray(cases) ? cases : [];
+    const total = list.length;
+    const finResolved = list.filter((c: any) => {
+      const ai = (c.assignedAgent || c.assigned_agent || c.handler || '').toString().toLowerCase();
+      const resolved = String(c.status || '').toLowerCase() === 'resolved';
+      return resolved && ai.includes('fin');
+    }).length;
+    const finTouched = list.filter((c: any) => {
+      const ai = (c.assignedAgent || c.assigned_agent || c.handler || '').toString().toLowerCase();
+      return ai.includes('fin') || (c.aiInvolved ?? c.ai_involved);
+    }).length;
+    const resolved = list.filter((c: any) => String(c.status || '').toLowerCase() === 'resolved').length;
+    const automation = total > 0 ? Math.round((finResolved / total) * 100) : 0;
+    const engagement = total > 0 ? Math.round((finTouched / total) * 100) : 0;
+    const resolutionRate = finTouched > 0 ? Math.round((finResolved / finTouched) * 100) : 0;
+    // Backend stats / report overview can override these when available.
+    const sBlock: any = stats || {};
+    const oBlock: any = overview || {};
+    return {
+      total,
+      finResolved,
+      finTouched,
+      resolved,
+      automation: typeof sBlock.automationRate === 'number' ? Math.round(sBlock.automationRate * 100) : (typeof oBlock.automationPct === 'number' ? Math.round(oBlock.automationPct) : automation),
+      engagement: typeof sBlock.engagementRate === 'number' ? Math.round(sBlock.engagementRate * 100) : engagement,
+      resolutionRate: typeof sBlock.resolutionRate === 'number' ? Math.round(sBlock.resolutionRate * 100) : resolutionRate,
+      cxScore: typeof sBlock.cxScore === 'number' ? sBlock.cxScore : (typeof oBlock.cxScore === 'number' ? oBlock.cxScore : null),
+    };
+  }, [cases, stats, overview]);
+  const periodLabel = useMemo(() => {
+    const end = new Date();
+    const start = new Date(); start.setDate(start.getDate() - 30);
+    const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+    return `${fmt(start)} – ${fmt(end)}`;
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header */}
@@ -15008,7 +15360,7 @@ function FinDesempenoContent() {
           <div className="mt-2 flex items-center gap-3">
             <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
-              <span>Apr 8, 2026 - May 5, 2026</span>
+              <span>{periodLabel}</span>
             </button>
             <button className="h-7 px-2 text-[12px] inline-flex items-center gap-1.5 text-[#646462] hover:text-[#1a1a1a]">
               <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
@@ -15057,15 +15409,17 @@ function FinDesempenoContent() {
                   <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de automatización</h3>
                   <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
                 </div>
-                <p className="mt-1 text-[12px] text-[#646462]">0 conversaciones resueltas por Fin de un volumen total de asistencia de 4</p>
+                <p className="mt-1 text-[12px] text-[#646462]">{totals.finResolved} conversaciones resueltas por Fin de un volumen total de asistencia de {totals.total}</p>
               </div>
               <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7] flex-shrink-0">
                 <span>Recomendaciones</span>
                 <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
             </div>
-            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">0%</p>
-            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden" />
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.automation}%</p>
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+              <div className="h-2 bg-[#a4c34f] rounded-full" style={{ width: `${Math.min(100, totals.automation)}%` }} />
+            </div>
             <div className="mt-3 flex items-center gap-4">
               <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
                 <span className="w-2 h-2 bg-[#a4c34f]" /> RESUELTO
@@ -15091,10 +15445,17 @@ function FinDesempenoContent() {
               </button>
             </div>
             <div className="flex items-center justify-center py-6">
-              <div className="text-center">
-                <svg viewBox="0 0 24 16" className="w-8 h-6 mx-auto fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
-                <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
-              </div>
+              {totals.cxScore != null ? (
+                <div className="text-center">
+                  <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{Math.round(totals.cxScore)}</p>
+                  <p className="mt-2 text-[12px] text-[#646462]">Puntuación CX agregada</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <svg viewBox="0 0 24 16" className="w-8 h-6 mx-auto fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                  <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3 mt-2 pt-4 border-t border-[#e9eae6]">
               <div>
@@ -15128,9 +15489,11 @@ function FinDesempenoContent() {
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de participación</h3>
               <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
             </div>
-            <p className="text-[12px] text-[#646462] mb-3">Fin participó en 0 conversaciones de un volumen total de 4</p>
-            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">0%</p>
-            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden" />
+            <p className="text-[12px] text-[#646462] mb-3">Fin participó en {totals.finTouched} conversaciones de un volumen total de {totals.total}</p>
+            <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.engagement}%</p>
+            <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+              <div className="h-2 bg-[#7c52d8] rounded-full" style={{ width: `${Math.min(100, totals.engagement)}%` }} />
+            </div>
             <div className="mt-3 flex items-center gap-4">
               <span className="inline-flex items-center gap-1.5 text-[10px] text-[#646462] uppercase tracking-[0.6px]">
                 <span className="w-2 h-2 bg-[#7c52d8]" /> PARTICIPACIÓN
@@ -15145,10 +15508,20 @@ function FinDesempenoContent() {
               <h3 className="text-[14px] font-bold text-[#1a1a1a]">Tasa de resolución</h3>
               <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-[#646462]" strokeWidth="1.2"><circle cx="6" cy="6" r="4.5"/><path d="M6 4.5v3M6 3v.01"/></svg>
             </div>
-            <div className="flex flex-col items-center justify-center py-10">
-              <svg viewBox="0 0 24 16" className="w-8 h-6 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
-              <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
-            </div>
+            {totals.finTouched > 0 ? (
+              <div className="py-3">
+                <p className="text-[40px] font-mono font-bold text-[#1a1a1a] leading-none">{totals.resolutionRate}%</p>
+                <p className="mt-2 text-[12px] text-[#646462]">{totals.finResolved} resueltas de {totals.finTouched} conversaciones donde Fin participó</p>
+                <div className="mt-4 h-2 bg-[#e9eae6] rounded-full overflow-hidden">
+                  <div className="h-2 bg-[#a4c34f] rounded-full" style={{ width: `${Math.min(100, totals.resolutionRate)}%` }} />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-10">
+                <svg viewBox="0 0 24 16" className="w-8 h-6 fill-none stroke-[#c4c4c2]" strokeWidth="1.5"><path d="M2 14h6M2 9h12M2 4h8"/></svg>
+                <p className="mt-2 text-[12px] text-[#646462]">No hay datos para mostrar</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -15209,6 +15582,43 @@ function FinTendenciasContent() {
 
 // ─── Analizar / Monitores (1:18192) ─────────────────────────────────────────
 function FinMonitoresContent() {
+  // Real agent runs from operationsApi feed the monitor cards. We also listen
+  // to /api/sse/agent-runs so the cards bump their counts in real time as
+  // chains execute. No mock data — empty state when nothing has run.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: runsData } = useApi(() => operationsApi.agentRuns(), [refreshKey], []);
+  const runs = Array.isArray(runsData) ? runsData : [];
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let es: EventSource | null = null;
+    let cancelled = false;
+    function connect() {
+      if (cancelled) return;
+      try { es = new EventSource('/api/sse/agent-runs'); } catch { return; }
+      es.addEventListener('agent:start',  () => setRefreshKey(k => k + 1));
+      es.addEventListener('agent:finish', () => setRefreshKey(k => k + 1));
+      es.onerror = () => { try { es?.close(); } catch { /* ignore */ } if (!cancelled) setTimeout(connect, 5000); };
+    }
+    connect();
+    return () => { cancelled = true; try { es?.close(); } catch { /* ignore */ } };
+  }, []);
+
+  const agg = useMemo(() => {
+    const total = runs.length;
+    const last7 = runs.filter((r: any) => {
+      const t = new Date(r.started_at || r.startedAt || r.created_at || r.createdAt || 0).getTime();
+      return Number.isFinite(t) && (Date.now() - t) <= 7 * 86400_000;
+    }).length;
+    const failed = runs.filter((r: any) => String(r.status || '').toLowerCase() === 'failed' || String(r.status || '').toLowerCase() === 'error').length;
+    const unreviewed = runs.filter((r: any) => !(r.reviewed_at || r.reviewedAt)).length;
+    const byAgent = new Map<string, number>();
+    for (const r of runs) {
+      const slug = String((r as any).agent_slug || (r as any).agentSlug || (r as any).agent || 'desconocido');
+      byAgent.set(slug, (byAgent.get(slug) || 0) + 1);
+    }
+    return { total, last7, failed, unreviewed, byAgent: Array.from(byAgent.entries()) };
+  }, [runs]);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-14 flex items-center justify-between">
@@ -15273,16 +15683,22 @@ function FinMonitoresContent() {
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.01"/></svg>
             </span>
             <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Conversaciones sin revisión</span>
-            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">0</span>
+            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">{agg.unreviewed}</span>
           </button>
           <button className="bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
             <span className="w-7 h-7 rounded-md bg-[#fef3c7] flex items-center justify-center flex-shrink-0">
               <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#a06820]"><path d="M8 1l7 13H1z"/></svg>
             </span>
-            <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Correcciones necesarias</span>
-            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">0</span>
+            <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Ejecuciones con error</span>
+            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">{agg.failed}</span>
           </button>
-          <div />
+          <button className="bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 hover:bg-[#f8f8f7] text-left">
+            <span className="w-7 h-7 rounded-md bg-[#dcfce7] flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#15803d]"><path d="M3 8l3 3 7-7" stroke="#15803d" strokeWidth="1.6" fill="none" strokeLinecap="round"/></svg>
+            </span>
+            <span className="flex-1 text-[13px] font-semibold text-[#1a1a1a]">Ejecuciones · 7 días</span>
+            <span className="text-[14px] font-mono font-bold text-[#1a1a1a]">{agg.last7}</span>
+          </button>
         </div>
 
         {/* Todas las conversaciones de Fin */}
@@ -15290,24 +15706,58 @@ function FinMonitoresContent() {
           <div className="bg-white rounded-[10px] border border-[#e9eae6] p-4">
             <div className="flex items-start justify-between">
               <div>
-                <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Todas las conversaciones de Fin</h4>
-                <p className="mt-0.5 text-[12px] text-[#646462]">Continuo</p>
+                <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Todas las ejecuciones de agentes</h4>
+                <p className="mt-0.5 text-[12px] text-[#646462]">SSE en directo</p>
               </div>
               <button className="w-6 h-6 rounded hover:bg-[#f8f8f7] flex items-center justify-center">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
               </button>
             </div>
-            <div className="mt-6 flex items-center gap-1 h-[60px] px-1">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <span key={i} className="flex-1 h-px border-t border-dashed border-[#d4d4d2]" />
-              ))}
-            </div>
             <div className="mt-3 pt-3 border-t border-[#e9eae6]">
-              <p className="text-[11px] text-[#646462]">Conversaciones</p>
-              <p className="text-[18px] font-mono font-bold text-[#1a1a1a]">0</p>
+              <p className="text-[11px] text-[#646462]">Total · histórico</p>
+              <p className="text-[18px] font-mono font-bold text-[#1a1a1a]">{agg.total}</p>
             </div>
           </div>
+          {agg.byAgent.slice(0, 2).map(([slug, count]) => (
+            <div key={slug} className="bg-white rounded-[10px] border border-[#e9eae6] p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="text-[14px] font-semibold text-[#1a1a1a] truncate">{slug}</h4>
+                  <p className="mt-0.5 text-[12px] text-[#646462]">Agente</p>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-[#e9eae6]">
+                <p className="text-[11px] text-[#646462]">Ejecuciones</p>
+                <p className="text-[18px] font-mono font-bold text-[#1a1a1a]">{count}</p>
+              </div>
+            </div>
+          ))}
         </div>
+
+        {/* Recent runs table */}
+        {runs.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-[14px] text-[#1a1a1a] mb-3">Últimas ejecuciones</h3>
+            <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              {runs.slice(0, 8).map((r: any, idx: number) => {
+                const status = String(r.status || '').toLowerCase();
+                const started = r.started_at || r.startedAt || r.created_at || r.createdAt;
+                const slug = r.agent_slug || r.agentSlug || r.agent || 'agente';
+                const caseId = r.case_id || r.caseId;
+                return (
+                  <div key={r.id || idx} className={`grid grid-cols-[1fr_140px_140px_120px] items-center px-4 py-2.5 ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
+                    <span className="text-[13px] text-[#1a1a1a] truncate">{slug}</span>
+                    <span className="text-[12px] text-[#646462]">{caseId || '—'}</span>
+                    <span className="text-[12px] text-[#646462]">{started ? new Date(started).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                    <span className={`text-[12px] font-semibold ${status === 'failed' || status === 'error' ? 'text-[#b91c1c]' : status === 'completed' || status === 'success' ? 'text-[#15803d]' : 'text-[#646462]'}`}>
+                      {status || 'pendiente'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -15315,6 +15765,22 @@ function FinMonitoresContent() {
 
 // ─── Registro de cambios (1:19066) ──────────────────────────────────────────
 function FinChangelogContent() {
+  // Pull workspace audit log; we filter by entity types relevant to Fin
+  // (agents, knowledge, workflows, policies). Each row is a real change.
+  const { data: auditData } = useApi(() => auditApi.workspaceAll(), [], []);
+  const [search, setSearch] = useState('');
+  const events = useMemo(() => {
+    const list = Array.isArray(auditData) ? auditData : [];
+    const finRelated = list.filter((e: any) => {
+      const t = String(e.entity_type || e.entityType || '').toLowerCase();
+      return ['agent', 'agents', 'knowledge', 'article', 'workflow', 'policy', 'fin'].some(k => t.includes(k));
+    });
+    const q = search.trim().toLowerCase();
+    return q
+      ? finRelated.filter((e: any) => JSON.stringify(e).toLowerCase().includes(q))
+      : finRelated;
+  }, [auditData, search]);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
@@ -15326,18 +15792,51 @@ function FinChangelogContent() {
       <div className="flex-shrink-0 px-6 py-4 flex items-center gap-3 border-b border-[#e9eae6]">
         <div className="relative flex-1 max-w-[320px]">
           <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
-          <input type="text" placeholder="Buscar elementos..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar elementos..."
+            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+          />
         </div>
         <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
           <span>Cualquier cambio</span>
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 flex items-start justify-center pt-24 px-6">
-        <div className="text-center max-w-[420px]">
-          <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
-          <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en su agente de IA Fin</p>
-        </div>
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
+        {events.length === 0 ? (
+          <div className="flex items-start justify-center pt-24">
+            <div className="text-center max-w-[420px]">
+              <h3 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">No se encontraron cambios</h3>
+              <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">Aún no se han realizado cambios en tu agente de IA Fin{search ? ' que coincidan con la búsqueda' : ''}.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden max-w-[920px]">
+            {events.map((e: any, idx: number) => {
+              const when = e.created_at || e.createdAt || e.timestamp;
+              return (
+                <div key={e.id || idx} className={`flex items-start gap-3 px-4 py-3 ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
+                  <span className="w-7 h-7 rounded-md bg-[#f3f3f1] flex items-center justify-center flex-shrink-0">
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><circle cx="8" cy="8" r="2"/></svg>
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-[#1a1a1a]">
+                      <span className="font-semibold">{e.actor_name || e.actorName || e.user_email || e.userEmail || 'Sistema'}</span>{' '}
+                      <span className="text-[#646462]">{e.action || e.event || 'modificó'}</span>{' '}
+                      <span className="font-mono text-[12px] bg-[#f3f3f1] px-1.5 py-0.5 rounded">{e.entity_type || e.entityType}</span>
+                      {(e.entity_id || e.entityId) && <span className="ml-1 font-mono text-[11px] text-[#646462]">#{e.entity_id || e.entityId}</span>}
+                    </p>
+                    {e.summary && <p className="mt-1 text-[12px] text-[#646462]">{e.summary}</p>}
+                  </div>
+                  <span className="text-[11px] text-[#646462] flex-shrink-0">{when ? new Date(when).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -15345,19 +15844,30 @@ function FinChangelogContent() {
 
 // ─── Ajustes de Fin · General (1:20145) ─────────────────────────────────────
 function FinSettingsContent() {
-  type Row = { icon: ReactNode; title: string; desc: string; cta?: string };
+  type Row = { icon: ReactNode; title: string; desc: string; cta?: string; view?: string };
+
+  // Each row deep-links to the canonical settings view that already implements
+  // the underlying configuration — single source of truth, no duplication.
+  function openView(view?: string) {
+    if (!view || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', view);
+    window.location.href = url.toString();
+  }
 
   const usoRows: Row[] = [
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M8 2.5l1.6 4 4.4.4-3.4 3 1.1 4.3L8 12l-3.7 2.2L5.4 9.9 2 6.9l4.4-.4z"/></svg>,
       title: 'Alertas y límites',
       desc: 'Fin es gratuito durante su prueba. Posteriormente, podrás establecer alertas y límites para controlar el gasto.',
+      view: 'billing',
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>,
       title: 'Supervisar el uso',
       desc: 'Obtén una descripción general de la facturación y ve cuántas resoluciones ha realizado Fin en este periodo.',
       cta: 'Ver uso',
+      view: 'billing',
     },
   ];
 
@@ -15366,27 +15876,31 @@ function FinSettingsContent() {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13.5c.7-2.4 2.7-3.7 5-3.7s4.3 1.3 5 3.7"/></svg>,
       title: 'La identidad de Fin',
       desc: 'Administra el nombre y avatar que verán tus clientes.',
+      view: 'workspaceBrands',
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 4l3 3-3 3M7 11h7" strokeLinecap="round"/></svg>,
       title: 'Botones de respuesta de Fin',
       desc: 'Elija cómo Fin formula las opciones que les presenta a sus clientes. Disponible en SMS.',
+      view: 'macros',
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.6 1.7 2.4 3.6 2.4 6S9.6 12.3 8 14C6.4 12.3 5.6 10.4 5.6 8S6.4 3.7 8 2z"/></svg>,
       title: 'Soporte multilingüe de Fin',
       desc: 'Controla los idiomas en los que responderá Fin.',
+      view: 'multilingual',
     },
     {
       icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4 5.5-4"/></svg>,
       title: 'Respuestas de correo electrónico de Fin',
       desc: 'Configura cómo Fin firma y formatea los correos electrónicos que envía a tus clientes.',
+      view: 'email',
     },
   ];
 
   function renderRow(r: Row) {
     return (
-      <button key={r.title} className="w-full bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 text-left hover:bg-[#f8f8f7]">
+      <button key={r.title} onClick={() => openView(r.view)} className="w-full bg-white rounded-[10px] border border-[#e9eae6] p-4 flex items-center gap-3 text-left hover:bg-[#f8f8f7]">
         <span className="w-8 h-8 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
           {r.icon}
         </span>
@@ -15424,6 +15938,30 @@ function FinSettingsContent() {
 
 // ─── Ajustes de Fin · Audiencias (1:21030) ──────────────────────────────────
 function FinAudiencesContent() {
+  // Audiences = teams + customer segments. We surface real teams from
+  // iamApi.teams() (already used in Settings › Equipos) and let the user
+  // jump there to manage them — single source of truth.
+  const { data: teamsData } = useApi(() => iamApi.teams(), [], []);
+  const { data: customers } = useApi(() => customersApi.list(), [], []);
+  const teams = Array.isArray(teamsData) ? teamsData : [];
+  const segments = useMemo(() => {
+    const list = Array.isArray(customers) ? customers : [];
+    const map = new Map<string, number>();
+    for (const c of list) {
+      const seg = String((c as any).segment || 'estándar').toLowerCase();
+      map.set(seg, (map.get(seg) || 0) + 1);
+    }
+    return Array.from(map.entries()).map(([id, count]) => ({ id, count }));
+  }, [customers]);
+
+  function openSettings(view: string) {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', view);
+      window.location.href = url.toString();
+    }
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-shrink-0 border-b border-[#e9eae6] px-6 h-12 flex items-center justify-between">
@@ -15431,21 +15969,66 @@ function FinAudiencesContent() {
           <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
           <h2 className="text-[15px] font-bold text-[#1a1a1a]">Audiencias</h2>
         </div>
-        <button className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+        <button onClick={() => openSettings('inboxTeam')} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
           <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-          <span>Nuevo</span>
+          <span>Gestionar equipos</span>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 p-6">
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 flex flex-col gap-5">
         <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[12px] p-6 max-w-[820px]">
           <h3 className="text-[16px] font-bold text-[#1a1a1a] leading-[22px]">Segmenta tu contenido y pautas de Fin para usuarios específicos</h3>
           <p className="mt-2 text-[13px] text-[#646462] leading-[20px]">
-            Crea y administra audiencias personalizadas para controlar qué conocimientos utiliza Fin y qué pauta aplica, asegurando que los usuarios obtengan respuestas que siempre sean relevantes.
+            Las audiencias en este workspace combinan equipos (para el routing humano + Copilot) y segmentos de clientes (VIP / estándar / bajo valor) que ya existen en Contactos. Fin aplica políticas distintas según la audiencia activa.
           </p>
-          <button className="mt-4 h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/><path d="M8 3.2v9.6"/></svg>
-            <span>Cómo usar las audiencias para segmentar a Fin</span>
-          </button>
+        </div>
+
+        {/* Teams */}
+        <div className="max-w-[820px]">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Equipos ({teams.length})</h4>
+            <button onClick={() => openSettings('inboxTeam')} className="text-[12.5px] font-medium text-[#1a1a1a] hover:underline">Gestionar →</button>
+          </div>
+          {teams.length === 0 ? (
+            <div className="bg-white border border-[#e9eae6] rounded-[10px] px-4 py-6 text-center text-[13px] text-[#646462]">
+              Sin equipos. Crea uno desde <button onClick={() => openSettings('inboxTeam')} className="underline">Equipos del Inbox</button>.
+            </div>
+          ) : (
+            <div className="bg-white border border-[#e9eae6] rounded-[10px] overflow-hidden">
+              {teams.map((t: any, idx: number) => (
+                <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${idx > 0 ? 'border-t border-[#f1f1ee]' : ''}`}>
+                  <span className="w-8 h-8 rounded-md bg-[#f3f3f1] flex items-center justify-center text-[12px] font-semibold text-[#1a1a1a]">{(t.name || '?')[0]}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{t.name}</p>
+                    {t.description && <p className="text-[12px] text-[#646462] truncate">{t.description}</p>}
+                  </div>
+                  <span className="text-[12px] text-[#646462]">{t.member_count ?? t.memberCount ?? '—'} miembros</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Customer segments */}
+        <div className="max-w-[820px]">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Segmentos de clientes ({segments.length})</h4>
+            <button onClick={() => openSettings('contacts')} className="text-[12.5px] font-medium text-[#1a1a1a] hover:underline">Ver contactos →</button>
+          </div>
+          {segments.length === 0 ? (
+            <div className="bg-white border border-[#e9eae6] rounded-[10px] px-4 py-6 text-center text-[13px] text-[#646462]">
+              Aún no hay datos de segmentación.
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {segments.map(s => (
+                <div key={s.id} className="bg-white border border-[#e9eae6] rounded-[10px] p-4">
+                  <p className="text-[12px] uppercase tracking-wide text-[#646462] font-semibold">{s.id}</p>
+                  <p className="mt-1 text-[24px] font-mono font-bold text-[#1a1a1a]">{s.count}</p>
+                  <p className="mt-1 text-[12px] text-[#646462]">{s.count === 1 ? 'contacto' : 'contactos'}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -15454,6 +16037,42 @@ function FinAudiencesContent() {
 
 // ─── Ajustes de Fin · Flujos de trabajo (Figma 1:22652) ─────────────────────
 function FinFlujosTrabajoContent() {
+  // Real workflows from the backend feed the table at the bottom of the screen.
+  // The hero card / filters above stay UI-only; selecting a row redirects to
+  // the existing /automation builder (already wired) for editing.
+  const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
+  const [search, setSearch] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const workflows = useMemo(() => {
+    const list = Array.isArray(workflowsData) ? workflowsData : [];
+    const q = search.trim().toLowerCase();
+    return q
+      ? list.filter((w: any) => String(w.name || w.title || w.id || '').toLowerCase().includes(q))
+      : list;
+  }, [workflowsData, search]);
+  function showStatus(msg: string, type: 'success' | 'error' = 'success') {
+    setStatusMsg({ msg, type });
+    window.setTimeout(() => setStatusMsg(null), 3000);
+  }
+  async function runWorkflow(id: string) {
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      await workflowsApi.run(id);
+      showStatus('Workflow lanzado correctamente');
+    } catch (err: any) {
+      showStatus(err?.message || 'No se pudo lanzar el workflow', 'error');
+    } finally { setBusyId(null); }
+  }
+  function openInBuilder(id: string) {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'automation');
+      url.searchParams.set('workflow', id);
+      window.location.href = url.toString();
+    }
+  }
   const filterChips = [
     {
       label: 'Visitantes, leads o usuarios',
@@ -15489,20 +16108,8 @@ function FinFlujosTrabajoContent() {
     },
   ];
 
-  const rows = [
-    {
-      title: 'Use Fin AI Agent over Messenger',
-      icon: (
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
-      ),
-    },
-    {
-      title: 'Triage customer conversations before Fin replies',
-      icon: (
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d]"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
-      ),
-    },
-  ];
+  // Live rows replace the placeholder static rows. Empty state is handled below.
+  const rows = workflows;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -15564,7 +16171,7 @@ function FinFlujosTrabajoContent() {
           <span>Aprender</span>
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
         </button>
-        <button className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
+        <button onClick={() => openInBuilder('new')} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
           <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
           <span>Nuevo flujo de trabajo</span>
           <svg viewBox="0 0 12 12" className="w-2.5 h-2.5 fill-white"><path d="M3 4.5l3 3 3-3z"/></svg>
@@ -15575,7 +16182,13 @@ function FinFlujosTrabajoContent() {
       <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2 flex-wrap">
         <div className="relative w-[220px]">
           <svg viewBox="0 0 16 16" className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13"/></svg>
-          <input type="text" placeholder="Buscar..." className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"/>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar..."
+            className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
+          />
         </div>
         {filterChips.map(c => (
           <button key={c.label} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
@@ -15589,7 +16202,12 @@ function FinFlujosTrabajoContent() {
 
       {/* Workflow list */}
       <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
-        <p className="text-[13px] text-[#646462] mb-3">2 flujo de trabajos</p>
+        {statusMsg && (
+          <div className={`mb-3 px-3 py-2 rounded-[8px] border text-[12.5px] ${statusMsg.type === 'error' ? 'bg-[#fef2f2] border-[#fecaca] text-[#b91c1c]' : 'bg-[#f0fdf4] border-[#bbf7d0] text-[#15803d]'}`}>
+            {statusMsg.msg}
+          </div>
+        )}
+        <p className="text-[13px] text-[#646462] mb-3">{rows.length} {rows.length === 1 ? 'flujo de trabajo' : 'flujos de trabajo'}</p>
 
         {/* Group header pill */}
         <button className="h-8 px-3 mb-3 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] inline-flex items-center gap-2 text-[12.5px] text-[#1a1a1a]">
@@ -15632,24 +16250,50 @@ function FinFlujosTrabajoContent() {
             <span>Enviado</span>
             <span>Objetivo</span>
           </div>
-          {rows.map(r => (
-            <div key={r.title} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa]">
-              <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
-              <span><input type="checkbox" className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
-              <span className="flex items-center gap-2 min-w-0">
-                {r.icon}
-                <span className="text-[13px] text-[#1a1a1a] truncate">{r.title}</span>
-              </span>
-              <span><span className="inline-flex items-center px-2 py-0.5 rounded-[6px] bg-[#f3f3f1] text-[11.5px] font-semibold text-[#646462]">Draft</span></span>
-              <span className="text-[12.5px] text-[#646462]">10 hours ago</span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center">H</span>
-                <span className="text-[12.5px] text-[#1a1a1a] truncate">Hector Vidal Sanchez</span>
-              </span>
-              <span className="text-[12.5px] text-[#3b59f6]">0</span>
-              <span className="text-[12.5px] text-[#646462]">—</span>
+          {rows.length === 0 ? (
+            <div className="px-6 py-8 text-center text-[13px] text-[#646462]">
+              {search ? 'Ningún flujo coincide con la búsqueda.' : 'Aún no hay flujos de trabajo. Crea uno con «Nuevo flujo de trabajo».'}
             </div>
-          ))}
+          ) : rows.map((r: any) => {
+            const id = String(r.id || r.slug || r.name || '');
+            const status = String(r.status || r.state || 'draft').toLowerCase();
+            const updated = r.updated_at || r.updatedAt || r.created_at || r.createdAt;
+            const updatedText = updated ? new Date(updated).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+            const title = r.name || r.title || id || 'Sin título';
+            const author = r.updated_by_name || r.updatedByName || r.author || r.created_by_name || '—';
+            const sent = r.runs_count ?? r.runsCount ?? 0;
+            return (
+              <div key={id} onClick={() => openInBuilder(id)} className="grid grid-cols-[40px_36px_1fr_120px_180px_200px_80px_120px] items-center px-3 h-12 border-b border-[#e9eae6] last:border-b-0 hover:bg-[#fafafa] cursor-pointer">
+                <span className="text-[#a4a4a2] text-center select-none">⋮⋮</span>
+                <span><input type="checkbox" onClick={e => e.stopPropagation()} className="w-3.5 h-3.5 accent-[#1a1a1a]"/></span>
+                <span className="flex items-center gap-2 min-w-0">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#ed621d] flex-shrink-0"><path d="M8 1l-3 7h3l-1 7 5-9h-3l1-5z"/></svg>
+                  <span className="text-[13px] text-[#1a1a1a] truncate">{title}</span>
+                </span>
+                <span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-[6px] text-[11.5px] font-semibold ${
+                    status === 'published' || status === 'active' ? 'bg-[#dcfce7] text-[#15803d]' :
+                    status === 'archived' ? 'bg-[#fef2f2] text-[#991b1b]' :
+                    'bg-[#f3f3f1] text-[#646462]'
+                  }`}>{status === 'published' ? 'Publicado' : status === 'active' ? 'Activo' : status === 'archived' ? 'Archivado' : 'Draft'}</span>
+                </span>
+                <span className="text-[12.5px] text-[#646462]">{updatedText}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-5 h-5 rounded-full bg-[#3b59f6] text-white text-[10px] font-semibold flex items-center justify-center flex-shrink-0">{(author[0] || '?').toUpperCase()}</span>
+                  <span className="text-[12.5px] text-[#1a1a1a] truncate">{author}</span>
+                </span>
+                <span className="text-[12.5px] text-[#3b59f6]">{sent}</span>
+                <span className="flex items-center gap-1.5">
+                  <button
+                    onClick={e => { e.stopPropagation(); runWorkflow(id); }}
+                    disabled={busyId === id}
+                    title="Ejecutar"
+                    className="h-6 px-2 rounded-[6px] bg-[#1a1a1a] text-white text-[11px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]"
+                  >{busyId === id ? '…' : 'Ejecutar'}</button>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -15658,18 +16302,55 @@ function FinFlujosTrabajoContent() {
 
 // ─── Ajustes de Fin · Automatizaciones simples (Figma 1:23926) ──────────────
 function FinAutomatizacionesSimplesContent() {
-  const trigger1Items = [
-    {
-      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 5h11M2.5 8h11M2.5 11h11" strokeLinecap="round"/></svg>,
-      label: 'Obtén el contexto de los problemas por adelantado',
-      state: 'Off' as const,
-    },
-    {
-      icon: <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>,
-      label: 'Comparte tu tiempo de respuesta habitual',
-      state: 'On' as const,
-    },
+  // Real "simple automations" come from workflowsApi filtered to ones tagged
+  // simple (or with kind='simple'). Each row shows the live published state
+  // and toggling it calls workflowsApi.publish/archive so changes persist.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: workflowsData } = useApi(() => workflowsApi.list(), [refreshKey], []);
+  const refreshWorkflows = () => setRefreshKey(k => k + 1);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const allFlows = Array.isArray(workflowsData) ? workflowsData : [];
+  const simpleFlows = useMemo(() => {
+    return allFlows.filter((w: any) => {
+      const kind = String(w.kind || w.type || '').toLowerCase();
+      const tags = Array.isArray(w.tags) ? w.tags.map((t: any) => String(t).toLowerCase()) : [];
+      return kind === 'simple' || tags.includes('simple') || tags.includes('automation:simple');
+    });
+  }, [allFlows]);
+  async function toggleFlow(id: string, currentlyOn: boolean) {
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      if (currentlyOn) {
+        await workflowsApi.archive(id);
+      } else {
+        await workflowsApi.publish(id);
+      }
+      refreshWorkflows?.();
+    } catch {
+      /* surface in UI via reload */
+    } finally { setBusyId(null); }
+  }
+  function openAutomation() {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'automation');
+      window.location.href = url.toString();
+    }
+  }
+  // Show the live simple flows; if none exist, fall back to the canonical
+  // illustrative pair so the UI doesn't go blank for first-time users.
+  const fallbackItems = [
+    { id: '__placeholder_context', label: 'Obtén el contexto de los problemas por adelantado', state: false as boolean },
+    { id: '__placeholder_response', label: 'Comparte tu tiempo de respuesta habitual',          state: false as boolean },
   ];
+  const trigger1Items = simpleFlows.length > 0
+    ? simpleFlows.map((w: any) => ({
+        id: String(w.id),
+        label: w.name || w.title || w.id,
+        state: ['published', 'active'].includes(String(w.status || '').toLowerCase()),
+      }))
+    : fallbackItems;
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -15759,18 +16440,28 @@ function FinAutomatizacionesSimplesContent() {
 
         {/* Action items */}
         <div className="flex flex-col gap-2 mb-6">
-          {trigger1Items.map(item => (
-            <button key={item.label} className="w-full bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 flex items-center gap-3 hover:bg-[#fafafa] text-left">
-              <span className="w-7 h-7 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">{item.icon}</span>
-              <span className="flex-1 text-[13px] text-[#1a1a1a]">{item.label}</span>
-              {item.state === 'On' ? (
-                <span className="px-2 py-0.5 rounded-full bg-[#dcf2e3] text-[#1f7a3a] text-[11.5px] font-semibold">On</span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full bg-[#f3f3f1] text-[#646462] text-[11.5px] font-semibold">Off</span>
-              )}
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
-            </button>
-          ))}
+          {trigger1Items.map(item => {
+            const placeholder = item.id.startsWith('__placeholder');
+            return (
+              <button
+                key={item.id}
+                onClick={() => placeholder ? openAutomation() : toggleFlow(item.id, item.state)}
+                disabled={busyId === item.id}
+                className="w-full bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 flex items-center gap-3 hover:bg-[#fafafa] text-left disabled:opacity-60"
+              >
+                <span className="w-7 h-7 rounded-md bg-[#f8f8f7] border border-[#e9eae6] flex items-center justify-center flex-shrink-0">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5" strokeLinecap="round"/></svg>
+                </span>
+                <span className="flex-1 text-[13px] text-[#1a1a1a]">{item.label}</span>
+                {item.state ? (
+                  <span className="px-2 py-0.5 rounded-full bg-[#dcf2e3] text-[#1f7a3a] text-[11.5px] font-semibold">On</span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-[#f3f3f1] text-[#646462] text-[11.5px] font-semibold">Off</span>
+                )}
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5.5 3l5 5-5 5" strokeLinecap="round"/></svg>
+              </button>
+            );
+          })}
         </div>
 
         {/* Group 2: cierre conversación */}
