@@ -8,7 +8,7 @@ import { agentsApi, aiApi, attachmentsApi, auditApi, billingApi, casesApi, conne
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
-import Workflows from '../components/Workflows';
+import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
 
@@ -21176,13 +21176,65 @@ function FinFlujosTrabajoContent() {
   // Real workflows from the backend feed the table at the bottom of the screen.
   // Selecting a row now opens the IDENTICAL <Workflows/> builder embedded
   // inside the Fin shell (no more ?view=automation redirect).
-  const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
+  const { data: workflowsData, refetch: refetchWorkflows } = useApi(() => workflowsApi.list(), [], []);
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [instantiatingTplId, setInstantiatingTplId] = useState<string | null>(null);
 
   // Embedded builder state. null = list, '' = create-new, anything else = edit existing id.
   const [builderId, setBuilderId] = useState<string | null>(null);
+
+  // Production-grade default templates (the 8 with `tpl_` prefix).
+  const defaultTemplates = useMemo(
+    () => (WORKFLOW_TEMPLATES as readonly any[]).filter((t) => typeof t.id === 'string' && t.id.startsWith('tpl_')),
+    [],
+  );
+
+  async function instantiateTemplate(tpl: any) {
+    if (instantiatingTplId) return;
+    setInstantiatingTplId(tpl.id);
+    try {
+      // Convert template node[].position → x/y, and edge {source,target} indices
+      // into UUIDs that the backend can normalize.
+      const nodeIds: string[] = (tpl.nodes || []).map(() =>
+        (typeof crypto !== 'undefined' && (crypto as any).randomUUID) ? (crypto as any).randomUUID() : `node_${Math.random().toString(36).slice(2, 10)}`,
+      );
+      const nodes = (tpl.nodes || []).map((n: any, idx: number) => ({
+        id: nodeIds[idx],
+        type: n.type,
+        key: n.key,
+        label: n.label,
+        position: n.position || { x: 100 + idx * 240, y: 240 },
+        config: n.config || {},
+      }));
+      const edges = (tpl.edges || []).map((e: any, idx: number) => ({
+        id: `edge_${idx}`,
+        source: nodeIds[e.source],
+        target: nodeIds[e.target],
+        label: e.label,
+        sourceHandle: e.sourceHandle,
+      }));
+      const created: any = await workflowsApi.create({
+        name: tpl.label || tpl.id,
+        description: tpl.description || '',
+        nodes,
+        edges,
+        trigger: { type: 'manual' },
+      });
+      const newId = created?.id || created?.workflow?.id;
+      showStatus(`Plantilla "${tpl.label}" creada`);
+      refetchWorkflows();
+      if (newId) {
+        // Open the builder for the new workflow.
+        setBuilderId(newId);
+      }
+    } catch (err: any) {
+      showStatus(err?.message || 'No se pudo instanciar la plantilla', 'error');
+    } finally {
+      setInstantiatingTplId(null);
+    }
+  }
 
   // Functional filter chips (state-driven; effect on `workflows` depends on shape of row).
   const [audienceFilter, setAudienceFilter] = useState<string>('any');
@@ -21579,6 +21631,59 @@ function FinFlujosTrabajoContent() {
             <span>Configuración simple</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 3l5 5-5 5" strokeLinecap="round"/></svg>
           </button>
+        </div>
+
+        {/* ── Plantillas predeterminadas ────────────────────────────────── */}
+        <div className="mb-5">
+          <div className="flex items-baseline gap-2 mb-1">
+            <h4 className="text-[14px] font-bold text-[#1a1a1a]">Plantillas listas para usar</h4>
+            <span className="text-[12px] text-[#a4a4a2]">{defaultTemplates.length}</span>
+          </div>
+          <p className="text-[13px] text-[#646462] mb-3">Instancia con un clic — Fin las preconfigura por ti.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {defaultTemplates.map((tpl: any) => {
+              const isBusy = instantiatingTplId === tpl.id;
+              return (
+                <div
+                  key={tpl.id}
+                  className="bg-white border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-3 hover:border-[#1a1a1a]/30 transition-colors"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#ed621d]"><path d="M3 2.5h6l4 4v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-10a1 1 0 011-1zm6 0v4h4"/></svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-[#a4a4a2]">{tpl.category}</span>
+                      </div>
+                      <h5 className="text-[13px] font-semibold text-[#1a1a1a] leading-[18px] mb-1 line-clamp-2">{tpl.label}</h5>
+                      <p className="text-[12.5px] text-[#646462] leading-[18px] line-clamp-3">{tpl.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11.5px] text-[#a4a4a2]">{(tpl.nodes || []).length} pasos</span>
+                    <button
+                      onClick={() => instantiateTemplate(tpl)}
+                      disabled={isBusy || !!instantiatingTplId}
+                      className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[12.5px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isBusy ? (
+                        <>
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 animate-spin fill-none stroke-white" strokeWidth="1.6"><circle cx="8" cy="8" r="6" strokeDasharray="20 14"/></svg>
+                          <span>Creando…</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+                          <span>Usar plantilla</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Workflow table */}
