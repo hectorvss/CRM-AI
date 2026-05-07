@@ -484,45 +484,97 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
   );
 }
 
-// ── Profile menu — popover that opens above the Perfil button in the LeftNav ──
+// ── Profile menu — popover with submenus for Tema / Idioma / Workspace ───────
+type ProfileSubmenu = null | 'theme' | 'language' | 'workspace';
+type ThemeOpt = 'light' | 'dark' | 'system';
+const THEME_OPTIONS: { value: ThemeOpt; label: string }[] = [
+  { value: 'light',  label: 'Claro' },
+  { value: 'dark',   label: 'Oscuro' },
+  { value: 'system', label: 'Sistema' },
+];
+const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'es',    label: 'Español' },
+  { value: 'es-MX', label: 'Español (México)' },
+  { value: 'en',    label: 'English' },
+  { value: 'en-GB', label: 'English (UK)' },
+  { value: 'fr',    label: 'Français' },
+  { value: 'pt',    label: 'Português' },
+  { value: 'pt-BR', label: 'Português (Brasil)' },
+  { value: 'de',    label: 'Deutsch' },
+  { value: 'it',    label: 'Italiano' },
+  { value: 'ja',    label: '日本語' },
+];
+
 function ProfileMenuButton({ expanded }: { expanded: boolean }) {
   const [open, setOpen] = useState(false);
+  const [submenu, setSubmenu] = useState<ProfileSubmenu>(null);
   const [away, setAway] = useState(false);
+  const [theme, setTheme] = useState<ThemeOpt>('system');
+  const [lang, setLang] = useState('es');
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const { data: user } = useApi<any>(iamApi.me, []);
+  const { data: workspacesRaw } = useApi<any[]>(workspacesApi.list, [], []);
+  const { data: ctx } = useApi<any>(workspacesApi.currentContext, [], null);
 
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
       if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
+      if (!wrapRef.current.contains(e.target as Node)) { setOpen(false); setSubmenu(null); }
     }
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (submenu) setSubmenu(null);
+      else { setOpen(false); }
+    }
     window.addEventListener('mousedown', onDoc);
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('mousedown', onDoc);
       window.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, submenu]);
 
   const userName = user?.name || 'Tu cuenta';
   const userEmail = user?.email || '';
   const initials = String(userName)
     .split(/\s+/).filter(Boolean).slice(0, 2).map((s: string) => s.charAt(0).toUpperCase()).join('') || '?';
 
-  function Row({ icon, label, sub, onClick, danger, chev }: { icon?: ReactNode; label: string; sub?: string; onClick?: () => void; danger?: boolean; chev?: boolean }) {
-    return (
-      <button
-        type="button"
-        onClick={() => { onClick?.(); setOpen(false); }}
-        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${danger ? 'text-[#b91c1c] hover:bg-[#fef2f2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
-      >
-        {icon && <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">{icon}</span>}
-        <span className="flex-1 truncate">{label}{sub && <span className="text-[#646462] font-normal"> {sub}</span>}</span>
-        {chev && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>}
-      </button>
-    );
+  // Workspaces: live from /workspaces, current from /workspaces/current/context
+  const workspaces = Array.isArray(workspacesRaw) ? workspacesRaw : [];
+  const currentWorkspaceId =
+    ctx?.workspace?.id ||
+    ctx?.workspace_id ||
+    user?.context?.workspace_id ||
+    user?.memberships?.[0]?.workspace_id ||
+    null;
+  const currentWorkspaceName =
+    workspaces.find((w: any) => w.id === currentWorkspaceId)?.name ||
+    ctx?.workspace?.name ||
+    user?.memberships?.[0]?.workspace_name ||
+    'Workspace';
+
+  const themeLabel = THEME_OPTIONS.find(t => t.value === theme)?.label || 'Sistema';
+  const langLabel = LANGUAGE_OPTIONS.find(l => l.value === lang)?.label || 'Español';
+
+  async function handleSwitchWorkspace(ws: any) {
+    if (!ws?.id || ws.id === currentWorkspaceId) { setSubmenu(null); return; }
+    // Update local membership cache so the next request() injects the new
+    // x-workspace-id header. Tenant id is preserved (workspaces belong to a
+    // single tenant). Then reload so all live queries pick up the new context.
+    try {
+      const raw = localStorage.getItem('crmai.membership.v1');
+      const cache = raw ? JSON.parse(raw) : {};
+      const tenantId = ws.tenant_id || cache?.tenantId || user?.context?.tenant_id;
+      if (cache?.userId && tenantId) {
+        localStorage.setItem('crmai.membership.v1', JSON.stringify({
+          userId: cache.userId,
+          tenantId,
+          workspaceId: ws.id,
+        }));
+      }
+    } catch { /* ignore */ }
+    if (typeof window !== 'undefined') window.location.reload();
   }
 
   async function handleSignOut() {
@@ -534,11 +586,61 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
     if (typeof window !== 'undefined') window.location.reload();
   }
 
+  function MainRow({ label, sub, onClick, danger, chev, onClose }: { label: string; sub?: string; onClick?: () => void; danger?: boolean; chev?: boolean; onClose?: boolean }) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          onClick?.();
+          if (onClose !== false && !chev) setOpen(false);
+        }}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${danger ? 'text-[#b91c1c] hover:bg-[#fef2f2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+      >
+        <span className="flex-1 truncate">
+          {label}
+          {sub && <span className="text-[#646462] font-normal"> {sub}</span>}
+        </span>
+        {chev && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>}
+      </button>
+    );
+  }
+
+  function CheckRow({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${active ? 'bg-[#f8f8f7] font-semibold text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+      >
+        <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+          {active && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="2"><path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        </span>
+        <span className="flex-1 truncate">{label}</span>
+      </button>
+    );
+  }
+
+  function SubHeader({ title }: { title: string }) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-2 border-b border-[#e9eae6]">
+        <button
+          type="button"
+          onClick={() => setSubmenu(null)}
+          className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
+          aria-label="Volver"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <span className="text-[13px] font-semibold text-[#1a1a1a]">{title}</span>
+      </div>
+    );
+  }
+
   return (
     <div ref={wrapRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => { setOpen(v => !v); setSubmenu(null); }}
         className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${open ? 'bg-white/80' : ''}`}
       >
         <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7] flex-shrink-0 flex items-center justify-center">
@@ -555,52 +657,106 @@ function ProfileMenuButton({ expanded }: { expanded: boolean }) {
       {open && (
         <div
           role="menu"
-          className="absolute z-50 left-full ml-2 bottom-0 w-[280px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] py-1.5 overflow-hidden"
+          className="absolute z-50 left-full ml-2 bottom-0 w-[280px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] overflow-hidden"
         >
-          {/* Header */}
-          <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-[#e9eae6]">
-            <div className="relative w-7 h-7 rounded-full overflow-hidden bg-[#f8f8f7] flex items-center justify-center">
-              {user?.avatar_url ? (
-                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-[12px] font-semibold text-[#646462]">{initials}</span>
-              )}
-              <div className={`absolute bottom-0 right-0 w-[8px] h-[8px] rounded-full border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+          {submenu === null && (
+            <div className="py-1.5">
+              <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-[#e9eae6]">
+                <div className="relative w-7 h-7 rounded-full overflow-hidden bg-[#f8f8f7] flex items-center justify-center">
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[12px] font-semibold text-[#646462]">{initials}</span>
+                  )}
+                  <div className={`absolute bottom-0 right-0 w-[8px] h-[8px] rounded-full border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{userName}</p>
+                  {userEmail && <p className="text-[11px] text-[#646462] truncate">{userEmail}</p>}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setAway(v => !v)}
+                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                <span className="flex-1 text-left">Modo ausente</span>
+                <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0 ${away ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
+                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${away ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                </span>
+              </button>
+
+              <div className="border-t border-[#e9eae6] my-1" />
+
+              <MainRow label="Tema:"             sub={themeLabel}            chev onClose={false} onClick={() => setSubmenu('theme')} />
+              <MainRow label="Idioma:"           sub={langLabel}             chev onClose={false} onClick={() => setSubmenu('language')} />
+              <MainRow label="Espacio de trabajo:" sub={currentWorkspaceName} chev onClose={false} onClick={() => setSubmenu('workspace')} />
+
+              <div className="border-t border-[#e9eae6] my-1" />
+
+              <MainRow label="Centro de ayuda"        onClick={() => window.open('https://www.intercom.com/help', '_blank')} />
+              <MainRow label="Foro de la comunidad"   onClick={() => window.open('https://community.intercom.com', '_blank')} />
+              <MainRow label="Página de estado"       onClick={() => window.open('https://www.intercomstatus.com', '_blank')} />
+              <MainRow label="Términos y políticas"   onClick={() => window.open('https://www.intercom.com/terms-and-policies', '_blank')} />
+
+              <div className="border-t border-[#e9eae6] my-1" />
+
+              <MainRow label="Cerrar sesión" danger onClick={handleSignOut} />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{userName}</p>
-              {userEmail && <p className="text-[11px] text-[#646462] truncate">{userEmail}</p>}
+          )}
+
+          {submenu === 'theme' && (
+            <div className="py-1">
+              <SubHeader title="Tema" />
+              <div className="py-1">
+                {THEME_OPTIONS.map(opt => (
+                  <CheckRow
+                    key={opt.value}
+                    active={theme === opt.value}
+                    label={opt.label}
+                    onClick={() => { setTheme(opt.value); setSubmenu(null); }}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Modo ausente toggle */}
-          <button
-            type="button"
-            onClick={() => setAway(v => !v)}
-            className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
-          >
-            <span className="flex-1 text-left">Modo ausente</span>
-            <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0 ${away ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
-              <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${away ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-            </span>
-          </button>
+          {submenu === 'language' && (
+            <div className="py-1">
+              <SubHeader title="Idioma" />
+              <div className="py-1 max-h-[280px] overflow-y-auto">
+                {LANGUAGE_OPTIONS.map(opt => (
+                  <CheckRow
+                    key={opt.value}
+                    active={lang === opt.value}
+                    label={opt.label}
+                    onClick={() => { setLang(opt.value); setSubmenu(null); }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
-          <div className="border-t border-[#e9eae6] my-1" />
-
-          <Row label="Tema:" sub="Sistema de coincidencias" chev />
-          <Row label="Idioma:" sub="Español (MX)" chev />
-          <Row label="Espacio de trabajo:" sub="Acme" chev />
-
-          <div className="border-t border-[#e9eae6] my-1" />
-
-          <Row label="Centro de ayuda" onClick={() => window.open('https://www.intercom.com/help', '_blank')} />
-          <Row label="Foro de la comunidad" onClick={() => window.open('https://community.intercom.com', '_blank')} />
-          <Row label="Página de estado" onClick={() => window.open('https://www.intercomstatus.com', '_blank')} />
-          <Row label="Términos y políticas" onClick={() => window.open('https://www.intercom.com/terms-and-policies', '_blank')} />
-
-          <div className="border-t border-[#e9eae6] my-1" />
-
-          <Row label="Cerrar sesión" danger onClick={handleSignOut} />
+          {submenu === 'workspace' && (
+            <div className="py-1">
+              <SubHeader title="Espacio de trabajo" />
+              <div className="py-1 max-h-[280px] overflow-y-auto">
+                {workspaces.length === 0 ? (
+                  <div className="px-3 py-3 text-[12.5px] text-[#646462]">Sin espacios de trabajo disponibles.</div>
+                ) : (
+                  workspaces.map((ws: any) => (
+                    <CheckRow
+                      key={ws.id}
+                      active={ws.id === currentWorkspaceId}
+                      label={ws.name || ws.slug || ws.id}
+                      onClick={() => handleSwitchWorkspace(ws)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
