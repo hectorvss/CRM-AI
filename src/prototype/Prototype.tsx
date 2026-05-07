@@ -13114,6 +13114,35 @@ function KnowledgeFolderModal({
 }
 
 // KnowledgeArticleEditor — create + edit individual articles.
+// Small collapsible block used by the right Información panel of
+// KnowledgeArticleEditor. Each section opens by default; clicking the
+// chevron toggles. State is local so toggling one doesn't re-render others.
+function ArticleEditorSection({
+  title, icon, defaultOpen = true, children,
+}: {
+  title: string;
+  icon?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-b border-[#e9eae6]">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-[#fafafa] text-left"
+      >
+        <span className="flex items-center gap-2 text-[14px] font-semibold text-[#1a1a1a]">
+          {icon}
+          {title}
+        </span>
+        <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#646462] transition-transform ${open ? '' : '-rotate-90'}`}><path d="M4 6l4 4 4-4z"/></svg>
+      </button>
+      {open && <div className="px-5 pb-4">{children}</div>}
+    </div>
+  );
+}
+
 function KnowledgeArticleEditor({
   initial,
   domains,
@@ -13127,14 +13156,91 @@ function KnowledgeArticleEditor({
   onSaved: () => void;
   onAction: (msg: string, type?: 'success' | 'error') => void;
 }) {
+  // ── Core fields ─────────────────────────────────────────────────────────
   const [title, setTitle] = useState(initial?.title || '');
+  const [description, setDescription] = useState<string>(initial?.description || '');
   const [content, setContent] = useState(initial?.content || initial?.body || '');
   const [type, setType] = useState<string>(String(initial?.type || 'ARTICLE').toUpperCase());
-  const [domainId, setDomainId] = useState<string>(initial?.domain_id || initial?.domainId || (domains[0]?.id ?? ''));
+  const [domainId, setDomainId] = useState<string>(initial?.domain_id || initial?.domainId || '');
   const [visibility, setVisibility] = useState<'public' | 'internal'>(initial?.visibility === 'internal' ? 'internal' : 'public');
+  const [language, setLanguage] = useState<string>(initial?.language || 'en');
+  const [authorUserId, setAuthorUserId] = useState<string>(initial?.author_user_id || initial?.created_by || '');
+  // ── Fin section ─────────────────────────────────────────────────────────
+  const [finService,    setFinService]    = useState<boolean>(!!initial?.fin_service);
+  const [finSales,      setFinSales]      = useState<boolean>(!!initial?.fin_sales);
+  const [copilotEnabled,setCopilotEnabled]= useState<boolean>(initial?.copilot_enabled !== false);
+  const [finAudience,   setFinAudience]   = useState<string[]>(
+    Array.isArray(initial?.fin_audience) && initial.fin_audience.length
+      ? initial.fin_audience
+      : ['users','leads','visitors'],
+  );
+  // ── Help-center section ─────────────────────────────────────────────────
+  const [hcStatus, setHcStatus] = useState<'draft' | 'published'>(
+    initial?.helpcenter_status === 'published' ? 'published' : 'draft',
+  );
+  const [hcCollectionId, setHcCollectionId] = useState<string>(initial?.helpcenter_collection_id || '');
+  const [hcAudience, setHcAudience] = useState<string[]>(
+    Array.isArray(initial?.helpcenter_audience) && initial.helpcenter_audience.length
+      ? initial.helpcenter_audience
+      : ['users','leads','visitors'],
+  );
+  // ── Suggestions / tags ──────────────────────────────────────────────────
+  const [excludedFromSuggestions, setExcludedFromSuggestions] = useState<boolean>(!!initial?.excluded_from_suggestions);
+  const [tags, setTags] = useState<string[]>(Array.isArray(initial?.tags) ? initial.tags : []);
+  const [tagDraft, setTagDraft] = useState('');
+  // ── UI shell ────────────────────────────────────────────────────────────
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  // Auto-focus the title field on first mount when creating a new article.
+  useEffect(() => {
+    if (!initial?.id) titleInputRef.current?.focus();
+  }, [initial?.id]);
+  // Close on Esc unless the user is typing in a field.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (!inEditable) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  // Read-only metadata helpers.
+  const articleId = initial?.id || initial?.article_id || null;
+  const articleStatus = initial?.status || 'draft';
+  const createdAt = initial?.created_at || null;
+  const updatedAt = initial?.updated_at || null;
+  const reactionsObj = (initial?.reactions || {}) as { happy?: number; neutral?: number; sad?: number };
+  const totalReactions = Math.max(0, (reactionsObj.happy || 0) + (reactionsObj.neutral || 0) + (reactionsObj.sad || 0));
+  const reactionPct = (n?: number) => totalReactions > 0 ? Math.round(((n || 0) / totalReactions) * 100) : 0;
+  const viewCount = initial?.view_count ?? 0;
+  const conversationCount = initial?.conversation_count ?? 0;
+  const finResolutions = initial?.fin_resolutions ?? null;
+  const finParticipations = initial?.fin_participations ?? null;
+  const typeLabel = type === 'POLICY' ? 'Política'
+    : type === 'SNIPPET' ? 'Fragmento'
+    : type === 'PLAYBOOK' ? 'Playbook'
+    : type === 'DOCUMENT' ? 'Documento'
+    : (visibility === 'internal' ? 'Artículo interno' : 'Artículo público');
+  function toggleAudience(setter: (v: string[]) => void, current: string[], token: string) {
+    const next = current.includes(token) ? current.filter(t => t !== token) : [...current, token];
+    setter(next.length === 0 ? current : next);
+  }
+  function addTag() {
+    const t = tagDraft.trim();
+    if (!t || tags.includes(t)) { setTagDraft(''); return; }
+    setTags(prev => [...prev, t]);
+    setTagDraft('');
+  }
+  function removeTag(t: string) { setTags(prev => prev.filter(x => x !== t)); }
+  const audienceLabel = (a: string[]) => {
+    if (a.length === 3) return 'Users, Leads, and Visitors';
+    return a.map(t => t === 'users' ? 'Users' : t === 'leads' ? 'Leads' : 'Visitors').join(', ');
+  };
 
   // ── Knowledge sheet (structured fields the AI agent reads) ────────────────
   // Backend stores them as JSON in content_structured. The simple editor stays
@@ -13253,10 +13359,25 @@ function KnowledgeArticleEditor({
       const payload: Record<string, any> = {
         title: title.trim(),
         content: content,
+        description: description.trim() || null,
         type: type.toLowerCase(),
         visibility,
+        language,
+        // Fin
+        fin_service: finService,
+        fin_sales: finSales,
+        copilot_enabled: copilotEnabled,
+        fin_audience: finAudience,
+        // Help center
+        helpcenter_status: hcStatus,
+        helpcenter_collection_id: hcCollectionId || null,
+        helpcenter_audience: hcAudience,
+        // Suggestions / tags
+        excluded_from_suggestions: excludedFromSuggestions,
+        tags,
       };
       if (domainId) payload.domain_id = domainId;
+      if (authorUserId) payload.author_user_id = authorUserId;
       if (ownerUserId) payload.owner_user_id = ownerUserId;
       const cycleNum = Number(reviewCycleDays);
       if (Number.isFinite(cycleNum) && cycleNum > 0) payload.review_cycle_days = cycleNum;
@@ -13264,7 +13385,7 @@ function KnowledgeArticleEditor({
       if (linkedApprovalPolicyIds.length > 0) payload.linked_approval_policy_ids = linkedApprovalPolicyIds;
       const structured = buildContentStructured();
       if (structured) payload.content_structured = structured;
-      let id = initial?.id;
+      let id = articleId;
       if (id) {
         await knowledgeApi.updateArticle(id, payload);
       } else {
@@ -13275,7 +13396,7 @@ function KnowledgeArticleEditor({
         await knowledgeApi.publishArticle(id);
         onAction('Artículo publicado');
       } else {
-        onAction(initial?.id ? 'Artículo actualizado' : 'Artículo creado');
+        onAction(articleId ? 'Artículo actualizado' : 'Borrador guardado');
       }
       onSaved();
       onClose();
@@ -13284,171 +13405,93 @@ function KnowledgeArticleEditor({
     } finally { setBusy(false); }
   }
 
+  // Author lookup for the Datos avatar.
+  const authorMember = members.find((m: any) => String(m.id || m.user_id) === String(authorUserId));
+  const authorName = authorMember?.name || authorMember?.full_name || authorMember?.email || 'Sin asignar';
+  const authorInitial = (authorName[0] || '?').toUpperCase();
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/25 flex items-center justify-center" onClick={onClose}>
-      <div
-        className="w-[640px] max-h-[80vh] rounded-2xl bg-white border border-[#e9eae6] shadow-[0px_16px_40px_rgba(20,20,20,0.22)] p-5 flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <h3 className="text-[16px] font-semibold text-[#1a1a1a] mb-3">{initial?.id ? 'Editar artículo' : 'Nuevo artículo'}</h3>
-        <input
-          autoFocus
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="Título del artículo"
-          className="w-full h-9 rounded-lg border border-[#e9eae6] px-3 text-[13.5px] font-semibold focus:outline-none focus:border-[#1a1a1a] mb-3"
-        />
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <select
-            value={type}
-            onChange={e => setType(e.target.value)}
-            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-          >
-            {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <select
-            value={visibility}
-            onChange={e => setVisibility(e.target.value as 'public' | 'internal')}
-            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-          >
-            <option value="public">Público</option>
-            <option value="internal">Interno</option>
-          </select>
-          <select
-            value={domainId}
-            onChange={e => setDomainId(e.target.value)}
-            className="h-9 rounded-lg border border-[#e9eae6] px-2 text-[13px] focus:outline-none focus:border-[#1a1a1a]"
-          >
-            <option value="">Sin carpeta</option>
-            {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+    <div className="fixed inset-0 z-50 bg-white flex flex-col" onClick={e => e.stopPropagation()}>
+      {/* Header */}
+      <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-4">
+        <div className="flex-1 flex items-center gap-2">
+          <h2 className="text-[15px] font-bold text-[#1a1a1a]">{typeLabel}</h2>
         </div>
-        <textarea
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder="Cuerpo del artículo. Usa Markdown si quieres dar formato."
-          className="flex-1 min-h-[160px] rounded-lg border border-[#e9eae6] px-3 py-2 text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
-        />
-        {/* Estructura para IA — extra fields the AI agent reads. Toggleable so
-            the simple editor stays clean. Each list field is one item per line. */}
-        <button
-          onClick={() => setShowSheet(s => !s)}
-          className="mt-3 self-start text-[12px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1"
-        >
-          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current transition-transform ${showSheet ? 'rotate-90' : ''}`}><path d="M5 4l5 4-5 4z"/></svg>
-          Estructura para la IA (opcional)
-        </button>
-        {showSheet && (
-          <div className="mt-2 grid grid-cols-2 gap-3 max-h-[260px] overflow-y-auto pr-1">
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Resumen ejecutivo</label>
-              <textarea value={sheetSummary} onChange={e => setSheetSummary(e.target.value)} placeholder="Una frase con la idea clave que el agente debe recordar." className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Política / regla principal</label>
-              <textarea value={sheetPolicy} onChange={e => setSheetPolicy(e.target.value)} placeholder="La política aplicable, redactada para que el agente la cite literal." className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Permitido (uno por línea)</label>
-              <textarea value={sheetAllowed} onChange={e => setSheetAllowed(e.target.value)} placeholder={'Reembolso completo en 14 días\nCambio de talla sin coste'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Bloqueado (uno por línea)</label>
-              <textarea value={sheetBlocked} onChange={e => setSheetBlocked(e.target.value)} placeholder={'Reembolso fuera de plazo\nDescuento sobre artículos en oferta'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Escalación (uno por línea)</label>
-              <textarea value={sheetEscalation} onChange={e => setSheetEscalation(e.target.value)} placeholder={'Pedido > 500€\nCliente VIP'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Evidencia / fuentes (uno por línea)</label>
-              <textarea value={sheetEvidence} onChange={e => setSheetEvidence(e.target.value)} placeholder={'Cláusula 4.2 del contrato\nManual interno OPS-12'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Notas para el agente</label>
-              <textarea value={sheetAgentNotes} onChange={e => setSheetAgentNotes(e.target.value)} placeholder={'Pide siempre nº de pedido antes de empezar.'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Ejemplos de pregunta</label>
-              <textarea value={sheetExamples} onChange={e => setSheetExamples(e.target.value)} placeholder={'¿Puedo devolver un artículo en oferta?\n¿En cuánto recibo el reembolso?'} className="w-full min-h-[60px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Palabras clave (separadas por línea o coma)</label>
-              <textarea value={sheetKeywords} onChange={e => setSheetKeywords(e.target.value.replace(/,/g, '\n'))} placeholder={'reembolso\ndevolución\nrefund'} className="w-full min-h-[44px] rounded-lg border border-[#e9eae6] px-3 py-1.5 text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
-            </div>
-          </div>
-        )}
-        {/* Advanced metadata: owner, review cycle, linked workflows + policies. */}
-        <button
-          onClick={() => setShowAdvanced(s => !s)}
-          className="mt-3 self-start text-[12px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1"
-        >
-          <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-current transition-transform ${showAdvanced ? 'rotate-90' : ''}`}><path d="M5 4l5 4-5 4z"/></svg>
-          Más opciones (propietario, revisión, enlaces)
-        </button>
-        {showAdvanced && (
-          <div className="mt-2 grid grid-cols-2 gap-3 max-h-[260px] overflow-y-auto pr-1">
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Propietario</label>
-              <select value={ownerUserId} onChange={e => setOwnerUserId(e.target.value)} className="w-full h-8 rounded-lg border border-[#e9eae6] px-2 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]">
-                <option value="">Sin asignar</option>
-                {members.map((m: any) => (
-                  <option key={m.id || m.user_id || m.email} value={m.id || m.user_id || ''}>{m.name || m.full_name || m.email || 'Sin nombre'}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Ciclo de revisión (días)</label>
+        <div className="flex items-center gap-2">
+          <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50">Cancelar</button>
+          <button onClick={() => save(false)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar como borrador'}</button>
+          <button onClick={() => save(true)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]">{busy ? '…' : 'Publicar'}</button>
+          <span className="w-px h-6 bg-[#e9eae6]" />
+          <button onClick={() => setInfoPanelOpen(o => !o)} title={infoPanelOpen ? 'Ocultar Información' : 'Mostrar Información'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 2l5 5M14 2l-5 5M2 14l5-5M14 14l-5-5" strokeLinecap="round"/></svg>
+          </button>
+          <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body — center editor + right Información panel */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Center column */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="max-w-[760px] mx-auto w-full px-12 pt-12 pb-24 flex flex-col gap-4">
               <input
-                type="number" min={7} max={365} step={7}
-                value={reviewCycleDays}
-                onChange={e => setReviewCycleDays(e.target.value)}
-                className="w-full h-8 rounded-lg border border-[#e9eae6] px-2 text-[12.5px] focus:outline-none focus:border-[#1a1a1a]"
+                ref={titleInputRef}
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder={visibility === 'internal' ? 'Artículo interno sin título' : 'Artículo público sin título'}
+                className="w-full text-[32px] font-bold text-[#1a1a1a] tracking-[-0.4px] leading-[40px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent"
+              />
+              <input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Describe tu artículo para que sea más fácil que lo encuentren"
+                className="w-full text-[15px] text-[#646462] leading-[22px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent"
+              />
+              <textarea
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                placeholder="Start writing..."
+                className="w-full min-h-[400px] text-[15px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
               />
             </div>
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Workflows vinculados ({linkedWorkflowIds.length})</label>
-              <div className="border border-[#e9eae6] rounded-lg p-2 max-h-[100px] overflow-y-auto flex flex-col gap-0.5">
-                {workflows.length === 0 && <p className="text-[11.5px] text-[#646462] italic px-1">No hay workflows todavía.</p>}
-                {workflows.map((w: any) => (
-                  <label key={w.id} className="flex items-center gap-2 px-1 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
-                    <input type="checkbox" checked={linkedWorkflowIds.includes(w.id)} onChange={() => toggleId(linkedWorkflowIds, setLinkedWorkflowIds, w.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
-                    <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{w.name || w.id}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-[11.5px] font-semibold text-[#646462] mb-1">Políticas de aprobación vinculadas ({linkedApprovalPolicyIds.length})</label>
-              <div className="border border-[#e9eae6] rounded-lg p-2 max-h-[100px] overflow-y-auto flex flex-col gap-0.5">
-                {policies.length === 0 && <p className="text-[11.5px] text-[#646462] italic px-1">No hay políticas creadas todavía.</p>}
-                {policies.map((p: any) => (
-                  <label key={p.id} className="flex items-center gap-2 px-1 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
-                    <input type="checkbox" checked={linkedApprovalPolicyIds.includes(p.id)} onChange={() => toggleId(linkedApprovalPolicyIds, setLinkedApprovalPolicyIds, p.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
-                    <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{p.title || p.name || p.id}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {/* Read-only metadata when editing an existing article */}
-            {initial?.id && (
-              <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[#646462] pt-1 border-t border-[#f1f1ee] mt-1">
-                {initial?.version != null && <span>Versión: <strong className="text-[#1a1a1a]">{initial.version}</strong></span>}
-                {initial?.last_reviewed_at && <span>Revisado: <strong className="text-[#1a1a1a]">{relativeTime(initial.last_reviewed_at)}</strong></span>}
-                {initial?.next_review_at && <span>Próxima revisión: <strong className="text-[#1a1a1a]">{relativeTime(initial.next_review_at)}</strong></span>}
-              </div>
-            )}
           </div>
-        )}
-        <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-[#e9eae6]">
-          <div>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={busy || importing}
-              className="h-8 px-3 rounded-full bg-[#f8f8f7] text-[12.5px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50"
-              title="Importar PDF o Markdown al cuerpo"
-            >
-              📄 {importing ? 'Importando…' : 'Importar archivo'}
+          {/* Bottom toolbar */}
+          <div className="flex-shrink-0 border-t border-[#e9eae6] bg-white px-5 py-2 flex items-center gap-1">
+            <button onClick={() => fileInputRef.current?.click()} title="Imagen / archivo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="7" r="1"/><path d="M2 11l3-3 3 3 3-3 3 3"/></svg>
+            </button>
+            <button onClick={() => setContent(c => c + '\n[Vídeo]\n')} title="Vídeo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M7 6l3 2-3 2z" fill="currentColor"/></svg>
+            </button>
+            <button onClick={() => setContent(c => c + '\n| Columna 1 | Columna 2 |\n| --- | --- |\n| | |\n')} title="Tabla" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 7h12M6 3v10M10 3v10"/></svg>
+            </button>
+            <button onClick={() => setContent(c => c + '\n\n')} title="Salto de párrafo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4h10M3 8h6M3 12h10"/></svg>
+            </button>
+            <button onClick={() => onAction('Sugerencia IA — próximamente.', 'error')} title="Sugerir con IA" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-current"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4z"/></svg>
+            </button>
+            <button onClick={() => setContent(c => c + '\n> ')} title="Cita" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4v8M5 4h7M5 8h5M5 12h7"/></svg>
+            </button>
+            <button onClick={() => setContent(c => c + '\n```\n\n```\n')} title="Bloque de código" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M5 5L2 8l3 3M11 5l3 3-3 3"/></svg>
+            </button>
+            <button onClick={() => setContent(c => c + '\n- ')} title="Lista" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><circle cx="3" cy="4" r="0.8" fill="currentColor"/><circle cx="3" cy="8" r="0.8" fill="currentColor"/><circle cx="3" cy="12" r="0.8" fill="currentColor"/><path d="M6 4h8M6 8h8M6 12h8"/></svg>
+            </button>
+            <button onClick={() => setContent(c => c + '\n1. ')} title="Lista numerada" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M2 3v3M2 9v3M6 4h8M6 8h8M6 12h8"/></svg>
+            </button>
+            <button onClick={() => onAction('Pega una URL en el cuerpo para crear un vínculo.', 'success')} title="Vínculo" className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M6 10l4-4M5 8l-1 1a2.5 2.5 0 003.5 3.5L9 11M11 8l1-1a2.5 2.5 0 00-3.5-3.5L7 5"/></svg>
+            </button>
+            <button onClick={() => fileInputRef.current?.click()} title="Adjuntar archivo (PDF/Markdown)" disabled={importing} className="w-9 h-9 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462] disabled:opacity-50">
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><path d="M11.5 4.5l-6 6a2.5 2.5 0 003.5 3.5l6-6a4 4 0 00-5.7-5.7L3 8"/></svg>
             </button>
             <input
               ref={fileInputRef}
@@ -13458,12 +13501,294 @@ function KnowledgeArticleEditor({
               onChange={e => { const f = e.target.files?.[0]; if (f) handleImport(f); }}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onClose} disabled={busy} className="h-8 px-4 rounded-full bg-[#f8f8f7] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea]">Cancelar</button>
-            <button onClick={() => save(false)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-white border border-[#1a1a1a] text-[13px] font-semibold text-[#1a1a1a] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar borrador'}</button>
-            <button onClick={() => save(true)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold disabled:bg-[#e9eae6] disabled:text-[#646462]">{busy ? '…' : 'Publicar'}</button>
-          </div>
         </div>
+
+        {/* Right Información panel */}
+        {infoPanelOpen ? (
+          <aside className="w-[360px] flex-shrink-0 border-l border-[#e9eae6] bg-white flex flex-col overflow-hidden">
+            <div className="flex-shrink-0 h-[60px] px-5 flex items-center justify-between border-b border-[#e9eae6]">
+              <h3 className="text-[15px] font-bold text-[#1a1a1a]">Información</h3>
+              <button onClick={() => setInfoPanelOpen(false)} title="Ocultar panel" className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M11 3v10"/></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {/* DATOS */}
+              <ArticleEditorSection title="Datos" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M5 4l-3 4 3 4M11 4l3 4-3 4" strokeLinecap="round"/></svg>}>
+                <dl className="text-[13px] grid grid-cols-[110px_1fr] gap-y-2 items-center">
+                  <dt className="text-[#646462]">Tipo</dt>
+                  <dd>
+                    <select value={type} onChange={e => setType(e.target.value)} className="w-full h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                      {KH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </dd>
+                  <dt className="text-[#646462]">Visibilidad</dt>
+                  <dd>
+                    <select value={visibility} onChange={e => setVisibility(e.target.value as 'public' | 'internal')} className="w-full h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                      <option value="public">Público</option>
+                      <option value="internal">Interno</option>
+                    </select>
+                  </dd>
+                  <dt className="text-[#646462]">Estado</dt>
+                  <dd className="inline-flex items-center"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${articleStatus === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>{articleStatus === 'published' ? 'Publicado' : 'Borrador'}</span></dd>
+                  {articleId && (<>
+                    <dt className="text-[#646462]">ID del artículo</dt>
+                    <dd className="font-mono text-[12px] text-[#1a1a1a] truncate" title={articleId}>{articleId}</dd>
+                  </>)}
+                  <dt className="text-[#646462]">Idioma</dt>
+                  <dd>
+                    <select value={language} onChange={e => setLanguage(e.target.value)} className="w-full h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                      <option value="en">English</option>
+                      <option value="es">Español</option>
+                      <option value="fr">Français</option>
+                      <option value="de">Deutsch</option>
+                      <option value="pt">Português</option>
+                      <option value="it">Italiano</option>
+                    </select>
+                  </dd>
+                  {createdAt && (<>
+                    <dt className="text-[#646462]">Creado</dt>
+                    <dd className="text-[12.5px] text-[#1a1a1a]">{relativeTime(createdAt)}</dd>
+                  </>)}
+                  {updatedAt && (<>
+                    <dt className="text-[#646462]">Última actualización</dt>
+                    <dd className="text-[12.5px] text-[#1a1a1a]">{relativeTime(updatedAt)}</dd>
+                  </>)}
+                  <dt className="text-[#646462]">Escrito por</dt>
+                  <dd>
+                    <select value={authorUserId} onChange={e => setAuthorUserId(e.target.value)} className="w-full h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                      <option value="">Sin asignar</option>
+                      {members.map((m: any) => (
+                        <option key={m.id || m.user_id || m.email} value={m.id || m.user_id || ''}>{m.name || m.full_name || m.email || 'Sin nombre'}</option>
+                      ))}
+                    </select>
+                  </dd>
+                </dl>
+                {authorUserId && (
+                  <div className="mt-3 flex items-center gap-2 text-[12px] text-[#646462]">
+                    <span className="w-5 h-5 rounded-full bg-[#f1c5a8] flex items-center justify-center text-[10px] font-bold text-[#1a1a1a]">{authorInitial}</span>
+                    <span className="truncate">{authorName}</span>
+                  </div>
+                )}
+                {articleId && initial?.version != null && (
+                  <button className="mt-3 text-[12.5px] font-semibold text-[#1a1a1a] hover:underline">Mostrar historial de versiones (v{initial.version})</button>
+                )}
+              </ArticleEditorSection>
+
+              {/* FIN */}
+              <ArticleEditorSection title="Fin" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 2l1.4 4.6L14 8l-4.6 1.4L8 14l-1.4-4.6L2 8l4.6-1.4z"/></svg>}>
+                <p className="text-[12.5px] text-[#646462] mb-3">Cuando esté habilitado, Fin usará este contenido para generar respuestas de IA.</p>
+                {([
+                  { label: 'Servicio', val: finService,    set: setFinService    },
+                  { label: 'Ventas',   val: finSales,      set: setFinSales      },
+                  { label: 'Copilot',  val: copilotEnabled,set: setCopilotEnabled},
+                ] as const).map(row => (
+                  <div key={row.label} className="flex items-center justify-between py-1.5">
+                    <span className="text-[13px] text-[#1a1a1a]">{row.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] text-[#646462]">{row.val ? 'Habilitado' : 'Deshabilitado'}</span>
+                      <button onClick={() => row.set(!row.val)} className={`relative w-9 h-5 rounded-full transition-colors ${row.val ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'}`}>
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${row.val ? 'left-[18px]' : 'left-0.5'}`} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <p className="mt-4 text-[12.5px] font-semibold text-[#1a1a1a] mb-1.5">Audiencia de Fin</p>
+                <p className="text-[11.5px] text-[#646462] mb-2">Fin AI Agent y Copilot solo utilizarán este artículo para responder preguntas de las audiencias seleccionadas.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['users', 'leads', 'visitors'] as const).map(t => {
+                    const active = finAudience.includes(t);
+                    return (
+                      <button key={t} onClick={() => toggleAudience(setFinAudience, finAudience, t)} className={`h-7 px-3 rounded-full text-[12px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>
+                        {t === 'users' ? 'Users' : t === 'leads' ? 'Leads' : 'Visitors'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </ArticleEditorSection>
+
+              {/* CENTRO DE AYUDA */}
+              <ArticleEditorSection title="Centro de ayuda" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg>}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[13px] text-[#1a1a1a]">Estado</span>
+                  <select value={hcStatus} onChange={e => setHcStatus(e.target.value as 'draft' | 'published')} className="h-7 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                    <option value="draft">No establecer en vivo</option>
+                    <option value="published">En vivo</option>
+                  </select>
+                </div>
+                <p className="text-[12.5px] text-[#646462] mb-2">Agregue su artículo a una colección en su Centro de ayuda para que los clientes puedan encontrarlo.</p>
+                <select value={hcCollectionId} onChange={e => setHcCollectionId(e.target.value)} className="w-full h-8 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px] mb-3">
+                  <option value="">Seleccionar colección...</option>
+                  {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+                <p className="text-[12.5px] font-semibold text-[#1a1a1a] mb-1.5">Audiencia del Centro de ayuda</p>
+                <p className="text-[11.5px] text-[#646462] mb-2">Controle quién puede encontrar y consultar este artículo en el Centro de ayuda.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['users', 'leads', 'visitors'] as const).map(t => {
+                    const active = hcAudience.includes(t);
+                    return (
+                      <button key={t} onClick={() => toggleAudience(setHcAudience, hcAudience, t)} className={`h-7 px-3 rounded-full text-[12px] font-semibold border ${active ? 'bg-[#1a1a1a] border-[#1a1a1a] text-white' : 'bg-white border-[#e9eae6] text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}>
+                        {t === 'users' ? 'Users' : t === 'leads' ? 'Leads' : 'Visitors'}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[11px] text-[#646462]">Audiencia activa: {audienceLabel(hcAudience)}.</p>
+              </ArticleEditorSection>
+
+              {/* SUGERENCIAS */}
+              <ArticleEditorSection title="Sugerencias de artículos" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5M8 11v.01" strokeLinecap="round"/></svg>} defaultOpen={false}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-[#1a1a1a]">Excluir de las sugerencias de artículos</span>
+                  <button onClick={() => setExcludedFromSuggestions(v => !v)} className={`relative w-9 h-5 rounded-full transition-colors ${excludedFromSuggestions ? 'bg-[#1a1a1a]' : 'bg-[#d4d4d2]'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${excludedFromSuggestions ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              </ArticleEditorSection>
+
+              {/* INFORMES */}
+              <ArticleEditorSection title="Informes" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2 13V3M14 13H2M5 11V8M8 11V5M11 11V7" strokeLinecap="round"/></svg>} defaultOpen={false}>
+                <dl className="text-[13px] grid grid-cols-[1fr_auto] gap-y-2 items-center">
+                  <dt className="text-[#646462]">Vistas</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{viewCount || '-'}</dd>
+                  <dt className="text-[#646462]">Conversaciones</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{conversationCount || '-'}</dd>
+                  <dt className="text-[#646462]">Reaccionó</dt>
+                  <dd className="text-[12.5px] flex items-center gap-2">
+                    <span title="Feliz">😀 {reactionPct(reactionsObj.happy)}%</span>
+                    <span title="Neutral">😐 {reactionPct(reactionsObj.neutral)}%</span>
+                    <span title="Triste">😞 {reactionPct(reactionsObj.sad)}%</span>
+                  </dd>
+                  <dt className="text-[#646462]">Resoluciones de Fin</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{finResolutions ?? '-'}</dd>
+                  <dt className="text-[#646462]">Participaciones de Fin</dt>
+                  <dd className="text-[#1a1a1a] font-mono">{finParticipations ?? '-'}</dd>
+                </dl>
+              </ArticleEditorSection>
+
+              {/* ETIQUETAS */}
+              <ArticleEditorSection title="Etiquetas" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 3l5 0L14 9l-5 5-6-6z"/><circle cx="6" cy="6" r="1"/></svg>} defaultOpen={false}>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {tags.length === 0 && <span className="text-[12.5px] text-[#646462] italic">Sin etiquetas todavía.</span>}
+                  {tags.map(t => (
+                    <span key={t} className="inline-flex items-center gap-1 h-6 px-2 rounded-full bg-[#f3f3f1] border border-[#e9eae6] text-[11.5px] text-[#1a1a1a]">
+                      {t}
+                      <button onClick={() => removeTag(t)} className="text-[#646462] hover:text-[#1a1a1a]">×</button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-1.5">
+                  <input
+                    value={tagDraft}
+                    onChange={e => setTagDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+                    placeholder="Añadir etiqueta…"
+                    className="flex-1 h-7 px-2 rounded-md border border-[#e9eae6] text-[12.5px] focus:outline-none focus:border-[#1a1a1a]"
+                  />
+                  <button onClick={addTag} disabled={!tagDraft.trim()} className="h-7 px-2 rounded-md bg-[#f8f8f7] border border-[#e9eae6] text-[12px] font-semibold text-[#1a1a1a] disabled:opacity-50">+</button>
+                </div>
+              </ArticleEditorSection>
+
+              {/* CARPETA */}
+              <ArticleEditorSection title="Carpeta" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2 5a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/></svg>} defaultOpen={false}>
+                <select value={domainId} onChange={e => setDomainId(e.target.value)} className="w-full h-8 px-2 rounded-md border border-[#e9eae6] bg-white text-[12.5px]">
+                  <option value="">Sin carpeta</option>
+                  {domains.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </ArticleEditorSection>
+
+              {/* ESTRUCTURA PARA LA IA */}
+              <ArticleEditorSection title="Estructura para la IA" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M3 3h10v10H3zM3 6h10M6 3v10"/></svg>} defaultOpen={false}>
+                <p className="text-[11.5px] text-[#646462] mb-2">Campos que el agente lee directamente. Una entrada por línea en cada lista.</p>
+                <div className="grid grid-cols-1 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Resumen ejecutivo</label>
+                    <textarea value={sheetSummary} onChange={e => setSheetSummary(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Política / regla principal</label>
+                    <textarea value={sheetPolicy} onChange={e => setSheetPolicy(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Permitido</label>
+                    <textarea value={sheetAllowed} onChange={e => setSheetAllowed(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Bloqueado</label>
+                    <textarea value={sheetBlocked} onChange={e => setSheetBlocked(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Escalación</label>
+                    <textarea value={sheetEscalation} onChange={e => setSheetEscalation(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Evidencia / fuentes</label>
+                    <textarea value={sheetEvidence} onChange={e => setSheetEvidence(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Notas para el agente</label>
+                    <textarea value={sheetAgentNotes} onChange={e => setSheetAgentNotes(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Ejemplos de pregunta</label>
+                    <textarea value={sheetExamples} onChange={e => setSheetExamples(e.target.value)} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Palabras clave</label>
+                    <textarea value={sheetKeywords} onChange={e => setSheetKeywords(e.target.value.replace(/,/g,'\n'))} className="w-full min-h-[44px] rounded-md border border-[#e9eae6] px-2 py-1 text-[12px] resize-none focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                </div>
+              </ArticleEditorSection>
+
+              {/* AVANZADO */}
+              <ArticleEditorSection title="Avanzado" icon={<svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2"/></svg>} defaultOpen={false}>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Propietario</label>
+                    <select value={ownerUserId} onChange={e => setOwnerUserId(e.target.value)} className="w-full h-7 rounded-md border border-[#e9eae6] px-2 text-[12px] focus:outline-none focus:border-[#1a1a1a]">
+                      <option value="">Sin asignar</option>
+                      {members.map((m: any) => (
+                        <option key={m.id || m.user_id || m.email} value={m.id || m.user_id || ''}>{m.name || m.full_name || m.email || 'Sin nombre'}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Ciclo de revisión (días)</label>
+                    <input type="number" min={7} max={365} step={7} value={reviewCycleDays} onChange={e => setReviewCycleDays(e.target.value)} className="w-full h-7 rounded-md border border-[#e9eae6] px-2 text-[12px] focus:outline-none focus:border-[#1a1a1a]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Workflows vinculados ({linkedWorkflowIds.length})</label>
+                    <div className="border border-[#e9eae6] rounded-md p-2 max-h-[120px] overflow-y-auto">
+                      {workflows.length === 0 && <p className="text-[11.5px] text-[#646462] italic">Sin workflows.</p>}
+                      {workflows.map((w: any) => (
+                        <label key={w.id} className="flex items-center gap-2 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
+                          <input type="checkbox" checked={linkedWorkflowIds.includes(w.id)} onChange={() => toggleId(linkedWorkflowIds, setLinkedWorkflowIds, w.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
+                          <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{w.name || w.id}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#646462] mb-1">Políticas vinculadas ({linkedApprovalPolicyIds.length})</label>
+                    <div className="border border-[#e9eae6] rounded-md p-2 max-h-[120px] overflow-y-auto">
+                      {policies.length === 0 && <p className="text-[11.5px] text-[#646462] italic">Sin políticas.</p>}
+                      {policies.map((p: any) => (
+                        <label key={p.id} className="flex items-center gap-2 py-0.5 hover:bg-[#f8f8f7] rounded cursor-pointer">
+                          <input type="checkbox" checked={linkedApprovalPolicyIds.includes(p.id)} onChange={() => toggleId(linkedApprovalPolicyIds, setLinkedApprovalPolicyIds, p.id)} className="w-3.5 h-3.5 accent-[#1a1a1a]" />
+                          <span className="text-[12px] text-[#1a1a1a] truncate flex-1">{p.title || p.name || p.id}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </ArticleEditorSection>
+            </div>
+          </aside>
+        ) : (
+          <button onClick={() => setInfoPanelOpen(true)} title="Mostrar Información" className="w-9 flex-shrink-0 border-l border-[#e9eae6] bg-white hover:bg-[#f8f8f7] flex items-start justify-center pt-4 text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 3v10"/></svg>
+          </button>
+        )}
       </div>
     </div>
   );
