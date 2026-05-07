@@ -43,9 +43,19 @@ const TABS: { id: ProfileTabType; label: string }[] = [
 // (#e9eae6 dividers, #f8f8f7 hover, 13px body, rounded-[12px] cards).
 export default function Profile({ onNavigate, initialSection }: ProfileProps) {
   const [activeTab, setActiveTab] = useState<ProfileTabType>('profile');
-  const [saveHandler, setSaveHandler] = useState<null | (() => Promise<void> | void)>(null);
+  const [saveHandler, setSaveHandlerRaw] = useState<null | (() => Promise<void> | void)>(null);
   const [discardTick, setDiscardTick] = useState(0);
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+
+  // Functional setState wrapper. CRITICAL: when storing a function in state via
+  // setState, React treats a bare function value as the updater function (it
+  // would invoke handleSave(prevState) instead of storing it). Tabs call this
+  // with their async save handler each render — without this wrapper React
+  // would execute the handler on every render and create an infinite
+  // re-render loop that hammers the backend on every click.
+  const setSaveHandler = useCallback((h: (() => Promise<void> | void) | null) => {
+    setSaveHandlerRaw(() => h);
+  }, []);
 
   // Pull user once at the shell level so the header card has avatar/name/role
   // without each tab re-fetching just to render its own breadcrumb.
@@ -53,7 +63,7 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
 
   useEffect(() => {
     setSaveHandler(null);
-  }, [activeTab]);
+  }, [activeTab, setSaveHandler]);
 
   useEffect(() => {
     if (!initialSection) return;
@@ -83,7 +93,7 @@ export default function Profile({ onNavigate, initialSection }: ProfileProps) {
     setDiscardTick(t => t + 1);
     setSaveHandler(null);
     setToast({ message: 'Cambios descartados.', tone: 'success' });
-  }, []);
+  }, [setSaveHandler]);
 
   const headerInfo = useMemo(() => {
     const u = user || {};
