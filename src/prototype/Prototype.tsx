@@ -8,9 +8,10 @@ import { agentsApi, aiApi, attachmentsApi, auditApi, billingApi, casesApi, conne
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
-import Workflows from '../components/Workflows';
+import ToolsIntegrations from '../components/ToolsIntegrations';
+import Workflows, { TEMPLATES as WORKFLOW_TEMPLATES } from '../components/Workflows';
 
-type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel';
+type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound' | 'workspaceGeneral' | 'workspaceTeammates' | 'auth' | 'developer' | 'customObjects' | 'topics' | 'switchChannel' | 'slackChannel' | 'helpCenter';
 
 // ── Shared icon constants ─────────────────────────────────────────────────────
 // Figma desktop MCP assets (extracted node-by-node for 100% fidelity)
@@ -452,43 +453,334 @@ function LeftNav({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
       </div>
 
       <div className={`flex flex-col gap-0.5 ${expanded ? 'px-2' : 'px-1.5'} pb-1`}>
-        {/* Configurar (with green dot) */}
-        <button className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}>
-          <div className="relative flex-shrink-0">
-            <div className="w-4 h-4 rounded-full border border-[#1a1a1a] flex items-center justify-center">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
-            </div>
-          </div>
-          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Configurar</span>}
-        </button>
+        {/* Pasa a Pro — upgrade CTA card */}
+        {expanded ? (
+          <button
+            type="button"
+            onClick={() => onNavigate('billing')}
+            className="w-full mb-1 rounded-[10px] bg-gradient-to-br from-[#e7e2fd] to-[#f4f4ff] border border-[#d6d0f8] hover:border-[#b09efa] px-2.5 py-2 flex items-center gap-2 text-left transition-colors"
+          >
+            <span className="w-6 h-6 rounded-md bg-[#5b21b6] flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-white"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-[12.5px] font-semibold text-[#1a1a1a]">Pasa a Pro</span>
+              <span className="block text-[11px] text-[#646462] truncate">Desbloquea funciones premium</span>
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            title="Pasa a Pro"
+            onClick={() => onNavigate('billing')}
+            className="w-full h-9 mb-1 flex items-center justify-center rounded-lg bg-gradient-to-br from-[#e7e2fd] to-[#f4f4ff] border border-[#d6d0f8] hover:border-[#b09efa]"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#5b21b6]"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>
+          </button>
+        )}
+
         {/* Buscar */}
         <button className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}>
-          <img src={ICON_SEARCH} alt="" className="w-4 h-4 flex-shrink-0" />
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
           {expanded && <>
             <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Buscar</span>
             <span className="text-[10px] text-[#646462] bg-white border border-[#e9eae6] rounded px-1 py-0.5">Ctrl K</span>
           </>}
         </button>
+
         {/* Ajustes */}
         <button
           onClick={() => onNavigate('settings')}
           className={`w-full h-9 flex items-center rounded-lg ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${isSettings ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)]" : "hover:bg-white/60"}`}
         >
-          <img src={ICON_SETTINGS} alt="" className="w-4 h-4 flex-shrink-0" />
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a] flex-shrink-0" strokeWidth="1.4">
+            <circle cx="8" cy="8" r="2.3"/>
+            <path d="M8 1.5v1.6M8 12.9v1.6M2.4 8h1.6M11.9 8h1.6M3.8 3.8l1.1 1.1M11.1 11.1l1.1 1.1M3.8 12.2l1.1-1.1M11.1 4.9l1.1-1.1" strokeLinecap="round"/>
+          </svg>
           {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Ajustes</span>}
         </button>
-        {/* Perfil */}
-        <button
-          onClick={() => onNavigate('personal')}
-          className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'}`}
-        >
-          <div className="relative w-4 h-4 rounded-lg overflow-hidden bg-[#f8f8f7] flex-shrink-0">
-            <img src={AVATAR_ME} alt="" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute bottom-[-2px] right-[-2px] w-[7px] h-[7px] bg-[#158613] rounded-[3.6px] border border-white" />
-          </div>
-          {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Perfil</span>}
-        </button>
+
+        {/* Perfil — popover menu (Intercom-style) */}
+        <ProfileMenuButton expanded={expanded} />
       </div>
+    </div>
+  );
+}
+
+// ── Profile menu — popover with submenus for Tema / Idioma / Workspace ───────
+type ProfileSubmenu = null | 'theme' | 'language' | 'workspace';
+type ThemeOpt = 'light' | 'dark' | 'system';
+const THEME_OPTIONS: { value: ThemeOpt; label: string }[] = [
+  { value: 'light',  label: 'Claro' },
+  { value: 'dark',   label: 'Oscuro' },
+  { value: 'system', label: 'Sistema' },
+];
+const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'es',    label: 'Español' },
+  { value: 'es-MX', label: 'Español (México)' },
+  { value: 'en',    label: 'English' },
+  { value: 'en-GB', label: 'English (UK)' },
+  { value: 'fr',    label: 'Français' },
+  { value: 'pt',    label: 'Português' },
+  { value: 'pt-BR', label: 'Português (Brasil)' },
+  { value: 'de',    label: 'Deutsch' },
+  { value: 'it',    label: 'Italiano' },
+  { value: 'ja',    label: '日本語' },
+];
+
+function ProfileMenuButton({ expanded }: { expanded: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [submenu, setSubmenu] = useState<ProfileSubmenu>(null);
+  const [away, setAway] = useState(false);
+  const [theme, setTheme] = useState<ThemeOpt>('system');
+  const [lang, setLang] = useState('es');
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const { data: user } = useApi<any>(iamApi.me, []);
+  const { data: workspacesRaw } = useApi<any[]>(workspacesApi.list, [], []);
+  const { data: ctx } = useApi<any>(workspacesApi.currentContext, [], null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) { setOpen(false); setSubmenu(null); }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (submenu) setSubmenu(null);
+      else { setOpen(false); }
+    }
+    window.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, submenu]);
+
+  const userName = user?.name || 'Tu cuenta';
+  const userEmail = user?.email || '';
+  const initials = String(userName)
+    .split(/\s+/).filter(Boolean).slice(0, 2).map((s: string) => s.charAt(0).toUpperCase()).join('') || '?';
+
+  // Workspaces: live from /workspaces, current from /workspaces/current/context
+  const workspaces = Array.isArray(workspacesRaw) ? workspacesRaw : [];
+  const currentWorkspaceId =
+    ctx?.workspace?.id ||
+    ctx?.workspace_id ||
+    user?.context?.workspace_id ||
+    user?.memberships?.[0]?.workspace_id ||
+    null;
+  const currentWorkspaceName =
+    workspaces.find((w: any) => w.id === currentWorkspaceId)?.name ||
+    ctx?.workspace?.name ||
+    user?.memberships?.[0]?.workspace_name ||
+    'Workspace';
+
+  const themeLabel = THEME_OPTIONS.find(t => t.value === theme)?.label || 'Sistema';
+  const langLabel = LANGUAGE_OPTIONS.find(l => l.value === lang)?.label || 'Español';
+
+  async function handleSwitchWorkspace(ws: any) {
+    if (!ws?.id || ws.id === currentWorkspaceId) { setSubmenu(null); return; }
+    // Update local membership cache so the next request() injects the new
+    // x-workspace-id header. Tenant id is preserved (workspaces belong to a
+    // single tenant). Then reload so all live queries pick up the new context.
+    try {
+      const raw = localStorage.getItem('crmai.membership.v1');
+      const cache = raw ? JSON.parse(raw) : {};
+      const tenantId = ws.tenant_id || cache?.tenantId || user?.context?.tenant_id;
+      if (cache?.userId && tenantId) {
+        localStorage.setItem('crmai.membership.v1', JSON.stringify({
+          userId: cache.userId,
+          tenantId,
+          workspaceId: ws.id,
+        }));
+      }
+    } catch { /* ignore */ }
+    if (typeof window !== 'undefined') window.location.reload();
+  }
+
+  async function handleSignOut() {
+    try {
+      const { supabase } = await import('../api/supabase');
+      await supabase.auth.signOut();
+    } catch { /* ignore */ }
+    try { localStorage.removeItem('crmai.membership.v1'); } catch { /* ignore */ }
+    if (typeof window !== 'undefined') window.location.reload();
+  }
+
+  function MainRow({ label, sub, onClick, danger, chev, onClose }: { label: string; sub?: string; onClick?: () => void; danger?: boolean; chev?: boolean; onClose?: boolean }) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          onClick?.();
+          if (onClose !== false && !chev) setOpen(false);
+        }}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${danger ? 'text-[#b91c1c] hover:bg-[#fef2f2]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+      >
+        <span className="flex-1 truncate">
+          {label}
+          {sub && <span className="text-[#646462] font-normal"> {sub}</span>}
+        </span>
+        {chev && <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>}
+      </button>
+    );
+  }
+
+  function CheckRow({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left ${active ? 'bg-[#f8f8f7] font-semibold text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'}`}
+      >
+        <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+          {active && <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="2"><path d="M3 8l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        </span>
+        <span className="flex-1 truncate">{label}</span>
+      </button>
+    );
+  }
+
+  function SubHeader({ title }: { title: string }) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-2 border-b border-[#e9eae6]">
+        <button
+          type="button"
+          onClick={() => setSubmenu(null)}
+          className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
+          aria-label="Volver"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <span className="text-[13px] font-semibold text-[#1a1a1a]">{title}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen(v => !v); setSubmenu(null); }}
+        className={`w-full h-9 flex items-center rounded-lg hover:bg-white/60 ${expanded ? 'px-2.5 gap-2' : 'justify-center'} ${open ? 'bg-white/80' : ''}`}
+      >
+        <span className="relative flex items-center justify-center flex-shrink-0">
+          <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#1a1a1a]" strokeWidth="1.4">
+            <circle cx="8" cy="5.5" r="2.6"/>
+            <path d="M2.5 14c0-2.8 2.5-5 5.5-5s5.5 2.2 5.5 5" strokeLinecap="round"/>
+          </svg>
+          <span className={`absolute -bottom-0.5 -right-0.5 w-[7px] h-[7px] rounded-full border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+        </span>
+        {expanded && <span className="text-[13px] font-medium text-[#1a1a1a] flex-1 text-left">Perfil</span>}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute z-50 left-full ml-2 bottom-0 w-[280px] bg-white border border-[#e9eae6] rounded-[12px] shadow-[0_12px_32px_rgba(20,20,20,0.18)] overflow-hidden"
+        >
+          {submenu === null && (
+            <div className="py-1.5">
+              <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-[#e9eae6]">
+                <div className="relative w-7 h-7 rounded-full overflow-hidden bg-[#f8f8f7] flex items-center justify-center">
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[12px] font-semibold text-[#646462]">{initials}</span>
+                  )}
+                  <div className={`absolute bottom-0 right-0 w-[8px] h-[8px] rounded-full border border-white ${away ? 'bg-[#a4a4a2]' : 'bg-[#158613]'}`} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-[#1a1a1a] truncate">{userName}</p>
+                  {userEmail && <p className="text-[11px] text-[#646462] truncate">{userEmail}</p>}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setAway(v => !v)}
+                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                <span className="flex-1 text-left">Modo ausente</span>
+                <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors flex-shrink-0 ${away ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'}`}>
+                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${away ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                </span>
+              </button>
+
+              <div className="border-t border-[#e9eae6] my-1" />
+
+              <MainRow label="Tema:"             sub={themeLabel}            chev onClose={false} onClick={() => setSubmenu('theme')} />
+              <MainRow label="Idioma:"           sub={langLabel}             chev onClose={false} onClick={() => setSubmenu('language')} />
+              <MainRow label="Espacio de trabajo:" sub={currentWorkspaceName} chev onClose={false} onClick={() => setSubmenu('workspace')} />
+
+              <div className="border-t border-[#e9eae6] my-1" />
+
+              <MainRow label="Centro de ayuda"        onClick={() => window.open('https://www.intercom.com/help', '_blank')} />
+              <MainRow label="Foro de la comunidad"   onClick={() => window.open('https://community.intercom.com', '_blank')} />
+              <MainRow label="Página de estado"       onClick={() => window.open('https://www.intercomstatus.com', '_blank')} />
+              <MainRow label="Términos y políticas"   onClick={() => window.open('https://www.intercom.com/terms-and-policies', '_blank')} />
+
+              <div className="border-t border-[#e9eae6] my-1" />
+
+              <MainRow label="Cerrar sesión" danger onClick={handleSignOut} />
+            </div>
+          )}
+
+          {submenu === 'theme' && (
+            <div className="py-1">
+              <SubHeader title="Tema" />
+              <div className="py-1">
+                {THEME_OPTIONS.map(opt => (
+                  <CheckRow
+                    key={opt.value}
+                    active={theme === opt.value}
+                    label={opt.label}
+                    onClick={() => { setTheme(opt.value); setSubmenu(null); }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {submenu === 'language' && (
+            <div className="py-1">
+              <SubHeader title="Idioma" />
+              <div className="py-1 max-h-[280px] overflow-y-auto">
+                {LANGUAGE_OPTIONS.map(opt => (
+                  <CheckRow
+                    key={opt.value}
+                    active={lang === opt.value}
+                    label={opt.label}
+                    onClick={() => { setLang(opt.value); setSubmenu(null); }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {submenu === 'workspace' && (
+            <div className="py-1">
+              <SubHeader title="Espacio de trabajo" />
+              <div className="py-1 max-h-[280px] overflow-y-auto">
+                {workspaces.length === 0 ? (
+                  <div className="px-3 py-3 text-[12.5px] text-[#646462]">Sin espacios de trabajo disponibles.</div>
+                ) : (
+                  workspaces.map((ws: any) => (
+                    <CheckRow
+                      key={ws.id}
+                      active={ws.id === currentWorkspaceId}
+                      label={ws.name || ws.slug || ws.id}
+                      onClick={() => handleSwitchWorkspace(ws)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -5655,6 +5947,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const isSuscripcionSection = view === 'billing';
   const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels' || view === 'switchChannel' || view === 'slackChannel';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
+
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     workspace:   isWorkspaceSection,
     suscripcion: isSuscripcionSection,
@@ -5776,7 +6069,14 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
 
       <div className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-0.5">
         {/* Inicio */}
-        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+        <button
+          onClick={() => onNavigate('settings')}
+          className={`flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] text-left ${
+            view === 'settings'
+              ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+              : 'font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]'
+          }`}
+        >
           <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoHome}</div>
           <span className="flex-1">Inicio</span>
         </button>
@@ -5847,7 +6147,7 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
           <div className="flex flex-col gap-0.5 pl-2">
             <SubRow icon={IcoAppS}  label="Tienda de aplicaciones"    nav={'appStore'} />
             <SubRow icon={IcoConnS} label="Conectores de datos"       nav={'connectors'} />
-            <SubRow icon={IcoAuthS} label="Autenticación"               nav={'auth'} />
+            <SubRow icon={IcoAuthS} label="Autenticación"             nav={'auth'} />
             <SubRow icon={IcoDevS}  label="Centro para desarrolladores" nav={'developer'} />
           </div>
         )}
@@ -5865,6 +6165,22 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
             <SubRow icon={IcoTopicsS}    label="Temas"                         nav={'topics'} />
           </div>
         )}
+
+        {/* Standalone bottom items */}
+        <button
+          onClick={() => onNavigate('helpCenter')}
+          className={`flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] text-left ${view === 'helpCenter' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold' : 'hover:bg-[#f3f3f1]'}`}
+        >
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoHelpGrp}</div>
+          <span className="flex-1">Centro de ayuda</span>
+        </button>
+        <button
+          onClick={() => onNavigate('outbound')}
+          className={`flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] text-left ${view === 'outbound' ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold' : 'hover:bg-[#f3f3f1]'}`}
+        >
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#1a1a1a]">{IcoOutboundGrp}</div>
+          <span className="flex-1">Canales salientes</span>
+        </button>
 
         {/* Personal */}
         <GroupRow icon={IcoUserGrp} label="Personal" groupKey="personal" sectionActive={isPersonalSection} />
@@ -6062,16 +6378,22 @@ function SetIcon({ kind }: { kind: SetIconKind }) {
   }
 }
 
-function SettingsCardGrid({ title, cards }: {
+function SettingsCardGrid({ title, cards, onNavigate }: {
   title: string;
-  cards: { icon: SetIconKind; bg: string; name: string; desc: string; badge?: string }[];
+  cards: { icon: SetIconKind; bg: string; name: string; desc: string; badge?: string; target?: View }[];
+  onNavigate?: (v: View) => void;
 }) {
   return (
     <div className="mb-6">
       <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-3">{title}</h3>
       <div className="grid grid-cols-3 gap-3">
         {cards.map((c, i) => (
-          <button key={i} className="bg-white border border-[#e9eae6] rounded-[10px] p-4 flex items-start gap-3 text-left hover:bg-[#fafaf9]">
+          <button
+            key={i}
+            onClick={() => { if (c.target && onNavigate) onNavigate(c.target); }}
+            disabled={!c.target}
+            className={`bg-white border border-[#e9eae6] rounded-[10px] p-4 flex items-start gap-3 text-left ${c.target ? 'hover:bg-[#fafaf9] hover:border-[#d4d4d0] cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+          >
             <span className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0" style={{ background: c.bg }}>
               <SetIcon kind={c.icon} />
             </span>
@@ -6089,7 +6411,7 @@ function SettingsCardGrid({ title, cards }: {
   );
 }
 
-function SettingsInicioContent() {
+function SettingsInicioContent({ onNavigate }: { onNavigate?: (v: View) => void }) {
   return (
     <div className="flex flex-col flex-1 min-w-0 bg-white rounded-[16px] shadow-[0px_1px_4px_0px_rgba(20,20,20,0.15)] overflow-hidden">
       <div className="flex items-center px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
@@ -6099,76 +6421,76 @@ function SettingsInicioContent() {
         </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 px-6 py-6">
-        <SettingsCardGrid title="Espacio de trabajo" cards={[
-          { icon: 'gear',   bg: '#f3f3f1', name: 'Generales',            desc: 'Visualiza información básica de tu cuenta, como tu nombre y zona horaria.' },
-          { icon: 'team',   bg: '#dbeafe', name: 'Compañeros de equipo', desc: 'Administra y añade a compañeros de equipo en tu espacio de trabajo.' },
-          { icon: 'clock',  bg: '#fef3c7', name: 'Horario de atención',  desc: 'Configura el horario en el que tu equipo está disponible.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Espacio de trabajo" cards={[
+          { icon: 'gear',   bg: '#f3f3f1', name: 'Generales',            desc: 'Visualiza información básica de tu cuenta, como tu nombre y zona horaria.', target: 'workspaceGeneral' },
+          { icon: 'team',   bg: '#dbeafe', name: 'Compañeros de equipo', desc: 'Administra y añade a compañeros de equipo en tu espacio de trabajo.', target: 'workspaceTeammates' },
+          { icon: 'clock',  bg: '#fef3c7', name: 'Horario de atención',  desc: 'Configura el horario en el que tu equipo está disponible.', target: 'workspaceHours' },
           { icon: 'gift',   bg: '#d1fae5', name: 'Referencias',          badge: 'Gana $200', desc: 'Recomienda Intercom a otras empresas y consigue una bonificación.' },
-          { icon: 'tag',    bg: '#fce7f3', name: 'Marcas',               desc: 'Para tus clientes y agencias.' },
-          { icon: 'shield', bg: '#e0e7ff', name: 'Seguridad',            desc: 'Configura la autenticación y los ajustes de inicio de sesión.' },
-          { icon: 'globe',  bg: '#fef3c7', name: 'Multilingüe',          desc: 'Configura los idiomas en los que opera tu espacio de trabajo.' },
+          { icon: 'tag',    bg: '#fce7f3', name: 'Marcas',               desc: 'Para tus clientes y agencias.', target: 'workspaceBrands' },
+          { icon: 'shield', bg: '#e0e7ff', name: 'Seguridad',            desc: 'Configura la autenticación y los ajustes de inicio de sesión.', target: 'workspaceSecurity' },
+          { icon: 'globe',  bg: '#fef3c7', name: 'Multilingüe',          desc: 'Configura los idiomas en los que opera tu espacio de trabajo.', target: 'workspaceMultilingual' },
         ]} />
-        <SettingsCardGrid title="Suscripción" cards={[
-          { icon: 'card',  bg: '#dcfce7', name: 'Facturación', desc: 'Administra tu suscripción y métodos de pago.' },
-          { icon: 'chart', bg: '#fee2e2', name: 'Uso',         desc: 'Monitoriza el uso de tu suscripción y compromiso de Fin.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Suscripción" cards={[
+          { icon: 'card',  bg: '#dcfce7', name: 'Facturación', desc: 'Administra tu suscripción y métodos de pago.', target: 'billing' },
+          { icon: 'chart', bg: '#fee2e2', name: 'Uso',         desc: 'Monitoriza el uso de tu suscripción y compromiso de Fin.', target: 'billing' },
         ]} />
-        <SettingsCardGrid title="Canales" cards={[
-          { icon: 'chat',     bg: '#fce7f3', name: 'Messenger',              desc: 'Atrae y mantente conectado con clientes a través de tu sitio web o aplicaciones móviles.' },
-          { icon: 'mail',     bg: '#dbeafe', name: 'Correo electrónico',     desc: 'Administra el correo de tu equipo, dominios y autenticación con DKIM.' },
-          { icon: 'phone',    bg: '#fee2e2', name: 'Teléfono',               desc: 'Configura y administra llamadas de voz directamente desde tu Inbox.' },
-          { icon: 'whatsapp', bg: '#dcfce7', name: 'WhatsApp',               desc: 'Habla y configura los números de WhatsApp y comparte tu equipo.' },
-          { icon: 'hash',     bg: '#e9d5ff', name: 'Slack',                  desc: 'Recibe y envía mensajes a tu equipo desde Slack.' },
-          { icon: 'discord',  bg: '#cffafe', name: 'Discord',                desc: 'Recibe y envía mensajes a usuarios de Discord.' },
-          { icon: 'sms',      bg: '#fef3c7', name: 'SMS',                    desc: 'Configura los números de SMS para enviar mensajes a tus usuarios.' },
-          { icon: 'social',   bg: '#fce7f3', name: 'Canales redes sociales', desc: 'Administra mensajes desde plataformas sociales en tu equipo.' },
-          { icon: 'globe',    bg: '#dbeafe', name: 'Todos los canales',      desc: 'Administra y configura los ajustes de todos los canales de tu equipo.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Canales" cards={[
+          { icon: 'chat',     bg: '#fce7f3', name: 'Messenger',              desc: 'Atrae y mantente conectado con clientes a través de tu sitio web o aplicaciones móviles.', target: 'messenger' },
+          { icon: 'mail',     bg: '#dbeafe', name: 'Correo electrónico',     desc: 'Administra el correo de tu equipo, dominios y autenticación con DKIM.', target: 'email' },
+          { icon: 'phone',    bg: '#fee2e2', name: 'Teléfono',               desc: 'Configura y administra llamadas de voz directamente desde tu Inbox.', target: 'phone' },
+          { icon: 'whatsapp', bg: '#dcfce7', name: 'WhatsApp',               desc: 'Habla y configura los números de WhatsApp y comparte tu equipo.', target: 'whatsapp' },
+          { icon: 'hash',     bg: '#e9d5ff', name: 'Slack',                  desc: 'Recibe y envía mensajes a tu equipo desde Slack.', target: 'slackChannel' },
+          { icon: 'discord',  bg: '#cffafe', name: 'Discord',                desc: 'Recibe y envía mensajes a usuarios de Discord.', target: 'discord' },
+          { icon: 'sms',      bg: '#fef3c7', name: 'SMS',                    desc: 'Configura los números de SMS para enviar mensajes a tus usuarios.', target: 'sms' },
+          { icon: 'social',   bg: '#fce7f3', name: 'Canales redes sociales', desc: 'Administra mensajes desde plataformas sociales en tu equipo.', target: 'social' },
+          { icon: 'globe',    bg: '#dbeafe', name: 'Todos los canales',      desc: 'Administra y configura los ajustes de todos los canales de tu equipo.', target: 'allChannels' },
         ]} />
-        <SettingsCardGrid title="Inbox" cards={[
-          { icon: 'inbox',    bg: '#dbeafe', name: 'Inbox para el equipo', desc: 'Crea buzones para tu equipo de compañeros que podrían trabajar juntos.' },
-          { icon: 'redirect', bg: '#fef3c7', name: 'Asignaciones',         desc: 'Especifica cómo se asignan los casos de soporte y cómo se manejan las cargas de trabajo.' },
-          { icon: 'bolt',     bg: '#e9d5ff', name: 'Macros',               desc: 'Crea y edita macros para enviar respuestas comunes con un solo clic.' },
-          { icon: 'ticket',   bg: '#fce7f3', name: 'Tipos de atención',    desc: 'Crea y configura los tipos de tickets y categorías de tu equipo de servicio al cliente.' },
-          { icon: 'timer',    bg: '#fee2e2', name: 'SLA',                  desc: 'Asegúrate de que tu equipo cumple los acuerdos de nivel de servicio prometidos.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Inbox" cards={[
+          { icon: 'inbox',    bg: '#dbeafe', name: 'Inbox para el equipo', desc: 'Crea buzones para tu equipo de compañeros que podrían trabajar juntos.', target: 'inboxTeam' },
+          { icon: 'redirect', bg: '#fef3c7', name: 'Asignaciones',         desc: 'Especifica cómo se asignan los casos de soporte y cómo se manejan las cargas de trabajo.', target: 'assignments' },
+          { icon: 'bolt',     bg: '#e9d5ff', name: 'Macros',               desc: 'Crea y edita macros para enviar respuestas comunes con un solo clic.', target: 'macros' },
+          { icon: 'ticket',   bg: '#fce7f3', name: 'Tipos de atención',    desc: 'Crea y configura los tipos de tickets y categorías de tu equipo de servicio al cliente.', target: 'tickets' },
+          { icon: 'timer',    bg: '#fee2e2', name: 'SLA',                  desc: 'Asegúrate de que tu equipo cumple los acuerdos de nivel de servicio prometidos.', target: 'sla' },
         ]} />
-        <SettingsCardGrid title="IA y automatización" cards={[
-          { icon: 'sparkle', bg: '#fef3c7', name: 'Fin AI Agent',   desc: 'Administra tu agente de IA y personalízalo para tus clientes.' },
-          { icon: 'aibox',   bg: '#e0e7ff', name: 'Buzón de IA',    badge: 'New Beta', desc: 'Activa características nuevas de inteligencia artificial en el buzón de tu equipo.' },
-          { icon: 'wrench',  bg: '#fce7f3', name: 'Automatización', desc: 'Crea reglas y flujos de trabajo para automatizar el trabajo en tu Inbox.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="IA y automatización" cards={[
+          { icon: 'sparkle', bg: '#fef3c7', name: 'Fin AI Agent',   desc: 'Administra tu agente de IA y personalízalo para tus clientes.', target: 'fin' },
+          { icon: 'aibox',   bg: '#e0e7ff', name: 'Buzón de IA',    badge: 'New Beta', desc: 'Activa características nuevas de inteligencia artificial en el buzón de tu equipo.', target: 'aiInbox' },
+          { icon: 'wrench',  bg: '#fce7f3', name: 'Automatización', desc: 'Crea reglas y flujos de trabajo para automatizar el trabajo en tu Inbox.', target: 'automation' },
         ]} />
-        <SettingsCardGrid title="Integraciones" cards={[
-          { icon: 'shop', bg: '#dbeafe', name: 'Tienda de aplicaciones',     desc: 'Conecta a Intercom todos los servicios y herramientas que ya usas.' },
-          { icon: 'plug', bg: '#dcfce7', name: 'Conectores de datos',        desc: 'Especifica los datos de los sistemas externos que usa tu equipo.' },
-          { icon: 'code', bg: '#fef3c7', name: 'Centro para desarrolladores', desc: 'Crea aplicaciones y servicios personalizados para tu propio negocio.' },
-          { icon: 'flow', bg: '#fce7f3', name: 'Automatizaciones',           desc: 'Crea automatizaciones con cualquier información o paso a paso.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Integraciones" cards={[
+          { icon: 'shop', bg: '#dbeafe', name: 'Tienda de aplicaciones',     desc: 'Conecta a Intercom todos los servicios y herramientas que ya usas.', target: 'appStore' },
+          { icon: 'plug', bg: '#dcfce7', name: 'Conectores de datos',        desc: 'Especifica los datos de los sistemas externos que usa tu equipo.', target: 'connectors' },
+          { icon: 'code', bg: '#fef3c7', name: 'Centro para desarrolladores', desc: 'Crea aplicaciones y servicios personalizados para tu propio negocio.', target: 'developer' },
+          { icon: 'flow', bg: '#fce7f3', name: 'Automatizaciones',           desc: 'Crea automatizaciones con cualquier información o paso a paso.', target: 'automation' },
         ]} />
-        <SettingsCardGrid title="Datos" cards={[
-          { icon: 'tag',      bg: '#dbeafe', name: 'Etiquetas',                desc: 'Administra tus etiquetas y agrúpalas en categorías para crear filtros.' },
-          { icon: 'user',     bg: '#dcfce7', name: 'Personas',                 desc: 'Administra atributos, segmentos y eventos de los contactos en tu cuenta.' },
-          { icon: 'building', bg: '#fef3c7', name: 'Empresas',                 desc: 'Administra atributos, segmentos y eventos de las cuentas en tu cuenta.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Datos" cards={[
+          { icon: 'tag',      bg: '#dbeafe', name: 'Etiquetas',                desc: 'Administra tus etiquetas y agrúpalas en categorías para crear filtros.', target: 'labels' },
+          { icon: 'user',     bg: '#dcfce7', name: 'Personas',                 desc: 'Administra atributos, segmentos y eventos de los contactos en tu cuenta.', target: 'people' },
+          { icon: 'building', bg: '#fef3c7', name: 'Empresas',                 desc: 'Administra atributos, segmentos y eventos de las cuentas en tu cuenta.', target: 'companies' },
           { icon: 'chat',     bg: '#fce7f3', name: 'Conversaciones',           desc: 'Crea atributos para los datos que tu equipo necesita en cada conversación.' },
-          { icon: 'cube',     bg: '#e9d5ff', name: 'Objetos personalizados',   desc: 'Importar tipos de objetos para crear y asociar datos personalizados.' },
-          { icon: 'arrows',   bg: '#cffafe', name: 'Importación y exportación', desc: 'Importa o exporta datos de Intercom y otras fuentes.' },
-          { icon: 'bars',     bg: '#fee2e2', name: 'Temas',                    desc: 'Crea categorías generales o más temas conversacionales.' },
+          { icon: 'cube',     bg: '#e9d5ff', name: 'Objetos personalizados',   desc: 'Importar tipos de objetos para crear y asociar datos personalizados.', target: 'customObjects' },
+          { icon: 'arrows',   bg: '#cffafe', name: 'Importación y exportación', desc: 'Importa o exporta datos de Intercom y otras fuentes.', target: 'imports' },
+          { icon: 'bars',     bg: '#fee2e2', name: 'Temas',                    desc: 'Crea categorías generales o más temas conversacionales.', target: 'topics' },
         ]} />
-        <SettingsCardGrid title="Centro de ayuda" cards={[
-          { icon: 'home', bg: '#dbeafe', name: 'Inicio Help Center',         desc: 'Configura el inicio de tu centro de ayuda.' },
-          { icon: 'book', bg: '#dcfce7', name: 'Todos los centros de ayuda', desc: 'Lista todos los centros de ayuda en tu cuenta.' },
-          { icon: 'plus', bg: '#fef3c7', name: 'Nuevo Centro de ayuda',      desc: '' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Centro de ayuda" cards={[
+          { icon: 'home', bg: '#dbeafe', name: 'Inicio Help Center',         desc: 'Configura el inicio de tu centro de ayuda.', target: 'helpCenter' },
+          { icon: 'book', bg: '#dcfce7', name: 'Todos los centros de ayuda', desc: 'Lista todos los centros de ayuda en tu cuenta.', target: 'helpCenter' },
+          { icon: 'plus', bg: '#fef3c7', name: 'Nuevo Centro de ayuda',      desc: '', target: 'helpCenter' },
         ]} />
-        <SettingsCardGrid title="Canales salientes" cards={[
-          { icon: 'bell',  bg: '#fce7f3', name: 'Suscripciones',         desc: 'Permite a los clientes administrar las comunicaciones que reciben.' },
-          { icon: 'flask', bg: '#fef3c7', name: 'Pruebas de mensajes',   desc: 'Crea pruebas A/B con mensajes automatizados.' },
-          { icon: 'tag',   bg: '#dcfce7', name: 'Etiquetas de mensajes', desc: 'Clasifica tus mensajes con etiquetas personalizadas.' },
-          { icon: 'brush', bg: '#e9d5ff', name: 'Personalización',       desc: 'Personaliza la apariencia de los mensajes salientes.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Canales salientes" cards={[
+          { icon: 'bell',  bg: '#fce7f3', name: 'Suscripciones',         desc: 'Permite a los clientes administrar las comunicaciones que reciben.', target: 'outbound' },
+          { icon: 'flask', bg: '#fef3c7', name: 'Pruebas de mensajes',   desc: 'Crea pruebas A/B con mensajes automatizados.', target: 'outbound' },
+          { icon: 'tag',   bg: '#dcfce7', name: 'Etiquetas de mensajes', desc: 'Clasifica tus mensajes con etiquetas personalizadas.', target: 'outbound' },
+          { icon: 'brush', bg: '#e9d5ff', name: 'Personalización',       desc: 'Personaliza la apariencia de los mensajes salientes.', target: 'outbound' },
         ]} />
-        <SettingsCardGrid title="Personal" cards={[
-          { icon: 'pencil',   bg: '#dbeafe', name: 'Información',            desc: 'Configura tu información personal como tu nombre y avatar.' },
-          { icon: 'shield',   bg: '#fef3c7', name: 'Seguridad de la cuenta', desc: 'Configura ajustes de tu cuenta personal de inicio de sesión.' },
-          { icon: 'bell',     bg: '#fce7f3', name: 'Notificaciones',         desc: 'Configura las preferencias de notificaciones.' },
-          { icon: 'eye',      bg: '#dcfce7', name: 'Visible para ti',        desc: 'Personaliza tu vista de pantalla y disposición.' },
-          { icon: 'key',      bg: '#fee2e2', name: 'Tokens de API',          desc: 'Verifica y configura tus tokens personales de la API.' },
-          { icon: 'lockuser', bg: '#e9d5ff', name: 'Acceso a la cuenta',     desc: 'Administra cuentas asociadas, incluyendo qué espacios de trabajo puedes usar.' },
-          { icon: 'globe',    bg: '#cffafe', name: 'Multilingüe',            desc: 'Configura los ajustes de traducción de tu cuenta.' },
+        <SettingsCardGrid onNavigate={onNavigate} title="Personal" cards={[
+          { icon: 'pencil',   bg: '#dbeafe', name: 'Información',            desc: 'Configura tu información personal como tu nombre y avatar.', target: 'personal' },
+          { icon: 'shield',   bg: '#fef3c7', name: 'Seguridad de la cuenta', desc: 'Configura ajustes de tu cuenta personal de inicio de sesión.', target: 'security' },
+          { icon: 'bell',     bg: '#fce7f3', name: 'Notificaciones',         desc: 'Configura las preferencias de notificaciones.', target: 'notifications' },
+          { icon: 'eye',      bg: '#dcfce7', name: 'Visible para ti',        desc: 'Personaliza tu vista de pantalla y disposición.', target: 'visible' },
+          { icon: 'key',      bg: '#fee2e2', name: 'Tokens de API',          desc: 'Verifica y configura tus tokens personales de la API.', target: 'tokens' },
+          { icon: 'lockuser', bg: '#e9d5ff', name: 'Acceso a la cuenta',     desc: 'Administra cuentas asociadas, incluyendo qué espacios de trabajo puedes usar.', target: 'accountAccess' },
+          { icon: 'globe',    bg: '#cffafe', name: 'Multilingüe',            desc: 'Configura los ajustes de traducción de tu cuenta.', target: 'multilingual' },
         ]} />
       </div>
     </div>
@@ -6182,7 +6504,7 @@ function SettingsView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
       <TrialBanner />
       <div className="flex flex-1 min-h-0 gap-3 overflow-hidden">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <SettingsInicioContent />
+        <SettingsInicioContent onNavigate={onNavigate} />
       </div>
     </div>
   );
@@ -7848,143 +8170,13 @@ function AutomationView({ view, onNavigate }: { view: View; onNavigate: (v: View
 
 // ── AppStoreView ──────────────────────────────────────────────────────────────
 
-type AppCardData = { name: string; img: string; desc: string };
-const APP_STORE_POPULAR: AppCardData[] = [
-  { name: 'Salesforce',        img: IMG_APP_SALESFORCE, desc: 'Sync data and streamline workflows for sales, marketing…' },
-  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Google Analytics',  img: IMG_APP_GA,         desc: 'Measure the impact of your Messenger on website…' },
-  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
-];
-const APP_STORE_NEW: AppCardData[] = [
-  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
-  { name: 'WhatsApp',          img: IMG_APP_WHATSAPP,   desc: 'Easily receive and reply to WhatsApp messages from your…' },
-  { name: 'Delighted Inc.',    img: IMG_APP_DELIGHTED,  desc: 'Sync customer feedback and trigger surveys based on key…' },
-];
-const APP_STORE_FREE: AppCardData[] = [
-  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
-  { name: 'Quick Links',       img: IMG_APP_QUICKLINKS, desc: 'Save time by creating smart links for your common tools or…' },
-  { name: 'Get a Demo',        img: IMG_APP_DEMO,       desc: 'Capture and qualify leads who want a product demo' },
-];
-const APP_STORE_SUPPORT: AppCardData[] = [
-  { name: 'Instagram',         img: IMG_APP_INSTAGRAM,  desc: 'Easily reply to Instagram private messages from your…' },
-  { name: 'Jira for Tickets',  img: IMG_APP_JIRA,       desc: 'Create Jira Issues from Intercom and automate with…' },
-  { name: 'WhatsApp',          img: IMG_APP_WHATSAPP,   desc: 'Easily receive and reply to WhatsApp messages from your…' },
-  { name: 'Stripe',            img: IMG_APP_STRIPE,     desc: 'View Stripe data from Intercom' },
-];
-
-function AppCard({ name, img, desc }: { name: string; img: string; desc: string }) {
-  return (
-    <div className="bg-white border border-[#e9eae6] rounded-[6px] px-[21px] pt-[21px] pb-[21px] flex flex-col gap-[15px] hover:border-[#c8c9c4] cursor-pointer">
-      <img src={img} alt="" className="w-12 h-12 rounded-[8px]" />
-      <p className="text-[16px] font-medium text-[#1a1a1a] leading-[24px]">{name}</p>
-      <p className="text-[14px] text-[#646462] leading-[20px] line-clamp-3">{desc}</p>
-    </div>
-  );
-}
-
 function AppStoreView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [search, setSearch] = useState('');
-  const categories = ['Todas las colecciones', 'Popular', 'New & noteworthy', 'Gratis', 'Para equipos de soporte'];
-  const [activeCategory, setActiveCategory] = useState('Todas las colecciones');
-
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
-      <div className="flex flex-1 min-h-0 gap-2">
+      <div className="flex flex-1 min-h-0 gap-2 overflow-hidden">
         <SettingsSidebar view={view} onNavigate={onNavigate} />
-        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
-            <h1 className="text-[20px] font-bold text-[#1a1a1a]">App Store</h1>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-[#646462] absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3 3"/></svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search for an app..." className="border border-[#e9eae6] rounded-full pl-8 pr-3 py-[6px] text-[13px] w-48 focus:outline-none focus:border-[#3b59f6]" />
-              </div>
-              <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
-                Aprender <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4"/></svg>
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-1 min-h-0 overflow-hidden">
-            {/* Left categories sidebar */}
-            <div className="w-[200px] flex-shrink-0 border-r border-[#e9eae6] flex flex-col overflow-y-auto">
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-1">Manage</p>
-                {['Your installed apps'].map(item => <button key={item} className="w-full text-left px-2 py-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f3f3f1] rounded-[6px]">{item}</button>)}
-              </div>
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-1">Featured</p>
-                {categories.map(cat => <button key={cat} onClick={() => setActiveCategory(cat)} className={`w-full text-left px-2 py-1.5 text-[13px] rounded-[6px] ${activeCategory === cat ? 'bg-[#f3f3f1] font-medium text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#f3f3f1]'}`}>{cat}</button>)}
-              </div>
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-1">Works with</p>
-                {['Outbound', 'Help Desk', 'Automations', 'Messenger'].map(item => <button key={item} className="w-full text-left px-2 py-1.5 text-[13px] text-[#1a1a1a] hover:bg-[#f3f3f1] rounded-[6px]">{item}</button>)}
-              </div>
-              <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#646462] mb-1">Categories</p>
-                {['Analytics', 'Automation', 'CRM', 'Data & Enrichment', 'For AI & Automation', 'For marketing teams', 'For sales teams', 'For Support Admins', 'For Support Agents', 'Issue tracking & ticketing', 'Lead capture', 'Marketing automation', 'Phone & video', 'Scheduling', 'Surveys & Feedback'].map(item => <button key={item} className="w-full text-left px-2 py-1.5 text-[12px] text-[#646462] hover:text-[#1a1a1a] hover:bg-[#f3f3f1] rounded-[6px]">{item}</button>)}
-              </div>
-            </div>
-            {/* Main content */}
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8">
-              {/* Banner cards */}
-              <div className="grid grid-cols-2 gap-0">
-                <a href="#" className="relative h-[300px] rounded-[16px] overflow-hidden bg-[#f0f1ef] flex flex-col items-center pb-[51px] pt-[55px] px-[40px]" data-node-id="1:30005">
-                  <img src={IMG_APPSTORE_BUILT} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                  <div className="relative flex-1 flex items-start w-full max-w-[324px]">
-                    <p className="text-[36px] font-bold leading-[46.8px] text-black" style={{ textShadow: '0px 0px 5px white' }}>Built by Intercom</p>
-                  </div>
-                  <div className="relative self-start">
-                    <span className="inline-block border border-black rounded-[6px] px-[17px] py-[11px] text-[14px] text-black bg-white/30 backdrop-blur-sm">View collection →</span>
-                  </div>
-                </a>
-                <a href="#" className="relative h-[300px] rounded-[16px] overflow-hidden bg-[#f0f1ef] flex flex-col items-center pb-[51px] pt-[55px] px-[40px]" data-node-id="1:30014">
-                  <img src={IMG_APPSTORE_MEETING} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                  <div className="relative flex-1 flex items-start w-full max-w-[324px]">
-                    <p className="text-[36px] font-bold leading-[46.8px] text-white" style={{ textShadow: '0px 0px 5px black' }}>Seamlessly<br/>schedule meetings</p>
-                  </div>
-                  <div className="relative self-start">
-                    <span className="inline-block border border-white rounded-[6px] px-[17px] py-[11px] text-[14px] text-white">View collection →</span>
-                  </div>
-                </a>
-              </div>
-              {/* Popular */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[15px] font-semibold text-[#1a1a1a]">Popular</p>
-                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
-                </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_POPULAR.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
-              </div>
-              {/* New & noteworthy */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[15px] font-semibold text-[#1a1a1a]">New & noteworthy</p>
-                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
-                </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_NEW.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
-              </div>
-              {/* Free apps */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[15px] font-semibold text-[#1a1a1a]">Free apps to install</p>
-                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
-                </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_FREE.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
-              </div>
-              {/* For support teams */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[15px] font-semibold text-[#1a1a1a]">For support teams</p>
-                  <button className="text-[13px] text-[#3b59f6] hover:underline">See all →</button>
-                </div>
-                <div className="grid grid-cols-4 gap-3">{APP_STORE_SUPPORT.map(a => <AppCard key={a.name} name={a.name} img={a.img} desc={a.desc} />)}</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ToolsIntegrations />
       </div>
     </div>
   );
@@ -21159,13 +21351,65 @@ function FinFlujosTrabajoContent() {
   // Real workflows from the backend feed the table at the bottom of the screen.
   // Selecting a row now opens the IDENTICAL <Workflows/> builder embedded
   // inside the Fin shell (no more ?view=automation redirect).
-  const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
+  const { data: workflowsData, refetch: refetchWorkflows } = useApi(() => workflowsApi.list(), [], []);
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [instantiatingTplId, setInstantiatingTplId] = useState<string | null>(null);
 
   // Embedded builder state. null = list, '' = create-new, anything else = edit existing id.
   const [builderId, setBuilderId] = useState<string | null>(null);
+
+  // Production-grade default templates (the 8 with `tpl_` prefix).
+  const defaultTemplates = useMemo(
+    () => (WORKFLOW_TEMPLATES as readonly any[]).filter((t) => typeof t.id === 'string' && t.id.startsWith('tpl_')),
+    [],
+  );
+
+  async function instantiateTemplate(tpl: any) {
+    if (instantiatingTplId) return;
+    setInstantiatingTplId(tpl.id);
+    try {
+      // Convert template node[].position → x/y, and edge {source,target} indices
+      // into UUIDs that the backend can normalize.
+      const nodeIds: string[] = (tpl.nodes || []).map(() =>
+        (typeof crypto !== 'undefined' && (crypto as any).randomUUID) ? (crypto as any).randomUUID() : `node_${Math.random().toString(36).slice(2, 10)}`,
+      );
+      const nodes = (tpl.nodes || []).map((n: any, idx: number) => ({
+        id: nodeIds[idx],
+        type: n.type,
+        key: n.key,
+        label: n.label,
+        position: n.position || { x: 100 + idx * 240, y: 240 },
+        config: n.config || {},
+      }));
+      const edges = (tpl.edges || []).map((e: any, idx: number) => ({
+        id: `edge_${idx}`,
+        source: nodeIds[e.source],
+        target: nodeIds[e.target],
+        label: e.label,
+        sourceHandle: e.sourceHandle,
+      }));
+      const created: any = await workflowsApi.create({
+        name: tpl.label || tpl.id,
+        description: tpl.description || '',
+        nodes,
+        edges,
+        trigger: { type: 'manual' },
+      });
+      const newId = created?.id || created?.workflow?.id;
+      showStatus(`Plantilla "${tpl.label}" creada`);
+      refetchWorkflows();
+      if (newId) {
+        // Open the builder for the new workflow.
+        setBuilderId(newId);
+      }
+    } catch (err: any) {
+      showStatus(err?.message || 'No se pudo instanciar la plantilla', 'error');
+    } finally {
+      setInstantiatingTplId(null);
+    }
+  }
 
   // Functional filter chips (state-driven; effect on `workflows` depends on shape of row).
   const [audienceFilter, setAudienceFilter] = useState<string>('any');
@@ -21562,6 +21806,59 @@ function FinFlujosTrabajoContent() {
             <span>Configuración simple</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 3l5 5-5 5" strokeLinecap="round"/></svg>
           </button>
+        </div>
+
+        {/* ── Plantillas predeterminadas ────────────────────────────────── */}
+        <div className="mb-5">
+          <div className="flex items-baseline gap-2 mb-1">
+            <h4 className="text-[14px] font-bold text-[#1a1a1a]">Plantillas listas para usar</h4>
+            <span className="text-[12px] text-[#a4a4a2]">{defaultTemplates.length}</span>
+          </div>
+          <p className="text-[13px] text-[#646462] mb-3">Instancia con un clic — Fin las preconfigura por ti.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {defaultTemplates.map((tpl: any) => {
+              const isBusy = instantiatingTplId === tpl.id;
+              return (
+                <div
+                  key={tpl.id}
+                  className="bg-white border border-[#e9eae6] rounded-[12px] p-4 flex flex-col gap-3 hover:border-[#1a1a1a]/30 transition-colors"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-[8px] bg-[#fef5ed] border border-[#fbe1c9] flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 16 16" className="w-4 h-4 fill-[#ed621d]"><path d="M3 2.5h6l4 4v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-10a1 1 0 011-1zm6 0v4h4"/></svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[10.5px] uppercase tracking-wide font-semibold text-[#a4a4a2]">{tpl.category}</span>
+                      </div>
+                      <h5 className="text-[13px] font-semibold text-[#1a1a1a] leading-[18px] mb-1 line-clamp-2">{tpl.label}</h5>
+                      <p className="text-[12.5px] text-[#646462] leading-[18px] line-clamp-3">{tpl.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11.5px] text-[#a4a4a2]">{(tpl.nodes || []).length} pasos</span>
+                    <button
+                      onClick={() => instantiateTemplate(tpl)}
+                      disabled={isBusy || !!instantiatingTplId}
+                      className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[12.5px] font-semibold inline-flex items-center gap-1.5 hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isBusy ? (
+                        <>
+                          <svg viewBox="0 0 16 16" className="w-3 h-3 animate-spin fill-none stroke-white" strokeWidth="1.6"><circle cx="8" cy="8" r="6" strokeDasharray="20 14"/></svg>
+                          <span>Creando…</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+                          <span>Usar plantilla</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Workflow table */}
@@ -22135,289 +22432,72 @@ function WorkspaceGeneralView({ view, onNavigate }: { view: View; onNavigate: (v
 }
 
 // ─── WorkspaceTeammatesView ──────────────────────────────────────────────────
-function WorkspaceTeammatesView({ view: _view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const { data: members, loading, refetch } = useApi(() => iamApi.members(), [], []);
-  const { data: rolesData } = useApi(() => iamApi.roles(), [], []);
+function WorkspaceTeammatesView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: members, loading } = useApi(() => iamApi.members(), [], []);
   const [search, setSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('agent');
-  const [memberRoles, setMemberRoles] = useState<Record<string, string>>({});
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'invited' | 'disabled'>('all');
-  const [sending, setSending] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
-
-  const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const availableRoles: { id: string; name: string }[] = ((rolesData as any[]) ?? []).length > 0
-    ? (rolesData as any[])
-    : [{ id: 'owner', name: 'Propietario' }, { id: 'admin', name: 'Administrador' }, { id: 'agent', name: 'Agente' }];
-
-  const ROLE_COLORS: Record<string, string> = {
-    admin:  'bg-[#fef9c3] text-[#854d0e]',
-    owner:  'bg-[#ede9fe] text-[#6d28d9]',
-    agent:  'bg-[#f0fdf4] text-[#15803d]',
-  };
-  const STATUS_BADGE: Record<string, { label: string; dot: string; cls: string }> = {
-    active:   { label: 'Activo',   dot: 'bg-[#16a34a]', cls: 'bg-[#dcfce7] text-[#15803d]' },
-    invited:  { label: 'Invitado', dot: 'bg-[#ca8a04]', cls: 'bg-[#fef9c3] text-[#854d0e]' },
-    disabled: { label: 'Inactivo', dot: 'bg-[#a4a4a2]', cls: 'bg-[#f1f1ee] text-[#646462]' },
-  };
-
-  const allRows = ((members as any[]) ?? []);
-  const rows = allRows.filter((m: any) => {
-    const matchSearch = !search || (m.name ?? m.email ?? '').toLowerCase().includes(search.toLowerCase()) || (m.email ?? '').toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === 'all' || (m.status ?? 'active') === filterStatus;
-    return matchSearch && matchStatus;
-  });
-
-  const handleRoleChange = async (memberId: string, newRole: string) => {
-    setMemberRoles(prev => ({ ...prev, [memberId]: newRole }));
-    try {
-      await iamApi.updateMember(memberId, { role_id: newRole });
-      showToast('Rol actualizado');
-    } catch {
-      showToast('Error al actualizar el rol', 'err');
-    }
-  };
-
-  const handleInvite = async () => {
-    if (!inviteEmail.includes('@')) return;
-    setSending(true);
-    try {
-      await iamApi.inviteMember({ email: inviteEmail, role_id: inviteRole });
-      showToast(`Invitación enviada a ${inviteEmail}`);
-      setInviteOpen(false);
-      setInviteEmail('');
-      refetch?.();
-    } catch {
-      showToast('Error al enviar la invitación', 'err');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const ROLE_DESC: Record<string, string> = {
-    owner: 'Acceso completo, incluyendo facturación y eliminación del workspace.',
-    admin: 'Puede gestionar ajustes, miembros, canales e integraciones.',
-    agent: 'Puede ver y responder conversaciones asignadas.',
-  };
-
+  const rows = ((members as any[]) ?? []).filter((m: any) => !search || (m.name ?? m.email ?? '').toLowerCase().includes(search.toLowerCase()));
+  const ROLE_COLORS: Record<string, string> = { admin: 'bg-[#fef9c3] text-[#854d0e]', owner: 'bg-[#ede9fe] text-[#6d28d9]', agent: 'bg-[#f0fdf4] text-[#15803d]' };
   return (
-    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden" style={{ background: '#f3f3f1' }}>
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
-
-      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-8 py-5 bg-[#f3f3f1] flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <button onClick={() => onNavigate('settings')} className="w-8 h-8 rounded-full bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7] shadow-sm">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="w-3.5 h-3.5 text-[#646462]"><path d="M10 3L5 8l5 5"/></svg>
-          </button>
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-6">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-[20px] font-bold text-[#1a1a1a] leading-tight">Compañeros de equipo</h1>
-            <p className="text-[13px] text-[#646462]">{allRows.length} miembro{allRows.length !== 1 ? 's' : ''} · Workspace</p>
+            <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Compañeros de equipo</h1>
+            <p className="text-[13.5px] text-[#646462]">Gestiona los miembros y sus roles.</p>
           </div>
+          <button onClick={() => setInviteOpen(true)} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">+ Invitar</button>
         </div>
-        <button
-          onClick={() => setInviteOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-xl hover:bg-[#333] transition-colors"
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M8 2v12M2 8h12"/></svg>
-          Invitar miembro
-        </button>
-      </div>
-
-      {/* ── Filter bar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-8 pb-4 flex-shrink-0">
         <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
-          <input
-            className="pl-9 pr-4 py-2 bg-white border border-[#e9eae6] rounded-xl text-[13px] focus:outline-none focus:border-[#1a1a1a] w-[280px] shadow-sm"
-            placeholder="Buscar por nombre o correo…"
-            value={search} onChange={e => setSearch(e.target.value)}
-          />
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a4a4a2]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+          <input className="w-full pl-9 pr-3 py-2 border border-[#e9eae6] rounded-lg text-[13px] focus:outline-none" placeholder="Buscar compañero…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <div className="flex gap-0.5 bg-white border border-[#e9eae6] rounded-xl p-1 shadow-sm">
-          {(['all', 'active', 'invited', 'disabled'] as const).map(s => (
-            <button key={s} onClick={() => setFilterStatus(s)} className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-medium transition-colors ${filterStatus === s ? 'bg-[#1a1a1a] text-white' : 'text-[#646462] hover:bg-[#f3f3f1]'}`}>
-              {s === 'all' ? `Todos (${allRows.length})` : s === 'active' ? `Activos (${allRows.filter((m: any) => (m.status ?? 'active') === 'active').length})` : s === 'invited' ? `Invitados (${allRows.filter((m: any) => m.status === 'invited').length})` : `Inactivos (${allRows.filter((m: any) => m.status === 'disabled').length})`}
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {search && <span className="text-[12px] text-[#a4a4a2]">{rows.length} resultado{rows.length !== 1 ? 's' : ''}</span>}
-        </div>
-      </div>
-
-      {/* ── Table ───────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-8 pb-8 min-h-0">
-        <div className="bg-white rounded-2xl border border-[#e9eae6] shadow-sm overflow-hidden">
-          {/* Table header */}
-          <div className="grid text-[11px] font-semibold text-[#a4a4a2] uppercase tracking-wide border-b border-[#f3f3f1] bg-[#fafaf9] px-4 py-3" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr 120px' }}>
-            <span>Miembro</span><span>Estado</span><span>Rol</span><span>Equipos</span><span>Último acceso</span><span className="text-right">Acciones</span>
+        {loading ? (
+          <div className="h-40 flex items-center justify-center text-[13px] text-[#a4a4a2]">Cargando…</div>
+        ) : (
+          <div className="bg-white border border-[#e9eae6] rounded-xl overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead className="bg-[#f8f8f7]">
+                <tr>{['Nombre', 'Correo', 'Rol', 'Último acceso', ''].map(h => <th key={h} className="text-left px-4 py-2.5 font-semibold text-[#646462] border-b border-[#e9eae6]">{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-[#e9eae6]">
+                {rows.length === 0 ? (
+                  <tr><td colSpan={5} className="text-center py-10 text-[#a4a4a2]">Sin resultados</td></tr>
+                ) : rows.map((m: any) => (
+                  <tr key={m.id ?? m.email} className="hover:bg-[#f8f8f7]">
+                    <td className="px-4 py-3 font-medium text-[#1a1a1a]">{m.name ?? '—'}</td>
+                    <td className="px-4 py-3 text-[#646462]">{m.email ?? '—'}</td>
+                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${ROLE_COLORS[m.role] ?? 'bg-[#f1f1ee] text-[#646462]'}`}>{m.role ?? 'agente'}</span></td>
+                    <td className="px-4 py-3 text-[#a4a4a2]">{m.last_seen ? new Date(m.last_seen).toLocaleDateString('es') : '—'}</td>
+                    <td className="px-4 py-3 text-right"><button className="text-[12px] text-[#646462] hover:text-[#b91c1c] border border-[#e9eae6] rounded px-2 py-0.5">Eliminar</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          {loading ? (
-            <div className="py-20 flex flex-col items-center gap-3 text-[#a4a4a2]">
-              <svg className="w-8 h-8 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
-              <span className="text-[13px]">Cargando miembros…</span>
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="py-20 flex flex-col items-center gap-3 text-[#a4a4a2]">
-              <svg viewBox="0 0 48 48" fill="none" className="w-12 h-12 text-[#d4d4d2]">
-                <circle cx="24" cy="18" r="8" stroke="currentColor" strokeWidth="2.5"/>
-                <path d="M8 42c0-8.8 7.2-16 16-16s16 7.2 16 16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-              </svg>
-              <p className="text-[14px] font-medium">Sin resultados</p>
-              <p className="text-[12.5px]">{search ? 'Prueba con otro término de búsqueda' : 'Invita a tu primer compañero de equipo'}</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-[#f3f3f1]">
-              {rows.map((m: any) => {
-                const currentRole = memberRoles[m.id] ?? m.role ?? 'agent';
-                const status: string = m.status ?? 'active';
-                const badge = STATUS_BADGE[status] ?? STATUS_BADGE.active;
-                const initials = ((m.name ?? m.email ?? '?') as string).split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
-                const avatarHue = ((m.email ?? m.name ?? '').charCodeAt(0) * 31) % 360;
-                return (
-                  <div key={m.id ?? m.email} className="grid items-center px-4 py-3.5 hover:bg-[#fafaf9] group transition-colors" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr 120px' }}>
-
-                    {/* Avatar + name */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0" style={{ background: `hsl(${avatarHue},55%,52%)` }}>{initials}</div>
-                      <div className="min-w-0">
-                        <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate leading-tight">{m.name ?? '—'}</p>
-                        <p className="text-[12px] text-[#a4a4a2] truncate leading-tight">{m.email ?? '—'}</p>
-                      </div>
-                    </div>
-
-                    {/* Status badge */}
-                    <div>
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-semibold ${badge.cls}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-                        {badge.label}
-                      </span>
-                    </div>
-
-                    {/* Role dropdown */}
-                    <div>
-                      <select
-                        value={currentRole}
-                        onChange={e => handleRoleChange(m.id, e.target.value)}
-                        className={`appearance-none px-3 py-1.5 pr-6 rounded-full text-[11.5px] font-semibold cursor-pointer focus:outline-none border-0 ${ROLE_COLORS[currentRole] ?? 'bg-[#f1f1ee] text-[#646462]'}`}
-                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%23646462' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center', backgroundSize: '14px' }}
-                      >
-                        {availableRoles.map((r: any) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
-                      </select>
-                    </div>
-
-                    {/* Teams */}
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {(m.teams ?? []).length > 0
-                        ? (m.teams as string[]).slice(0, 2).map((t: string) => <span key={t} className="px-2 py-0.5 bg-[#f3f3f1] text-[#646462] rounded text-[11px] font-medium">{t}</span>)
-                        : <span className="text-[12px] text-[#d4d4d2]">—</span>
-                      }
-                    </div>
-
-                    {/* Last seen */}
-                    <div className="text-[12.5px] text-[#a4a4a2]">
-                      {m.last_seen ? new Date(m.last_seen).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) : status === 'invited' ? 'Pendiente' : 'Nunca'}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {status === 'active' && (
-                        <button className="px-2.5 py-1 text-[11.5px] text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7] hover:text-[#1a1a1a] transition-colors">Desactivar</button>
-                      )}
-                      {status === 'disabled' && (
-                        <button className="px-2.5 py-1 text-[11.5px] text-[#15803d] border border-[#bbf7d0] rounded-lg hover:bg-[#f0fdf4] transition-colors">Activar</button>
-                      )}
-                      {status === 'invited' && (
-                        <button className="px-2.5 py-1 text-[11.5px] text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7] transition-colors">Reenviar</button>
-                      )}
-                      <button className="px-2.5 py-1 text-[11.5px] text-[#646462] border border-[#e9eae6] rounded-lg hover:bg-[#fef2f2] hover:text-[#b91c1c] hover:border-[#fecaca] transition-colors">Eliminar</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Invite modal ────────────────────────────────────────────────────── */}
-      {inviteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-[3px]" onClick={() => setInviteOpen(false)}>
-          <div className="bg-white rounded-2xl w-[460px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#f3f3f1]">
-              <h2 className="text-[17px] font-bold text-[#1a1a1a]">Invitar al workspace</h2>
-              <button onClick={() => setInviteOpen(false)} className="w-8 h-8 rounded-full hover:bg-[#f3f3f1] flex items-center justify-center text-[#646462] transition-colors">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="w-3.5 h-3.5"><path d="M3 3l10 10M13 3L3 13"/></svg>
-              </button>
-            </div>
-
-            {/* Modal body */}
-            <div className="px-6 py-5 flex flex-col gap-5">
-              <div>
-                <label className="block text-[12.5px] font-semibold text-[#1a1a1a] mb-2">Correo electrónico</label>
-                <input
-                  autoFocus
-                  className="w-full border border-[#e9eae6] rounded-xl px-4 py-3 text-[13.5px] focus:outline-none focus:border-[#1a1a1a] focus:ring-2 focus:ring-[#1a1a1a]/10"
-                  placeholder="nombre@empresa.com"
-                  value={inviteEmail}
-                  onChange={e => setInviteEmail(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleInvite()}
-                />
-              </div>
-              <div>
-                <label className="block text-[12.5px] font-semibold text-[#1a1a1a] mb-2">Rol</label>
-                <div className="flex flex-col gap-2">
-                  {availableRoles.map((r: any) => (
-                    <label key={r.id} className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${inviteRole === r.id ? 'border-[#1a1a1a] bg-[#fafaf9]' : 'border-[#e9eae6] hover:border-[#d4d4d2]'}`}>
-                      <input type="radio" name="invite-role" value={r.id} checked={inviteRole === r.id} onChange={() => setInviteRole(r.id)} className="accent-[#1a1a1a]" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-semibold text-[#1a1a1a]">{r.name ?? r.id}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-semibold ${ROLE_COLORS[r.id] ?? 'bg-[#f1f1ee] text-[#646462]'}`}>{r.id}</span>
-                        </div>
-                        <p className="text-[11.5px] text-[#a4a4a2] mt-0.5">{ROLE_DESC[r.id] ?? ''}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+        )}
+        {inviteOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setInviteOpen(false)}>
+            <div className="bg-white rounded-2xl p-6 w-[380px] shadow-xl" onClick={e => e.stopPropagation()}>
+              <h2 className="text-[16px] font-bold text-[#1a1a1a] mb-4">Invitar compañero</h2>
+              <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] mb-4" placeholder="correo@empresa.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setInviteOpen(false)} className="px-4 py-2 text-[13px] border border-[#e9eae6] rounded-lg hover:bg-[#f8f8f7]">Cancelar</button>
+                <button onClick={() => setInviteOpen(false)} className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Enviar invitación</button>
               </div>
             </div>
-
-            {/* Modal footer */}
-            <div className="flex justify-end gap-2 px-6 py-4 bg-[#fafaf9] border-t border-[#f3f3f1]">
-              <button onClick={() => setInviteOpen(false)} className="px-4 py-2.5 text-[13px] font-medium border border-[#e9eae6] rounded-xl hover:bg-white transition-colors">Cancelar</button>
-              <button
-                onClick={handleInvite}
-                disabled={!inviteEmail.includes('@') || sending}
-                className="px-5 py-2.5 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-xl hover:bg-[#333] disabled:opacity-40 transition-colors flex items-center gap-2"
-              >
-                {sending && <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>}
-                {sending ? 'Enviando…' : 'Enviar invitación'}
-              </button>
-            </div>
+          </div>
+        )}
+      </div>
           </div>
         </div>
-      )}
-
-      {/* ── Toast ───────────────────────────────────────────────────────────── */}
-      {toast && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-[13px] font-semibold z-[60] transition-all ${toast.type === 'ok' ? 'bg-[#1a1a1a] text-white' : 'bg-[#b91c1c] text-white'}`}>
-          {toast.type === 'ok'
-            ? <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M2 8l4 4 8-8"/></svg>
-            : <svg viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" className="w-4 h-4"><path d="M3 3l10 10M13 3L3 13"/></svg>
-          }
-          {toast.msg}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -22782,6 +22862,69 @@ function SlackChannelView({ view, onNavigate }: { view: View; onNavigate: (v: Vi
   );
 }
 
+// ─── HelpCenterSettingsView ──────────────────────────────────────────────────
+function HelpCenterSettingsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const [published, setPublished] = useState(true);
+  const [domain, setDomain] = useState('soporte.miempresa.com');
+  const [color, setColor] = useState('#6366f1');
+  const STATS = [
+    { label: 'Artículos publicados', value: '84' },
+    { label: 'Búsquedas este mes', value: '3.2K' },
+    { label: 'Tasa de resolución', value: '67%' },
+    { label: 'Valoración media', value: '4.6 ★' },
+  ];
+  return (
+    <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
+      <TrialBanner />
+      <div className="flex flex-1 min-h-0 gap-2">
+        <SettingsSidebar view={view} onNavigate={onNavigate} />
+        <div className="flex-1 bg-white rounded-[12px] border border-[#e9eae6] flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-[760px] mx-auto py-10 px-6 flex flex-col gap-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[22px] font-bold text-[#1a1a1a] mb-1">Centro de ayuda</h1>
+            <p className="text-[13.5px] text-[#646462]">Configura tu portal de autoservicio.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-[#646462]">{published ? 'Publicado' : 'No publicado'}</span>
+            <button onClick={() => setPublished(v => !v)} className={`w-10 h-6 rounded-full transition-colors ${published ? 'bg-[#1a1a1a]' : 'bg-[#e9eae6]'} flex items-center`}>
+              <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${published ? 'translate-x-5' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {STATS.map(s => (
+            <div key={s.label} className="bg-white border border-[#e9eae6] rounded-xl p-4 text-center">
+              <p className="text-[22px] font-bold text-[#1a1a1a]">{s.value}</p>
+              <p className="text-[11px] text-[#646462] mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+        <div className="bg-white border border-[#e9eae6] rounded-xl divide-y divide-[#e9eae6]">
+          <div className="px-5 py-4">
+            <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Dominio personalizado</label>
+            <input className="w-full border border-[#e9eae6] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#6366f1]/30" value={domain} onChange={e => setDomain(e.target.value)} />
+            <p className="text-[12px] text-[#646462] mt-1">Añade un registro CNAME en tu DNS apuntando a <span className="font-mono">help.intercom.com</span></p>
+          </div>
+          <div className="px-5 py-4 flex items-center gap-4">
+            <div className="flex-1">
+              <label className="block text-[13px] font-semibold text-[#1a1a1a] mb-1">Color de marca</label>
+              <p className="text-[12px] text-[#646462]">Personaliza el color principal del portal.</p>
+            </div>
+            <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-10 h-10 rounded-lg border border-[#e9eae6] cursor-pointer p-0.5" />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button className="px-4 py-2 bg-[#1a1a1a] text-white text-[13px] font-semibold rounded-lg hover:bg-[#333]">Guardar cambios</button>
+        </div>
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Prototype() {
   // ?icons=v2 → render the icon-library gallery instead of the app shell.
@@ -22888,6 +23031,7 @@ function PrototypeApp() {
       case 'topics':              return <TopicsView view={view} onNavigate={setView} />;
       case 'switchChannel':       return <SwitchChannelView view={view} onNavigate={setView} />;
       case 'slackChannel':        return <SlackChannelView view={view} onNavigate={setView} />;
+      case 'helpCenter':          return <HelpCenterSettingsView view={view} onNavigate={setView} />;
     }
   }
 
