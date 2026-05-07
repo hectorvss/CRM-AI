@@ -226,3 +226,289 @@ export async function executeNodeWithRetry(
 
   return lastResult ?? { status: 'failed', error: 'Node execution failed before producing a result', attempt, maxRetries: retries };
 }
+
+// ── Top-level BFS scheduler ─────────────────────────────────────────────────
+//
+// `executeWorkflow` is the canonical entry point for running a workflow
+// version end to end. It was extracted from `server/routes/workflows.ts`
+// (where it lived as `executeWorkflowVersion`) in Phase 4c — Turno 5/D2.
+//
+// The scheduler itself is pure; the side-effectful collaborators
+// (validation, context construction, persistence, broadcasting, error-event
+// dispatch) are passed in as `deps`. The route file builds the deps once
+// and passes them into every call site that previously invoked
+// `executeWorkflowVersion`.
+//
+// No behavior change vs the inline definition: idempotency replay, BFS
+// fan-out, MAX_STEPS guard, audit + SSE broadcast on completion, and the
+// post-failure `trigger.workflow_error` dispatch are byte-for-byte
+// identical. The only mechanical difference is the use of `crypto.randomUUID`
+// imported here instead of the shared route-level import.
+//
+// `getNodeContract` / repository singletons / sender clients remain in the
+// route — only the scheduler logic moves.
+
+import crypto from 'node:crypto';
+
+export interface ExecuteWorkflowDeps {
+  /** Validates the node + edge graph; throws statusCode=422 on hard error. */
+  validateWorkflowDefinition: (
+    nodes: any[],
+    edges: any[],
+  ) => { ok: boolean; nodes: any[]; edges: any[]; errors: string[]; warnings?: string[]; diagnostics?: any[] };
+  /** Returns the start (trigger) node from an already-normalized list. */
+  getStartNode: (nodes: any[]) => any | null;
+  /** Returns the next nodes following currentNode given the workflow context. */
+  pickNextNodes: (nodes: any[], edges: any[], currentNode: any, context: any) => any[];
+  /** Builds the initial workflow context (case bundle, order, payment, etc). */
+  buildWorkflowContext: (
+    scope: { tenantId: string; workspaceId: string; userId?: string },
+    payload: any,
+  ) => Promise<any>;
+  /** Per-node executor with retry + audit. */
+  executeNodeWithRetry: (
+    scope: { tenantId: string; workspaceId: string; userId?: string },
+    node: any,
+    context: any,
+  ) => Promise<any>;
+  /** Supabase admin client. RLS bypassed; the scheduler scopes all queries. */
+  getSupabaseAdmin: () => any;
+  /** Append-only audit writer for run-level events. */
+  auditLog: (
+    scope: { tenantId: string; workspaceId: string },
+    entry: {
+      actorId: string;
+      action: string;
+      entityType: string;
+      entityId: string;
+      metadata?: Record<string, any>;
+    },
+  ) => Promise<unknown>;
+  /** SSE broadcaster — emits workflow:run:* events to subscribed tenants. */
+  broadcastSSE: (tenantId: string, event: string, payload: Record<string, any>) => void;
+  /** Cross-workflow event dispatcher (used for trigger.workflow_error). */
+  executeWorkflowsByEvent?: (
+    scope: { tenantId: string; workspaceId: string; userId?: string },
+    eventType: string,
+    payload: Record<string, any>,
+  ) => Promise<any>;
+  /** Logger used for non-fatal warnings (idempotency, dispatch failures). */
+  logger: { info: (m: string, meta?: any) => void; warn: (m: string, meta?: any) => void };
+}
+
+export interface ExecuteWorkflowOptions {
+  tenantId: string;
+  workspaceId: string;
+  userId?: string;
+  workflowId: string;
+  version: any;
+  triggerPayload: any;
+  triggerType?: string;
+  retryOfRunId?: string | null;
+}
+
+export interface ExecuteWorkflowResult {
+  id: string;
+  status: string;
+  error: string | null;
+  steps: any[];
+  retryOfRunId?: string | null;
+}
+
+export async function executeWorkflow(
+  opts: ExecuteWorkflowOptions,
+  deps: ExecuteWorkflowDeps,
+): Promise<ExecuteWorkflowResult> {
+  const {
+    tenantId,
+    workspaceId,
+    userId,
+    workflowId,
+    version,
+    triggerPayload,
+    triggerType = 'manual',
+    retryOfRunId = null,
+  } = opts;
+
+  const validation = deps.validateWorkflowDefinition(version.nodes ?? [], version.edges ?? []);
+  if (!validation.ok) {
+    const error: any = new Error('Workflow is not executable');
+    error.statusCode = 422;
+    error.validation = validation;
+    throw error;
+  }
+
+  const supabase = deps.getSupabaseAdmin();
+  const runId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const workflowContext = await deps.buildWorkflowContext(
+    { tenantId, workspaceId, userId },
+    triggerPayload ?? {},
+  );
+  const caseId = triggerPayload?.caseId ?? triggerPayload?.case_id ?? workflowContext.case?.id ?? null;
+
+  // Idempotency: if the trigger payload carries a trace_id and a run already
+  // exists for this version + trace_id, return that run instead of creating a
+  // duplicate. This protects against double-fires from retries / cron sweeps.
+  const traceId = triggerPayload?.trace_id ?? triggerPayload?.traceId ?? null;
+  if (traceId && !retryOfRunId) {
+    const { data: existing } = await supabase
+      .from('workflow_runs')
+      .select('id, status, error')
+      .eq('tenant_id', tenantId)
+      .eq('workflow_version_id', version.id)
+      .eq('trigger_payload->>trace_id', String(traceId))
+      .limit(1);
+    if (existing && existing.length > 0) {
+      const prior = existing[0];
+      deps.logger.info('executeWorkflow: idempotent replay, returning existing run', {
+        traceId, runId: prior.id, status: prior.status,
+      });
+      const { data: priorSteps } = await supabase
+        .from('workflow_run_steps')
+        .select('*')
+        .eq('workflow_run_id', prior.id)
+        .order('started_at', { ascending: true });
+      return { id: prior.id, status: prior.status, error: prior.error ?? null, steps: priorSteps ?? [], retryOfRunId: null };
+    }
+  }
+
+  const { error: runError } = await supabase.from('workflow_runs').insert({
+    id: runId,
+    workflow_version_id: version.id,
+    case_id: caseId,
+    tenant_id: tenantId,
+    workspace_id: workspaceId,
+    trigger_type: triggerType,
+    trigger_payload: triggerPayload ?? {},
+    status: 'running',
+    current_node_id: deps.getStartNode(validation.nodes)?.id ?? null,
+    context: { dryRun: false, source: retryOfRunId ? 'workflow_retry' : 'workflow_api', retryOfRunId, workflowContext },
+    started_at: now,
+    ended_at: null,
+    error: null,
+  });
+  if (runError) throw runError;
+
+  // Broadcast run started
+  deps.broadcastSSE(tenantId, 'workflow:run:started', {
+    runId, workflowId: version.workflow_id ?? '', versionId: version.id,
+    triggerType: triggerType ?? 'manual', startedAt: now,
+  });
+
+  const steps: any[] = [];
+  // BFS queue: each entry carries the node plus the input data snapshot for that branch
+  const queue: Array<{ node: any; branchInput: any; order: number }> = [
+    { node: deps.getStartNode(validation.nodes), branchInput: triggerPayload ?? {}, order: 0 },
+  ];
+  const visited = new Set<string>();
+  let finalStatus = 'completed';
+  let finalError: string | null = null;
+  const MAX_STEPS = validation.nodes.length * 4; // guard against runaway graphs
+
+  while (queue.length > 0 && steps.length < MAX_STEPS) {
+    const { node: currentNode, branchInput, order } = queue.shift()!;
+    if (!currentNode || visited.has(currentNode.id)) continue;
+    visited.add(currentNode.id);
+
+    const startedAt = new Date().toISOString();
+    const result = await deps.executeNodeWithRetry({ tenantId, workspaceId, userId }, currentNode, workflowContext);
+    const endedAt = new Date().toISOString();
+
+    const step = {
+      id: crypto.randomUUID(),
+      workflow_run_id: runId,
+      node_id: currentNode.id,
+      node_type: currentNode.type,
+      status: result.status,
+      input: order === 0 ? branchInput : { fromPreviousStep: true },
+      output: result.output ?? {},
+      started_at: startedAt,
+      ended_at: endedAt,
+      error: (result as any).error ?? null,
+    };
+    steps.push(step);
+
+    workflowContext.lastOutput = result.output ?? null;
+    workflowContext.lastNode = { id: currentNode.id, key: currentNode.key, label: currentNode.label, status: result.status };
+    if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
+      workflowContext.data = (result.output as any).data ?? result.output;
+    }
+
+    if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) {
+      // Blocking result: record final status, drain remaining queue as skipped
+      finalStatus = result.status === 'waiting_approval' ? 'waiting' : result.status;
+      finalError = (result as any).error ?? (result.output as any)?.reason ?? null;
+      break;
+    }
+
+    // Enqueue next nodes (may be multiple for flow.branch fan-out)
+    const nextNodes = deps.pickNextNodes(validation.nodes, validation.edges, currentNode, workflowContext);
+    for (const nextNode of nextNodes) {
+      if (!visited.has(nextNode.id)) {
+        queue.push({ node: nextNode, branchInput: result.output ?? {}, order: order + 1 });
+      }
+    }
+  }
+
+  // Cycle detection: if queue still has items that were already visited
+  if (steps.length >= MAX_STEPS) {
+    finalStatus = 'failed';
+    finalError = 'Workflow exceeded maximum step count — possible cycle detected';
+  }
+
+  if (steps.length > 0) {
+    const { error: stepsError } = await supabase.from('workflow_run_steps').insert(steps);
+    if (stepsError) throw stepsError;
+  }
+
+  const { error: updateRunError } = await supabase.from('workflow_runs').update({
+    status: finalStatus,
+    current_node_id: steps.at(-1)?.node_id ?? null,
+    context: { dryRun: false, source: retryOfRunId ? 'workflow_retry' : 'workflow_api', retryOfRunId, workflowContext },
+    ended_at: ['completed', 'failed', 'blocked', 'stopped'].includes(finalStatus) ? new Date().toISOString() : null,
+    error: finalError,
+  }).eq('id', runId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
+  if (updateRunError) throw updateRunError;
+
+  await deps.auditLog({ tenantId, workspaceId }, {
+    actorId: userId ?? 'system',
+    action: finalStatus === 'completed' ? 'WORKFLOW_RUN_COMPLETED' : 'WORKFLOW_RUN_PAUSED',
+    entityType: 'workflow',
+    entityId: workflowId,
+    metadata: { runId, retryOfRunId, stepCount: steps.length, finalStatus, finalError },
+  });
+
+  // Broadcast run completed/failed/paused
+  deps.broadcastSSE(tenantId, 'workflow:run:updated', {
+    runId,
+    workflowId: workflowId ?? '',
+    status: finalStatus,
+    stepCount: steps.length,
+    error: finalError,
+    endedAt: new Date().toISOString(),
+  });
+
+  // Dispatch trigger.workflow_error event so error-handler workflows can react.
+  // Skipped on retries to avoid loops.
+  if (finalStatus === 'failed' && triggerType !== 'workflow.error' && !retryOfRunId && deps.executeWorkflowsByEvent) {
+    try {
+      await deps.executeWorkflowsByEvent(
+        { tenantId, workspaceId, userId },
+        'trigger.workflow_error',
+        {
+          sourceWorkflowId: workflowId,
+          sourceRunId: runId,
+          severity: 'error',
+          error: finalError,
+          failedNodeId: steps.find((s) => s.status === 'failed')?.node_id ?? null,
+          failedNodeKey: steps.find((s) => s.status === 'failed')?.node_id ?? null,
+        },
+      );
+    } catch (dispatchErr: any) {
+      deps.logger.warn('workflow_error event dispatch failed', { runId, error: String(dispatchErr?.message ?? dispatchErr) });
+    }
+  }
+
+  return { id: runId, status: finalStatus, error: finalError, steps, retryOfRunId };
+}

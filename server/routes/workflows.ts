@@ -24,7 +24,7 @@ import { config as appConfig } from '../config.js';
 import { getRefundThreshold } from '../utils/refundThreshold.js';
 import { logger } from '../utils/logger.js';
 import { broadcastSSE } from './sse.js';
-import { executeNode as runAdapter, executeNodeWithRetry } from '../runtime/workflowExecutor.js';
+import { executeNode as runAdapter, executeNodeWithRetry, executeWorkflow } from '../runtime/workflowExecutor.js';
 import { registerSchedulerHooks } from '../runtime/adapters/flowScheduler.js';
 
 const router = Router();
@@ -1061,16 +1061,13 @@ async function executeWorkflowNodeWithRetry(
   });
 }
 
-async function executeWorkflowVersion({
-  tenantId,
-  workspaceId,
-  userId,
-  workflowId,
-  version,
-  triggerPayload,
-  triggerType = 'manual',
-  retryOfRunId = null,
-}: {
+// `executeWorkflowVersion` was extracted to
+// `server/runtime/workflowExecutor.ts` as `executeWorkflow` (Phase 4c — Turno
+// 5/D2). This thin wrapper preserves the original signature + every existing
+// call site (POST /:id/run, /:id/retry, /events/trigger, /forms/:slug, the
+// flow.subworkflow scheduler hook, and `executeWorkflowsByEvent`) by
+// injecting the route's repositories + helpers as a deps bundle.
+async function executeWorkflowVersion(opts: {
   tenantId: string;
   workspaceId: string;
   userId?: string;
@@ -1080,188 +1077,20 @@ async function executeWorkflowVersion({
   triggerType?: string;
   retryOfRunId?: string | null;
 }) {
-  const validation = validateWorkflowDefinition(version.nodes ?? [], version.edges ?? []);
-  if (!validation.ok) {
-    const error: any = new Error('Workflow is not executable');
-    error.statusCode = 422;
-    error.validation = validation;
-    throw error;
-  }
-
-  const supabase = getSupabaseAdmin();
-  const runId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const workflowContext = await buildWorkflowContext(
-    { tenantId, workspaceId, userId },
-    triggerPayload ?? {},
-  );
-  const caseId = triggerPayload?.caseId ?? triggerPayload?.case_id ?? workflowContext.case?.id ?? null;
-
-  // Idempotency: if the trigger payload carries a trace_id and a run already
-  // exists for this version + trace_id, return that run instead of creating a
-  // duplicate. This protects against double-fires from retries / cron sweeps.
-  const traceId = triggerPayload?.trace_id ?? triggerPayload?.traceId ?? null;
-  if (traceId && !retryOfRunId) {
-    const { data: existing } = await supabase
-      .from('workflow_runs')
-      .select('id, status, error')
-      .eq('tenant_id', tenantId)
-      .eq('workflow_version_id', version.id)
-      .eq('trigger_payload->>trace_id', String(traceId))
-      .limit(1);
-    if (existing && existing.length > 0) {
-      const prior = existing[0];
-      logger.info('executeWorkflowVersion: idempotent replay, returning existing run', {
-        traceId, runId: prior.id, status: prior.status,
-      });
-      const { data: priorSteps } = await supabase
-        .from('workflow_run_steps')
-        .select('*')
-        .eq('workflow_run_id', prior.id)
-        .order('started_at', { ascending: true });
-      return { id: prior.id, status: prior.status, error: prior.error ?? null, steps: priorSteps ?? [], retryOfRunId: null };
-    }
-  }
-
-  const { error: runError } = await supabase.from('workflow_runs').insert({
-    id: runId,
-    workflow_version_id: version.id,
-    case_id: caseId,
-    tenant_id: tenantId,
-    workspace_id: workspaceId,
-    trigger_type: triggerType,
-    trigger_payload: triggerPayload ?? {},
-    status: 'running',
-    current_node_id: getStartNode(validation.nodes)?.id ?? null,
-    context: { dryRun: false, source: retryOfRunId ? 'workflow_retry' : 'workflow_api', retryOfRunId, workflowContext },
-    started_at: now,
-    ended_at: null,
-    error: null,
+  return executeWorkflow(opts, {
+    validateWorkflowDefinition,
+    getStartNode,
+    pickNextNodes,
+    buildWorkflowContext,
+    executeNodeWithRetry: executeWorkflowNodeWithRetry,
+    getSupabaseAdmin,
+    auditLog: (scope, entry) => auditRepository.logEvent(scope, entry),
+    broadcastSSE,
+    executeWorkflowsByEvent,
+    logger,
   });
-  if (runError) throw runError;
-
-  // Broadcast run started
-  broadcastSSE(tenantId, 'workflow:run:started', {
-    runId, workflowId: version.workflow_id ?? '', versionId: version.id,
-    triggerType: triggerType ?? 'manual', startedAt: now,
-  });
-
-  const steps: any[] = [];
-  // BFS queue: each entry carries the node plus the input data snapshot for that branch
-  const queue: Array<{ node: any; branchInput: any; order: number }> = [
-    { node: getStartNode(validation.nodes), branchInput: triggerPayload ?? {}, order: 0 },
-  ];
-  const visited = new Set<string>();
-  let finalStatus = 'completed';
-  let finalError: string | null = null;
-  const MAX_STEPS = validation.nodes.length * 4; // guard against runaway graphs
-
-  while (queue.length > 0 && steps.length < MAX_STEPS) {
-    const { node: currentNode, branchInput, order } = queue.shift()!;
-    if (!currentNode || visited.has(currentNode.id)) continue;
-    visited.add(currentNode.id);
-
-    const startedAt = new Date().toISOString();
-    const result = await executeWorkflowNodeWithRetry({ tenantId, workspaceId, userId }, currentNode, workflowContext);
-    const endedAt = new Date().toISOString();
-
-    const step = {
-      id: crypto.randomUUID(),
-      workflow_run_id: runId,
-      node_id: currentNode.id,
-      node_type: currentNode.type,
-      status: result.status,
-      input: order === 0 ? branchInput : { fromPreviousStep: true },
-      output: result.output ?? {},
-      started_at: startedAt,
-      ended_at: endedAt,
-      error: (result as any).error ?? null,
-    };
-    steps.push(step);
-
-    workflowContext.lastOutput = result.output ?? null;
-    workflowContext.lastNode = { id: currentNode.id, key: currentNode.key, label: currentNode.label, status: result.status };
-    if (result.output && typeof result.output === 'object' && !Array.isArray(result.output)) {
-      workflowContext.data = (result.output as any).data ?? result.output;
-    }
-
-    if (['failed', 'blocked', 'waiting_approval', 'waiting', 'stopped'].includes(result.status)) {
-      // Blocking result: record final status, drain remaining queue as skipped
-      finalStatus = result.status === 'waiting_approval' ? 'waiting' : result.status;
-      finalError = (result as any).error ?? (result.output as any)?.reason ?? null;
-      break;
-    }
-
-    // Enqueue next nodes (may be multiple for flow.branch fan-out)
-    const nextNodes = pickNextNodes(validation.nodes, validation.edges, currentNode, workflowContext);
-    for (const nextNode of nextNodes) {
-      if (!visited.has(nextNode.id)) {
-        queue.push({ node: nextNode, branchInput: result.output ?? {}, order: order + 1 });
-      }
-    }
-  }
-
-  // Cycle detection: if queue still has items that were already visited
-  if (steps.length >= MAX_STEPS) {
-    finalStatus = 'failed';
-    finalError = 'Workflow exceeded maximum step count — possible cycle detected';
-  }
-
-  if (steps.length > 0) {
-    const { error: stepsError } = await supabase.from('workflow_run_steps').insert(steps);
-    if (stepsError) throw stepsError;
-  }
-
-  const { error: updateRunError } = await supabase.from('workflow_runs').update({
-    status: finalStatus,
-    current_node_id: steps.at(-1)?.node_id ?? null,
-    context: { dryRun: false, source: retryOfRunId ? 'workflow_retry' : 'workflow_api', retryOfRunId, workflowContext },
-    ended_at: ['completed', 'failed', 'blocked', 'stopped'].includes(finalStatus) ? new Date().toISOString() : null,
-    error: finalError,
-  }).eq('id', runId).eq('tenant_id', tenantId).eq('workspace_id', workspaceId);
-  if (updateRunError) throw updateRunError;
-
-  await auditRepository.logEvent({ tenantId, workspaceId }, {
-    actorId: userId ?? 'system',
-    action: finalStatus === 'completed' ? 'WORKFLOW_RUN_COMPLETED' : 'WORKFLOW_RUN_PAUSED',
-    entityType: 'workflow',
-    entityId: workflowId,
-    metadata: { runId, retryOfRunId, stepCount: steps.length, finalStatus, finalError },
-  });
-
-  // Broadcast run completed/failed/paused
-  broadcastSSE(tenantId, 'workflow:run:updated', {
-    runId,
-    workflowId: workflowId ?? '',
-    status: finalStatus,
-    stepCount: steps.length,
-    error: finalError,
-    endedAt: new Date().toISOString(),
-  });
-
-  // Dispatch trigger.workflow_error event so error-handler workflows can react.
-  // Skipped on retries to avoid loops.
-  if (finalStatus === 'failed' && triggerType !== 'workflow.error' && !retryOfRunId) {
-    try {
-      await executeWorkflowsByEvent(
-        { tenantId, workspaceId, userId },
-        'trigger.workflow_error',
-        {
-          sourceWorkflowId: workflowId,
-          sourceRunId: runId,
-          severity: 'error',
-          error: finalError,
-          failedNodeId: steps.find((s) => s.status === 'failed')?.node_id ?? null,
-          failedNodeKey: steps.find((s) => s.status === 'failed')?.node_id ?? null,
-        },
-      );
-    } catch (dispatchErr: any) {
-      logger.warn('workflow_error event dispatch failed', { runId, error: String(dispatchErr?.message ?? dispatchErr) });
-    }
-  }
-
-  return { id: runId, status: finalStatus, error: finalError, steps, retryOfRunId };
 }
+
 
 export async function continueWorkflowRun({
   tenantId,
