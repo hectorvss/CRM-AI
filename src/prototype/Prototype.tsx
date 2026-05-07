@@ -9942,24 +9942,20 @@ function rsparkDerive(valueStr: string | number, trend: string, idx: number): nu
   const dir = trend === 'up' ? 1 : trend === 'down' ? -1 : 0;
   return Array.from({ length: 8 }, (_, i) => Math.max(0, base + dir * base * 0.18 * (i / 7) + ((idx + i) % 3) * base * 0.03));
 }
-function ReportsAnalysisKpiCard({ label, value, change, trend, sub, idx }: { label: string; value: string; change?: string; trend?: string; sub?: string; idx: number }) {
-  const vals = rsparkDerive(value, trend ?? 'neutral', idx);
-  const color = trend === 'up' ? '#16a34a' : trend === 'down' ? '#dc2626' : '#6366f1';
-  const badgeCls = trend === 'up' ? 'text-[#16a34a] bg-[#dcfce7]' : trend === 'down' ? 'text-[#dc2626] bg-[#fee2e2]' : 'text-[#646462] bg-[#f3f3f1]';
+function ReportsAnalysisKpiCard({ label, value, change, trend, sub }: { label: string; value: string; change?: string; trend?: string; sub?: string; idx?: number }) {
+  const deltaColor = trend === 'up' ? 'text-[#16a34a]' : trend === 'down' ? 'text-[#dc2626]' : 'text-[#646462]';
+  const deltaArrow = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '';
   return (
-    <div className="border border-[#e9eae6] rounded-[10px] bg-white p-4 relative overflow-hidden min-h-[110px]">
-      <div className="flex items-start justify-between mb-1 relative z-10">
-        <p className="text-[12px] text-[#646462] leading-tight max-w-[75%]">{label}</p>
-        {change && <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${badgeCls}`}>{change}</span>}
+    <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
+      <div className="flex items-center gap-1 mb-3">
+        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+        <span className="text-[12.5px] text-[#1a1a1a]">{label}</span>
       </div>
-      <p className="text-[28px] font-bold text-[#1a1a1a] leading-none relative z-10">{value}</p>
-      {sub && <p className="text-[11px] text-[#646462] mt-1 relative z-10">{sub}</p>}
-      <div className="absolute bottom-0 left-0 right-0 h-10 opacity-30 pointer-events-none">
-        <svg className="w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 22">
-          <path d={rsparkArea(vals)} fill={color} opacity="0.3"/>
-          <path d={rsparkPath(vals)} fill="none" stroke={color} strokeWidth="1.5"/>
-        </svg>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[28px] font-bold text-[#1a1a1a] leading-none">{value}</span>
+        {change && <span className={`text-[12px] font-medium ${deltaColor}`}>{deltaArrow} {change}</span>}
       </div>
+      {sub && <p className="text-[11.5px] text-[#646462] mt-1">{sub}</p>}
     </div>
   );
 }
@@ -14085,36 +14081,23 @@ function KnowledgeView() {
     }
   }
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  // Pre-filled draft handed from Vacíos / Resumen / Fuentes → Articulos
-  // (kept for the Articulos table, which still uses externalDraft to seed
-  // its own inline editor when the user explicitly navigated there).
+  // Pre-filled draft handed from Vacíos / Resumen / Fuentes → Articulos.
+  // Optional visibility lets the Resumen "Artículo público / interno" cards
+  // open the editor with the right field already set.
   const [pendingDraft, setPendingDraft] = useState<{ title: string; content: string; type?: string; visibility?: string } | null>(null);
-  // Top-level editor overlay. Any child sub-view that wants to create or
-  // edit an article opens THIS modal in-place rather than navigating away.
-  const [editorPrefill, setEditorPrefill] = useState<any | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
-  // Domains shared by sidebar + every editor invocation. Refresh whenever a
-  // folder changes or an article is saved so dropdowns stay in sync.
-  const { data: domainsData } = useApi(() => knowledgeApi.listDomains(), [refreshKey], []);
-  const domainsAll = Array.isArray(domainsData) ? domainsData : [];
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
     window.setTimeout(() => setToast(null), 2500);
   }
-  // Open the editor IN PLACE on top of whatever sub-view is showing.
+  // Open the editor in create mode from outside the Articulos view.
   function startCreate(opts: { type?: string; visibility?: 'public' | 'internal' } = {}) {
-    const visibility = opts.visibility || 'public';
-    setEditorPrefill({
+    setPendingDraft({
+      title: '',
+      content: '',
       type: opts.type || 'ARTICLE',
-      visibility,
-      // Default Fin flags by visibility — public articles power Fin Service,
-      // internal ones power Copilot only.
-      fin_service: visibility === 'public',
-      fin_sales: false,
-      copilot_enabled: true,
-      domain_id: activeFolderId || null,
+      visibility: opts.visibility || 'public',
     });
-    setEditorOpen(true);
+    setSub('articulos');
   }
   function draftFromGap(g: any) {
     const title = String(g?.topic || 'Nuevo artículo').trim();
@@ -14136,17 +14119,8 @@ function KnowledgeView() {
       `- Dominio sugerido: ${g?.suggestedDomain || 'Sin clasificar'}`,
       `- Aprobaciones pendientes vinculadas: ${g?.pendingApprovals ?? 0}`,
     ];
-    // Open the editor in place with the gap content pre-filled, no navigation.
-    setEditorPrefill({
-      title,
-      content: lines.join('\n'),
-      type: 'ARTICLE',
-      visibility: 'public',
-      fin_service: true,
-      copilot_enabled: true,
-      domain_id: activeFolderId || null,
-    });
-    setEditorOpen(true);
+    setPendingDraft({ title, content: lines.join('\n'), type: 'ARTICLE' });
+    setSub('articulos');
     showToast('Borrador preparado, revísalo antes de publicar');
   }
   function openCrmView(v: string) {
@@ -14202,16 +14176,6 @@ function KnowledgeView() {
               setFolderModal(null);
             }
           }}
-          onAction={showToast}
-        />
-      )}
-      {/* Top-level article editor — opens IN PLACE on top of any sub-view. */}
-      {editorOpen && (
-        <KnowledgeArticleEditor
-          initial={editorPrefill}
-          domains={domainsAll}
-          onClose={() => { setEditorOpen(false); setEditorPrefill(null); }}
-          onSaved={() => { setRefreshKey(k => k + 1); }}
           onAction={showToast}
         />
       )}
