@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, auditApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, operationsApi, reportsApi, workflowsApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, workflowsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -5080,7 +5080,7 @@ function UsersTable({
         <div className="flex items-center justify-between bg-[#f8f8f7] rounded-[6px] px-[15px] py-[10px] border border-[#e9eae6]">
           <span className="text-[13px] text-[#1a1a1a]">
             Exige la verificación de identidad para proteger los datos de tus usuarios.{" "}
-            <button onClick={() => { if (typeof window !== 'undefined') { const u = new URL(window.location.href); u.searchParams.set('view', 'workspaceSecurity'); window.location.href = u.toString(); } }} className="underline cursor-pointer hover:text-black">Configurar verificación de identidad.</button>
+            <span className="underline cursor-pointer">Configurar verificación de identidad.</span>
           </span>
           <button onClick={() => setShowVerifyBanner(false)} className="text-[13px] text-[#646462] ml-4 hover:text-[#1a1a1a] flex-shrink-0">✕</button>
         </div>
@@ -5168,15 +5168,6 @@ function ContactsCommon({
   const [bulkTagIds, setBulkTagIds] = useState<string[] | null>(null);
   const [bulkMsgIds, setBulkMsgIds] = useState<string[] | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-  // Trial banner — dismissable, persisted across reloads.
-  const [bannerHidden, setBannerHidden] = useState<boolean>(() => {
-    try { return typeof window !== 'undefined' && window.localStorage.getItem('clain.contacts.trialBanner') === '1'; }
-    catch { return false; }
-  });
-  function dismissBanner() {
-    setBannerHidden(true);
-    try { window.localStorage.setItem('clain.contacts.trialBanner', '1'); } catch { /* ignore */ }
-  }
 
   useEffect(() => {
     if (!toast) return;
@@ -5212,15 +5203,13 @@ function ContactsCommon({
         />
       ) : (
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          {!bannerHidden && (
           <div className="flex items-center justify-between px-4 py-2 bg-[#e7e2fd] border border-[#b09efa] rounded-[10px] mx-4 mt-3 flex-shrink-0">
             <span className="text-[13px] text-[#1a1a1a]">
               Quedan <strong>14 días</strong> en tu prueba de Advanced.{" "}
-              <button onClick={() => onNavigate('billing' as View)} className="underline cursor-pointer hover:text-black">Explorar planes</button>
+              <span className="underline cursor-pointer">Explorar planes</span>
             </span>
-            <button onClick={dismissBanner} className="text-[13px] text-[#646462] hover:text-[#1a1a1a]" title="Ocultar">✕</button>
+            <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a]">✕</button>
           </div>
-          )}
           <ContactsPageHeader onBack={onBack} title={title} onCreate={() => setCreateOpen(true)} />
           <div className="flex-1 overflow-y-auto min-h-0">
             {!loading && all.length === 0 && <ImportHero />}
@@ -5329,7 +5318,7 @@ function _AllLeadsTableSection_REMOVED() {
           <img src={ICON_INFO} alt="" className="w-4 h-4 flex-shrink-0 mr-[10px]" />
           <span className="text-[14px] font-medium text-[#1a1a1a] flex-1">
             Exige la verificación de identidad para proteger las conversaciones con los clientes y evitar la suplantación de identidad.{" "}
-            <button onClick={() => { if (typeof window !== 'undefined') { const u = new URL(window.location.href); u.searchParams.set('view', 'workspaceSecurity'); window.location.href = u.toString(); } }} className="underline cursor-pointer hover:text-black">Configurar verificación de identidad.</button>
+            <span className="underline cursor-pointer">Configurar verificación de identidad.</span>
           </span>
         </div>
       </div>
@@ -9943,7 +9932,7 @@ function ReportsSidebar({ sub, onSelect }: { sub: ReportsSubView; onSelect: (s: 
   // All groups collapsed by default — user opens what they need via chevron click.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'Temas de informes': false,
-    'IA y automatización': false,
+    'IA y automatización': true,
     'Soporte humano': false,
     'Proactivo': false,
   });
@@ -10469,140 +10458,118 @@ function ReportsCallsContent() {
   );
 }
 
-function ReportsConversationsContent() {
+function ReportsConversationsContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.conversations(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 }));
+  const byChannel: { channel: string; count: number }[] = data?.byChannel ?? [];
+  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
+  const CHANNEL_COLORS = ['#3b59f6', '#fc8a37', '#1e40af', '#7c3aed', '#16a34a', '#dc2626'];
+  const totalByChannel = byChannel.reduce((s, c) => s + c.count, 1);
+  let cumPct = 0;
+  const channelGradientStops = byChannel.map((c, i) => {
+    const pct = (c.count / totalByChannel) * 100;
+    const start = cumPct;
+    cumPct += pct;
+    return `${CHANNEL_COLORS[i % CHANNEL_COLORS.length]} ${start}% ${cumPct}%`;
+  });
+  const donutGradient = channelGradientStops.length > 0
+    ? `conic-gradient(${channelGradientStops.join(', ')})`
+    : 'conic-gradient(#e9eae6 0 100%)';
+
   return (
     <>
       <ReportShellHeader title="Conversations" description="Track your new inbound conversations, busiest periods and biggest customer issues, etc." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-4 gap-4">
-        <ReportsKpiCard label="New conversations" value="4" delta="4" />
-        <ReportsKpiCard label="Conversations replied to" value="0" />
-        <ReportsKpiCard label="Replies sent" value="0" />
-        <ReportsKpiCard label="Closed conversations" value="0" />
-        <ReportsKpiCard label="Reopened conversations" value="0" />
-        <ReportsKpiCard label="Open conversations" value="4" delta="4" />
-        <ReportsKpiCard label="Snoozed conversations" value="0" />
+        <ReportsKpiCard label="New conversations" value={loading ? '…' : String(kpis.new_conversations ?? '—')} delta={kpis.new_change && kpis.new_trend === 'up' ? kpis.new_change : undefined} />
+        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.replied_conversations ?? '—')} />
+        <ReportsKpiCard label="Closed conversations" value={loading ? '…' : String(kpis.closed_conversations ?? '—')} delta={kpis.closed_change && kpis.closed_trend === 'up' ? kpis.closed_change : undefined} />
+        <ReportsKpiCard label="Open conversations" value={loading ? '…' : String(kpis.open_conversations ?? '—')} />
+        {/* Time series bar chart */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
           <div className="flex items-center gap-1 mb-3">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">New conversations - by time</span>
           </div>
           <div className="h-[180px] flex items-end gap-1 px-3">
-            {Array.from({ length: 28 }, (_, i) => i === 26 ? 4 : 0).map((h, i) => (
-              <div key={i} style={{ height: h ? `${(h / 4) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+            {timeSeries.map((t, i) => (
+              <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
             ))}
           </div>
           <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
-            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>30 días anteriores</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#cccaff]"/>Apr 8 - May 5</span>
+            <span>Día 1</span><span>Día 7</span><span>Día 14</span><span>Día 21</span><span>Día 28</span>
           </div>
         </div>
+        {/* By channel donut */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-2">
           <div className="flex items-center gap-1 mb-3">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">New conversations - by channel</span>
           </div>
-          <div className="h-[140px] flex items-center justify-center">
-            <div className="relative w-[120px] h-[120px] rounded-full" style={{ background: 'conic-gradient(#3b59f6 0 75%, #fc8a37 75% 100%)' }}>
-              <div className="absolute inset-[18px] rounded-full bg-white" />
-            </div>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Unknown</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Chat</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#1e40af]"/>Email</span>
-          </div>
+          {loading ? (
+            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Cargando...</div>
+          ) : byChannel.length === 0 ? (
+            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
+          ) : (
+            <>
+              <div className="h-[120px] flex items-center justify-center">
+                <div className="relative w-[120px] h-[120px] rounded-full" style={{ background: donutGradient }}>
+                  <div className="absolute inset-[18px] rounded-full bg-white" />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-2 text-[11px] text-[#646462]">
+                {byChannel.slice(0, 4).map((c, i) => (
+                  <span key={c.channel} className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full" style={{ background: CHANNEL_COLORS[i % CHANNEL_COLORS.length] }} />
+                    {c.channel} ({c.count})
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
-        <ReportEmptyChart label="Replies sent - by time" span={2} />
-        <ReportEmptyChart label="Closed vs. Reopened conversations" span={2} />
+        {/* By type bar */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-2">
           <div className="flex items-center gap-1 mb-3">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Open and Snoozed conversations</span>
+            <span className="text-[12.5px] text-[#1a1a1a]">Conversaciones por tipo (top 5)</span>
           </div>
-          <div className="h-[140px] flex items-end gap-2 px-3">
-            {Array.from({ length: 28 }, (_, i) => i === 26 ? 3 : 0).map((h, i) => (
-              <div key={i} style={{ height: h ? `${(h / 3) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-            ))}
-          </div>
-          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
-            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Conversaciones abiertas</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Conversaciones pospuestas</span>
-          </div>
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Comparison of New Conversations and Replies</span>
-          </div>
-          <div className="h-[140px] flex items-end gap-2 px-3">
-            {Array.from({ length: 28 }, (_, i) => i === 26 ? 4 : 0).map((h, i) => (
-              <div key={i} style={{ height: h ? `${(h / 4) * 100}%` : '4px' }} className={`flex-1 ${h ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
-            ))}
-          </div>
-          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
-            <span>Apr 8</span><span>Apr 13</span><span>Apr 20</span><span>Apr 27</span><span>May 4</span>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-[#646462]">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#3b59f6]"/>Nuevas conversaciones</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#fc8a37]"/>Conversaciones respondidas a</span>
-          </div>
-        </div>
-        <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-4">
-          <div className="flex items-center gap-1 mb-3">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
-            <span className="text-[12.5px] text-[#1a1a1a]">Hourly Distribution of New Conversations</span>
-          </div>
-          <div className="flex">
-            <div className="flex flex-col justify-between pr-2 pt-1 pb-1 text-[10px] text-[#646462] uppercase tracking-wide">
-              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => (
-                <span key={d} className="leading-none h-[20px] flex items-center">{d}</span>
-              ))}
-            </div>
-            <div className="flex-1">
-              <div className="grid gap-[2px] p-1 bg-[#cfe5ff] rounded-sm" style={{ gridTemplateColumns: 'repeat(24, minmax(0,1fr))' }}>
-                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].flatMap(day => Array.from({ length: 24 }, (_, h) => {
-                  const highlighted = day === 'Tue' && h === 7;
-                  return (
-                    <div
-                      key={`${day}-${h}`}
-                      className="aspect-square rounded-[2px] flex items-center justify-center text-[8px]"
-                      style={{ background: highlighted ? '#2563eb' : '#bfdbff', color: highlighted ? '#fff' : '#1d4ed8' }}
-                    >
-                      {highlighted ? '4' : '0'}
+          {loading ? (
+            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Cargando...</div>
+          ) : (data?.byType ?? []).length === 0 ? (
+            <div className="h-[140px] flex items-center justify-center text-[12px] text-[#646462]">Sin datos</div>
+          ) : (
+            <div className="space-y-2 pt-2">
+              {(data?.byType ?? []).slice(0, 5).map((t: { type: string; count: number }) => {
+                const maxCount = Math.max(...(data?.byType ?? []).map((x: any) => x.count), 1);
+                return (
+                  <div key={t.type} className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#646462] w-[100px] truncate">{t.type.replace(/_/g, ' ')}</span>
+                    <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                      <div className="bg-[#3b59f6] h-2 rounded-full" style={{ width: `${(t.count / maxCount) * 100}%` }} />
                     </div>
-                  );
-                }))}
-              </div>
-              <div className="flex justify-between text-[10px] text-[#646462] mt-1 px-1">
-                {Array.from({ length: 24 }, (_, h) => <span key={h}>{h}</span>)}
-              </div>
+                    <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-4">
-            <span className="text-[10px] text-[#646462]">0</span>
-            <div className="h-[8px] w-[200px] rounded-full" style={{ background: 'linear-gradient(to right, #cfe5ff, #2563eb)' }} />
-            <span className="text-[10px] text-[#646462]">4</span>
-          </div>
+          )}
         </div>
       </div>
     </>
   );
 }
 
-function ReportsCsatContent() {
+function ReportsCsatContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.csat(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
   return (
     <>
       <ReportShellHeader title="Surveyed CSAT" description="See how your customer satisfaction scores and support channels, teammates, e..." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Overall CSAT score" value="—" sub="0 de 0" />
+        <ReportsKpiCard label="Overall CSAT score" value={loading ? '…' : kpis.overall_csat != null ? `${kpis.overall_csat}%` : '—'} sub={`${kpis.positive_count ?? 0} de ${(kpis.positive_count ?? 0) + (kpis.neutral_count ?? 0) + (kpis.negative_count ?? 0)}`} />
         <ReportsKpiCard label="Teammate CSAT score" value="—" sub="0 de 0" />
         <ReportsKpiCard label="Fin Agent CSAT score" value="—" sub="0 de 0" />
         <ReportEmptyChart label="CSAT score over time" span={3} />
@@ -10611,9 +10578,9 @@ function ReportsCsatContent() {
           <ReportEmptyChart label="Conversation ratings - by conversation rating" />
           <ReportEmptyChart label="Conversation ratings - by conversation rating" />
         </div>
-        <ReportsKpiCard label="Positive remarks" value="0" />
-        <ReportsKpiCard label="Neutral remarks" value="0" />
-        <ReportsKpiCard label="Negative remarks" value="0" />
+        <ReportsKpiCard label="Positive remarks" value={loading ? '…' : String(kpis.positive_count ?? 0)} />
+        <ReportsKpiCard label="Neutral remarks" value={loading ? '…' : String(kpis.neutral_count ?? 0)} />
+        <ReportsKpiCard label="Negative remarks" value={loading ? '…' : String(kpis.negative_count ?? 0)} />
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-3">
           <div className="flex items-center gap-1 mb-3">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
@@ -10626,8 +10593,8 @@ function ReportsCsatContent() {
           </div>
         </div>
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">CSAT survey</h3>
-        <ReportsKpiCard label="CSAT request rate" value="0%" sub="0 de 0" />
-        <ReportsKpiCard label="CSAT response rate" value="0%" sub="0 de 0" />
+        <ReportsKpiCard label="CSAT request rate" value={loading ? '…' : kpis.request_rate ?? '0%'} sub="0 de 0" />
+        <ReportsKpiCard label="CSAT response rate" value={loading ? '…' : kpis.response_rate ?? '0%'} sub="0 de 0" />
         <div className="col-span-1" />
         <ReportEmptyChart label="CSAT survey request & response rates - by time" span={3} />
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Dissatisfaction drivers</h3>
@@ -10639,23 +10606,25 @@ function ReportsCsatContent() {
   );
 }
 
-function ReportsEffectivenessContent() {
+function ReportsEffectivenessContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.effectiveness(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
   return (
     <>
       <ReportShellHeader title="Effectiveness" description="Measure how effectively your teams handle conversations with the Effectiveness report." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Conversations replied to" value="0" />
-        <ReportsKpiCard label="Closed conversations on first contact rate" value="0%" sub="0 de 4" />
-        <ReportsKpiCard label="Median replies to close a conversation" value="—" />
-        <ReportsKpiCard label="Conversations reassigned" value="0" />
+        <ReportsKpiCard label="Conversations replied to" value={loading ? '…' : String(kpis.conversations_replied_to ?? '—')} />
+        <ReportsKpiCard label="Closed conversations on first contact rate" value={loading ? '…' : kpis.first_contact_resolution ?? '0%'} sub={kpis.first_contact_total != null ? `${kpis.first_contact_resolved ?? 0} de ${kpis.first_contact_total}` : undefined} />
+        <ReportsKpiCard label="Median replies to close a conversation" value={kpis.median_replies_to_close ?? '—'} />
+        <ReportsKpiCard label="Conversations reassigned" value={loading ? '…' : String(kpis.conversations_reassigned ?? 0)} />
         <ReportsKpiCard label="Median time to first assignment" value="—" />
         <ReportsKpiCard label="Median time from first assignment to close" value="—" />
         <div className="col-span-3 grid grid-cols-2 gap-4">
           <ReportEmptyChart label="Median replies to close a conversation - by time" />
           <ReportEmptyChart label="Median time to first assignment" />
         </div>
-        <ReportLineChartCard label="Closed conversations on first contact rate - by time" span={3} points={[{ i: 26, v: 0 }]} axis={["Apr 8","Apr 13","Apr 20","Apr 27","May 4"]} yMax={5} yLabel="5%" />
+        <ReportLineChartCard label="Closed conversations on first contact rate - by time" span={3} points={[{ i: 0, v: 0 }]} axis={["Día 1","Día 7","Día 14","Día 21","Día 28"]} yMax={5} yLabel="5%" />
         <div className="col-span-3 grid grid-cols-2 gap-4">
           <ReportEmptyChart label="Conversations reassigned - by time" />
           <ReportEmptyChart label="Median time from first assignment to close - by time" />
@@ -10665,15 +10634,17 @@ function ReportsEffectivenessContent() {
   );
 }
 
-function ReportsResponsivenessContent() {
+function ReportsResponsivenessContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.responsiveness(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
   return (
     <>
       <ReportShellHeader title="Responsiveness" description="See how quickly your team respond to, and close conversations with the Responsiveness report." />
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Median response time: including time assigned to bot" value="—" />
-        <ReportsKpiCard label="Median first response time: including time assigned to bot" value="—" />
-        <ReportsKpiCard label="Median time to close: including time assigned to bot" value="—" />
+        <ReportsKpiCard label="Median response time: including time assigned to bot" value={loading ? '…' : kpis.median_response_time ?? '—'} />
+        <ReportsKpiCard label="Median first response time: including time assigned to bot" value={loading ? '…' : kpis.median_first_response ?? '—'} />
+        <ReportsKpiCard label="Median time to close: including time assigned to bot" value={loading ? '…' : kpis.median_time_to_close ?? '—'} />
         <ReportEmptyChart label="Median response time: including time assigned to bot - by time" span={3} />
         <div className="col-span-3 grid grid-cols-2 gap-4">
           <ReportEmptyChart label="Median first response time: including time assigned to bot - by time" />
@@ -10715,35 +10686,108 @@ function ReportsResponsivenessContent() {
   );
 }
 
-function ReportsSlasContent() {
+function ReportsSlasContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.sla(period, channel), [period, channel], null);
+  const distribution: { status: string; count: number }[] = data?.distribution ?? [];
+  const byPriority: { priority: string; slaStatus: string; count: number }[] = data?.byPriority ?? [];
+  const breachedByType: { type: string; count: number }[] = data?.breachedByType ?? [];
+  const totalWithSla = distribution.reduce((s, d) => s + d.count, 0);
+  const breachedCount = distribution.find(d => d.status === 'breached')?.count ?? 0;
+  const compliantCount = distribution.find(d => d.status === 'compliant')?.count ?? 0;
+  const missRate = totalWithSla > 0 ? `${Math.round((breachedCount / totalWithSla) * 100)}%` : '—';
+
+  // Group byPriority into pivot table
+  const priorities = [...new Set(byPriority.map(r => r.priority))].filter(Boolean);
+  const slaStatuses = [...new Set(byPriority.map(r => r.slaStatus))].filter(Boolean);
+
   return (
     <>
       <ReportShellHeader title="SLAs" description="Review your team's performance against your Service Level Agreements with the SLAs report." />
       <ReportShellFilters extraFilter={{ icon: 'sla', label: 'SLA (Acuerdo de nivel de servicio) es Cualquiera' }} />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <ReportsKpiCard label="Conversation and ticket SLA miss rate" value="—" sub="0 de 0" />
-        <ReportsKpiCard label="Conversations and tickets with SLA" value="0" />
-        <ReportsKpiCard label="Conversations and tickets with missed SLA" value="0" />
+        <ReportsKpiCard label="Conversation and ticket SLA miss rate" value={loading ? '…' : missRate} sub={`${breachedCount} de ${totalWithSla}`} />
+        <ReportsKpiCard label="Conversations and tickets with SLA" value={loading ? '…' : String(totalWithSla)} />
+        <ReportsKpiCard label="Conversations and tickets with missed SLA" value={loading ? '…' : String(breachedCount)} />
+        {/* Distribution summary */}
         <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
           <div className="px-5 py-3 flex items-center gap-1">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">SLA performance</span>
           </div>
           <div className="grid grid-cols-4 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
-            <div>Tipo de métrica de SLA</div>
-            <div>Tasa de cumplimiento del Acuerdo de Nivel de Servicio</div>
-            <div>SLA incumplidos</div>
-            <div>Promedio Tiempo de respuesta después de un incumplimiento del SLA</div>
+            <div>Estado SLA</div>
+            <div>Casos</div>
+            <div>% del total</div>
+            <div>Tendencia</div>
           </div>
-          <div className="grid grid-cols-4 px-5 py-3 text-[12.5px] text-[#1a1a1a]">
-            <div>Resumen</div>
-            <div className="text-[#646462]">—</div>
-            <div>0</div>
-            <div className="text-[#646462]">—</div>
-          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : distribution.length === 0 ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Sin datos SLA en el período</div>
+          ) : distribution.map(d => (
+            <div key={d.status} className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="capitalize">{d.status}</div>
+              <div>{d.count}</div>
+              <div className="text-[#646462]">{totalWithSla > 0 ? `${Math.round((d.count / totalWithSla) * 100)}%` : '—'}</div>
+              <div className="text-[#646462]">—</div>
+            </div>
+          ))}
+          {/* Compliant summary row */}
+          {distribution.length > 0 && (
+            <div className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] bg-[#f8f8f7] text-[12.5px] font-medium text-[#1a1a1a]">
+              <div>Total</div>
+              <div>{totalWithSla}</div>
+              <div>100%</div>
+              <div className={compliantCount > breachedCount ? 'text-[#16a34a]' : 'text-[#dc2626]'}>{missRate} miss rate</div>
+            </div>
+          )}
         </div>
+        {/* By priority table */}
+        {byPriority.length > 0 && (
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+            <div className="px-5 py-3 flex items-center gap-1">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">SLA por prioridad</span>
+            </div>
+            <div className={`grid px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]`} style={{ gridTemplateColumns: `repeat(${1 + slaStatuses.length}, minmax(0,1fr))` }}>
+              <div>Prioridad</div>
+              {slaStatuses.map(s => <div key={s} className="capitalize">{s}</div>)}
+            </div>
+            {priorities.map(priority => (
+              <div key={priority} className={`grid px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]`} style={{ gridTemplateColumns: `repeat(${1 + slaStatuses.length}, minmax(0,1fr))` }}>
+                <div className="capitalize">{priority ?? 'Sin prioridad'}</div>
+                {slaStatuses.map(s => {
+                  const found = byPriority.find(r => r.priority === priority && r.slaStatus === s);
+                  return <div key={s} className="text-[#646462]">{found?.count ?? 0}</div>;
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Breached by type */}
+        {breachedByType.length > 0 && (
+          <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5 col-span-3">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">SLA incumplidos por tipo de caso</span>
+            </div>
+            <div className="space-y-2">
+              {breachedByType.slice(0, 8).map(t => {
+                const maxCount = Math.max(...breachedByType.map(x => x.count), 1);
+                return (
+                  <div key={t.type} className="flex items-center gap-2">
+                    <span className="text-[11px] text-[#646462] w-[120px] truncate">{t.type.replace(/_/g, ' ')}</span>
+                    <div className="flex-1 bg-[#fee2e2] rounded-full h-2">
+                      <div className="bg-[#dc2626] h-2 rounded-full" style={{ width: `${(t.count / maxCount) * 100}%` }} />
+                    </div>
+                    <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <ReportEmptyChart label="Targets hit over time" span={3} />
-        <ReportEmptyChart label="Hourly Distribution of Missed Targets" span={3} />
       </div>
     </>
   );
@@ -10768,7 +10812,10 @@ function ReportsTeamInboxContent() {
   );
 }
 
-function ReportsTeammateContent() {
+function ReportsTeammateContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.teammate(period, channel), [period, channel], null);
+  const members: any[] = data?.members ?? [];
+  const isEmpty = data?.isEmpty !== false || members.length === 0;
   return (
     <>
       <ReportShellHeader title="Teammate performance" description="Check in on teammate performance with accurate metrics and insights." />
@@ -10779,7 +10826,7 @@ function ReportsTeammateContent() {
         <ReportsKpiCard label="Median teammate assignment to first response" value="—" />
         <ReportsKpiCard label="Median teammate assignment to subsequent response" value="—" />
         <ReportsKpiCard label="Conversations closed per active hour" value="—" />
-        <ReportsKpiCard label="Conversations assigned per active hour" value="∞" />
+        <ReportsKpiCard label="Conversations assigned per active hour" value="—" />
         <ReportsKpiCard label="Conversations replied to per active hour" value="—" />
         <div className="col-span-1" />
         <ReportEmptyChart label="Teammate Productivity" span={3} />
@@ -10790,26 +10837,37 @@ function ReportsTeammateContent() {
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
             <span className="text-[12.5px] text-[#1a1a1a]">Comparison of Teammate performance</span>
           </div>
-          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+          <div className="grid grid-cols-4 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
             <div>Compañero de equipo</div>
-            <div>Conversaciones asignadas</div>
-            <div>Conversaciones respondidas a</div>
-            <div>Respuestas enviadas</div>
-            <div>Conversaciones cerradas por compañeros de equipo</div>
+            <div>Rol</div>
+            <div>Casos asignados</div>
+            <div>Casos cerrados</div>
           </div>
-          <div className="grid grid-cols-5 px-5 py-3 text-[12.5px] text-[#1a1a1a] border-b border-[#f1f1ee]">
-            <div>Resumen</div><div>4</div><div>0</div><div>0</div><div>0</div>
-          </div>
-          <div className="grid grid-cols-5 px-5 py-3 text-[12.5px] text-[#1a1a1a]">
-            <div>Hector Vidal Sanchez</div><div>4</div><div>0</div><div>0</div><div>0</div>
-          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : isEmpty ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay datos de compañeros de equipo disponibles. La tabla workspace_members puede no estar configurada.</div>
+          ) : members.map((m, i) => (
+            <div key={i} className="grid grid-cols-4 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div>{m.name ?? m.userId ?? 'Miembro'}</div>
+              <div className="text-[#646462] capitalize">{m.role ?? '—'}</div>
+              <div>{m.casesAssigned ?? 0}</div>
+              <div>{m.casesClosed ?? 0}</div>
+            </div>
+          ))}
         </div>
       </div>
     </>
   );
 }
 
-function ReportsTicketsContent() {
+function ReportsTicketsContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.tickets(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const byType: { type: string; count: number }[] = data?.byType ?? [];
+  const timeSeries: { day: number; count: number }[] = data?.timeSeries ?? Array.from({ length: 28 }, (_, i) => ({ day: i, count: 0 }));
+  const maxBar = Math.max(...timeSeries.map(t => t.count), 1);
+  const maxType = Math.max(...byType.map(t => t.count), 1);
   return (
     <>
       <ReportShellHeader title="Tickets" description="Explore your tickets report and create your own custom reports using ticket data." />
@@ -10819,14 +10877,119 @@ function ReportsTicketsContent() {
         <ReportsKpiCard label="Median ticket time in submitted" value="—" />
         <ReportsKpiCard label="Median ticket time in progress" value="—" />
         <ReportsKpiCard label="Median ticket time in waiting on customer" value="—" />
-        <div className="col-span-4"><ReportEmptyChart label="Median ticket time to resolve - by time" span={3} /></div>
-        <div className="col-span-2"><ReportEmptyChart label="Median ticket time to resolve - by team assigned" span={3} /></div>
-        <div className="col-span-2"><ReportEmptyChart label="Median ticket time to resolve - by teammate assigned" span={3} /></div>
-        <div className="col-span-2"><ReportsKpiCard label="New tickets" value="0" /></div>
-        <div className="col-span-2"><ReportsKpiCard label="Resolved tickets" value="0" /></div>
-        <div className="col-span-4"><ReportEmptyChart label="Comparison of New and Resolved Tickets" span={3} /></div>
+        <div className="col-span-2"><ReportsKpiCard label="New tickets" value={loading ? '…' : String(kpis.new_tickets ?? 0)} /></div>
+        <div className="col-span-2"><ReportsKpiCard label="Resolved tickets" value={loading ? '…' : String(kpis.resolved_tickets ?? 0)} /></div>
+        {/* time series */}
+        <div className="col-span-4 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+          <div className="flex items-center gap-1 mb-3">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Nuevos tickets por día</span>
+          </div>
+          <div className="h-[140px] flex items-end gap-1 px-3">
+            {timeSeries.map((t, i) => (
+              <div key={i} style={{ height: t.count ? `${(t.count / maxBar) * 100}%` : '4px' }} className={`flex-1 ${t.count ? 'bg-[#3b59f6]' : 'bg-[#f3f3f1]'} rounded-t`} />
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] text-[#646462] mt-2 px-3">
+            <span>Día 1</span><span>Día 7</span><span>Día 14</span><span>Día 21</span><span>Día 28</span>
+          </div>
+        </div>
+        {/* by type */}
+        {byType.length > 0 ? (
+          <div className="col-span-4 border border-[#e9eae6] rounded-[10px] bg-white p-5">
+            <div className="flex items-center gap-1 mb-3">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+              <span className="text-[12.5px] text-[#1a1a1a]">Tickets por tipo</span>
+            </div>
+            <div className="space-y-2">
+              {byType.map(t => (
+                <div key={t.type} className="flex items-center gap-2">
+                  <span className="text-[11px] text-[#646462] w-[120px] truncate">{t.type.replace(/_/g, ' ')}</span>
+                  <div className="flex-1 bg-[#f3f3f1] rounded-full h-2">
+                    <div className="bg-[#3b59f6] h-2 rounded-full" style={{ width: `${(t.count / maxType) * 100}%` }} />
+                  </div>
+                  <span className="text-[11px] text-[#1a1a1a] w-6 text-right">{t.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="col-span-4"><ReportEmptyChart label="Ticket volume - by type" span={3} /></div>
+        )}
         <div className="col-span-2"><ReportEmptyChart label="Ticket volume - by team assigned" span={3} /></div>
         <div className="col-span-2"><ReportEmptyChart label="Ticket volume - by teammate assigned" span={3} /></div>
+      </div>
+    </>
+  );
+}
+
+function ReportsFinAgentContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.finagent(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
+  const agents: any[] = data?.agentBreakdown ?? [];
+  return (
+    <>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[18px] font-bold text-[#1a1a1a] truncate">Fin AI Agent</h1>
+          <p className="text-[12.5px] text-[#646462] mt-0.5 truncate">Métricas de resolución, calidad y volumen del agente Fin.</p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-[12px] text-[#646462]">Propietario: <span className="text-[#1a1a1a]">Clain</span></span>
+          <button className="flex items-center gap-1 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a] hover:bg-[#f5f5f4]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M8 1v10M4 7l4 4 4-4M2 13h12"/></svg>
+            Compartir
+          </button>
+        </div>
+      </div>
+      <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-shrink-0 flex-wrap">
+        <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
+          Período: {period}
+          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
+        </button>
+        <div className="ml-auto flex items-center gap-1 text-[12px] text-[#646462]">
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v3l2 1.5"/></svg>
+          Madrid time (GMT+2)
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
+        {/* KPI Cards */}
+        <ReportsKpiCard label="Tasa de auto-resolución IA" value={loading ? '…' : kpis.auto_resolution_rate ?? '—'} delta={kpis.auto_resolution_change && kpis.auto_resolution_change !== '0%' ? kpis.auto_resolution_change : undefined} />
+        <ReportsKpiCard label="Casos resueltos por IA" value={loading ? '…' : String(kpis.cases_resolved_by_ai ?? 0)} />
+        <ReportsKpiCard label="Total casos IA" value={loading ? '…' : String(kpis.total_ai_cases ?? '—')} />
+        <ReportsKpiCard label="Avg. tasa de éxito agentes" value={loading ? '…' : kpis.avg_agent_success_rate ?? '—'} />
+        <ReportsKpiCard label="Tokens totales usados" value={loading ? '…' : Number(kpis.total_tokens ?? 0).toLocaleString()} />
+        <ReportsKpiCard label="Créditos consumidos" value={loading ? '…' : String(kpis.credits_used ?? 0)} />
+        {/* Agent breakdown table */}
+        <div className="border border-[#e9eae6] rounded-[10px] bg-white col-span-3 overflow-hidden">
+          <div className="px-5 py-3 flex items-center gap-1">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v4M8 11h.01"/></svg>
+            <span className="text-[12.5px] text-[#1a1a1a]">Agentes de IA — rendimiento</span>
+          </div>
+          <div className="grid grid-cols-5 px-5 py-2 bg-[#fafaf9] border-t border-b border-[#e9eae6] text-[12px] text-[#646462]">
+            <div>Agente</div>
+            <div>Ejecuciones</div>
+            <div>Tasa de éxito</div>
+            <div>Tokens</div>
+            <div>Créditos</div>
+          </div>
+          {loading ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">Cargando...</div>
+          ) : agents.length === 0 ? (
+            <div className="px-5 py-4 text-[12.5px] text-[#646462]">No hay agentes configurados para este período.</div>
+          ) : agents.map((a, i) => (
+            <div key={i} className="grid grid-cols-5 px-5 py-2.5 border-b border-[#f1f1ee] text-[12.5px] text-[#1a1a1a]">
+              <div className="font-medium">{a.name ?? a.slug ?? 'Agente'}</div>
+              <div>{a.totalRuns ?? 0}</div>
+              <div className={Number.parseFloat(String(a.successRate).replace('%', '') || '0') >= 80 ? 'text-[#16a34a]' : 'text-[#dc2626]'}>
+                {a.successRate ?? '—'}
+              </div>
+              <div className="text-[#646462]">{Number(a.tokensUsed ?? 0).toLocaleString()}</div>
+              <div className="text-[#646462]">{a.costCredits ?? 0}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );
@@ -10981,7 +11144,9 @@ function ReportsHorariosContent() {
   );
 }
 
-function ReportsArticlesContent() {
+function ReportsArticlesContent({ period, channel }: { period: string; channel: string }) {
+  const { data, loading } = useApi(() => reportsApi.articles(period, channel), [period, channel], null);
+  const kpis = data?.kpis ?? {};
   return (
     <>
       <div className="flex items-center justify-between px-6 py-4 border-b border-[#e9eae6] flex-shrink-0">
@@ -11001,7 +11166,7 @@ function ReportsArticlesContent() {
       <div className="px-6 py-3 border-b border-[#e9eae6] flex items-center gap-2 flex-wrap flex-shrink-0">
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5 2v3M11 2v3"/></svg>
-          Apr 29, 2026 - May 5, 2026
+          Período: {period}
         </button>
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="6" r="2.5"/><path d="M3 13c0-2 2.5-3 5-3s5 1 5 3"/></svg>
@@ -11011,9 +11176,10 @@ function ReportsArticlesContent() {
         <button className="flex items-center gap-1.5 border border-[#e9eae6] rounded-full px-3 py-[6px] text-[12.5px] font-medium text-[#1a1a1a]">Todos los centros de ayuda</button>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <ReportsKpiCard label="Personas que vieron un artículo" value="0" delta={undefined} />
-          <ReportsKpiCard label="Total de visualizaciones del artículo" value="0" delta={undefined} />
+        <div className="grid grid-cols-3 gap-4">
+          <ReportsKpiCard label="Total artículos" value={loading ? '…' : String(kpis.total_articles ?? 0)} />
+          <ReportsKpiCard label="Artículos publicados" value={loading ? '…' : String(kpis.published_articles ?? 0)} />
+          <ReportsKpiCard label="Borradores" value={loading ? '…' : String(kpis.draft_articles ?? 0)} />
         </div>
         <div className="border border-[#e9eae6] rounded-[10px] bg-white p-5">
           <div className="flex items-center justify-between mb-3">
@@ -11173,29 +11339,32 @@ function ReportsOutboundEngagementContent() {
 }
 
 function ReportsView() {
-  const [sub, setSub] = useState<ReportsSubView>('temas');
+  const [sub, setSub] = useState<ReportsSubView>('finAgent');
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+  const [channel, setChannel] = useState('all');
   function renderSub() {
     switch (sub) {
       case 'temas':         return <ReportsTopicsContent />;
       case 'sugerencias':   return <ReportsSugerenciasContent />;
       case 'export':        return <ReportsExportContent />;
       case 'horarios':      return <ReportsHorariosContent />;
-      case 'finAgent':      return <ReportsCustomReport title="Fin AI Agent" description="Métricas de resolución, calidad y volumen del agente Fin." />;
+      case 'finAgent':      return <ReportsFinAgentContent period={period} channel={channel} />;
       case 'copilot':       return <ReportsCustomReport title="Copilot" description="Analyze and report on how Copilot is used by teammates in your workspace." />;
       case 'calls':         return <ReportsCallsContent />;
-      case 'conversations': return <ReportsConversationsContent />;
-      case 'csat':          return <ReportsCsatContent />;
-      case 'effectiveness': return <ReportsEffectivenessContent />;
-      case 'responsiveness':return <ReportsResponsivenessContent />;
-      case 'slas':          return <ReportsSlasContent />;
+      case 'conversations': return <ReportsConversationsContent period={period} channel={channel} />;
+      case 'csat':          return <ReportsCsatContent period={period} channel={channel} />;
+      case 'effectiveness': return <ReportsEffectivenessContent period={period} channel={channel} />;
+      case 'responsiveness':return <ReportsResponsivenessContent period={period} channel={channel} />;
+      case 'slas':          return <ReportsSlasContent period={period} channel={channel} />;
       case 'teamInbox':     return <ReportsTeamInboxContent />;
-      case 'teammate':      return <ReportsTeammateContent />;
-      case 'tickets':       return <ReportsTicketsContent />;
-      case 'articles':      return <ReportsArticlesContent />;
+      case 'teammate':      return <ReportsTeammateContent period={period} channel={channel} />;
+      case 'tickets':       return <ReportsTicketsContent period={period} channel={channel} />;
+      case 'articles':      return <ReportsArticlesContent period={period} channel={channel} />;
       case 'outboundEng':   return <ReportsOutboundEngagementContent />;
       case 'administrar':   return <KnowledgePlaceholder title="Administrar" subtitle="Configuración avanzada de informes, propietarios y permisos." />;
     }
   }
+  // setPeriod/setChannel will be wired to a future period/channel selector UI
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -11460,19 +11629,7 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
 
 type KhTab = 'all' | 'ai' | 'copilot' | 'help';
 
-function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; onOpenView?: (view: string) => void }) {
-  // Hero dismissal — persisted in localStorage so it stays hidden across reloads.
-  // Per-tab key so user can dismiss each independently.
-  const lsKey = `clain.knowledge.hero.${tab}`;
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    try { return typeof window !== 'undefined' && window.localStorage.getItem(lsKey) === '1'; }
-    catch { return false; }
-  });
-  function dismiss() {
-    setDismissed(true);
-    try { window.localStorage.setItem(lsKey, '1'); } catch { /* ignore quota */ }
-  }
-  if (dismissed) return null;
+function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
   if (tab === 'ai') {
     return (
       <div className="relative bg-white border border-[#e9eae6] rounded-[10px] flex overflow-hidden">
@@ -11483,7 +11640,7 @@ function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; on
           </div>
           <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">Fin utiliza tu contenido de asistencia para responder preguntas a través de Messenger y correo electrónico, para así mejorar la asistencia de autoservicio, la experiencia del cliente y las puntuaciones CSAT.</p>
           <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
-            <button onClick={() => onOpenView?.('fin')} className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</button>
+            <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</a>
             <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
           </div>
         </div>
@@ -11499,7 +11656,7 @@ function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; on
             <div className="bg-[#ff5f3f] text-white rounded-[6px] px-2 py-1 text-[8.5px]">How many API calls can I make per month?</div>
           </div>
         </div>
-        <button onClick={dismiss} title="Ocultar" className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+        <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
         </button>
       </div>
@@ -11515,7 +11672,7 @@ function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; on
           </div>
           <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">Copilot utiliza tu contenido de asistencia para encontrar respuestas rápidamente, dando a cada miembro del equipo un asistente de IA que mejora la eficiencia del equipo y la experiencia del cliente.</p>
           <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
-            <button onClick={() => onOpenView?.('inbox')} className="inline-flex items-center gap-1 hover:underline">↗ Ir a Inbox</button>
+            <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Ir a Inbox</a>
             <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="1.2"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg> Ver guía</a>
             <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
           </div>
@@ -11531,7 +11688,7 @@ function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; on
             </div>
           </div>
         </div>
-        <button onClick={dismiss} title="Ocultar" className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+        <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
         </button>
       </div>
@@ -11547,7 +11704,7 @@ function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; on
         </div>
         <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">El centro de ayuda te permite crear artículos y organizarlos en colecciones para que los clientes encuentren respuestas a preguntas frecuentes rápidamente en tu sitio web o aplicación.</p>
         <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
-          <button onClick={() => onOpenView?.('connectors')} className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</button>
+          <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</a>
           <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
         </div>
       </div>
@@ -11568,7 +11725,7 @@ function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; on
           </div>
         </div>
       </div>
-      <button onClick={dismiss} title="Ocultar" className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+      <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
         <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
       </button>
     </div>
@@ -11576,19 +11733,9 @@ function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; on
 }
 
 function KhChecklist({ title, items }: { title: string; items: { label: string; done?: boolean }[] }) {
-  // Dismiss the whole checklist; persist per-title so each appearance is independent.
-  const lsKey = `clain.knowledge.checklist.${title.toLowerCase().replace(/\s+/g, '_')}`;
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    try { return typeof window !== 'undefined' && window.localStorage.getItem(lsKey) === '1'; } catch { return false; }
-  });
-  function dismiss() {
-    setDismissed(true);
-    try { window.localStorage.setItem(lsKey, '1'); } catch { /* ignore */ }
-  }
-  if (dismissed) return null;
   return (
     <div className="relative bg-white border border-[#e9eae6] rounded-[10px] p-4">
-      <button onClick={dismiss} title="Ocultar" className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+      <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#ededea]">
         <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
       </button>
       <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">{title}</p>
@@ -11797,7 +11944,7 @@ function KnowledgeFuentes({
 
         {tab === 'ai' && (
           <>
-            <KhProductHero tab="ai" onOpenView={onOpenView} />
+            <KhProductHero tab="ai" />
             <div className="grid grid-cols-[1fr_280px] gap-4">
               <div className="flex flex-col gap-4">
                 <KhSection
@@ -11835,7 +11982,7 @@ function KnowledgeFuentes({
 
         {tab === 'copilot' && (
           <>
-            <KhProductHero tab="copilot" onOpenView={onOpenView} />
+            <KhProductHero tab="copilot" />
             <div className="grid grid-cols-[1fr_280px] gap-4">
               <div className="flex flex-col gap-4">
                 <KhSection
@@ -11910,7 +12057,7 @@ function KnowledgeFuentes({
 
         {tab === 'help' && (
           <>
-            <KhProductHero tab="help" onOpenView={onOpenView} />
+            <KhProductHero tab="help" />
             <div className="grid grid-cols-[1fr_280px] gap-4">
               <div className="flex flex-col gap-4">
                 <KhSection
@@ -13492,7 +13639,7 @@ function FinFaqItem({ q, a, open, onToggle }: { q: string; a: string; open: bool
   );
 }
 
-function FinAllRolesContent({ onStart }: { onStart?: () => void }) {
+function FinAllRolesContent() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   return (
     <div className="flex-1 overflow-y-auto min-h-0">
@@ -13523,7 +13670,6 @@ function FinAllRolesContent({ onStart }: { onStart?: () => void }) {
                 'Resolver consultas complejas',
                 'En todos los canales',
               ]}
-              onStart={onStart}
             />
             <FinRoleCard
               image={IMG_FIN_SALES_AGENT}
@@ -13536,7 +13682,6 @@ function FinAllRolesContent({ onStart }: { onStart?: () => void }) {
                 'Guía para el descubrimiento de productos',
                 'Calificar y canalizar clientes potenciales',
               ]}
-              onStart={onStart}
             />
           </div>
         </div>
@@ -13574,7 +13719,7 @@ function FinAllRolesContent({ onStart }: { onStart?: () => void }) {
 }
 
 function FinRoleCard({
-  image, iconColor, iconKind, title, tagline, bullets, onStart,
+  image, iconColor, iconKind, title, tagline, bullets,
 }: {
   image: string;
   iconColor: string;
@@ -13582,7 +13727,6 @@ function FinRoleCard({
   title: string;
   tagline: string;
   bullets: string[];
-  onStart?: () => void;
 }) {
   return (
     <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden flex flex-col">
@@ -13612,7 +13756,7 @@ function FinRoleCard({
           {bullets.map(b => <li key={b}>{b}</li>)}
         </ul>
         <div className="mt-4">
-          <button onClick={onStart} className="bg-[#222] text-white text-[12.5px] font-semibold rounded-full px-4 py-1.5 hover:bg-black">
+          <button className="bg-[#222] text-white text-[12.5px] font-semibold rounded-full px-4 py-1.5 hover:bg-black">
             Comenzar
           </button>
         </div>
@@ -14039,7 +14183,7 @@ function FinAtributosContent() {
             <button className="w-8 h-8 rounded-[8px] bg-white border border-[#e9eae6] flex items-center justify-center hover:bg-[#f8f8f7]">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#1a1a1a]"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
             </button>
-            <button onClick={() => openCrmView('automation')} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo</span>
             </button>
@@ -14061,11 +14205,7 @@ function FinAtributosContent() {
             <div>Escalado</div>
           </div>
           {rows.map(r => (
-            <button
-              key={r.name}
-              onClick={() => openCrmView('automation')}
-              className="w-full text-left grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 py-3.5 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a] hover:bg-[#fafafa]"
-            >
+            <div key={r.name} className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr] gap-4 px-2 py-3.5 border-b border-[#e9eae6] items-center text-[13.5px] text-[#1a1a1a]">
               <div className="flex items-center gap-2">
                 <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
                 <span>{r.name}</span>
@@ -14077,7 +14217,7 @@ function FinAtributosContent() {
               <div className="text-[#646462]">—</div>
               <div className="text-[#646462]">—</div>
               <div className="text-[#646462]">—</div>
-            </button>
+            </div>
           ))}
         </div>
       </div>
@@ -14090,11 +14230,9 @@ function FinEscalamientoContent() {
   const IMG_ESCALATION_BANNER = `${FIGMA_CDN}/b1517b7b-b13a-40c8-83a1-46a7a4839098`;
   const IMG_ESCALATION_LINK_BOOK = `${FIGMA_CDN}/34e259b7-ba78-42e5-9f7a-f48a3961b433`;
   const IMG_ESCALATION_CLOSE = `${FIGMA_CDN}/34dfc6d2-2f3f-4639-aa68-6573e7f751a7`;
-  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('escalamiento');
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
-      {!heroDismissed && (
       <div className="flex-shrink-0 px-4 pt-4">
         <div className="relative bg-white rounded-[16px] shadow-[0px_1px_2px_rgba(20,20,20,0.15)] px-6 py-5 flex gap-6 items-start">
           <div className="flex-1 min-w-0 max-w-[640px] flex flex-col gap-4">
@@ -14118,12 +14256,11 @@ function FinEscalamientoContent() {
           <div className="relative w-[388px] h-[192px] rounded-[12px] overflow-hidden flex-shrink-0">
             <img src={IMG_ESCALATION_BANNER} alt="Escalation examples" className="absolute inset-0 w-full h-full object-cover" />
           </div>
-          <button onClick={dismissHero} aria-label="Cerrar" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+          <button aria-label="Cerrar" className="absolute top-2 right-2 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
             <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_ESCALATION_CLOSE})`, backgroundSize: 'cover' }} />
           </button>
         </div>
       </div>
-      )}
 
       {/* Escalamiento section header */}
       <div className="flex-shrink-0 border-b border-[#e9eae6]">
@@ -14186,7 +14323,7 @@ function FinEscalamientoContent() {
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M6 4l4 4-4 4z"/></svg>
               </button>
               <div className="px-4 py-2.5 border-t border-[#e9eae6]">
-                <button onClick={() => openCrmView('automation')} className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
+                <button className="text-[13px] font-semibold text-[#1a1a1a] flex items-center gap-1.5 hover:text-black">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                   <span>Nuevo</span>
                 </button>
@@ -14208,13 +14345,13 @@ function FinEscalamientoContent() {
               </div>
             </div>
             <div className="mt-3 ml-9 flex items-center gap-2 flex-wrap">
-              <button onClick={() => openCrmView('automation')} className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <button className="h-8 px-3 rounded-[8px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">
                 <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
                 <span>Nuevo</span>
               </button>
-              <button onClick={() => openCrmView('automation')} className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px] hover:bg-[#f8f8f7]">
+              <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[360px]">
                 Transfiere las solicitudes de VPN o de elusión a un nivel superior
-              </button>
+              </span>
               <span className="h-8 px-3 inline-flex items-center rounded-[8px] bg-white border border-[#e9eae6] text-[13px] text-[#1a1a1a] truncate max-w-[160px]">
                 Escala las soli…
               </span>
@@ -14233,29 +14370,10 @@ function FinProcedimientosContent() {
   const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
   const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
   const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
-  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('procedures');
-  // Pull live workflow rows kind=procedure; fall back to two visible drafts
-  // so the page never goes empty before any are created.
-  const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
-  const procedures = useMemo(() => {
-    const list = Array.isArray(workflowsData) ? workflowsData : [];
-    const filtered = list.filter((w: any) => {
-      const kind = String(w.kind || w.type || '').toLowerCase();
-      const tags = Array.isArray(w.tags) ? w.tags.map((t: any) => String(t).toLowerCase()) : [];
-      return kind === 'procedure' || tags.includes('procedure');
-    });
-    if (filtered.length > 0) {
-      return filtered.map((w: any) => ({
-        id: String(w.id),
-        title: w.name || w.title || 'Sin título',
-        status: String(w.status || 'draft').toLowerCase() === 'published' ? 'Activo' : 'Draft',
-      }));
-    }
-    return [
-      { id: '__draft1', title: 'Untitled', status: 'Draft' },
-      { id: '__draft2', title: 'Untitled', status: 'Draft' },
-    ];
-  }, [workflowsData]);
+  const procedures: { title: string; status: 'Draft' }[] = [
+    { title: 'Untitled', status: 'Draft' },
+    { title: 'Untitled', status: 'Draft' },
+  ];
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Header */}
@@ -14271,7 +14389,7 @@ function FinProcedimientosContent() {
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <button onClick={() => openCrmView('automation')} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo procedimiento</span>
             </button>
@@ -14299,7 +14417,6 @@ function FinProcedimientosContent() {
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-6 py-5 flex flex-col gap-5">
           {/* Hero card peach */}
-          {!heroDismissed && (
           <div className="relative bg-[#ffccb2] rounded-[16px] px-8 pt-[54px] pb-12 flex gap-8 items-start overflow-hidden">
             <div className="flex-1 min-w-0 max-w-[605px] flex flex-col gap-[15.4px]">
               <h2 className="text-[40px] text-[#1a1a1a] leading-[40px] tracking-[-1.2px]" style={{ fontFamily: "'Segoe UI', sans-serif" }}>
@@ -14329,23 +14446,18 @@ function FinProcedimientosContent() {
             <div className="relative w-[400px] h-[264px] rounded-[8px] overflow-hidden flex-shrink-0">
               <img src={IMG_PROCEDURES_BANNER} alt="Procedimientos" className="absolute inset-0 w-full h-full object-cover" />
             </div>
-            <button onClick={dismissHero} aria-label="Cerrar" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
+            <button aria-label="Cerrar" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[#222] hover:bg-black flex items-center justify-center">
               <span className="w-4 h-4" style={{ backgroundImage: `url(${IMG_PROCEDURES_CLOSE})`, backgroundSize: 'cover' }} />
             </button>
           </div>
-          )}
 
           {/* Procedimientos list */}
           <div>
             <h3 className="text-[14px] font-bold text-[#1a1a1a]">Procedimientos</h3>
             <p className="mt-0.5 text-[13px] text-[#646462]">Automatice las consultas complejas con instrucciones paso a paso para Fin.</p>
             <div className="mt-3 flex flex-col gap-2">
-              {procedures.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => openCrmView('automation')}
-                  className="w-full text-left bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40"
-                >
+              {procedures.map((p, i) => (
+                <div key={i} className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.title}</p>
@@ -14361,20 +14473,10 @@ function FinProcedimientosContent() {
                       <span>Errores: <span className="text-[#1a1a1a]">0</span></span>
                     </div>
                   </div>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (p.id.startsWith('__')) return;
-                      if (typeof window !== 'undefined' && !window.confirm(`¿Archivar el procedimiento "${p.title}"?`)) return;
-                      try { await workflowsApi.archive(p.id); window.location.reload(); } catch { /* surface via reload */ }
-                    }}
-                    className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]"
-                  >
+                  <button className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]">
                     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
-                  </span>
-                </button>
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -14744,73 +14846,37 @@ function FinPruebasContent() {
   );
 }
 
-// Hook for hero-card dismiss state, persisted in localStorage. Used across
-// every Fin page that has a closable promo banner.
-function useDismissibleHero(key: string) {
-  const lsKey = `clain.fin.hero.${key}`;
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    try { return typeof window !== 'undefined' && window.localStorage.getItem(lsKey) === '1'; } catch { return false; }
-  });
-  function dismiss() {
-    setDismissed(true);
-    try { window.localStorage.setItem(lsKey, '1'); } catch { /* ignore */ }
-  }
-  return { dismissed, dismiss };
-}
-
-// Tiny helper used by every Fin page to push the user to a top-level view
-// (channel settings, connectors, etc.) via the URL the prototype already
-// listens to.
-function openCrmView(view: string) {
-  if (typeof window === 'undefined') return;
-  const url = new URL(window.location.href);
-  url.searchParams.set('view', view);
-  window.location.href = url.toString();
-}
-
 // ─── Desplegar / Chat (Figma 1:12035) ────────────────────────────────────────
 function FinDespliegueChatContent() {
-  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('depChat');
-  const { data: connectorsData } = useApi(() => connectorsApi.list(), [], []);
-  const isLive = useMemo(() => {
-    const list = Array.isArray(connectorsData) ? connectorsData : [];
-    return list.some((c: any) => {
-      const provider = String(c.provider || c.type || '').toLowerCase();
-      const status = String(c.status || '').toLowerCase();
-      return ['messenger', 'web', 'chat', 'slack'].some(p => provider.includes(p)) && (status === 'connected' || status === 'active');
-    });
-  }, [connectorsData]);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
-      {!heroDismissed && (
-        <div className="flex-shrink-0 px-6 pt-5 pb-3">
-          <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
-            <div className="flex-1 min-w-0 pr-2">
-              <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
-                Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
-              </h2>
-              <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
-                Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-                <button onClick={() => openCrmView('messenger')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                  <span>Activar Fin para chat</span>
-                </button>
-                <button onClick={() => openCrmView('automation')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                  <span>Usa Fin en los flujos de trabajo</span>
-                </button>
-              </div>
+      <div className="flex-shrink-0 px-6 pt-5 pb-3">
+        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
+          <div className="flex-1 min-w-0 pr-2">
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+              Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
+            </h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+              Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Activar Fin para chat</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Usa Fin en los flujos de trabajo</span>
+              </a>
             </div>
-            <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
-            <button onClick={dismissHero} title="Ocultar" className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-            </button>
           </div>
+          <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
+          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Section divider with title */}
       <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
@@ -14823,9 +14889,8 @@ function FinDespliegueChatContent() {
         <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
           <div className="flex items-center gap-3">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
-            <button onClick={() => openCrmView('connectors')} className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-[#15803d]' : 'bg-[#a4a4a2]'}`} />
-              <span>{isLive ? 'En vivo' : 'No establecer en vivo'}</span>
+            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
+              <span>No establecer en vivo</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
           </div>
@@ -14841,11 +14906,11 @@ function FinDespliegueChatContent() {
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Cuando un cliente inicia una conversación</span>
           </div>
           {[
-            { l: 'Los clientes ven a Fin', v: 'Users, Leads, and Visitors', target: 'people' },
-            { l: 'En los canales seleccionados', v: 'Web, iOS y Android', target: 'allChannels' },
-            { l: 'Fin se presenta', v: 'Activadas (Todos los idi…)', target: 'multilingual' },
+            { l: 'Los clientes ven a Fin', v: 'Users, Leads, and Visitors' },
+            { l: 'En los canales seleccionados', v: 'Web, iOS y Android' },
+            { l: 'Fin se presenta', v: 'Activadas (Todos los idi…)' },
           ].map((row, i) => (
-            <button key={i} onClick={() => openCrmView(row.target)} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+            <button key={i} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.l}</span>
                 <span className="text-[12.5px] text-[#646462] truncate">{row.v}</span>
@@ -14861,7 +14926,7 @@ function FinDespliegueChatContent() {
             </span>
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin responde al cliente</span>
           </div>
-          <button onClick={() => openCrmView('knowledge')} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[13px] font-semibold text-[#1a1a1a]">Usando contenido de asistencia</span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fff1eb] text-[11px] text-[#bf3a1d] font-medium">
@@ -14871,7 +14936,7 @@ function FinDespliegueChatContent() {
             </div>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
           </button>
-          <button onClick={() => openCrmView('fin')} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Siguiendo la guía</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
           </button>
@@ -14883,51 +14948,39 @@ function FinDespliegueChatContent() {
 
 // ─── Desplegar / Correo electrónico (Figma 1:13680) ──────────────────────────
 function FinDespliegueEmailContent() {
-  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('depEmail');
-  const { data: connectorsData } = useApi(() => connectorsApi.list(), [], []);
-  const isLive = useMemo(() => {
-    const list = Array.isArray(connectorsData) ? connectorsData : [];
-    return list.some((c: any) => {
-      const provider = String(c.provider || c.type || '').toLowerCase();
-      const status = String(c.status || '').toLowerCase();
-      return provider.includes('email') && (status === 'connected' || status === 'active');
-    });
-  }, [connectorsData]);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
-      {!heroDismissed && (
-        <div className="flex-shrink-0 px-6 pt-5 pb-3">
-          <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
-            <div className="flex-1 min-w-0 pr-2">
-              <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
-                Implementa Fin por correo electrónico para obtener respuestas precisas al instante
-              </h2>
-              <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
-                Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-                <button onClick={() => openCrmView('knowledge')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                  <span>Aprende cómo Fin responde a los correos electrónicos</span>
-                </button>
-                <button onClick={() => openCrmView('automation')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                  <span>Usa Fin en los flujos de trabajo</span>
-                </button>
-                <button onClick={() => openCrmView('email')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
-                  <span>Desplegar Fin por correo electrónico</span>
-                </button>
-              </div>
+      <div className="flex-shrink-0 px-6 pt-5 pb-3">
+        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
+          <div className="flex-1 min-w-0 pr-2">
+            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+              Implementa Fin por correo electrónico para obtener respuestas precisas al instante
+            </h2>
+            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+              Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Aprende cómo Fin responde a los correos electrónicos</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                <span>Usa Fin en los flujos de trabajo</span>
+              </a>
+              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
+                <span>Desplegar Fin por correo electrónico</span>
+              </a>
             </div>
-            <img src={IMG_FIN_DEPLOY_EMAIL} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
-            <button onClick={dismissHero} title="Ocultar" className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
-              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-            </button>
           </div>
+          <img src={IMG_FIN_DEPLOY_EMAIL} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
+          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Section divider with title */}
       <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
@@ -14940,9 +14993,8 @@ function FinDespliegueEmailContent() {
         <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
           <div className="flex items-center gap-3">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
-            <button onClick={() => openCrmView('connectors')} className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
-              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-[#15803d]' : 'bg-[#a4a4a2]'}`} />
-              <span>{isLive ? 'En vivo' : 'No establecer en vivo'}</span>
+            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
+              <span>No establecer en vivo</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
           </div>
@@ -14958,10 +15010,10 @@ function FinDespliegueEmailContent() {
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Cuando un cliente envía su primer mensaje</span>
           </div>
           {[
-            { l: 'Fin responderá a', v: 'Users, Leads, and Visitors', target: 'people' },
-            { l: 'A través del canal de correo electrónico', v: '', target: 'email' },
+            { l: 'Fin responderá a', v: 'Users, Leads, and Visitors' },
+            { l: 'A través del canal de correo electrónico', v: '' },
           ].map((row, i) => (
-            <button key={i} onClick={() => openCrmView(row.target)} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+            <button key={i} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.l}</span>
                 {row.v && <span className="text-[12.5px] text-[#646462] truncate">{row.v}</span>}
@@ -14977,14 +15029,14 @@ function FinDespliegueEmailContent() {
             </span>
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin responde al cliente</span>
           </div>
-          <button onClick={() => openCrmView('multilingual')} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin se presenta</span>
               <span className="text-[12.5px] text-[#646462] truncate">Activadas (Todos los idi…)</span>
             </div>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
           </button>
-          <button onClick={() => openCrmView('knowledge')} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[13px] font-semibold text-[#1a1a1a]">Usando contenido de asistencia</span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fff1eb] text-[11px] text-[#bf3a1d] font-medium">
@@ -15028,22 +15080,13 @@ function FinDespliegueTelefonoContent() {
                 La voz de Fin está en <a href="#" className="underline">disponibilidad gestionada.</a>
               </p>
               <div className="mt-5 flex items-center gap-4">
-                <button
-                  onClick={() => {
-                    try {
-                      const key = 'clain.fin.voice.waitlist';
-                      window.localStorage.setItem(key, new Date().toISOString());
-                      window.alert('Te hemos apuntado a la lista de espera de Fin Voice. Te avisaremos en cuanto haya disponibilidad para tu workspace.');
-                    } catch { /* ignore */ }
-                  }}
-                  className="h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black"
-                >
+                <button className="h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">
                   Registre su interés
                 </button>
-                <button onClick={() => openCrmView('phone')} className="text-[13px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1.5">
+                <a href="#" className="text-[13px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1.5">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
                   <span>Más información</span>
-                </button>
+                </a>
               </div>
             </div>
             <img src={IMG_FIN_VOICE_BANNER} alt="" className="flex-shrink-0 rounded-[8px] object-cover" style={{ width: 400, height: 260 }} />
@@ -15073,20 +15116,8 @@ const FIN_INDUSTRY_TABS: { label: string; iconAsset: string; iconInset: string; 
   { label: 'Servicios financieros', iconAsset: 'f703656b-8581-4dd8-9698-22db4d8cfaee', iconInset: '18.75% 0' },
 ];
 
-function FinComenzarContent({ onStart }: { onStart?: () => void }) {
+function FinComenzarContent() {
   const [previewTab, setPreviewTab] = useState<'persoTareas' | 'transferencia'>('persoTareas');
-  const [activeIndustry, setActiveIndustry] = useState<string>(() => FIN_INDUSTRY_TABS.find((t: any) => t.active)?.label || FIN_INDUSTRY_TABS[0]?.label || '');
-  const [selectedQuestion, setSelectedQuestion] = useState<number>(0);
-  const previewQuestions = [
-    '¿Cuál es el horario de su equipo de asistencia?',
-    '¿Pueden mejorar mis ofertas de tarjetas de crédito?',
-    '¿Tienen una aplicación móvil?',
-  ];
-  const previewAnswers = [
-    'Nuestra asistencia por chat está disponible las 24 hrs./7 días a la semana. La asistencia telefónica y por correo electrónico está disponible de lunes a viernes durante el horario laboral, por lo que siempre hay alguien disponible cuando necesitas ayuda.',
-    'Para revisar y mejorar las ofertas de tu tarjeta de crédito necesitamos validar tu identidad. Inicia sesión y abre la sección "Mis productos" para ver opciones disponibles para ti.',
-    'Sí, contamos con aplicaciones móviles para iOS y Android. Puedes descargarlas desde la App Store o Google Play buscando el nombre de la empresa.',
-  ];
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -15101,7 +15132,7 @@ function FinComenzarContent({ onStart }: { onStart?: () => void }) {
               <p className="mt-4 text-[14px] text-[#646462] leading-[20px]">
                 Responde a las consultas de los clientes y lleva a cabo acciones complejas para resolver incluso los problemas más difíciles.
               </p>
-              <button onClick={onStart} className="mt-6 h-8 px-3 rounded-full bg-[#222] text-[#f8f8f7] text-[14px] font-semibold inline-flex items-center gap-2 hover:bg-black leading-[16px]">
+              <button className="mt-6 h-8 px-3 rounded-full bg-[#222] text-[#f8f8f7] text-[14px] font-semibold inline-flex items-center gap-2 hover:bg-black leading-[16px]">
                 <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
                   <img src={`${FIGMA_CDN}/e4cc1589-cd85-4651-b069-7cddec16bfff`} alt="" className="absolute" style={{ inset: '12.5% 6.25%' }} />
                 </span>
@@ -15126,12 +15157,11 @@ function FinComenzarContent({ onStart }: { onStart?: () => void }) {
             <h3 className="text-[20px] font-serif text-[#1a1a1a]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>Seleccione su industria</h3>
             <p className="mt-2 text-[14px] text-[#646462]">Vea cómo empresas como la suya automatizan con Fin y qué tipo de impacto podría lograr.</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {FIN_INDUSTRY_TABS.map((t: any) => (
+              {FIN_INDUSTRY_TABS.map(t => (
                 <button
                   key={t.label}
-                  onClick={() => setActiveIndustry(t.label)}
                   className={`pt-[6.87px] pb-[7.98px] px-[12px] rounded-full font-['Inter'] font-semibold text-[14px] leading-[16px] inline-flex items-center gap-2 ${
-                    activeIndustry === t.label
+                    t.active
                       ? 'bg-[#222] text-[#f8f8f7]'
                       : 'bg-[#f8f8f7] text-[#1a1a1a] hover:bg-[#ededea]'
                   }`}
@@ -15200,7 +15230,7 @@ function FinComenzarContent({ onStart }: { onStart?: () => void }) {
                 <p className="mt-3 text-[13px] text-[#1a1a1a] leading-[20px]">
                   Proporcione a Fin contenido de su centro de ayuda y responderá preguntas frecuentes al instante. Comience poco a poco con algunas consultas informativas, como sus preguntas frecuentes principales. Visite Fin Studio para ver cómo se hace.
                 </p>
-                <button onClick={onStart} className="mt-5 h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+                <button className="mt-5 h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
                   <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4" />
                   <span>Guía de configuración</span>
                 </button>
@@ -15252,12 +15282,12 @@ function FinComenzarContent({ onStart }: { onStart?: () => void }) {
                 <div className="px-4 py-3 border-b border-[#e9eae6]">
                   <p className="text-[11px] font-mono tracking-[1px] uppercase text-[#646462]">Preguntas frecuentes</p>
                 </div>
-                {previewQuestions.map((q, i) => (
-                  <button
-                    key={q}
-                    onClick={() => setSelectedQuestion(i)}
-                    className={`w-full text-left px-4 py-3 text-[13px] hover:bg-[#f8f8f7] ${i === selectedQuestion ? 'bg-[#f8f8f7] text-[#1a1a1a] font-semibold' : 'text-[#1a1a1a]'} ${i < previewQuestions.length - 1 ? 'border-b border-[#e9eae6]' : ''}`}
-                  >
+                {[
+                  '¿Cuál es el horario de su equipo de asistencia?',
+                  '¿Pueden mejorar mis ofertas de tarjetas de crédito?',
+                  '¿Tienen una aplicación móvil?',
+                ].map((q, i) => (
+                  <button key={q} className={`w-full text-left px-4 py-3 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${i < 2 ? 'border-b border-[#e9eae6]' : ''}`}>
                     {q}
                   </button>
                 ))}
@@ -15279,18 +15309,18 @@ function FinComenzarContent({ onStart }: { onStart?: () => void }) {
                       Esta es una vista previa de cómo Fin respondería a las preguntas de los clientes que necesitan <span className="font-semibold">contenido de asistencia al cliente.</span>
                     </p>
                   </div>
-                  {/* User question (dark, right) — reflects selected preview question */}
+                  {/* User question (dark, right) */}
                   <div className="self-end bg-[#222] border border-[#e9eae6] rounded-[16px] px-[13px] pt-[16px] pb-[23px] w-[281px]">
-                    <p className="text-[14px] text-[#f8f8f7] leading-[20px]">{previewQuestions[selectedQuestion]}</p>
+                    <p className="text-[14px] text-[#f8f8f7] leading-[20px]">Tengo problemas para contactar con alguien, ¿cuándo está disponible su equipo de asistencia?</p>
                   </div>
-                  {/* Fin response — matched answer */}
+                  {/* Fin response */}
                   <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[16px] px-[13px] py-[17px] w-[281px]">
                     <div className="flex items-center gap-2 mb-3">
                       <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4" />
                       <span className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px]">Fin • AI Agent</span>
                     </div>
                     <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
-                      {previewAnswers[selectedQuestion]}
+                      Nuestra asistencia por chat está disponible las 24 hrs./7 días a la semana. La asistencia telefónica y por correo electrónico está disponible de lunes a viernes durante el horario laboral, por lo que siempre hay alguien disponible cuando necesitas ayuda.
                     </p>
                   </div>
                 </div>
@@ -15313,11 +15343,9 @@ function FinComenzarContent({ onStart }: { onStart?: () => void }) {
 function FinDesempenoContent() {
   // Live numbers — pull stats + cases so we can compute Fin-specific KPIs
   // (automation %, engagement %, resolution %) without faking anything.
-  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
   const { data: stats } = useApi(() => aiApi.stats(), [], null);
   const { data: cases } = useApi(() => casesApi.list(), [], []);
-  const { data: overview } = useApi(() => reportsApi.overview(period, 'all'), [period], null);
-  const { dismissed: bannerDismissed, dismiss: dismissBanner } = useDismissibleHero('desempeno');
+  const { data: overview } = useApi(() => reportsApi.overview('30d', 'all'), [], null);
   const totals = useMemo(() => {
     const list = Array.isArray(cases) ? cases : [];
     const total = list.length;
@@ -15350,12 +15378,10 @@ function FinDesempenoContent() {
   }, [cases, stats, overview]);
   const periodLabel = useMemo(() => {
     const end = new Date();
-    const start = new Date();
-    const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
-    start.setDate(start.getDate() - days);
+    const start = new Date(); start.setDate(start.getDate() - 30);
     const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
     return `${fmt(start)} – ${fmt(end)}`;
-  }, [period]);
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -15364,16 +15390,14 @@ function FinDesempenoContent() {
         <div>
           <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">Rendimiento de Support</h2>
           <div className="mt-2 flex items-center gap-3">
-            <select
-              value={period}
-              onChange={e => setPeriod(e.target.value as '7d' | '30d' | '90d')}
-              className="h-7 px-2 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a]"
-            >
-              <option value="7d">Últimos 7 días</option>
-              <option value="30d">Últimos 30 días</option>
-              <option value="90d">Últimos 90 días</option>
-            </select>
-            <span className="text-[12px] text-[#646462]">{periodLabel}</span>
+            <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
+              <span>{periodLabel}</span>
+            </button>
+            <button className="h-7 px-2 text-[12px] inline-flex items-center gap-1.5 text-[#646462] hover:text-[#1a1a1a]">
+              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
+              <span>Añadir filtro</span>
+            </button>
           </div>
         </div>
         <button className="h-7 px-2.5 text-[12px] inline-flex items-center gap-1.5 text-[#0070c0] hover:underline">
@@ -15384,7 +15408,6 @@ function FinDesempenoContent() {
 
       <div className="flex-1 overflow-y-auto min-h-0 p-6">
         {/* Pro trial banner */}
-        {!bannerDismissed && (
         <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5 flex items-center gap-5 mb-5 relative">
           <div className="w-[180px] h-[100px] flex-shrink-0 rounded-[8px] overflow-hidden bg-gradient-to-br from-[#fef3c7] via-[#f9d6a8] to-[#e8b478] relative flex items-center justify-center">
             <div className="absolute inset-3 bg-white rounded-md p-2 flex flex-col gap-1">
@@ -15403,11 +15426,10 @@ function FinDesempenoContent() {
               <span>Más información</span>
             </a>
           </div>
-          <button onClick={dismissBanner} title="Ocultar" className="absolute top-3 right-3 w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center">
+          <button className="absolute top-3 right-3 w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
           </button>
         </div>
-        )}
 
         {/* Top KPI row */}
         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -16347,7 +16369,7 @@ function FinAiView() {
 
   function renderSub() {
     switch (sub) {
-      case 'allRoles':       return <FinAllRolesContent onStart={() => setSub('anaGetStarted')} />;
+      case 'allRoles':       return <FinAllRolesContent />;
       case 'capacitar':      return <FinPlaceholderContent title="Capacitar"   subtitle="Configura el contenido, las atribuciones y los procedimientos que entrenan a Fin." />;
       case 'capContent':     return <FinContenidoContent />;
       case 'capGuidance':    return <FinOrientacionContent />;
@@ -16360,7 +16382,7 @@ function FinAiView() {
       case 'depChat':        return <FinDespliegueChatContent />;
       case 'depEmail':       return <FinDespliegueEmailContent />;
       case 'depPhone':       return <FinDespliegueTelefonoContent />;
-      case 'anaGetStarted':  return <FinComenzarContent onStart={() => setSub('capContent')} />;
+      case 'anaGetStarted':  return <FinComenzarContent />;
       case 'analizar':
       case 'anaPerformance': return <FinDesempenoContent />;
       case 'anaRecommendations': return <FinPlaceholderContent title="Recomendaciones" subtitle="Sugerencias de Fin para mejorar la cobertura, el tono y la resolución." />;
