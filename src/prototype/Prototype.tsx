@@ -8,6 +8,7 @@ import { agentsApi, aiApi, attachmentsApi, auditApi, billingApi, casesApi, conne
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
+import Workflows from '../components/Workflows';
 
 type View = 'inbox' | 'contacts' | 'allLeads' | 'settings' | 'imports' | 'personal' | 'security' | 'notifications' | 'visible' | 'tokens' | 'accountAccess' | 'multilingual' | 'assignments' | 'macros' | 'tickets' | 'sla' | 'aiInbox' | 'automation' | 'appStore' | 'connectors' | 'labels' | 'people' | 'companies' | 'workspaceSecurity' | 'workspaceMultilingual' | 'workspaceHours' | 'workspaceBrands' | 'billing' | 'messenger' | 'email' | 'phone' | 'whatsapp' | 'discord' | 'sms' | 'social' | 'allChannels' | 'inboxTeam' | 'fin' | 'knowledge' | 'reports' | 'outbound';
 
@@ -17065,9 +17066,9 @@ function FinPautaEditor({
             value={body}
             onChange={e => setBody(e.target.value)}
             placeholder="Escriba aquí..."
-            className="w-full min-h-[280px] text-[16px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
+            className="w-full min-h-[72px] text-[16px] text-[#1a1a1a] leading-[24px] placeholder:text-[#a4a4a2] focus:outline-none bg-transparent resize-none border-none p-0"
           />
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {FIN_PAUTA_SUGGESTIONS.map(s => (
               <button
                 key={s.label}
@@ -17144,6 +17145,12 @@ function FinOrientacionContent() {
     pautas.update(editing.id, { enabled: next });
     setEditing({ ...editing, enabled: next });
     toast.show(next ? 'Pauta habilitada' : 'Pauta pausada');
+  }
+  function handleDeletePauta(p: FinPauta, ev?: React.MouseEvent) {
+    ev?.stopPropagation();
+    if (!window.confirm(`¿Eliminar la pauta "${p.title.trim() || 'Sin título'}"?`)) return;
+    pautas.remove(p.id);
+    toast.show('Pauta eliminada');
   }
 
   const filtered = useMemo(() => {
@@ -17293,10 +17300,10 @@ function FinOrientacionContent() {
                       </div>
                     ) : (
                       items.map(p => (
-                        <button
+                        <div
                           key={p.id}
                           onClick={() => openEdit(p)}
-                          className="w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] text-left"
+                          className="group w-full px-4 py-3 grid grid-cols-[1fr_auto_auto_auto_32px] items-center gap-3 hover:bg-[#f8f8f7]/40 border-b border-[#e9eae6] text-left cursor-pointer"
                         >
                           <p className="text-[13.5px] font-medium text-[#1a1a1a] truncate">{p.title.trim() || 'Sin título'}</p>
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[12px] text-[#646462]">
@@ -17308,7 +17315,14 @@ function FinOrientacionContent() {
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[12px] ${p.enabled ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]' : 'bg-[#f1f1ee] border-[#e9eae6] text-[#646462]'}`}>
                             {p.enabled ? 'Habilitado' : 'Pausado'}
                           </span>
-                        </button>
+                          <button
+                            onClick={(e) => handleDeletePauta(p, e)}
+                            title="Eliminar pauta"
+                            className="w-7 h-7 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M4.5 4.5l.7 8a1 1 0 001 .9h3.6a1 1 0 001-.9l.7-8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        </div>
                       ))
                     )}
                     <div className="px-4 py-2.5">
@@ -18259,10 +18273,46 @@ const FIN_ESC_FIELD_ICON_ATTR = (
 const FIN_ESC_FIELD_ICON_DATA = (
   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M3 8h10M8 3c1.5 1.5 2.3 3.2 2.3 5S9.5 11.5 8 13c-1.5-1.5-2.3-3.2-2.3-5S6.5 4.5 8 3z"/></svg>
 );
+const FIN_ESC_FIELD_ICON_TRANSFER = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 6h9M9 3l3 3-3 3M13 10H4M7 13l-3-3 3-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_TAG = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 7.5L8 2h5.5V7.5L8 13l-5.5-5.5z" strokeLinejoin="round"/><circle cx="10.5" cy="5" r="0.8" fill="currentColor"/></svg>
+);
+const FIN_ESC_FIELD_ICON_CAL = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.2"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_MAIL = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4.5 5.5-4.5"/></svg>
+);
+const FIN_ESC_FIELD_ICON_LINK = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M6 9.5L9.5 6M5.5 10.5l-1 1a2.1 2.1 0 11-3-3l2.5-2.5M10.5 5.5l1-1a2.1 2.1 0 113 3l-2.5 2.5" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PAPERCLIP = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M11 5l-5 5a2 2 0 102.8 2.8l5-5a3.5 3.5 0 10-5-5l-5.4 5.4" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_GLOBE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5a8 8 0 010 11M8 2.5a8 8 0 000 11"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PHONE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M5 2.5h6a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1zM7 12h2" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_FIN = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 1l1.5 3.7L13 6l-3 2.6L11 13 8 11 5 13l1-4.4L3 6l3.5-1.3z"/></svg>
+);
+const FIN_ESC_FIELD_ICON_CHAT = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 4.5a1.5 1.5 0 011.5-1.5h8a1.5 1.5 0 011.5 1.5v5a1.5 1.5 0 01-1.5 1.5H6l-3 2.5V4.5z"/></svg>
+);
+const FIN_ESC_FIELD_ICON_BOOK = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+);
+const FIN_ESC_FIELD_ICON_BUILDING = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="0.6"/><path d="M5.5 5h2M8.5 5h2M5.5 7.5h2M8.5 7.5h2M5.5 10h2M8.5 10h2"/></svg>
+);
 
 type FinEscField = { key: string; label: string; status?: string; icon: ReactNode };
 
-const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEscField[]; personData: FinEscField[] } = {
+const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEscField[]; personData: FinEscField[]; companyData: FinEscField[]; messageData: FinEscField[]; conversationData: FinEscField[] } = {
   conversation: [
     { key: 'teammate_assigned', label: 'Teammate assigned', icon: FIN_ESC_FIELD_ICON_PERSON },
     { key: 'team_assigned',     label: 'Team assigned',     icon: FIN_ESC_FIELD_ICON_PEOPLE },
@@ -18313,6 +18363,85 @@ const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEs
     { key: 'pd_utm_medium',           label: 'UTM Medium',               icon: FIN_ESC_FIELD_ICON_DATA },
     { key: 'pd_utm_source',           label: 'UTM Source',               icon: FIN_ESC_FIELD_ICON_DATA },
     { key: 'pd_utm_term',             label: 'UTM Term',                 icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_referral_url',         label: 'Referral URL',             icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'pd_sub_optouts',          label: 'Subscription type opt-outs', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_sub_optins',           label: 'Subscription type opt-ins',  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_survey',          label: 'Last Survey received',     icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'pd_whatsapp_number',      label: 'WhatsApp number',          icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'pd_slack_email',          label: 'Slack Email',              icon: FIN_ESC_FIELD_ICON_TRANSFER },
+  ],
+  companyData: [
+    { key: 'co_name',           label: 'Company name',         icon: FIN_ESC_FIELD_ICON_BUILDING },
+    { key: 'co_id',             label: 'Company ID',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'co_last_seen',      label: 'Company last seen',    icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'co_created_at',     label: 'Company created at',   icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'co_people',         label: 'People',               icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'co_web_sessions',   label: 'Company web sessions', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'co_plan',           label: 'Plan',                 icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_monthly_spend',  label: 'Monthly Spend',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'co_segment',        label: 'Company Segment',      icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_tag',            label: 'Company tag',          icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_size',           label: 'Company size',         icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'co_industry',       label: 'Company industry',     icon: FIN_ESC_FIELD_ICON_BUILDING },
+    { key: 'co_website',        label: 'Company website',      icon: FIN_ESC_FIELD_ICON_LINK },
+  ],
+  messageData: [
+    { key: 'msg_detected_lang',     label: 'Idioma detectado',                    icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_content',           label: 'Contenido del mensaje',               icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_has_attachments',   label: 'El mensaje tiene archivos adjuntos',  icon: FIN_ESC_FIELD_ICON_PAPERCLIP },
+    { key: 'msg_page_url',          label: 'URL de la página',                    icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_subject',     label: 'Asunto del correo electrónico',       icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_recipient',   label: 'Destinatario del correo electrónico', icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_to',          label: 'Correo electrónico para',             icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_cc',          label: 'Copia del correo electrónico',        icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_bcc',         label: 'Correo electrónico Cco',              icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_from_android',      label: 'Desde Android',                       icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_ios',          label: 'Desde iOS',                           icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_email',        label: 'Desde el correo electrónico',         icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_from_facebook',     label: 'Desde Facebook',                      icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_whatsapp',     label: 'Desde WhatsApp',                      icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_twitter',      label: 'Desde Twitter',                       icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_instagram',    label: 'Desde Instagram',                     icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_phoneswitch',  label: 'Desde Phone Switch',                  icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_sms',          label: 'Desde SMS',                           icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_whatsapp_business', label: 'Número de WhatsApp Business',         icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_instagram_account', label: 'Cuenta de Instagram para empresas',   icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_started_via_inbox', label: 'Started via Inbox',                   icon: FIN_ESC_FIELD_ICON_CHAT },
+  ],
+  conversationData: [
+    { key: 'cd_smart_suggestion',     label: 'Smart Suggestion Group',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_sdr_success',          label: 'SDR Success Counted',              icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_imported_standalone',  label: 'Imported via standalone',          icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_language',             label: 'Language',                         icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'cd_auto_translated',      label: 'Auto-translated',                  icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'cd_external_id',          label: 'External ID',                      icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_fin_preview',          label: 'Fin AI Agent: Preview',            icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_preview_admin',        label: 'Preview Admin ID',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_tone',              label: 'AI Tone of Voice',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_answer_length',     label: 'AI Answer Length',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_pronoun',           label: 'AI Pronoun Formality',             icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_title',             label: 'AI Title',                         icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workflow_preview',     label: 'Workflow: Preview',                icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_fin_resolution',       label: 'Fin AI Agent resolution state',    icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_pending_reason',   label: 'Fin AI Agent: Pending reason',     icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_sales_outcome',    label: 'Fin Sales outcome',                icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_awaiting_team',    label: 'Fin awaiting teammate input',      icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_activated',        label: 'Fin AI Agent activated',           icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_last_outbound_call',   label: 'Last outbound call state',         icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workspace_phone',      label: 'Workspace phone number',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workspace_sms',        label: 'Workspace SMS phone number',       icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_recording_consent',    label: 'Recording consent',                icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_merged',               label: 'Merged',                           icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'cd_fin_action_used',      label: 'Fin AI Agent: Action used in resolution',     icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_image_used',       label: 'Fin AI Agent: Image used in resolution',      icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_procedure_used',   label: 'Fin AI Agent: Procedure or task used',        icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_issue_summary',     label: 'AI Issue summary',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_query_type',           label: 'Query Type',                       icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_escalation_reason',label: 'Fin Escalation Reason',            icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_configuration',    label: 'Fin AI Agent: Configuration used', icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_involved',    label: 'Fin for Ecommerce involved',       icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_product_a',   label: 'Fin for Ecommerce: Product asked', icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_product_b',   label: 'Fin for Ecommerce: Product issue', icon: FIN_ESC_FIELD_ICON_FIN },
   ],
 };
 
@@ -18332,7 +18461,10 @@ function findFinEscField(key: string): FinEscField | undefined {
   return (
     FIN_ESCALATION_FIELDS.conversation.find(f => f.key === key) ||
     FIN_ESCALATION_FIELDS.finAttributes.find(f => f.key === key) ||
-    FIN_ESCALATION_FIELDS.personData.find(f => f.key === key)
+    FIN_ESCALATION_FIELDS.personData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.companyData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.messageData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.conversationData.find(f => f.key === key)
   );
 }
 
@@ -18363,10 +18495,13 @@ function FinFieldPickerPopover({
   const conversation = filt(FIN_ESCALATION_FIELDS.conversation);
   const finAttributes = filt(FIN_ESCALATION_FIELDS.finAttributes);
   const personData = filt(FIN_ESCALATION_FIELDS.personData);
+  const companyData = filt(FIN_ESCALATION_FIELDS.companyData);
+  const messageData = filt(FIN_ESCALATION_FIELDS.messageData);
+  const conversationData = filt(FIN_ESCALATION_FIELDS.conversationData);
   return (
     <div
       ref={popRef}
-      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[320px] max-h-[380px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden"
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[340px] max-h-[420px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden"
       onClick={e => e.stopPropagation()}
     >
       <div className="flex-shrink-0 p-2 border-b border-[#e9eae6]">
@@ -18418,7 +18553,40 @@ function FinFieldPickerPopover({
             ))}
           </div>
         )}
-        {conversation.length === 0 && finAttributes.length === 0 && personData.length === 0 && (
+        {companyData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Company data</div>
+            {companyData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {messageData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Message data</div>
+            {messageData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {conversationData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Conversation data</div>
+            {conversationData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {conversation.length === 0 && finAttributes.length === 0 && personData.length === 0 && companyData.length === 0 && messageData.length === 0 && conversationData.length === 0 && (
           <div className="px-3 py-6 text-center text-[12.5px] text-[#646462]">No hay coincidencias</div>
         )}
       </div>
@@ -21002,19 +21170,86 @@ function FinAudiencesContent() {
 // ─── Ajustes de Fin · Flujos de trabajo (Figma 1:22652) ─────────────────────
 function FinFlujosTrabajoContent() {
   // Real workflows from the backend feed the table at the bottom of the screen.
-  // The hero card / filters above stay UI-only; selecting a row redirects to
-  // the existing /automation builder (already wired) for editing.
+  // Selecting a row now opens the IDENTICAL <Workflows/> builder embedded
+  // inside the Fin shell (no more ?view=automation redirect).
   const { data: workflowsData } = useApi(() => workflowsApi.list(), [], []);
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  // Embedded builder state. null = list, '' = create-new, anything else = edit existing id.
+  const [builderId, setBuilderId] = useState<string | null>(null);
+
+  // Functional filter chips (state-driven; effect on `workflows` depends on shape of row).
+  const [audienceFilter, setAudienceFilter] = useState<string>('any');
+  const [statusFilter, setStatusFilter] = useState<string>('any');
+  const [channelFilter, setChannelFilter] = useState<string>('any');
+  const [typeFilter, setTypeFilter] = useState<string>('any');
+  const [extraFilters, setExtraFilters] = useState<{ tag: boolean; lastEdited: boolean }>({ tag: false, lastEdited: false });
+  const [tagFilter, setTagFilter] = useState<string>('any');
+  const [lastEditedFilter, setLastEditedFilter] = useState<string>('any');
+  const [showAddFilter, setShowAddFilter] = useState(false);
+  const addFilterRef = useRef<HTMLDivElement>(null);
+
+  // Modal state for "Aprender" / "Solucionar problemas" / Fin row.
+  const [learnModal, setLearnModal] = useState<null | 'docs' | 'tutorial' | 'templates'>(null);
+  const [troubleshootOpen, setTroubleshootOpen] = useState(false);
+
+  useEffect(() => {
+    if (!showAddFilter) return;
+    function onClick(e: MouseEvent) {
+      if (addFilterRef.current?.contains(e.target as Node)) return;
+      setShowAddFilter(false);
+    }
+    window.addEventListener('mousedown', onClick);
+    return () => window.removeEventListener('mousedown', onClick);
+  }, [showAddFilter]);
+
   const workflows = useMemo(() => {
     const list = Array.isArray(workflowsData) ? workflowsData : [];
     const q = search.trim().toLowerCase();
-    return q
-      ? list.filter((w: any) => String(w.name || w.title || w.id || '').toLowerCase().includes(q))
-      : list;
-  }, [workflowsData, search]);
+    return list.filter((w: any) => {
+      if (q && !String(w.name || w.title || w.id || '').toLowerCase().includes(q)) return false;
+      if (statusFilter !== 'any') {
+        const s = String(w.status || w.state || '').toLowerCase();
+        const want = statusFilter.toLowerCase();
+        const aliases: Record<string, string[]> = {
+          active: ['active', 'published', 'live'],
+          draft: ['draft', 'unpublished'],
+          paused: ['paused'],
+          archived: ['archived'],
+        };
+        if (!(aliases[want] || [want]).includes(s)) return false;
+      }
+      if (audienceFilter !== 'any') {
+        const a = String(w.audience || '').toLowerCase();
+        if (a && a !== audienceFilter) return false;
+      }
+      if (channelFilter !== 'any') {
+        const channels: string[] = Array.isArray(w.channels) ? w.channels.map((c: any) => String(c).toLowerCase()) : [];
+        if (channels.length > 0 && !channels.includes(channelFilter)) return false;
+      }
+      if (typeFilter !== 'any') {
+        const t = String(w.kind || w.trigger?.type || w.type || '').toLowerCase();
+        if (t && !t.includes(typeFilter)) return false;
+      }
+      if (extraFilters.tag && tagFilter !== 'any') {
+        const tags: string[] = Array.isArray(w.tags) ? w.tags.map((t: any) => String(t).toLowerCase()) : [];
+        if (tags.length > 0 && !tags.includes(tagFilter)) return false;
+      }
+      if (extraFilters.lastEdited && lastEditedFilter !== 'any') {
+        const updated = w.updated_at || w.updatedAt;
+        if (updated) {
+          const days = (Date.now() - new Date(updated).getTime()) / (1000 * 60 * 60 * 24);
+          if (lastEditedFilter === '7d' && days > 7) return false;
+          if (lastEditedFilter === '30d' && days > 30) return false;
+          if (lastEditedFilter === '90d' && days > 90) return false;
+        }
+      }
+      return true;
+    });
+  }, [workflowsData, search, statusFilter, audienceFilter, channelFilter, typeFilter, extraFilters, tagFilter, lastEditedFilter]);
+
   function showStatus(msg: string, type: 'success' | 'error' = 'success') {
     setStatusMsg({ msg, type });
     window.setTimeout(() => setStatusMsg(null), 3000);
@@ -21030,50 +21265,50 @@ function FinFlujosTrabajoContent() {
     } finally { setBusyId(null); }
   }
   function openInBuilder(id: string) {
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.set('view', 'automation');
-      url.searchParams.set('workflow', id);
-      window.location.href = url.toString();
-    }
+    setBuilderId(id === 'new' ? '' : id);
   }
-  const filterChips = [
-    {
-      label: 'Visitantes, leads o usuarios',
-      icon: (
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
-          <circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/>
-        </svg>
-      ),
-    },
-    {
-      label: 'State is any',
-      icon: (
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
-          <rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11M5 9h6M5 11h4"/>
-        </svg>
-      ),
-    },
-    {
-      label: 'Cualquier canal',
-      icon: (
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
-          <path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/>
-        </svg>
-      ),
-    },
-    {
-      label: 'El tipo es cualquiera',
-      icon: (
-        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4">
-          <circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/>
-        </svg>
-      ),
-    },
-  ];
+
+  // ── Embedded builder view ───────────────────────────────────────────────
+  if (builderId !== null) {
+    return (
+      <div className="flex flex-col h-full min-h-0 bg-white">
+        <div className="flex-shrink-0 h-12 border-b border-[#e9eae6] px-4 flex items-center gap-2">
+          <button
+            onClick={() => setBuilderId(null)}
+            className="h-8 px-3 rounded-md hover:bg-[#f8f8f7] text-[13px] font-medium text-[#1a1a1a] flex items-center gap-1.5"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Volver a flujos de trabajo
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <Workflows
+            focusWorkflowId={builderId === '' ? undefined : builderId}
+            onNavigate={(target: any) => {
+              // The embedded Workflows component fires onNavigate with various
+              // section targets. Treat any "leave the workflow" intent as
+              // "go back to the Fin list" — covers section: 'library', page
+              // changes away from 'workflows', etc.
+              const section = target?.section;
+              const page = target?.page;
+              if (page && page !== 'workflows') { setBuilderId(null); return; }
+              if (section === 'library' || section === 'list') { setBuilderId(null); return; }
+              // builder/runs/evaluations stay inside the embedded view.
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   // Live rows replace the placeholder static rows. Empty state is handled below.
   const rows = workflows;
+
+  // Problematic workflows for the "Solucionar problemas" modal.
+  const problematic = (Array.isArray(workflowsData) ? workflowsData : []).filter((w: any) => {
+    const s = String(w.status || w.state || '').toLowerCase();
+    return s === 'blocked' || s === 'needs_setup' || s === 'dependency_missing';
+  });
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -21126,15 +21361,34 @@ function FinFlujosTrabajoContent() {
       {/* Section header */}
       <div className="flex-shrink-0 px-6 pb-3 flex items-center gap-2">
         <h3 className="text-[15px] font-bold text-[#1a1a1a] flex-1">Flujos de trabajo</h3>
-        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
+        <button
+          onClick={() => setTroubleshootOpen(true)}
+          className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]"
+        >
           <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M9.5 2l-1.5 4 4 1-5 7 1-4-4-1z" strokeLinejoin="round"/></svg>
           <span>Solucionar problemas</span>
         </button>
-        <button className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
-          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
-          <span>Aprender</span>
-          <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
-        </button>
+        <Dropdown
+          value=""
+          onChange={(v) => {
+            if (v === 'docs') setLearnModal('docs');
+            else if (v === 'tutorial') setLearnModal('tutorial');
+            else if (v === 'templates') setLearnModal('templates');
+          }}
+          items={[
+            { value: 'docs', label: 'Documentación' },
+            { value: 'tutorial', label: 'Tutorial: tu primer flujo' },
+            { value: 'templates', label: 'Plantillas' },
+          ]}
+          renderTrigger={(_sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z" strokeLinejoin="round"/></svg>
+              <span>Aprender</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+        />
         <button onClick={() => openInBuilder('new')} className="h-8 px-3 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-black">
           <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-white" strokeWidth="1.7"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
           <span>Nuevo flujo de trabajo</span>
@@ -21154,14 +21408,135 @@ function FinFlujosTrabajoContent() {
             className="w-full h-8 pl-9 pr-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2] focus:outline-none focus:border-[#1a1a1a]"
           />
         </div>
-        {filterChips.map(c => (
-          <button key={c.label} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
-            {c.icon}<span>{c.label}</span>
+        <Dropdown
+          value={audienceFilter}
+          onChange={setAudienceFilter}
+          items={[
+            { value: 'any', label: 'Todos' },
+            { value: 'visitors', label: 'Visitantes' },
+            { value: 'leads', label: 'Leads' },
+            { value: 'users', label: 'Usuarios' },
+          ]}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          renderTrigger={(sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M2 13.5c.6-2.2 2.2-3.4 4-3.4s3.4 1.2 4 3.4"/><circle cx="11.5" cy="5" r="1.7"/><path d="M11 9.6c1.5.1 2.7 1.1 3.2 2.7"/></svg>
+              <span>{sel?.value === 'any' || !sel ? 'Visitantes, leads o usuarios' : sel.label}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+        />
+        <Dropdown
+          value={statusFilter}
+          onChange={setStatusFilter}
+          items={[
+            { value: 'any', label: 'Cualquiera' },
+            { value: 'draft', label: 'Borrador' },
+            { value: 'active', label: 'Activo' },
+            { value: 'paused', label: 'Pausado' },
+            { value: 'archived', label: 'Archivado' },
+          ]}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          renderTrigger={(sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><rect x="2.5" y="3" width="11" height="10" rx="1.2"/><path d="M2.5 6h11M5 9h6M5 11h4"/></svg>
+              <span>{sel?.value === 'any' || !sel ? 'State is any' : `Estado: ${sel.label}`}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+        />
+        <Dropdown
+          value={channelFilter}
+          onChange={setChannelFilter}
+          items={[
+            { value: 'any', label: 'Cualquiera' },
+            { value: 'chat', label: 'Chat' },
+            { value: 'email', label: 'Email' },
+            { value: 'sms', label: 'SMS' },
+            { value: 'phone', label: 'Teléfono' },
+            { value: 'messenger', label: 'Messenger' },
+          ]}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          renderTrigger={(sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M2.5 6.5C2.5 4 4.5 2.5 8 2.5s5.5 1.5 5.5 4-2 4-5.5 4c-.7 0-1.4-.1-2-.2L3 11.5l.6-2.3c-.7-.8-1.1-1.7-1.1-2.7z"/></svg>
+              <span>{sel?.value === 'any' || !sel ? 'Cualquier canal' : `Canal: ${sel.label}`}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+        />
+        <Dropdown
+          value={typeFilter}
+          onChange={setTypeFilter}
+          items={[
+            { value: 'any', label: 'Cualquiera' },
+            { value: 'trigger', label: 'Trigger' },
+            { value: 'manual', label: 'Manual' },
+            { value: 'scheduled', label: 'Programado' },
+            { value: 'event', label: 'Evento' },
+          ]}
+          triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          renderTrigger={(sel, isOpen) => (
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/></svg>
+              <span>{sel?.value === 'any' || !sel ? 'El tipo es cualquiera' : `Tipo: ${sel.label}`}</span>
+              <svg viewBox="0 0 16 16" className={`w-3 h-3 fill-[#646462] transition-transform ${isOpen ? 'rotate-180' : ''}`}><path d="M4 6l4 4 4-4z"/></svg>
+            </span>
+          )}
+        />
+        {extraFilters.tag && (
+          <Dropdown
+            value={tagFilter}
+            onChange={setTagFilter}
+            items={[
+              { value: 'any', label: 'Cualquier etiqueta' },
+              { value: 'priority', label: 'Prioridad' },
+              { value: 'support', label: 'Soporte' },
+              { value: 'sales', label: 'Ventas' },
+              { value: 'onboarding', label: 'Onboarding' },
+            ]}
+            triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          />
+        )}
+        {extraFilters.lastEdited && (
+          <Dropdown
+            value={lastEditedFilter}
+            onChange={setLastEditedFilter}
+            items={[
+              { value: 'any', label: 'Cualquier fecha' },
+              { value: '7d', label: 'Últimos 7 días' },
+              { value: '30d', label: 'Últimos 30 días' },
+              { value: '90d', label: 'Últimos 90 días' },
+            ]}
+            triggerClassName="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a] hover:bg-[#f8f8f7]"
+          />
+        )}
+        <div className="relative inline-block" ref={addFilterRef}>
+          <button
+            onClick={() => setShowAddFilter(o => !o)}
+            className="h-8 px-2 text-[12.5px] font-semibold text-[#ed621d] hover:underline inline-flex items-center gap-1"
+          >
+            <span>+</span><span>Agregar filtro</span>
           </button>
-        ))}
-        <button className="h-8 px-2 text-[12.5px] font-semibold text-[#ed621d] hover:underline inline-flex items-center gap-1">
-          <span>+</span><span>Agregar filtro</span>
-        </button>
+          {showAddFilter && (
+            <div className="absolute top-[calc(100%+4px)] left-0 z-30 bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] py-1 min-w-[200px]">
+              <button
+                onClick={() => { setExtraFilters(f => ({ ...f, tag: !f.tag })); setShowAddFilter(false); }}
+                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                <span className={`w-3.5 h-3.5 rounded border ${extraFilters.tag ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#e9eae6]'}`}/>
+                <span>Etiquetas</span>
+              </button>
+              <button
+                onClick={() => { setExtraFilters(f => ({ ...f, lastEdited: !f.lastEdited })); setShowAddFilter(false); }}
+                className="w-full flex items-center gap-2 px-3 h-9 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]"
+              >
+                <span className={`w-3.5 h-3.5 rounded border ${extraFilters.lastEdited ? 'bg-[#1a1a1a] border-[#1a1a1a]' : 'border-[#e9eae6]'}`}/>
+                <span>Última edición</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Workflow list */}
@@ -21194,7 +21569,7 @@ function FinFlujosTrabajoContent() {
             <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4 object-contain"/>
           </div>
           <span className="flex-1 text-[13px] text-[#1a1a1a]">Permitir que Fin responda automáticamente a la pregunta del cliente</span>
-          <button className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1.5 hover:underline">
+          <button onClick={() => openInBuilder('new')} className="text-[13px] font-semibold text-[#1a1a1a] inline-flex items-center gap-1.5 hover:underline">
             <span>Configuración simple</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M5 3l5 5-5 5" strokeLinecap="round"/></svg>
           </button>
@@ -21260,6 +21635,81 @@ function FinFlujosTrabajoContent() {
           })}
         </div>
       </div>
+
+      {/* Aprender modal */}
+      {learnModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setLearnModal(null)}>
+          <div className="bg-white rounded-[12px] shadow-xl w-full max-w-[520px] p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-[16px] font-bold text-[#1a1a1a]">
+                {learnModal === 'docs' ? 'Documentación' : learnModal === 'tutorial' ? 'Tutorial: tu primer flujo' : 'Plantillas'}
+              </h4>
+              <button onClick={() => setLearnModal(null)} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center" aria-label="Cerrar">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <p className="text-[13px] text-[#646462] leading-[20px]">
+              {learnModal === 'docs' && 'Aprende cómo construir flujos de trabajo automatizados que responden a eventos de tu CRM. Encuentra guías paso a paso, ejemplos y referencia de nodos.'}
+              {learnModal === 'tutorial' && 'Sigue este tutorial guiado para crear tu primer flujo de trabajo en menos de 5 minutos. Aprenderás a añadir un trigger, configurar acciones y publicar el flujo.'}
+              {learnModal === 'templates' && 'Explora plantillas listas para usar: refunds con aprobación, triage de casos, envío automático de emails, escalado de SLAs y más.'}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setLearnModal(null)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Cerrar</button>
+              {learnModal === 'templates' && (
+                <button
+                  onClick={() => { setLearnModal(null); openInBuilder('new'); }}
+                  className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black"
+                >
+                  Crear desde plantilla
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Solucionar problemas modal */}
+      {troubleshootOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setTroubleshootOpen(false)}>
+          <div className="bg-white rounded-[12px] shadow-xl w-full max-w-[600px] p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-[16px] font-bold text-[#1a1a1a]">Solucionar problemas</h4>
+              <button onClick={() => setTroubleshootOpen(false)} className="w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center" aria-label="Cerrar">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            {problematic.length === 0 ? (
+              <p className="text-[13px] text-[#646462] py-4">No hay flujos con problemas.</p>
+            ) : (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {problematic.map((w: any) => {
+                  const id = String(w.id || w.slug || w.name || '');
+                  const status = String(w.status || w.state || '').toLowerCase();
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => { setTroubleshootOpen(false); openInBuilder(id); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[8px] border border-[#e9eae6] hover:bg-[#f8f8f7] text-left"
+                    >
+                      <span className="w-6 h-6 rounded-full bg-[#fef2f2] text-[#b91c1c] flex items-center justify-center flex-shrink-0">
+                        <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.6"><path d="M8 3v6M8 12v.01" strokeLinecap="round"/></svg>
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[13px] font-semibold text-[#1a1a1a] truncate">{w.name || w.title || id}</span>
+                        <span className="block text-[11.5px] text-[#646462]">{status}</span>
+                      </span>
+                      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.5"><path d="M6 3l5 5-5 5" strokeLinecap="round"/></svg>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end">
+              <button onClick={() => setTroubleshootOpen(false)} className="h-8 px-3 rounded-[8px] border border-[#e9eae6] bg-white text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7]">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
