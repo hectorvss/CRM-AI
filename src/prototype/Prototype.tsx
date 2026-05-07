@@ -5640,46 +5640,118 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
   const isCanalesSection = view === 'messenger' || view === 'email' || view === 'phone' || view === 'whatsapp' || view === 'discord' || view === 'sms' || view === 'social' || view === 'allChannels';
   const isPersonalSection = view === 'personal' || view === 'security' || view === 'notifications' || view === 'visible' || view === 'tokens' || view === 'accountAccess' || view === 'multilingual';
 
-  // Explicit collapse state — initial defaults open the group whose sub is active.
-  // Click on chevron/header now toggles freely (decoupled from navigation).
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    workspace:  isWorkspaceSection,
-    suscripcion:isSuscripcionSection,
-    canales:    isCanalesSection,
-    inbox:      isInboxSection,
-    ia:         isIASection,
-    integ:      isIntegSection,
-    datos:      isDatos,
-    personal:   isPersonalSection,
+    workspace:   isWorkspaceSection,
+    suscripcion: isSuscripcionSection,
+    canales:     isCanalesSection,
+    inbox:       isInboxSection,
+    ia:          isIASection,
+    integ:       isIntegSection,
+    datos:       isDatos,
+    personal:    isPersonalSection,
   });
   const toggle = (k: string) => setOpenGroups(s => ({ ...s, [k]: !s[k] }));
-  // Chevron icon: rotate-90 when open (down ▼), default right (▶).
-  const Chev = ({ open }: { open: boolean }) => (
-    <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className={`w-3.5 h-3.5 opacity-40 transition-transform ${open ? 'rotate-90' : ''}`} />
+
+  // Inline SVG chevron — rotates 90° when open
+  const Chev = ({ on }: { on: boolean }) => (
+    <svg viewBox="0 0 16 16" className={`w-3.5 h-3.5 fill-[#8a8a88] flex-shrink-0 transition-transform duration-150 ${on ? 'rotate-90' : ''}`}>
+      <path d="M6 4l4 4-4 4z"/>
+    </svg>
   );
 
-  function SubItems({ items }: { items: typeof DATOS_SUB }) {
+  // Group section header with icon + rotating chevron
+  function GroupRow({ icon, label, groupKey, sectionActive }: { icon: React.ReactNode; label: string; groupKey: string; sectionActive: boolean }) {
     return (
-      <div className="flex flex-col gap-0.5 pl-3">
-        {items.map((sub) => {
-          const active = sub.nav !== null && view === sub.nav;
-          return (
-            <button
-              key={sub.label}
-              onClick={() => sub.nav && onNavigate(sub.nav)}
-              className={`flex items-center w-full px-3 py-[7px] rounded-lg text-[13px] text-left ${
-                active
-                  ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]"
-                  : "font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]"
-              }`}
-            >
-              {sub.label}
-            </button>
-          );
-        })}
-      </div>
+      <button
+        onClick={() => toggle(groupKey)}
+        className={`flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] text-left ${
+          sectionActive ? 'font-semibold text-[#1a1a1a] bg-[#ededea]/60' : 'font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]'
+        }`}
+      >
+        <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#646462]">{icon}</div>
+        <span className="flex-1">{label}</span>
+        <Chev on={openGroups[groupKey]} />
+      </button>
     );
   }
+
+  // Sub-item with icon + white-card active state
+  function SubRow({ icon, label, nav, warn }: { icon: React.ReactNode; label: string; nav: View | null; warn?: boolean }) {
+    const active = nav !== null && view === nav;
+    return (
+      <button
+        onClick={() => nav && onNavigate(nav)}
+        disabled={!nav}
+        className={`flex items-center gap-2 w-full h-8 pl-3 pr-2.5 rounded-lg text-[13px] text-left ${
+          active
+            ? 'bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]'
+            : nav
+              ? 'font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]'
+              : 'font-medium text-[#9a9a98] cursor-default'
+        }`}
+      >
+        <div className="w-[15px] h-[15px] flex items-center justify-center flex-shrink-0 text-[#646462]">{icon}</div>
+        <span className="flex-1">{label}</span>
+        {warn && <span className="text-[#f59e0b] text-[11px] leading-none">⚠</span>}
+      </button>
+    );
+  }
+
+  // ── Group icons (18px) ────────────────────────────────────────────────────
+  const IcoHome        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2L2 7v7h4v-4h4v4h4V7L8 2z"/></svg>;
+  const IcoWorkspace   = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="7" width="12" height="7" rx="1.5" opacity="0.5"/><path d="M1 7.5L8 2l7 5.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/><rect x="6" y="9" width="4" height="5" rx="1"/></svg>;
+  const IcoCreditCard  = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="3" width="14" height="10" rx="1.5"/><rect x="1" y="6.5" width="14" height="2" fill="white" opacity="0.35"/><rect x="3" y="9.5" width="3" height="1.5" rx="0.5" fill="white" opacity="0.55"/></svg>;
+  const IcoChannels    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12a1 1 0 011 1v7a1 1 0 01-1 1H9l-3 3v-3H2a1 1 0 01-1-1V3a1 1 0 011-1z"/></svg>;
+  const IcoInboxGrp    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v6H11l-1 2H6L5 9H1V3z" opacity="0.55"/><path d="M1 9h4l1 2h4l1-2h4v3a1 1 0 01-1 1H2a1 1 0 01-1-1V9z"/></svg>;
+  const IcoAIGrp       = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>;
+  const IcoIntegGrp    = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2.2"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15M3.2 3.2l1.8 1.8M11 11l1.8 1.8M3.2 12.8l1.8-1.8M11 5l1.8-1.8" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoDataGrp     = <svg viewBox="0 0 16 16" fill="currentColor"><ellipse cx="8" cy="4" rx="6" ry="2"/><path d="M2 4v3c0 1.1 2.7 2 6 2s6-.9 6-2V4" opacity="0.65"/><path d="M2 7v3c0 1.1 2.7 2 6 2s6-.9 6-2V7" opacity="0.35"/></svg>;
+  const IcoHelpGrp     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="2" width="14" height="10" rx="1.5" opacity="0.55"/><path d="M6.5 5.5a1.5 1.5 0 113 0c0 .8-.5 1.2-1 1.6S8 8 8 8.5M8 10v.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoOutboundGrp = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 5.5h1.5v5H2a1 1 0 01-1-1v-3a1 1 0 011-1zM3.5 5.5L9 2v12L3.5 10.5v-5z"/><path d="M11 6.3a2.5 2.5 0 010 3.4" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/><path d="M12.7 4.5a5 5 0 010 7" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoUserGrp     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6H2z"/></svg>;
+
+  // ── Sub-item icons (15px) ─────────────────────────────────────────────────
+  const IcoGeneral     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoTeammate    = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="5" r="2.3"/><path d="M1 13c0-2.6 2.2-4.7 5-4.7s5 2.1 5 4.7H1z"/><circle cx="12" cy="5" r="1.8" opacity="0.55"/><path d="M10.5 13h4.5c0-2-1.7-3.7-4-4" opacity="0.55"/></svg>;
+  const IcoHoursS      = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" opacity="0.3"/><path d="M8 4v4l2.5 2.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>;
+  const IcoBrandsS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2l1.8 3.7L14 6.4l-3 3 .7 4.2L8 11.6l-3.7 2-.7-4.2-3-3 4.2-.7L8 2z"/></svg>;
+  const IcoSecurityS   = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L2 3.5v4C2 11.2 5 14 8 15c3-1 6-3.8 6-7.5v-4L8 1z" opacity="0.45"/><path d="M5.5 8l2 2 3-3" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoMultilingS  = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="5.5" opacity="0.25"/><ellipse cx="8" cy="8" rx="3" ry="5.5" stroke="currentColor" strokeWidth="1.1" fill="none"/><path d="M2.5 8h11" stroke="currentColor" strokeWidth="1.1" fill="none"/></svg>;
+  const IcoBillingS    = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><rect x="1" y="7" width="14" height="2" fill="white" opacity="0.35"/><rect x="3" y="9.5" width="3" height="1.3" rx="0.4" fill="white" opacity="0.55"/></svg>;
+  const IcoMessengerS  = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1C4.1 1 1 3.8 1 7.2c0 2 1 3.7 2.6 5l-.5 2.8 2.8-1.4c.6.2 1.3.3 2.1.3 3.9 0 7-2.8 7-6.2S11.9 1 8 1z"/><path d="M5 9l2-2.5 2 1.5 2-2" stroke="white" strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoEmailS      = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 5.5l7 4.5 7-4.5" stroke="white" strokeWidth="1.2" fill="none"/></svg>;
+  const IcoPhoneS      = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 2h3l1.5 3.5L6 7a8 8 0 004 4l1.5-1.5L15 11v3a1 1 0 01-1 1A13 13 0 012 3a1 1 0 011-1z"/></svg>;
+  const IcoWhatsAppS   = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6.5" opacity="0.45"/><path d="M5 10.5c.8.5 1.8.8 2.8.8 2.8 0 5-2.2 5-5S10.8 1.5 8 1.5 3 3.7 3 6.5c0 .9.2 1.8.7 2.5L3 11.5l2-.5-.2-.5z" opacity="0.8"/><path d="M6 6.5c0-.3.2-.5.4-.5l.4.1c.2 0 .3.1.4.3l.4 1.1c.1.2 0 .4-.1.5l-.3.3a3.5 3.5 0 001.5 1.5l.3-.3c.1-.2.3-.2.5-.1l1.1.4c.2.1.4.3.4.5 0 .3-.3.5-.5.5C8 10.8 6 8.8 6 6.5z" fill="white"/></svg>;
+  const IcoSwitchS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="5" width="14" height="6" rx="3"/><circle cx="11" cy="8" r="2.5" fill="white"/></svg>;
+  const IcoSlackS      = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="2" width="3.5" height="3.5" rx="0.8" opacity="0.8"/><rect x="2" y="6.5" width="3.5" height="3.5" rx="0.8" opacity="0.55"/><rect x="6.5" y="2" width="3.5" height="3.5" rx="0.8" opacity="0.55"/><rect x="6.5" y="6.5" width="3.5" height="3.5" rx="0.8" opacity="0.35"/><rect x="11" y="2" width="3.5" height="8" rx="0.8" opacity="0.25"/></svg>;
+  const IcoDiscordS    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M12.5 3A10 10 0 0010 2.5c-.1.3-.2.6-.4.8A9.4 9.4 0 006.3 3c-.1.2-.3.5-.4.8A10 10 0 003.5 5.5C2.5 7.9 2.5 10.4 3.5 12c.8.8 1.8 1 2.5 1l.5-1a4.5 4.5 0 01-1.5-1 5.5 5.5 0 001 .3v.5a5.5 5.5 0 004 0v-.5c.3-.1.7-.2 1-.3a4.5 4.5 0 01-1.5 1l.5 1c.7 0 1.7-.2 2.5-1 1-1.6 1-4.1 0-6.5z"/><circle cx="6.2" cy="9" r="1"/><circle cx="9.8" cy="9" r="1"/></svg>;
+  const IcoSMSS        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12a1 1 0 011 1v7a1 1 0 01-1 1H9l-3 3v-3H2a1 1 0 01-1-1V3a1 1 0 011-1z" opacity="0.65"/><path d="M5 6.5h6M5 8.7h4" stroke="currentColor" strokeWidth="1.1" fill="none" strokeLinecap="round"/></svg>;
+  const IcoSocialS     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="2"/><circle cx="12" cy="4" r="2"/><circle cx="12" cy="12" r="2"/><path d="M5.9 7.1l4.2-2.2M5.9 8.9l4.2 2.2" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>;
+  const IcoAllChanS    = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.2" opacity="0.8"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity="0.35"/></svg>;
+  const IcoTeamS       = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="5" r="2.3"/><path d="M1 13c0-2.6 2.2-4.7 5-4.7S11 10.4 11 13H1z"/><circle cx="12" cy="5" r="1.8" opacity="0.55"/><path d="M10.5 13h4.5c0-2-1.7-3.7-4-4" opacity="0.55"/></svg>;
+  const IcoAssignS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8l2 2 4-4" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoMacrosS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3 4.5h10M3 8h7M3 11.5h5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/><path d="M13 9l2 2-2 2" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoTicketsS    = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="4" width="14" height="8" rx="1.5"/><path d="M4 8h1.5M7 8h1.5M10 8h1.5" stroke="white" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
+  const IcoSLAS        = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" opacity="0.25"/><path d="M8 4v4l2.5 2.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>;
+  const IcoFinS        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l1.6 4.4H14l-3.6 2.6 1.4 4.4L8 9.8l-3.8 2.6 1.4-4.4L2 5.4h4.4L8 1z"/></svg>;
+  const IcoBuzonS      = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="4" width="14" height="9" rx="2" opacity="0.4"/><path d="M1 7l7 4 7-4" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>;
+  const IcoAutoS       = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 2H4.5a1.5 1.5 0 00-1.5 1.5V4M10 2h1.5A1.5 1.5 0 0113 3.5V4M10 14h1.5a1.5 1.5 0 001.5-1.5V12M6 14H4.5A1.5 1.5 0 013 12.5V12" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/><rect x="4" y="6" width="8" height="4" rx="1.2"/></svg>;
+  const IcoAppS        = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1.2" opacity="0.8"/><rect x="9" y="1" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="1" y="9" width="6" height="6" rx="1.2" opacity="0.55"/><rect x="9" y="9" width="6" height="6" rx="1.2" opacity="0.35"/></svg>;
+  const IcoConnS       = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="8" r="2.5"/><circle cx="12" cy="8" r="2.5"/><path d="M6.5 8h3" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>;
+  const IcoAuthS       = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="10.5" r="1.2" fill="white"/></svg>;
+  const IcoDevS        = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M5 5L2 8l3 3M11 5l3 3-3 3M9.5 3l-3 10" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  const IcoLabelsS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h6.2L14 8l-5.8 6H2l-1-1V3l1-1z"/><circle cx="5.5" cy="8" r="1.2" fill="white"/></svg>;
+  const IcoPeopleS     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6H2z"/></svg>;
+  const IcoCompaniesS  = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="6" width="12" height="9" rx="1"/><path d="M5 6V4.5A1.5 1.5 0 016.5 3h3A1.5 1.5 0 0111 4.5V6" stroke="currentColor" strokeWidth="1.1" fill="none"/><rect x="6.5" y="9" width="3" height="3" rx="0.5" fill="white" opacity="0.65"/></svg>;
+  const IcoConvS       = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12a1 1 0 011 1v7a1 1 0 01-1 1H9l-3 3v-3H2a1 1 0 01-1-1V3a1 1 0 011-1z"/></svg>;
+  const IcoImportsS    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 12.5h12" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>;
+  const IcoTopicsS     = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="5.5" opacity="0.25"/><path d="M5.5 8h5M8 5.5v5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/></svg>;
+  const IcoCustomS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2" opacity="0.35"/><rect x="5.5" y="5.5" width="5" height="5" rx="1"/></svg>;
+  const IcoInfoS       = <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="6" opacity="0.25"/><path d="M8 7v4.5M8 5.3v.7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>;
+  const IcoNotifsS     = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a5 5 0 015 5v3l1.5 2.5h-13L3 10V7a5 5 0 015-5zM6.3 13.5a1.8 1.8 0 003.4 0H6.3z"/></svg>;
+  const IcoVisibleS    = <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2" fill="white"/></svg>;
+  const IcoTokensS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V5a3 3 0 016 0v1" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="8" cy="10" r="1.3" fill="white"/></svg>;
+  const IcoAccessS     = <svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="7" width="10" height="7" rx="1.5"/><path d="M4 7V5.5a4 4 0 018 0V7" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round"/><circle cx="7" cy="11" r="1.3" fill="white"/><path d="M14 8l1.5 1.5L14 11" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>;
 
   return (
     <div className="flex flex-col h-full w-[230px] flex-shrink-0 bg-[#fbfbf9] rounded-[16px] drop-shadow-[0px_1px_2px_rgba(20,20,20,0.15)] overflow-hidden">
@@ -5688,99 +5760,122 @@ function SettingsSidebar({ view, onNavigate }: { view: View; onNavigate: (v: Vie
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-0.5">
-        {/* Inicio (no chevron) */}
-        <button className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Inicio</span>
+        {/* Inicio */}
+        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#646462]">{IcoHome}</div>
+          <span className="flex-1">Inicio</span>
         </button>
 
-        {/* Espacio de trabajo section */}
-        <button
-          onClick={() => toggle('workspace')}
-          className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-        >
-          <span>Espacio de trabajo</span>
-          <Chev open={openGroups.workspace} />
-        </button>
+        {/* Espacio de trabajo */}
+        <GroupRow icon={IcoWorkspace} label="Espacio de trabajo" groupKey="workspace" sectionActive={isWorkspaceSection} />
         {openGroups.workspace && (
-          <div className="flex flex-col gap-0.5 pl-3">
-            {WORKSPACE_SUB.map((sub) => {
-              const active = sub.nav !== null && view === sub.nav;
-              return (
-                <button
-                  key={sub.label}
-                  onClick={() => sub.nav && onNavigate(sub.nav)}
-                  className={`flex items-center w-full px-3 py-[7px] rounded-lg text-[13px] text-left ${
-                    active
-                      ? "bg-white shadow-[0px_0px_0px_1px_#e9eae6,0px_1px_4px_0px_rgba(20,20,20,0.15)] font-semibold text-[#1a1a1a]"
-                      : "font-medium text-[#1a1a1a] hover:bg-[#f3f3f1]"
-                  }`}
-                >
-                  <span className="flex-1">{sub.label}</span>
-                  {sub.warn && <span className="text-[#f59e0b] ml-1">⚠</span>}
-                </button>
-              );
-            })}
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoGeneral}    label="General"              nav={null} />
+            <SubRow icon={IcoTeammate}   label="Compañeros de equipo" nav={null} />
+            <SubRow icon={IcoHoursS}     label="Horario de atención"  nav={'workspaceHours'} />
+            <SubRow icon={IcoBrandsS}    label="Marcas"               nav={'workspaceBrands'} />
+            <SubRow icon={IcoSecurityS}  label="Seguridad"            nav={'workspaceSecurity'} warn />
+            <SubRow icon={IcoMultilingS} label="Multilingüe"          nav={'workspaceMultilingual'} />
           </div>
         )}
 
-        {/* Suscripción section */}
-        <button onClick={() => toggle('suscripcion')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Suscripción</span>
-          <Chev open={openGroups.suscripcion} />
-        </button>
-        {openGroups.suscripcion && <SubItems items={SUSCRIPCION_SUB} />}
+        {/* Suscripción */}
+        <GroupRow icon={IcoCreditCard} label="Suscripción" groupKey="suscripcion" sectionActive={isSuscripcionSection} />
+        {openGroups.suscripcion && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoBillingS} label="Facturación" nav={'billing'} />
+          </div>
+        )}
 
-        {/* Canales section */}
-        <button onClick={() => toggle('canales')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Canales</span>
-          <Chev open={openGroups.canales} />
-        </button>
-        {openGroups.canales && <SubItems items={CANALES_SUB} />}
+        {/* Canales */}
+        <GroupRow icon={IcoChannels} label="Canales" groupKey="canales" sectionActive={isCanalesSection} />
+        {openGroups.canales && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoMessengerS} label="Messenger"                nav={'messenger'} />
+            <SubRow icon={IcoEmailS}     label="Correo electrónico"        nav={'email'} />
+            <SubRow icon={IcoPhoneS}     label="Teléfono"                  nav={'phone'} />
+            <SubRow icon={IcoWhatsAppS}  label="WhatsApp"                  nav={'whatsapp'} />
+            <SubRow icon={IcoSwitchS}    label="Switch"                    nav={null} />
+            <SubRow icon={IcoSlackS}     label="Slack"                     nav={null} />
+            <SubRow icon={IcoDiscordS}   label="Discord"                   nav={'discord'} />
+            <SubRow icon={IcoSMSS}       label="SMS"                       nav={'sms'} />
+            <SubRow icon={IcoSocialS}    label="Canales de redes sociales" nav={'social'} />
+            <SubRow icon={IcoAllChanS}   label="Todos los canales"         nav={'allChannels'} />
+          </div>
+        )}
 
-        {/* Inbox section */}
-        <button onClick={() => toggle('inbox')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Inbox</span>
-          <Chev open={openGroups.inbox} />
-        </button>
-        {openGroups.inbox && <SubItems items={INBOX_SUB} />}
+        {/* Inbox */}
+        <GroupRow icon={IcoInboxGrp} label="Inbox" groupKey="inbox" sectionActive={isInboxSection} />
+        {openGroups.inbox && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoTeamS}    label="Inbox para el equipo" nav={'inboxTeam'} />
+            <SubRow icon={IcoAssignS}  label="Asignaciones"         nav={'assignments'} />
+            <SubRow icon={IcoMacrosS}  label="Macros"               nav={'macros'} />
+            <SubRow icon={IcoTicketsS} label="Folios de atención"   nav={'tickets'} />
+            <SubRow icon={IcoSLAS}     label="SLA"                  nav={'sla'} />
+          </div>
+        )}
 
-        {/* IA y automatización section */}
-        <button onClick={() => toggle('ia')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>IA y automatización</span>
-          <Chev open={openGroups.ia} />
-        </button>
-        {openGroups.ia && <SubItems items={IA_SUB} />}
+        {/* IA y automatización */}
+        <GroupRow icon={IcoAIGrp} label="IA y automatización" groupKey="ia" sectionActive={isIASection} />
+        {openGroups.ia && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoFinS}   label="Fin AI Agent"   nav={'fin'} />
+            <SubRow icon={IcoBuzonS} label="Buzón de IA"    nav={'aiInbox'} />
+            <SubRow icon={IcoAutoS}  label="Automatización" nav={'automation'} />
+          </div>
+        )}
 
-        {/* Integraciones section */}
-        <button onClick={() => toggle('integ')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Integraciones</span>
-          <Chev open={openGroups.integ} />
-        </button>
-        {openGroups.integ && <SubItems items={INTEG_SUB} />}
+        {/* Integraciones */}
+        <GroupRow icon={IcoIntegGrp} label="Integraciones" groupKey="integ" sectionActive={isIntegSection} />
+        {openGroups.integ && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoAppS}  label="Tienda de aplicaciones"    nav={'appStore'} />
+            <SubRow icon={IcoConnS} label="Conectores de datos"       nav={'connectors'} />
+            <SubRow icon={IcoAuthS} label="Autenticación"             nav={null} />
+            <SubRow icon={IcoDevS}  label="Centro para desarrolladores" nav={null} />
+          </div>
+        )}
 
-        {/* Datos section */}
-        <button onClick={() => toggle('datos')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Datos</span>
-          <Chev open={openGroups.datos} />
-        </button>
-        {openGroups.datos && <SubItems items={DATOS_SUB} />}
+        {/* Datos */}
+        <GroupRow icon={IcoDataGrp} label="Datos" groupKey="datos" sectionActive={isDatos} />
+        {openGroups.datos && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoLabelsS}    label="Etiquetas"                     nav={'labels'} />
+            <SubRow icon={IcoPeopleS}    label="Personas"                      nav={'people'} />
+            <SubRow icon={IcoCompaniesS} label="Empresas"                      nav={'companies'} />
+            <SubRow icon={IcoConvS}      label="Conversaciones"                nav={'settings'} />
+            <SubRow icon={IcoCustomS}    label="Objetos personalizados"        nav={null} />
+            <SubRow icon={IcoImportsS}   label="Importaciones y exportaciones" nav={'imports'} />
+            <SubRow icon={IcoTopicsS}    label="Temas"                         nav={null} />
+          </div>
+        )}
 
-        {SETTINGS_NAV_BOTTOM.map((item) => (
-          <button
-            key={item.label}
-            className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left"
-          >
-            <span>{item.label}</span>
-            <img src={ICON_SETTINGS_CHEVRON_OPEN} alt="" className="w-3.5 h-3.5 opacity-40" />
-          </button>
-        ))}
-
-        {/* Personal section */}
-        <button onClick={() => toggle('personal')} className="flex items-center justify-between w-full px-3 py-[7px] rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
-          <span>Personal</span>
-          <Chev open={openGroups.personal} />
+        {/* Standalone bottom items */}
+        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#646462]">{IcoHelpGrp}</div>
+          <span className="flex-1">Centro de ayuda</span>
+          <Chev on={false} />
         </button>
-        {openGroups.personal && <SubItems items={PERSONAL_SUB} />}
+        <button className="flex items-center gap-2 w-full h-8 px-2.5 rounded-lg text-[13px] font-medium text-[#1a1a1a] hover:bg-[#f3f3f1] text-left">
+          <div className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 text-[#646462]">{IcoOutboundGrp}</div>
+          <span className="flex-1">Canales salientes</span>
+          <Chev on={false} />
+        </button>
+
+        {/* Personal */}
+        <GroupRow icon={IcoUserGrp} label="Personal" groupKey="personal" sectionActive={isPersonalSection} />
+        {openGroups.personal && (
+          <div className="flex flex-col gap-0.5 pl-2">
+            <SubRow icon={IcoInfoS}      label="Información"            nav={'personal'} />
+            <SubRow icon={IcoSecurityS}  label="Seguridad de la cuenta" nav={'security'} />
+            <SubRow icon={IcoNotifsS}    label="Notificaciones"         nav={'notifications'} />
+            <SubRow icon={IcoVisibleS}   label="Visible para ti"        nav={'visible'} />
+            <SubRow icon={IcoTokensS}    label="Tokens de API"          nav={'tokens'} />
+            <SubRow icon={IcoAccessS}    label="Acceso a la cuenta"     nav={'accountAccess'} />
+            <SubRow icon={IcoMultilingS} label="Multilingüe"            nav={'multilingual'} />
+          </div>
+        )}
       </div>
     </div>
   );
