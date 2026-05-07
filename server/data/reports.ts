@@ -956,6 +956,29 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
     // column doesn't exist — return zeros
   }
 
+  // Teammate CSAT: cases assigned to a human (not auto-resolved by AI)
+  let teammateCsatScore = 0;
+  let teammateCsatCount = 0;
+  let finCsatScore = 0;
+  let finCsatCount = 0;
+  try {
+    let qh = supabase.from('cases').select('satisfaction_score, assigned_user_id, execution_state').eq('tenant_id', scope.tenantId).gte('created_at', since).not('satisfaction_score', 'is', null);
+    if (normalizedChannel) qh = qh.eq('source_channel', normalizedChannel);
+    const { data: csatRows } = await qh;
+    if (csatRows) {
+      for (const r of csatRows) {
+        const score = Number(r.satisfaction_score);
+        if (!isNaN(score)) {
+          if (r.execution_state === 'completed') {
+            finCsatScore += score; finCsatCount++;
+          } else if (r.assigned_user_id) {
+            teammateCsatScore += score; teammateCsatCount++;
+          }
+        }
+      }
+    }
+  } catch (_) { /* satisfaction_score not ready */ }
+
   return {
     period,
     kpis: {
@@ -965,6 +988,10 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
       negative_count: negativeCount,
       request_rate: requestRate,
       response_rate: responseRate,
+      teammate_csat: teammateCsatCount > 0 ? Math.round((teammateCsatScore / teammateCsatCount / 5) * 100) : null,
+      teammate_csat_count: teammateCsatCount,
+      fin_csat: finCsatCount > 0 ? Math.round((finCsatScore / finCsatCount / 5) * 100) : null,
+      fin_csat_count: finCsatCount,
     },
     scoreDistribution,
   };

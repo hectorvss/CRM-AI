@@ -11205,8 +11205,8 @@ function ReportsCsatContent({ period, channel }: { period: string; channel: stri
       <ReportShellFilters />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
         <ReportsKpiCard label="Overall CSAT score" value={loading ? '…' : kpis.overall_csat != null ? `${kpis.overall_csat}%` : '—'} sub={`${kpis.positive_count ?? 0} de ${(kpis.positive_count ?? 0) + (kpis.neutral_count ?? 0) + (kpis.negative_count ?? 0)}`} />
-        <ReportsKpiCard label="Teammate CSAT score" value="—" sub="0 de 0" />
-        <ReportsKpiCard label="Fin Agent CSAT score" value="—" sub="0 de 0" />
+        <ReportsKpiCard label="Teammate CSAT score" value={loading ? '…' : kpis.teammate_csat != null ? `${kpis.teammate_csat}%` : '—'} sub={kpis.teammate_csat_count ? `${kpis.teammate_csat_count} surveys` : '0 de 0'} />
+        <ReportsKpiCard label="Fin Agent CSAT score" value={loading ? '…' : kpis.fin_csat != null ? `${kpis.fin_csat}%` : '—'} sub={kpis.fin_csat_count ? `${kpis.fin_csat_count} surveys` : '0 de 0'} />
         <ReportEmptyChart label="CSAT score over time" span={3} />
         <h3 className="col-span-3 text-[14px] font-bold text-[#1a1a1a] mt-2">Conversation ratings and remarks</h3>
         <div className="col-span-3 grid grid-cols-2 gap-4">
@@ -11497,12 +11497,15 @@ function ReportsTeammateContent({ period, channel }: { period: string; channel: 
   const { data, loading } = useApi(() => reportsApi.teammate(period, channel), [period, channel], null);
   const members: any[] = data?.members ?? [];
   const isEmpty = data?.isEmpty !== false || members.length === 0;
+  // Derive aggregate median handle time from members that have it
+  const handleTimes = members.filter((m: any) => m.medianHandleTime).map((m: any) => m.medianHandleTime as string);
+  const aggHandleTime = handleTimes.length > 0 ? handleTimes[Math.floor(handleTimes.length / 2)] : null;
   return (
     <>
       <ReportShellHeader title="Teammate performance" description="Check in on teammate performance with accurate metrics and insights." />
       <ReportShellFilters extraFilter={{ icon: 'user', label: 'Compañero de equipo es Cualquiera' }} />
       <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-3 gap-4">
-        <div className="col-span-2"><ReportsKpiCard label="Median teammate handling time" value="—" /></div>
+        <div className="col-span-2"><ReportsKpiCard label="Median teammate handling time" value={loading ? '…' : aggHandleTime ?? '—'} /></div>
         <ReportsKpiCard label="Median teammate assignment to close" value="—" />
         <ReportsKpiCard label="Median teammate assignment to first response" value="—" />
         <ReportsKpiCard label="Median teammate assignment to subsequent response" value="—" />
