@@ -614,30 +614,90 @@ async function getFinAgentSupabase(scope: ReportScope, period: string, channel?:
   };
 }
 
-async function getTeammateSupabase(scope: ReportScope, period: string, _channel?: string) {
+async function getTeammateSupabase(scope: ReportScope, period: string, channel?: string) {
   const supabase = getSupabaseAdmin();
+  const since = periodToISO(period);
+  const normalizedChannel = normalizeChannel(channel);
   let members: any[] = [];
 
   try {
-    const { data, error } = await supabase
+    // Load workspace members
+    const { data: wmData, error: wmErr } = await supabase
       .from('workspace_members')
-      .select('user_id, role, joined_at')
-      .eq('tenant_id', scope.tenantId);
-    if (!error && data) {
-      members = data.map((m: any) => ({
-        userId: m.user_id,
-        role: m.role || 'member',
-        joinedAt: m.joined_at,
-        name: m.user_id || 'Member',
-        email: null,
-        casesAssigned: 0,
-        casesReplied: 0,
-        casesClosed: 0,
-        medianHandleTime: null,
-      }));
+      .select('user_id, display_name, email, role, team, is_active')
+      .eq('tenant_id', scope.tenantId)
+      .eq('is_active', true);
+    if (wmErr) throw wmErr;
+
+    const memberList = wmData || [];
+    if (memberList.length === 0) {
+      return { period, members: [], isEmpty: true };
     }
+
+    // Load cases for the period grouped by assigned_user_id
+    let casesQ = supabase
+      .from('cases')
+      .select('assigned_user_id, status, created_at, closed_at, first_response_at')
+      .eq('tenant_id', scope.tenantId)
+      .gte('created_at', since);
+    if (normalizedChannel) casesQ = casesQ.eq('source_channel', normalizedChannel);
+    const { data: casesData } = await casesQ;
+
+    // Aggregate per user
+    const userMetrics = new Map<string, {
+      assigned: number; replied: number; closed: number;
+      durs: number[]; firstResp: number[];
+    }>();
+    for (const row of (casesData || [])) {
+      const uid = row.assigned_user_id;
+      if (!uid) continue;
+      const m = userMetrics.get(uid) ?? { assigned: 0, replied: 0, closed: 0, durs: [], firstResp: [] };
+      m.assigned++;
+      if (!['open', 'pending'].includes(row.status)) m.replied++;
+      if (['resolved', 'closed'].includes(row.status)) {
+        m.closed++;
+        const closeTs = row.closed_at || null;
+        if (closeTs && row.created_at) {
+          const d = new Date(closeTs).getTime() - new Date(row.created_at).getTime();
+          if (d > 0) m.durs.push(d);
+        }
+      }
+      if (row.first_response_at && row.created_at) {
+        const d = new Date(row.first_response_at).getTime() - new Date(row.created_at).getTime();
+        if (d > 0) m.firstResp.push(d);
+      }
+      userMetrics.set(uid, m);
+    }
+
+    const msToStr = (ms: number) => {
+      const h = ms / 3_600_000;
+      return h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
+    };
+    const median = (arr: number[]) => {
+      if (!arr.length) return null;
+      const s = [...arr].sort((a, b) => a - b);
+      return s[Math.floor(s.length / 2)];
+    };
+
+    members = memberList.map((m: any) => {
+      const met = userMetrics.get(m.user_id) ?? { assigned: 0, replied: 0, closed: 0, durs: [], firstResp: [] };
+      const medDur = median(met.durs);
+      const medFirst = median(met.firstResp);
+      return {
+        userId: m.user_id,
+        name: m.display_name || m.user_id,
+        email: m.email,
+        role: m.role || 'agent',
+        team: m.team,
+        casesAssigned: met.assigned,
+        casesReplied: met.replied,
+        casesClosed: met.closed,
+        medianHandleTime: medDur ? msToStr(medDur) : null,
+        medianFirstResponse: medFirst ? msToStr(medFirst) : null,
+      };
+    }).sort((a: any, b: any) => b.casesAssigned - a.casesAssigned);
   } catch (_) {
-    // table doesn't exist — use empty array
+    // workspace_members not accessible — return empty
   }
 
   return {
@@ -707,31 +767,44 @@ async function getArticlesSupabase(scope: ReportScope, period: string, _channel?
   let publishedArticles = 0;
   let draftArticles = 0;
   let searchHitsTotal = 0;
+  let viewCountTotal = 0;
+  let helpfulTotal = 0;
+  let unhelpfulTotal = 0;
+  let deflectedTotal = 0;
+  const topArticles: { title: string; views: number; helpful: number; unhelpful: number; deflected: number }[] = [];
 
   try {
     const { data, error } = await supabase
       .from('knowledge_articles')
-      .select('status, created_at')
+      .select('title, status, search_hits, view_count, helpful_count, unhelpful_count, conversation_deflected_count')
       .eq('tenant_id', scope.tenantId);
     if (!error && data) {
       totalArticles = data.length;
       publishedArticles = data.filter((r: any) => r.status === 'published').length;
       draftArticles = data.filter((r: any) => r.status === 'draft').length;
+
+      for (const r of data) {
+        searchHitsTotal += Number(r.search_hits || 0);
+        viewCountTotal += Number(r.view_count || 0);
+        helpfulTotal += Number(r.helpful_count || 0);
+        unhelpfulTotal += Number(r.unhelpful_count || 0);
+        deflectedTotal += Number(r.conversation_deflected_count || 0);
+      }
+
+      // Top 5 articles by views
+      const sorted = [...data].sort((a: any, b: any) => Number(b.view_count || 0) - Number(a.view_count || 0));
+      for (const r of sorted.slice(0, 5)) {
+        topArticles.push({
+          title: String(r.title || 'Untitled'),
+          views: Number(r.view_count || 0),
+          helpful: Number(r.helpful_count || 0),
+          unhelpful: Number(r.unhelpful_count || 0),
+          deflected: Number(r.conversation_deflected_count || 0),
+        });
+      }
     }
   } catch (_) {
     // table doesn't exist — return zeros
-  }
-
-  try {
-    const { data } = await supabase
-      .from('knowledge_articles')
-      .select('search_hits')
-      .eq('tenant_id', scope.tenantId);
-    if (data) {
-      searchHitsTotal = data.reduce((s: number, r: any) => s + Number(r.search_hits || 0), 0);
-    }
-  } catch (_) {
-    // column doesn't exist
   }
 
   return {
@@ -741,7 +814,13 @@ async function getArticlesSupabase(scope: ReportScope, period: string, _channel?
       published_articles: publishedArticles,
       draft_articles: draftArticles,
       search_hits_total: searchHitsTotal,
+      view_count_total: viewCountTotal,
+      helpful_total: helpfulTotal,
+      unhelpful_total: unhelpfulTotal,
+      deflected_total: deflectedTotal,
+      helpfulness_rate: pct(helpfulTotal, (helpfulTotal + unhelpfulTotal) || 1),
     },
+    topArticles,
   };
 }
 
@@ -750,39 +829,67 @@ async function getResponsivenessSupabase(scope: ReportScope, period: string, cha
   const since = periodToISO(period);
   const normalizedChannel = normalizeChannel(channel);
 
+  let medianFirstResponse: string | null = null;
   let medianTimeToClose: string | null = null;
+  const dist = [
+    { bucket: '< 5m', count: 0 },
+    { bucket: '5m - 15m', count: 0 },
+    { bucket: '15m - 30m', count: 0 },
+    { bucket: '30m - 1h', count: 0 },
+    { bucket: '1h - 3h', count: 0 },
+    { bucket: '3h - 8h', count: 0 },
+    { bucket: '> 8h', count: 0 },
+  ];
 
   try {
     let query = supabase
       .from('cases')
-      .select('created_at, updated_at, status')
+      .select('created_at, first_response_at, closed_at, status')
       .eq('tenant_id', scope.tenantId)
-      .gte('created_at', since)
-      .in('status', ['resolved', 'closed']);
+      .gte('created_at', since);
     if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
     const { data } = await query;
 
     if (data && data.length > 0) {
-      let totalHours = 0;
-      let count = 0;
+      // First response times (all cases that have first_response_at)
+      const firstRespMs: number[] = [];
       for (const row of data) {
-        if (row.updated_at && row.created_at) {
-          const diffMs = new Date(row.updated_at).getTime() - new Date(row.created_at).getTime();
-          if (diffMs > 0) {
-            totalHours += diffMs / (1000 * 3600);
-            count += 1;
+        if (row.first_response_at && row.created_at) {
+          const ms = new Date(row.first_response_at).getTime() - new Date(row.created_at).getTime();
+          if (ms > 0) {
+            firstRespMs.push(ms);
+            // bucket by first response time
+            const mins = ms / 60_000;
+            if (mins < 5) dist[0].count++;
+            else if (mins < 15) dist[1].count++;
+            else if (mins < 30) dist[2].count++;
+            else if (mins < 60) dist[3].count++;
+            else if (mins < 180) dist[4].count++;
+            else if (mins < 480) dist[5].count++;
+            else dist[6].count++;
           }
         }
       }
-      if (count > 0) {
-        const avgHours = totalHours / count;
-        if (avgHours < 1) {
-          medianTimeToClose = `${Math.round(avgHours * 60)}m`;
-        } else if (avgHours < 24) {
-          medianTimeToClose = `${Math.round(avgHours)}h`;
-        } else {
-          medianTimeToClose = `${Math.round(avgHours / 24)}d`;
+      if (firstRespMs.length > 0) {
+        const sorted = firstRespMs.sort((a, b) => a - b);
+        const medMs = sorted[Math.floor(sorted.length / 2)];
+        const h = medMs / 3_600_000;
+        medianFirstResponse = h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
+      }
+
+      // Time to close (closed cases with closed_at)
+      const closeMs: number[] = [];
+      for (const row of data) {
+        if (['resolved', 'closed'].includes(row.status) && row.closed_at && row.created_at) {
+          const ms = new Date(row.closed_at).getTime() - new Date(row.created_at).getTime();
+          if (ms > 0) closeMs.push(ms);
         }
+      }
+      if (closeMs.length > 0) {
+        const sorted = closeMs.sort((a, b) => a - b);
+        const medMs = sorted[Math.floor(sorted.length / 2)];
+        const h = medMs / 3_600_000;
+        medianTimeToClose = h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
       }
     }
   } catch (_) {
@@ -792,19 +899,11 @@ async function getResponsivenessSupabase(scope: ReportScope, period: string, cha
   return {
     period,
     kpis: {
-      median_response_time: null,
-      median_first_response: null,
+      median_response_time: medianFirstResponse,
+      median_first_response: medianFirstResponse,
       median_time_to_close: medianTimeToClose,
     },
-    distribution: [
-      { bucket: '< 5m', count: 0 },
-      { bucket: '5m - 15m', count: 0 },
-      { bucket: '15m - 30m', count: 0 },
-      { bucket: '30m - 1h', count: 0 },
-      { bucket: '1h - 3h', count: 0 },
-      { bucket: '3h - 8h', count: 0 },
-      { bucket: '> 8h', count: 0 },
-    ],
+    distribution: dist,
   };
 }
 
@@ -817,23 +916,40 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
   let positiveCount = 0;
   let neutralCount = 0;
   let negativeCount = 0;
+  let requestRate = '0%';
+  let responseRate = '0%';
+  const scoreDistribution = [1, 2, 3, 4, 5].map(s => ({ score: s, count: 0 }));
 
   try {
     let query = supabase
       .from('cases')
-      .select('satisfaction_score')
+      .select('satisfaction_score, survey_sent_at, survey_responded_at, status')
       .eq('tenant_id', scope.tenantId)
       .gte('created_at', since);
     if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
     const { data } = await query;
 
     if (data && data.length > 0) {
+      const closed = data.filter((r: any) => ['resolved', 'closed'].includes(r.status));
+      const surveySent = data.filter((r: any) => r.survey_sent_at != null);
+      const surveyResponded = data.filter((r: any) => r.survey_responded_at != null);
       const withScore = data.filter((r: any) => r.satisfaction_score != null);
+
+      // request_rate = % of closed cases that got a survey
+      requestRate = pct(surveySent.length, closed.length || 1);
+      // response_rate = % of surveys that got a response
+      responseRate = pct(surveyResponded.length, surveySent.length || 1);
+
       if (withScore.length > 0) {
         positiveCount = withScore.filter((r: any) => r.satisfaction_score >= 4).length;
         neutralCount = withScore.filter((r: any) => r.satisfaction_score === 3).length;
         negativeCount = withScore.filter((r: any) => r.satisfaction_score <= 2).length;
         overallCsat = Math.round((positiveCount / withScore.length) * 100);
+        for (const row of withScore) {
+          const s = Number(row.satisfaction_score);
+          const entry = scoreDistribution.find(e => e.score === s);
+          if (entry) entry.count++;
+        }
       }
     }
   } catch (_) {
@@ -847,9 +963,10 @@ async function getCsatSupabase(scope: ReportScope, period: string, channel?: str
       positive_count: positiveCount,
       neutral_count: neutralCount,
       negative_count: negativeCount,
-      request_rate: '0%',
-      response_rate: '0%',
+      request_rate: requestRate,
+      response_rate: responseRate,
     },
+    scoreDistribution,
   };
 }
 
@@ -877,29 +994,53 @@ async function getEffectivenessSupabase(scope: ReportScope, period: string, chan
     caseCount(q => q.not('status', 'eq', 'open')),
   ]);
 
-  // First contact resolution: cases closed within 1 hour using updated_at - created_at < 3600000ms
+  // First contact resolution: closed within 1 hour of creation, no reassignment
   let firstContactResolved = 0;
   let firstContactTotal = 0;
+  let totalReassigned = 0;
+  let medianRepliesToClose: number | null = null;
+
   try {
     let query = supabase
       .from('cases')
-      .select('created_at, updated_at, status')
+      .select('id, created_at, closed_at, first_response_at, status, reassigned_count')
       .eq('tenant_id', scope.tenantId)
-      .gte('created_at', since)
-      .in('status', ['resolved', 'closed']);
+      .gte('created_at', since);
     if (normalizedChannel) query = query.eq('source_channel', normalizedChannel);
     const { data } = await query;
     if (data) {
-      firstContactTotal = data.length;
+      firstContactTotal = data.filter((r: any) => ['resolved', 'closed'].includes(r.status)).length;
       firstContactResolved = data.filter((r: any) => {
-        if (!r.updated_at || !r.created_at) return false;
-        const diffMs = new Date(r.updated_at).getTime() - new Date(r.created_at).getTime();
-        return diffMs > 0 && diffMs < 3_600_000;
+        if (!['resolved', 'closed'].includes(r.status)) return false;
+        const closeTs = r.closed_at || null;
+        if (!closeTs || !r.created_at) return false;
+        const diffMs = new Date(closeTs).getTime() - new Date(r.created_at).getTime();
+        return diffMs > 0 && diffMs < 3_600_000 && (r.reassigned_count ?? 0) === 0;
       }).length;
+      totalReassigned = data.reduce((s: number, r: any) => s + Number(r.reassigned_count || 0), 0);
     }
   } catch (_) {
-    // column missing
+    // column missing — use safe defaults
   }
+
+  // Median replies-to-close: count outbound messages per case then median
+  try {
+    let msgQ = supabase
+      .from('messages')
+      .select('case_id, direction')
+      .eq('tenant_id', scope.tenantId)
+      .eq('direction', 'outbound')
+      .gte('sent_at', since);
+    const { data: msgData } = await msgQ;
+    if (msgData && msgData.length > 0) {
+      const repliesPerCase = new Map<string, number>();
+      for (const row of msgData) {
+        if (row.case_id) repliesPerCase.set(row.case_id, (repliesPerCase.get(row.case_id) || 0) + 1);
+      }
+      const counts = Array.from(repliesPerCase.values()).sort((a, b) => a - b);
+      if (counts.length > 0) medianRepliesToClose = counts[Math.floor(counts.length / 2)];
+    }
+  } catch (_) { /* messages table issue */ }
 
   const nTotal = total || 0;
   const nReplied = replied || 0;
@@ -912,8 +1053,8 @@ async function getEffectivenessSupabase(scope: ReportScope, period: string, chan
       first_contact_resolution: fcrRate,
       first_contact_resolved: firstContactResolved,
       first_contact_total: firstContactTotal,
-      conversations_reassigned: 0,
-      median_replies_to_close: null,
+      conversations_reassigned: totalReassigned,
+      median_replies_to_close: medianRepliesToClose,
       total_conversations: nTotal,
     },
   };
@@ -929,43 +1070,70 @@ async function getCallsSupabase(scope: ReportScope, period: string, channel?: st
   let inboundCalls = 0;
   let outboundCalls = 0;
   let messengerCalls = 0;
+  let totalDurationSecs = 0;
+  let durCount = 0;
   const timeSeries: { day: number; count: number }[] = Array.from({ length: days }, (_, i) => ({ day: i, count: 0 }));
   const byDirection: { direction: string; count: number }[] = [];
+  const baseMs = Date.now() - days * 86_400_000;
 
+  // ── Primary: calls table ───────────────────────────────────────────────────
+  let usedCallsTable = false;
   try {
-    let query = supabase
-      .from('cases')
-      .select('id, created_at, source_channel')
+    let q = supabase
+      .from('calls')
+      .select('direction, channel, started_at, duration_secs')
       .eq('tenant_id', scope.tenantId)
-      .gte('created_at', since)
-      .in('source_channel', ['phone', 'voice', 'call', 'messenger_call', 'video']);
+      .gte('started_at', since);
+    if (channel && channel !== 'all') q = q.eq('channel', channel);
 
-    const { data } = await query;
-    if (data && data.length > 0) {
-      // Derive inbound/outbound from channel name as a heuristic
-      inboundCalls = data.filter((r: any) =>
-        !r.source_channel?.includes('outbound') && r.source_channel !== 'messenger_call'
-      ).length;
-      outboundCalls = data.filter((r: any) => r.source_channel?.includes('outbound')).length;
-      messengerCalls = data.filter((r: any) => r.source_channel === 'messenger_call').length;
-
-      // Time series
-      const baseMs = Date.now() - days * 86_400_000;
+    const { data, error } = await q;
+    if (!error && data && data.length > 0) {
+      usedCallsTable = true;
       for (const row of data) {
-        if (!row.created_at) continue;
-        const dayIdx = Math.floor((new Date(row.created_at).getTime() - baseMs) / 86_400_000);
-        if (dayIdx >= 0 && dayIdx < days && timeSeries[dayIdx]) {
-          timeSeries[dayIdx].count += 1;
+        const ch = row.channel || 'phone';
+        const dir = row.direction || 'inbound';
+        if (ch === 'messenger') messengerCalls++;
+        else if (dir === 'outbound') outboundCalls++;
+        else inboundCalls++;
+        if (row.duration_secs != null) { totalDurationSecs += Number(row.duration_secs); durCount++; }
+        if (row.started_at) {
+          const dayIdx = Math.floor((new Date(row.started_at).getTime() - baseMs) / 86_400_000);
+          if (dayIdx >= 0 && dayIdx < days) timeSeries[dayIdx].count += 1;
         }
       }
-
-      if (inboundCalls > 0) byDirection.push({ direction: 'inbound', count: inboundCalls });
-      if (outboundCalls > 0) byDirection.push({ direction: 'outbound', count: outboundCalls });
-      if (messengerCalls > 0) byDirection.push({ direction: 'messenger', count: messengerCalls });
     }
-  } catch (_) {
-    // No calls data — return graceful zeros
+  } catch (_) { /* calls table not accessible */ }
+
+  // ── Fallback: cases with phone-like source_channel ─────────────────────────
+  if (!usedCallsTable) {
+    try {
+      let q = supabase
+        .from('cases')
+        .select('source_channel, created_at')
+        .eq('tenant_id', scope.tenantId)
+        .gte('created_at', since)
+        .in('source_channel', ['phone', 'voice', 'call', 'messenger_call', 'video']);
+      const { data } = await q;
+      if (data) {
+        for (const row of data) {
+          const ch = row.source_channel || '';
+          if (ch === 'messenger_call') messengerCalls++;
+          else if (ch.includes('outbound')) outboundCalls++;
+          else inboundCalls++;
+          if (row.created_at) {
+            const dayIdx = Math.floor((new Date(row.created_at).getTime() - baseMs) / 86_400_000);
+            if (dayIdx >= 0 && dayIdx < days) timeSeries[dayIdx].count += 1;
+          }
+        }
+      }
+    } catch (_) { /* no calls data */ }
   }
+
+  if (inboundCalls > 0) byDirection.push({ direction: 'inbound', count: inboundCalls });
+  if (outboundCalls > 0) byDirection.push({ direction: 'outbound', count: outboundCalls });
+  if (messengerCalls > 0) byDirection.push({ direction: 'messenger', count: messengerCalls });
+
+  const medianDuration = durCount > 0 ? `${Math.round(totalDurationSecs / durCount / 60)}m` : null;
 
   return {
     period,
@@ -974,7 +1142,7 @@ async function getCallsSupabase(scope: ReportScope, period: string, channel?: st
       outbound_calls: outboundCalls,
       messenger_calls: messengerCalls,
       total_calls: inboundCalls + outboundCalls + messengerCalls,
-      median_call_duration: null,
+      median_call_duration: medianDuration,
       median_queue_time: null,
       median_talk_time: null,
     },
@@ -1000,24 +1168,24 @@ async function getTeamInboxSupabase(scope: ReportScope, period: string, channel?
   try {
     let baseQuery = supabase
       .from('cases')
-      .select('id, status, created_at, updated_at, assigned_to')
+      .select('id, status, created_at, closed_at, assigned_user_id')
       .eq('tenant_id', scope.tenantId)
       .gte('created_at', since);
     if (normalizedChannel) baseQuery = baseQuery.eq('source_channel', normalizedChannel);
     const { data } = await baseQuery;
 
     if (data && data.length > 0) {
-      conversationsAssigned = data.filter((r: any) => r.assigned_to != null).length;
+      conversationsAssigned = data.filter((r: any) => r.assigned_user_id != null).length;
       conversationsReplied = data.filter((r: any) => !['open', 'pending'].includes(r.status)).length;
       closedConversations = data.filter((r: any) => ['resolved', 'closed'].includes(r.status)).length;
 
-      // Median time to close from created_at → updated_at on closed cases
+      // Median time to close using closed_at (preferred) or fallback to status-based estimate
       const closedRows = data.filter((r: any) =>
-        ['resolved', 'closed'].includes(r.status) && r.created_at && r.updated_at
+        ['resolved', 'closed'].includes(r.status) && r.created_at && r.closed_at
       );
       if (closedRows.length > 0) {
         const durations = closedRows
-          .map((r: any) => new Date(r.updated_at).getTime() - new Date(r.created_at).getTime())
+          .map((r: any) => new Date(r.closed_at).getTime() - new Date(r.created_at).getTime())
           .filter((d: number) => d > 0)
           .sort((a: number, b: number) => a - b);
         if (durations.length > 0) {
@@ -1027,17 +1195,17 @@ async function getTeamInboxSupabase(scope: ReportScope, period: string, channel?
         }
       }
 
-      // Group by assigned_to (treat each unique value as a "team inbox")
+      // Group by assigned_user_id (treat each unique assignee as a "team inbox")
       const byAssignee: Record<string, { assigned: number; replied: number; closed: number; durs: number[] }> = {};
       for (const row of data) {
-        const key = String(row.assigned_to ?? 'Unassigned');
+        const key = String(row.assigned_user_id ?? 'Unassigned');
         if (!byAssignee[key]) byAssignee[key] = { assigned: 0, replied: 0, closed: 0, durs: [] };
         byAssignee[key].assigned++;
         if (!['open', 'pending'].includes(row.status)) byAssignee[key].replied++;
         if (['resolved', 'closed'].includes(row.status)) {
           byAssignee[key].closed++;
-          if (row.created_at && row.updated_at) {
-            const d = new Date(row.updated_at).getTime() - new Date(row.created_at).getTime();
+          if (row.created_at && row.closed_at) {
+            const d = new Date(row.closed_at).getTime() - new Date(row.created_at).getTime();
             if (d > 0) byAssignee[key].durs.push(d);
           }
         }
@@ -1083,48 +1251,46 @@ async function getOutboundSupabase(scope: ReportScope, period: string, _channel?
   const performance: { title: string; sent: number; goal: number }[] = [];
 
   try {
-    // Try outbound_messages table first
-    const { data: omData } = await supabase
+    // outbound_messages table: sent_by, sent_at, channel, status, subject
+    const { data: omData, error: omErr } = await supabase
       .from('outbound_messages')
-      .select('id, created_at, sender_id, subject, sent_count')
+      .select('id, sent_at, sent_by, channel, status, subject')
       .eq('tenant_id', scope.tenantId)
-      .gte('created_at', since);
+      .gte('sent_at', since);
 
-    if (omData && omData.length > 0) {
-      totalSent = omData.reduce((s: number, r: any) => s + Number(r.sent_count || 1), 0);
+    if (!omErr && omData) {
+      totalSent = omData.length;
       const baseMs = Date.now() - days * 86_400_000;
+
+      // per-user counts
+      const userMap = new Map<string, number>();
       for (const row of omData) {
-        if (!row.created_at) continue;
-        const dayIdx = Math.floor((new Date(row.created_at).getTime() - baseMs) / 86_400_000);
-        if (dayIdx >= 0 && dayIdx < days && timeSeries[dayIdx]) {
-          timeSeries[dayIdx].count += Number(row.sent_count || 1);
+        const ts = row.sent_at;
+        if (ts) {
+          const dayIdx = Math.floor((new Date(ts).getTime() - baseMs) / 86_400_000);
+          if (dayIdx >= 0 && dayIdx < days) timeSeries[dayIdx].count += 1;
         }
+        const u = String(row.sent_by || 'System');
+        userMap.set(u, (userMap.get(u) || 0) + 1);
+      }
+      for (const [name, count] of Array.from(userMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8)) {
+        byUser.push({ name, count });
+      }
+
+      // performance: group by subject/channel
+      const perfMap = new Map<string, { sent: number }>();
+      for (const row of omData) {
+        const key = row.subject || row.channel || 'Campaign';
+        const p = perfMap.get(key) || { sent: 0 };
+        p.sent++;
+        perfMap.set(key, p);
+      }
+      for (const [title, m] of Array.from(perfMap.entries()).sort((a, b) => b[1].sent - a[1].sent).slice(0, 5)) {
+        performance.push({ title, sent: m.sent, goal: 0 });
       }
     }
   } catch (_) {
-    // No outbound_messages table — try cases with outbound tag
-    try {
-      const { data: caseData } = await supabase
-        .from('cases')
-        .select('id, created_at, assigned_to, case_type')
-        .eq('tenant_id', scope.tenantId)
-        .gte('created_at', since)
-        .ilike('case_type', '%outbound%');
-
-      if (caseData && caseData.length > 0) {
-        totalSent = caseData.length;
-        const baseMs = Date.now() - days * 86_400_000;
-        for (const row of caseData) {
-          if (!row.created_at) continue;
-          const dayIdx = Math.floor((new Date(row.created_at).getTime() - baseMs) / 86_400_000);
-          if (dayIdx >= 0 && dayIdx < days && timeSeries[dayIdx]) {
-            timeSeries[dayIdx].count += 1;
-          }
-        }
-      }
-    } catch (__) {
-      // completely empty
-    }
+    // outbound_messages not accessible — keep zeros
   }
 
   return {

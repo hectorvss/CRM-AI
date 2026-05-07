@@ -13192,6 +13192,9 @@ function KnowledgeArticleEditor({
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [infoPanelOpen, setInfoPanelOpen] = useState(true);
+  // Fullscreen toggle — when on, the drawer expands to cover the whole
+  // viewport (no slice of the underlying view remains visible on the left).
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   // Auto-focus the title field on first mount when creating a new article.
@@ -13417,7 +13420,11 @@ function KnowledgeArticleEditor({
     // Backdrop is transparent (no dimming) and click-outside dismisses.
     <div className="fixed inset-0 z-50" onClick={onClose}>
       <div
-        className="absolute right-0 top-0 bottom-0 w-[70%] min-w-[920px] max-w-[1500px] bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden"
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen
+            ? 'w-full max-w-none border-l-0'
+            : 'w-[70%] min-w-[920px] max-w-[1500px]'
+        }`}
         onClick={e => e.stopPropagation()}
       >
       {/* Header */}
@@ -13430,8 +13437,25 @@ function KnowledgeArticleEditor({
           <button onClick={() => save(false)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#f8f8f7] border border-[#e9eae6] text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#ededea] disabled:opacity-50">{busy ? 'Guardando…' : 'Guardar como borrador'}</button>
           <button onClick={() => save(true)} disabled={busy || !title.trim()} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black disabled:bg-[#a4a4a2]">{busy ? '…' : 'Publicar'}</button>
           <span className="w-px h-6 bg-[#e9eae6]" />
+          <button
+            onClick={() => setIsFullscreen(v => !v)}
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]"
+          >
+            {isFullscreen ? (
+              // "compress" icon — four arrows pointing inward
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
+                <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : (
+              // "expand" icon — four arrows pointing outward
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
+                <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </button>
           <button onClick={() => setInfoPanelOpen(o => !o)} title={infoPanelOpen ? 'Ocultar Información' : 'Mostrar Información'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
-            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M2 2l5 5M14 2l-5 5M2 14l5-5M14 14l-5-5" strokeLinecap="round"/></svg>
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M11 3v10"/></svg>
           </button>
           <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
