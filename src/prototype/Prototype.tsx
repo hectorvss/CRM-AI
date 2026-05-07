@@ -14220,6 +14220,201 @@ function KnowledgeExternalSourcePicker({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeContentLibrary — drawer modal triggered by the "Ver todo" card.
+// Shows every piece of content in the workspace (articles, snippets,
+// website-syncs, documents) with type / status filters + search; clicking
+// a row opens that record in the article editor without leaving Fin.
+// ─────────────────────────────────────────────────────────────────────────────
+function KnowledgeContentLibrary({
+  domains,
+  onOpenArticle,
+  onClose,
+  onAction,
+}: {
+  domains: Array<{ id: string; name: string }>;
+  onOpenArticle: (article: any) => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+}) {
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: articlesData, loading } = useApi(() => knowledgeApi.listArticles(), [refreshKey], []);
+  const articles: any[] = Array.isArray(articlesData) ? articlesData : [];
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'any' | 'article' | 'snippet' | 'policy' | 'website' | 'document'>('any');
+  const [statusFilter, setStatusFilter] = useState<'any' | 'draft' | 'published'>('any');
+  const [visibilityFilter, setVisibilityFilter] = useState<'any' | 'public' | 'internal'>('any');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return articles.filter((a: any) => {
+      if (typeFilter !== 'any' && String(a.type || '').toLowerCase() !== typeFilter) return false;
+      if (statusFilter !== 'any' && String(a.status || '').toLowerCase() !== statusFilter) return false;
+      if (visibilityFilter !== 'any' && String(a.visibility || '').toLowerCase() !== visibilityFilter) return false;
+      if (!q) return true;
+      const hay = [a.title, a.description, a.content, a.id].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [articles, search, typeFilter, statusFilter, visibilityFilter]);
+
+  function typeLabel(t?: string) {
+    const v = String(t || '').toLowerCase();
+    return v === 'article' ? 'Artículo'
+      : v === 'snippet' ? 'Fragmento'
+      : v === 'policy' ? 'Política'
+      : v === 'website' ? 'Sitio web'
+      : v === 'document' ? 'Documento'
+      : v === 'playbook' ? 'Playbook'
+      : v || 'Artículo';
+  }
+  function domainName(id?: string) {
+    if (!id) return '—';
+    return domains.find(d => d.id === id)?.name || id.slice(0, 8);
+  }
+  async function publishOne(id: string) {
+    try {
+      await knowledgeApi.publishArticle(id);
+      onAction('Artículo publicado');
+      setRefreshKey(k => k + 1);
+    } catch (err: any) {
+      onAction(err?.message || 'No se pudo publicar', 'error');
+    }
+  }
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      if (!inEditable) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className={`absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden transition-[width] duration-200 ease-out ${
+          isFullscreen ? 'w-full max-w-none border-l-0 rounded-none' : 'w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]'
+        }`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-4">
+          <h2 className="flex-1 text-[15px] font-bold text-[#1a1a1a]">Todo el contenido <span className="text-[#646462] font-normal">· {filtered.length}{filtered.length !== articles.length ? ` de ${articles.length}` : ''}</span></h2>
+          <button onClick={() => setIsFullscreen(v => !v)} title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'} className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5">
+              {isFullscreen
+                ? <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" strokeLinecap="round" strokeLinejoin="round"/>
+                : <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" strokeLinecap="round" strokeLinejoin="round"/>}
+            </svg>
+          </button>
+          <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Filter bar */}
+        <div className="flex-shrink-0 border-b border-[#e9eae6] flex items-center px-5 py-3 gap-2 flex-wrap">
+          <div className="flex-1 max-w-[360px] h-8 rounded-[8px] border border-[#e9eae6] bg-white flex items-center px-3 gap-2 focus-within:border-[#1a1a1a]">
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3" strokeLinecap="round"/></svg>
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar en todo el contenido…"
+              className="flex-1 bg-transparent outline-none text-[13px] text-[#1a1a1a] placeholder:text-[#a4a4a2]"
+            />
+            {search && <button onClick={() => setSearch('')} title="Limpiar"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg></button>}
+          </div>
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)} className="h-8 px-2 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a]">
+            <option value="any">Todos los tipos</option>
+            <option value="article">Artículos</option>
+            <option value="snippet">Fragmentos</option>
+            <option value="policy">Políticas</option>
+            <option value="website">Sitios web</option>
+            <option value="document">Documentos</option>
+          </select>
+          <select value={visibilityFilter} onChange={e => setVisibilityFilter(e.target.value as any)} className="h-8 px-2 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a]">
+            <option value="any">Visibilidad</option>
+            <option value="public">Público</option>
+            <option value="internal">Interno</option>
+          </select>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="h-8 px-2 rounded-[8px] border border-[#e9eae6] bg-white text-[12.5px] text-[#1a1a1a]">
+            <option value="any">Cualquier estado</option>
+            <option value="published">Publicados</option>
+            <option value="draft">Borradores</option>
+          </select>
+          {(typeFilter !== 'any' || statusFilter !== 'any' || visibilityFilter !== 'any' || search) && (
+            <button
+              onClick={() => { setSearch(''); setTypeFilter('any'); setStatusFilter('any'); setVisibilityFilter('any'); }}
+              className="h-8 px-2.5 rounded-[8px] text-[12px] text-[#b91c1c] hover:bg-[#fef2f2]"
+            >Limpiar filtros</button>
+          )}
+        </div>
+
+        {/* Body — table */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {loading && articles.length === 0 ? (
+            <p className="p-8 text-[13px] text-[#646462]">Cargando contenido…</p>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-[13px] text-[#646462]">
+              {articles.length === 0 ? 'No hay contenido todavía. Crea un artículo desde "Agregar contenido".' : 'Ningún elemento coincide con los filtros.'}
+            </div>
+          ) : (
+            <div>
+              <div className="grid grid-cols-[1fr_120px_120px_120px_140px_100px] items-center gap-3 px-5 py-2.5 border-b border-[#e9eae6] text-[11.5px] uppercase tracking-wide font-semibold text-[#646462] sticky top-0 bg-white">
+                <span>Título</span>
+                <span>Tipo</span>
+                <span>Estado</span>
+                <span>Visibilidad</span>
+                <span>Carpeta</span>
+                <span className="text-right">Acción</span>
+              </div>
+              {filtered.map((a: any) => {
+                const status = String(a.status || 'draft').toLowerCase();
+                const visibility = String(a.visibility || 'public').toLowerCase();
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => onOpenArticle(a)}
+                    className="w-full text-left grid grid-cols-[1fr_120px_120px_120px_140px_100px] items-center gap-3 px-5 py-3 border-b border-[#f1f1ee] hover:bg-[#fafafa]"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[13.5px] font-semibold text-[#1a1a1a] truncate">{a.title || 'Sin título'}</p>
+                      {a.description && <p className="text-[12px] text-[#646462] truncate">{a.description}</p>}
+                    </div>
+                    <span className="text-[12.5px] text-[#1a1a1a]">{typeLabel(a.type)}</span>
+                    <span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${status === 'published' ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                        {status === 'published' ? 'Publicado' : 'Borrador'}
+                      </span>
+                    </span>
+                    <span className="text-[12.5px] text-[#646462]">{visibility === 'internal' ? 'Interno' : 'Público'}</span>
+                    <span className="text-[12.5px] text-[#646462] truncate">{domainName(a.domain_id)}</span>
+                    <div className="flex items-center justify-end gap-2">
+                      {status !== 'published' && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => { e.stopPropagation(); publishOne(a.id); }}
+                          className="text-[12px] font-semibold text-[#15803d] hover:underline"
+                        >Publicar</span>
+                      )}
+                      <span className="text-[12px] font-semibold text-[#1a1a1a] hover:underline">Editar</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // KnowledgeArticulos — list + filter + create + publish, optionally scoped to a folder.
 function KnowledgeArticulos({
   onAction,
@@ -15347,14 +15542,16 @@ function FinContenidoContent() {
     return { total, published };
   }, [articles]);
   const [search, setSearch] = useState('');
-  // Modal state — three flavours of "Agregar contenido": the article editor
-  // for Artículo público / interno / Fragmento, the website-sync wizard for
-  // "Sincronización de sitio web", and the external-source picker for the
-  // multi-icon card on the right of the row.
+  // Modal state — every card opens an in-place modal, never navigates away:
+  //   • Artículo público / interno / Fragmento → article editor
+  //   • Sincronización de sitio web            → website-sync wizard
+  //   • Conectar app externa                   → external-source picker
+  //   • Ver todo                               → content-library browser
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorPrefill, setEditorPrefill] = useState<any>(null);
   const [websiteSyncOpen, setWebsiteSyncOpen] = useState(false);
   const [externalPickerOpen, setExternalPickerOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type });
@@ -15382,8 +15579,13 @@ function FinContenidoContent() {
     else if (label === 'Artículo interno')     openCreateEditor({ type: 'ARTICLE', visibility: 'internal' });
     else if (label === 'Fragmento de texto')   openCreateEditor({ type: 'SNIPPET', visibility: 'internal' });
     else if (label === 'Sincronización de sitio web') setWebsiteSyncOpen(true);
-    else if (label === 'Ver todo')             jumpToKnowledge();
+    else if (label === 'Ver todo')             setLibraryOpen(true);
     else openCreateEditor();
+  }
+  function openExistingArticle(article: any) {
+    setLibraryOpen(false);
+    setEditorPrefill(article);
+    setEditorOpen(true);
   }
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -15548,6 +15750,14 @@ function FinContenidoContent() {
       {externalPickerOpen && (
         <KnowledgeExternalSourcePicker
           onClose={() => setExternalPickerOpen(false)}
+          onAction={showToast}
+        />
+      )}
+      {libraryOpen && (
+        <KnowledgeContentLibrary
+          domains={domains}
+          onOpenArticle={openExistingArticle}
+          onClose={() => setLibraryOpen(false)}
           onAction={showToast}
         />
       )}
