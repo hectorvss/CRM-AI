@@ -18259,10 +18259,46 @@ const FIN_ESC_FIELD_ICON_ATTR = (
 const FIN_ESC_FIELD_ICON_DATA = (
   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M3 8h10M8 3c1.5 1.5 2.3 3.2 2.3 5S9.5 11.5 8 13c-1.5-1.5-2.3-3.2-2.3-5S6.5 4.5 8 3z"/></svg>
 );
+const FIN_ESC_FIELD_ICON_TRANSFER = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 6h9M9 3l3 3-3 3M13 10H4M7 13l-3-3 3-3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_TAG = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 7.5L8 2h5.5V7.5L8 13l-5.5-5.5z" strokeLinejoin="round"/><circle cx="10.5" cy="5" r="0.8" fill="currentColor"/></svg>
+);
+const FIN_ESC_FIELD_ICON_CAL = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.2"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_MAIL = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2.5 4.5l5.5 4.5 5.5-4.5"/></svg>
+);
+const FIN_ESC_FIELD_ICON_LINK = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M6 9.5L9.5 6M5.5 10.5l-1 1a2.1 2.1 0 11-3-3l2.5-2.5M10.5 5.5l1-1a2.1 2.1 0 113 3l-2.5 2.5" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PAPERCLIP = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M11 5l-5 5a2 2 0 102.8 2.8l5-5a3.5 3.5 0 10-5-5l-5.4 5.4" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_GLOBE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5a8 8 0 010 11M8 2.5a8 8 0 000 11"/></svg>
+);
+const FIN_ESC_FIELD_ICON_PHONE = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M5 2.5h6a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1zM7 12h2" strokeLinecap="round"/></svg>
+);
+const FIN_ESC_FIELD_ICON_FIN = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 1l1.5 3.7L13 6l-3 2.6L11 13 8 11 5 13l1-4.4L3 6l3.5-1.3z"/></svg>
+);
+const FIN_ESC_FIELD_ICON_CHAT = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 4.5a1.5 1.5 0 011.5-1.5h8a1.5 1.5 0 011.5 1.5v5a1.5 1.5 0 01-1.5 1.5H6l-3 2.5V4.5z"/></svg>
+);
+const FIN_ESC_FIELD_ICON_BOOK = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+);
+const FIN_ESC_FIELD_ICON_BUILDING = (
+  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="0.6"/><path d="M5.5 5h2M8.5 5h2M5.5 7.5h2M8.5 7.5h2M5.5 10h2M8.5 10h2"/></svg>
+);
 
 type FinEscField = { key: string; label: string; status?: string; icon: ReactNode };
 
-const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEscField[]; personData: FinEscField[] } = {
+const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEscField[]; personData: FinEscField[]; companyData: FinEscField[]; messageData: FinEscField[]; conversationData: FinEscField[] } = {
   conversation: [
     { key: 'teammate_assigned', label: 'Teammate assigned', icon: FIN_ESC_FIELD_ICON_PERSON },
     { key: 'team_assigned',     label: 'Team assigned',     icon: FIN_ESC_FIELD_ICON_PEOPLE },
@@ -18313,6 +18349,85 @@ const FIN_ESCALATION_FIELDS: { conversation: FinEscField[]; finAttributes: FinEs
     { key: 'pd_utm_medium',           label: 'UTM Medium',               icon: FIN_ESC_FIELD_ICON_DATA },
     { key: 'pd_utm_source',           label: 'UTM Source',               icon: FIN_ESC_FIELD_ICON_DATA },
     { key: 'pd_utm_term',             label: 'UTM Term',                 icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_referral_url',         label: 'Referral URL',             icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'pd_sub_optouts',          label: 'Subscription type opt-outs', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_sub_optins',           label: 'Subscription type opt-ins',  icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'pd_last_survey',          label: 'Last Survey received',     icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'pd_whatsapp_number',      label: 'WhatsApp number',          icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'pd_slack_email',          label: 'Slack Email',              icon: FIN_ESC_FIELD_ICON_TRANSFER },
+  ],
+  companyData: [
+    { key: 'co_name',           label: 'Company name',         icon: FIN_ESC_FIELD_ICON_BUILDING },
+    { key: 'co_id',             label: 'Company ID',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'co_last_seen',      label: 'Company last seen',    icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'co_created_at',     label: 'Company created at',   icon: FIN_ESC_FIELD_ICON_CAL },
+    { key: 'co_people',         label: 'People',               icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'co_web_sessions',   label: 'Company web sessions', icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'co_plan',           label: 'Plan',                 icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_monthly_spend',  label: 'Monthly Spend',        icon: FIN_ESC_FIELD_ICON_DATA },
+    { key: 'co_segment',        label: 'Company Segment',      icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_tag',            label: 'Company tag',          icon: FIN_ESC_FIELD_ICON_TAG },
+    { key: 'co_size',           label: 'Company size',         icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'co_industry',       label: 'Company industry',     icon: FIN_ESC_FIELD_ICON_BUILDING },
+    { key: 'co_website',        label: 'Company website',      icon: FIN_ESC_FIELD_ICON_LINK },
+  ],
+  messageData: [
+    { key: 'msg_detected_lang',     label: 'Idioma detectado',                    icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_content',           label: 'Contenido del mensaje',               icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_has_attachments',   label: 'El mensaje tiene archivos adjuntos',  icon: FIN_ESC_FIELD_ICON_PAPERCLIP },
+    { key: 'msg_page_url',          label: 'URL de la página',                    icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_subject',     label: 'Asunto del correo electrónico',       icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_recipient',   label: 'Destinatario del correo electrónico', icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_to',          label: 'Correo electrónico para',             icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_cc',          label: 'Copia del correo electrónico',        icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_email_bcc',         label: 'Correo electrónico Cco',              icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_from_android',      label: 'Desde Android',                       icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_ios',          label: 'Desde iOS',                           icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_email',        label: 'Desde el correo electrónico',         icon: FIN_ESC_FIELD_ICON_MAIL },
+    { key: 'msg_from_facebook',     label: 'Desde Facebook',                      icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_whatsapp',     label: 'Desde WhatsApp',                      icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_twitter',      label: 'Desde Twitter',                       icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_instagram',    label: 'Desde Instagram',                     icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_from_phoneswitch',  label: 'Desde Phone Switch',                  icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_from_sms',          label: 'Desde SMS',                           icon: FIN_ESC_FIELD_ICON_PHONE },
+    { key: 'msg_whatsapp_business', label: 'Número de WhatsApp Business',         icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_instagram_account', label: 'Cuenta de Instagram para empresas',   icon: FIN_ESC_FIELD_ICON_CHAT },
+    { key: 'msg_started_via_inbox', label: 'Started via Inbox',                   icon: FIN_ESC_FIELD_ICON_CHAT },
+  ],
+  conversationData: [
+    { key: 'cd_smart_suggestion',     label: 'Smart Suggestion Group',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_sdr_success',          label: 'SDR Success Counted',              icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_imported_standalone',  label: 'Imported via standalone',          icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_language',             label: 'Language',                         icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'cd_auto_translated',      label: 'Auto-translated',                  icon: FIN_ESC_FIELD_ICON_GLOBE },
+    { key: 'cd_external_id',          label: 'External ID',                      icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_fin_preview',          label: 'Fin AI Agent: Preview',            icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_preview_admin',        label: 'Preview Admin ID',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_tone',              label: 'AI Tone of Voice',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_answer_length',     label: 'AI Answer Length',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_pronoun',           label: 'AI Pronoun Formality',             icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_title',             label: 'AI Title',                         icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workflow_preview',     label: 'Workflow: Preview',                icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_fin_resolution',       label: 'Fin AI Agent resolution state',    icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_pending_reason',   label: 'Fin AI Agent: Pending reason',     icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_sales_outcome',    label: 'Fin Sales outcome',                icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_awaiting_team',    label: 'Fin awaiting teammate input',      icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_activated',        label: 'Fin AI Agent activated',           icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_last_outbound_call',   label: 'Last outbound call state',         icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workspace_phone',      label: 'Workspace phone number',           icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_workspace_sms',        label: 'Workspace SMS phone number',       icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_recording_consent',    label: 'Recording consent',                icon: FIN_ESC_FIELD_ICON_TRANSFER },
+    { key: 'cd_merged',               label: 'Merged',                           icon: FIN_ESC_FIELD_ICON_PEOPLE },
+    { key: 'cd_fin_action_used',      label: 'Fin AI Agent: Action used in resolution',     icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_image_used',       label: 'Fin AI Agent: Image used in resolution',      icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_procedure_used',   label: 'Fin AI Agent: Procedure or task used',        icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_ai_issue_summary',     label: 'AI Issue summary',                 icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_query_type',           label: 'Query Type',                       icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_escalation_reason',label: 'Fin Escalation Reason',            icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_configuration',    label: 'Fin AI Agent: Configuration used', icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_involved',    label: 'Fin for Ecommerce involved',       icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_product_a',   label: 'Fin for Ecommerce: Product asked', icon: FIN_ESC_FIELD_ICON_FIN },
+    { key: 'cd_fin_ecom_product_b',   label: 'Fin for Ecommerce: Product issue', icon: FIN_ESC_FIELD_ICON_FIN },
   ],
 };
 
@@ -18332,7 +18447,10 @@ function findFinEscField(key: string): FinEscField | undefined {
   return (
     FIN_ESCALATION_FIELDS.conversation.find(f => f.key === key) ||
     FIN_ESCALATION_FIELDS.finAttributes.find(f => f.key === key) ||
-    FIN_ESCALATION_FIELDS.personData.find(f => f.key === key)
+    FIN_ESCALATION_FIELDS.personData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.companyData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.messageData.find(f => f.key === key) ||
+    FIN_ESCALATION_FIELDS.conversationData.find(f => f.key === key)
   );
 }
 
@@ -18363,10 +18481,13 @@ function FinFieldPickerPopover({
   const conversation = filt(FIN_ESCALATION_FIELDS.conversation);
   const finAttributes = filt(FIN_ESCALATION_FIELDS.finAttributes);
   const personData = filt(FIN_ESCALATION_FIELDS.personData);
+  const companyData = filt(FIN_ESCALATION_FIELDS.companyData);
+  const messageData = filt(FIN_ESCALATION_FIELDS.messageData);
+  const conversationData = filt(FIN_ESCALATION_FIELDS.conversationData);
   return (
     <div
       ref={popRef}
-      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[320px] max-h-[380px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden"
+      className="absolute top-[calc(100%+4px)] left-0 z-40 w-[340px] max-h-[420px] bg-white border border-[#e9eae6] rounded-[10px] shadow-[0_8px_24px_rgba(20,20,20,0.12)] flex flex-col overflow-hidden"
       onClick={e => e.stopPropagation()}
     >
       <div className="flex-shrink-0 p-2 border-b border-[#e9eae6]">
@@ -18418,7 +18539,40 @@ function FinFieldPickerPopover({
             ))}
           </div>
         )}
-        {conversation.length === 0 && finAttributes.length === 0 && personData.length === 0 && (
+        {companyData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Company data</div>
+            {companyData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {messageData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Message data</div>
+            {messageData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {conversationData.length > 0 && (
+          <div className="py-1 border-t border-[#f1f1ee]">
+            <div className="px-3 pb-1 pt-1 text-[11px] uppercase tracking-[0.5px] font-semibold text-[#646462]">Conversation data</div>
+            {conversationData.map(f => (
+              <button key={f.key} onClick={() => { onPick(f.key); onClose(); }} className="w-full flex items-center gap-2.5 px-3 h-8 text-[13px] text-left text-[#1a1a1a] hover:bg-[#f8f8f7]">
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center text-[#646462]">{f.icon}</span>
+                <span className="flex-1 truncate">{f.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {conversation.length === 0 && finAttributes.length === 0 && personData.length === 0 && companyData.length === 0 && messageData.length === 0 && conversationData.length === 0 && (
           <div className="px-3 py-6 text-center text-[12.5px] text-[#646462]">No hay coincidencias</div>
         )}
       </div>
