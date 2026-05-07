@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, workflowsApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, auditApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, operationsApi, reportsApi, workflowsApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -11449,7 +11449,19 @@ function KnowledgeSidebar({ sub, onSelect, activeFolderId, onSelectFolder, onCre
 
 type KhTab = 'all' | 'ai' | 'copilot' | 'help';
 
-function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
+function KhProductHero({ tab, onOpenView }: { tab: 'ai' | 'copilot' | 'help'; onOpenView?: (view: string) => void }) {
+  // Hero dismissal — persisted in localStorage so it stays hidden across reloads.
+  // Per-tab key so user can dismiss each independently.
+  const lsKey = `clain.knowledge.hero.${tab}`;
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try { return typeof window !== 'undefined' && window.localStorage.getItem(lsKey) === '1'; }
+    catch { return false; }
+  });
+  function dismiss() {
+    setDismissed(true);
+    try { window.localStorage.setItem(lsKey, '1'); } catch { /* ignore quota */ }
+  }
+  if (dismissed) return null;
   if (tab === 'ai') {
     return (
       <div className="relative bg-white border border-[#e9eae6] rounded-[10px] flex overflow-hidden">
@@ -11460,7 +11472,7 @@ function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
           </div>
           <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">Fin utiliza tu contenido de asistencia para responder preguntas a través de Messenger y correo electrónico, para así mejorar la asistencia de autoservicio, la experiencia del cliente y las puntuaciones CSAT.</p>
           <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
-            <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</a>
+            <button onClick={() => onOpenView?.('fin')} className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</button>
             <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
           </div>
         </div>
@@ -11476,7 +11488,7 @@ function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
             <div className="bg-[#ff5f3f] text-white rounded-[6px] px-2 py-1 text-[8.5px]">How many API calls can I make per month?</div>
           </div>
         </div>
-        <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+        <button onClick={dismiss} title="Ocultar" className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
         </button>
       </div>
@@ -11492,7 +11504,7 @@ function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
           </div>
           <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">Copilot utiliza tu contenido de asistencia para encontrar respuestas rápidamente, dando a cada miembro del equipo un asistente de IA que mejora la eficiencia del equipo y la experiencia del cliente.</p>
           <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
-            <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Ir a Inbox</a>
+            <button onClick={() => onOpenView?.('inbox')} className="inline-flex items-center gap-1 hover:underline">↗ Ir a Inbox</button>
             <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><rect x="3" y="2.5" width="10" height="11" rx="1.2"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></svg> Ver guía</a>
             <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
           </div>
@@ -11508,7 +11520,7 @@ function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
             </div>
           </div>
         </div>
-        <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+        <button onClick={dismiss} title="Ocultar" className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
           <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
         </button>
       </div>
@@ -11524,7 +11536,7 @@ function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
         </div>
         <p className="text-[13px] text-[#646462] leading-[19px] max-w-[520px]">El centro de ayuda te permite crear artículos y organizarlos en colecciones para que los clientes encuentren respuestas a preguntas frecuentes rápidamente en tu sitio web o aplicación.</p>
         <div className="mt-3 flex items-center gap-4 text-[12.5px] font-medium text-[#1a1a1a]">
-          <a href="#" className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</a>
+          <button onClick={() => onOpenView?.('connectors')} className="inline-flex items-center gap-1 hover:underline">↗ Configurar ahora</button>
           <a href="#" className="inline-flex items-center gap-1 hover:underline"><svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/></svg> Más información</a>
         </div>
       </div>
@@ -11545,7 +11557,7 @@ function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
           </div>
         </div>
       </div>
-      <button className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
+      <button onClick={dismiss} title="Ocultar" className="absolute top-2.5 right-2.5 w-6 h-6 flex items-center justify-center rounded-full bg-[#1a1a1a]/40 hover:bg-[#1a1a1a]/60 text-white">
         <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
       </button>
     </div>
@@ -11553,9 +11565,19 @@ function KhProductHero({ tab }: { tab: 'ai' | 'copilot' | 'help' }) {
 }
 
 function KhChecklist({ title, items }: { title: string; items: { label: string; done?: boolean }[] }) {
+  // Dismiss the whole checklist; persist per-title so each appearance is independent.
+  const lsKey = `clain.knowledge.checklist.${title.toLowerCase().replace(/\s+/g, '_')}`;
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try { return typeof window !== 'undefined' && window.localStorage.getItem(lsKey) === '1'; } catch { return false; }
+  });
+  function dismiss() {
+    setDismissed(true);
+    try { window.localStorage.setItem(lsKey, '1'); } catch { /* ignore */ }
+  }
+  if (dismissed) return null;
   return (
     <div className="relative bg-white border border-[#e9eae6] rounded-[10px] p-4">
-      <button className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#ededea]">
+      <button onClick={dismiss} title="Ocultar" className="absolute top-2.5 right-2.5 w-5 h-5 flex items-center justify-center rounded-full hover:bg-[#ededea]">
         <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M12.7 4.7l-1.4-1.4L8 6.6 4.7 3.3 3.3 4.7 6.6 8l-3.3 3.3 1.4 1.4L8 9.4l3.3 3.3 1.4-1.4L9.4 8z"/></svg>
       </button>
       <p className="text-[13px] font-semibold text-[#1a1a1a] mb-3">{title}</p>
@@ -11764,7 +11786,7 @@ function KnowledgeFuentes({
 
         {tab === 'ai' && (
           <>
-            <KhProductHero tab="ai" />
+            <KhProductHero tab="ai" onOpenView={onOpenView} />
             <div className="grid grid-cols-[1fr_280px] gap-4">
               <div className="flex flex-col gap-4">
                 <KhSection
@@ -11802,7 +11824,7 @@ function KnowledgeFuentes({
 
         {tab === 'copilot' && (
           <>
-            <KhProductHero tab="copilot" />
+            <KhProductHero tab="copilot" onOpenView={onOpenView} />
             <div className="grid grid-cols-[1fr_280px] gap-4">
               <div className="flex flex-col gap-4">
                 <KhSection
@@ -11877,7 +11899,7 @@ function KnowledgeFuentes({
 
         {tab === 'help' && (
           <>
-            <KhProductHero tab="help" />
+            <KhProductHero tab="help" onOpenView={onOpenView} />
             <div className="grid grid-cols-[1fr_280px] gap-4">
               <div className="flex flex-col gap-4">
                 <KhSection
@@ -13459,7 +13481,7 @@ function FinFaqItem({ q, a, open, onToggle }: { q: string; a: string; open: bool
   );
 }
 
-function FinAllRolesContent() {
+function FinAllRolesContent({ onStart }: { onStart?: () => void }) {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   return (
     <div className="flex-1 overflow-y-auto min-h-0">
@@ -13490,6 +13512,7 @@ function FinAllRolesContent() {
                 'Resolver consultas complejas',
                 'En todos los canales',
               ]}
+              onStart={onStart}
             />
             <FinRoleCard
               image={IMG_FIN_SALES_AGENT}
@@ -13502,6 +13525,7 @@ function FinAllRolesContent() {
                 'Guía para el descubrimiento de productos',
                 'Calificar y canalizar clientes potenciales',
               ]}
+              onStart={onStart}
             />
           </div>
         </div>
@@ -13539,7 +13563,7 @@ function FinAllRolesContent() {
 }
 
 function FinRoleCard({
-  image, iconColor, iconKind, title, tagline, bullets,
+  image, iconColor, iconKind, title, tagline, bullets, onStart,
 }: {
   image: string;
   iconColor: string;
@@ -13547,6 +13571,7 @@ function FinRoleCard({
   title: string;
   tagline: string;
   bullets: string[];
+  onStart?: () => void;
 }) {
   return (
     <div className="bg-white border border-[#e9eae6] rounded-[12px] overflow-hidden flex flex-col">
@@ -13576,7 +13601,7 @@ function FinRoleCard({
           {bullets.map(b => <li key={b}>{b}</li>)}
         </ul>
         <div className="mt-4">
-          <button className="bg-[#222] text-white text-[12.5px] font-semibold rounded-full px-4 py-1.5 hover:bg-black">
+          <button onClick={onStart} className="bg-[#222] text-white text-[12.5px] font-semibold rounded-full px-4 py-1.5 hover:bg-black">
             Comenzar
           </button>
         </div>
@@ -14666,37 +14691,73 @@ function FinPruebasContent() {
   );
 }
 
+// Hook for hero-card dismiss state, persisted in localStorage. Used across
+// every Fin page that has a closable promo banner.
+function useDismissibleHero(key: string) {
+  const lsKey = `clain.fin.hero.${key}`;
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try { return typeof window !== 'undefined' && window.localStorage.getItem(lsKey) === '1'; } catch { return false; }
+  });
+  function dismiss() {
+    setDismissed(true);
+    try { window.localStorage.setItem(lsKey, '1'); } catch { /* ignore */ }
+  }
+  return { dismissed, dismiss };
+}
+
+// Tiny helper used by every Fin page to push the user to a top-level view
+// (channel settings, connectors, etc.) via the URL the prototype already
+// listens to.
+function openCrmView(view: string) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('view', view);
+  window.location.href = url.toString();
+}
+
 // ─── Desplegar / Chat (Figma 1:12035) ────────────────────────────────────────
 function FinDespliegueChatContent() {
+  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('depChat');
+  const { data: connectorsData } = useApi(() => connectorsApi.list(), [], []);
+  const isLive = useMemo(() => {
+    const list = Array.isArray(connectorsData) ? connectorsData : [];
+    return list.some((c: any) => {
+      const provider = String(c.provider || c.type || '').toLowerCase();
+      const status = String(c.status || '').toLowerCase();
+      return ['messenger', 'web', 'chat', 'slack'].some(p => provider.includes(p)) && (status === 'connected' || status === 'active');
+    });
+  }, [connectorsData]);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
-      <div className="flex-shrink-0 px-6 pt-5 pb-3">
-        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
-          <div className="flex-1 min-w-0 pr-2">
-            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
-              Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
-            </h2>
-            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
-              Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>Activar Fin para chat</span>
-              </a>
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>Usa Fin en los flujos de trabajo</span>
-              </a>
+      {!heroDismissed && (
+        <div className="flex-shrink-0 px-6 pt-5 pb-3">
+          <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
+            <div className="flex-1 min-w-0 pr-2">
+              <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+                Implementa Fin a través de Messenger, Slack, WhatsApp, SMS y redes sociales
+              </h2>
+              <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+                Fin AI Agent saluda a los clientes, responde preguntas al instante y remite los problemas a tu equipo cuando es necesario, en el Messenger y en Slack, WhatsApp, SMS, Facebook o Instagram.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+                <button onClick={() => openCrmView('messenger')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Activar Fin para chat</span>
+                </button>
+                <button onClick={() => openCrmView('automation')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Usa Fin en los flujos de trabajo</span>
+                </button>
+              </div>
             </div>
+            <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
+            <button onClick={dismissHero} title="Ocultar" className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
           </div>
-          <img src={IMG_FIN_DEPLOY_CHAT} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
-          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Section divider with title */}
       <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
@@ -14709,8 +14770,9 @@ function FinDespliegueChatContent() {
         <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
           <div className="flex items-center gap-3">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
-            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
-              <span>No establecer en vivo</span>
+            <button onClick={() => openCrmView('connectors')} className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-[#15803d]' : 'bg-[#a4a4a2]'}`} />
+              <span>{isLive ? 'En vivo' : 'No establecer en vivo'}</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
           </div>
@@ -14726,11 +14788,11 @@ function FinDespliegueChatContent() {
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Cuando un cliente inicia una conversación</span>
           </div>
           {[
-            { l: 'Los clientes ven a Fin', v: 'Users, Leads, and Visitors' },
-            { l: 'En los canales seleccionados', v: 'Web, iOS y Android' },
-            { l: 'Fin se presenta', v: 'Activadas (Todos los idi…)' },
+            { l: 'Los clientes ven a Fin', v: 'Users, Leads, and Visitors', target: 'people' },
+            { l: 'En los canales seleccionados', v: 'Web, iOS y Android', target: 'allChannels' },
+            { l: 'Fin se presenta', v: 'Activadas (Todos los idi…)', target: 'multilingual' },
           ].map((row, i) => (
-            <button key={i} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+            <button key={i} onClick={() => openCrmView(row.target)} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.l}</span>
                 <span className="text-[12.5px] text-[#646462] truncate">{row.v}</span>
@@ -14746,7 +14808,7 @@ function FinDespliegueChatContent() {
             </span>
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin responde al cliente</span>
           </div>
-          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+          <button onClick={() => openCrmView('knowledge')} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[13px] font-semibold text-[#1a1a1a]">Usando contenido de asistencia</span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fff1eb] text-[11px] text-[#bf3a1d] font-medium">
@@ -14756,7 +14818,7 @@ function FinDespliegueChatContent() {
             </div>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
           </button>
-          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+          <button onClick={() => openCrmView('fin')} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Siguiendo la guía</span>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
           </button>
@@ -14768,39 +14830,51 @@ function FinDespliegueChatContent() {
 
 // ─── Desplegar / Correo electrónico (Figma 1:13680) ──────────────────────────
 function FinDespliegueEmailContent() {
+  const { dismissed: heroDismissed, dismiss: dismissHero } = useDismissibleHero('depEmail');
+  const { data: connectorsData } = useApi(() => connectorsApi.list(), [], []);
+  const isLive = useMemo(() => {
+    const list = Array.isArray(connectorsData) ? connectorsData : [];
+    return list.some((c: any) => {
+      const provider = String(c.provider || c.type || '').toLowerCase();
+      const status = String(c.status || '').toLowerCase();
+      return provider.includes('email') && (status === 'connected' || status === 'active');
+    });
+  }, [connectorsData]);
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Hero card */}
-      <div className="flex-shrink-0 px-6 pt-5 pb-3">
-        <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
-          <div className="flex-1 min-w-0 pr-2">
-            <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
-              Implementa Fin por correo electrónico para obtener respuestas precisas al instante
-            </h2>
-            <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
-              Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>Aprende cómo Fin responde a los correos electrónicos</span>
-              </a>
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
-                <span>Usa Fin en los flujos de trabajo</span>
-              </a>
-              <a href="#" className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
-                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
-                <span>Desplegar Fin por correo electrónico</span>
-              </a>
+      {!heroDismissed && (
+        <div className="flex-shrink-0 px-6 pt-5 pb-3">
+          <div className="relative bg-white rounded-[12px] flex gap-5 items-start overflow-hidden">
+            <div className="flex-1 min-w-0 pr-2">
+              <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px] tracking-[-0.2px] max-w-[640px]">
+                Implementa Fin por correo electrónico para obtener respuestas precisas al instante
+              </h2>
+              <p className="mt-2 text-[13px] text-[#646462] leading-[20px] max-w-[640px]">
+                Fin AI Agent interpreta los correos electrónicos entrantes, proporciona respuestas utilizando tu contenido de asistencia y escala los problemas complejos cuando es necesario, ampliando la asistencia más allá del chat en vivo.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-[13px]">
+                <button onClick={() => openCrmView('knowledge')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Aprende cómo Fin responde a los correos electrónicos</span>
+                </button>
+                <button onClick={() => openCrmView('automation')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
+                  <span>Usa Fin en los flujos de trabajo</span>
+                </button>
+                <button onClick={() => openCrmView('email')} className="flex items-center gap-1.5 text-[#1a1a1a] hover:underline font-semibold">
+                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2.5" y="4" width="11" height="8" rx="1.2"/><path d="M2.5 5l5.5 4 5.5-4" strokeLinecap="round"/></svg>
+                  <span>Desplegar Fin por correo electrónico</span>
+                </button>
+              </div>
             </div>
+            <img src={IMG_FIN_DEPLOY_EMAIL} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
+            <button onClick={dismissHero} title="Ocultar" className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
+              <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
           </div>
-          <img src={IMG_FIN_DEPLOY_EMAIL} alt="" className="object-cover object-top rounded-[10px] flex-shrink-0" style={{ width: 388, height: 160 }} />
-          <button className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[#1a1a1a] hover:bg-black text-white flex items-center justify-center">
-            <svg viewBox="0 0 16 16" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.6"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
-          </button>
         </div>
-      </div>
+      )}
 
       {/* Section divider with title */}
       <div className="flex-shrink-0 border-t border-b border-[#e9eae6] px-6 h-12 flex items-center gap-2">
@@ -14813,8 +14887,9 @@ function FinDespliegueEmailContent() {
         <div className="px-6 py-6 flex flex-col gap-4 max-w-[720px]">
           <div className="flex items-center gap-3">
             <h4 className="text-[14px] font-bold text-[#1a1a1a]">Implementación sencilla</h4>
-            <button className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a]">
-              <span>No establecer en vivo</span>
+            <button onClick={() => openCrmView('connectors')} className="h-7 px-2.5 rounded-[6px] bg-white border border-[#e9eae6] flex items-center gap-1.5 text-[12px] text-[#1a1a1a] hover:bg-[#f8f8f7]">
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-[#15803d]' : 'bg-[#a4a4a2]'}`} />
+              <span>{isLive ? 'En vivo' : 'No establecer en vivo'}</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
           </div>
@@ -14830,10 +14905,10 @@ function FinDespliegueEmailContent() {
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Cuando un cliente envía su primer mensaje</span>
           </div>
           {[
-            { l: 'Fin responderá a', v: 'Users, Leads, and Visitors' },
-            { l: 'A través del canal de correo electrónico', v: '' },
+            { l: 'Fin responderá a', v: 'Users, Leads, and Visitors', target: 'people' },
+            { l: 'A través del canal de correo electrónico', v: '', target: 'email' },
           ].map((row, i) => (
-            <button key={i} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+            <button key={i} onClick={() => openCrmView(row.target)} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-[13px] font-semibold text-[#1a1a1a]">{row.l}</span>
                 {row.v && <span className="text-[12.5px] text-[#646462] truncate">{row.v}</span>}
@@ -14849,14 +14924,14 @@ function FinDespliegueEmailContent() {
             </span>
             <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin responde al cliente</span>
           </div>
-          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+          <button onClick={() => openCrmView('multilingual')} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[13px] font-semibold text-[#1a1a1a]">Fin se presenta</span>
               <span className="text-[12.5px] text-[#646462] truncate">Activadas (Todos los idi…)</span>
             </div>
             <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462] flex-shrink-0"><path d="M6 4l4 4-4 4z"/></svg>
           </button>
-          <button className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
+          <button onClick={() => openCrmView('knowledge')} className="flex items-center justify-between bg-white border border-[#e9eae6] rounded-[10px] px-4 py-3 hover:bg-[#f8f8f7]">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-[13px] font-semibold text-[#1a1a1a]">Usando contenido de asistencia</span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#fff1eb] text-[11px] text-[#bf3a1d] font-medium">
@@ -14900,13 +14975,22 @@ function FinDespliegueTelefonoContent() {
                 La voz de Fin está en <a href="#" className="underline">disponibilidad gestionada.</a>
               </p>
               <div className="mt-5 flex items-center gap-4">
-                <button className="h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">
+                <button
+                  onClick={() => {
+                    try {
+                      const key = 'clain.fin.voice.waitlist';
+                      window.localStorage.setItem(key, new Date().toISOString());
+                      window.alert('Te hemos apuntado a la lista de espera de Fin Voice. Te avisaremos en cuanto haya disponibilidad para tu workspace.');
+                    } catch { /* ignore */ }
+                  }}
+                  className="h-9 px-4 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black"
+                >
                   Registre su interés
                 </button>
-                <a href="#" className="text-[13px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1.5">
+                <button onClick={() => openCrmView('phone')} className="text-[13px] font-semibold text-[#1a1a1a] hover:underline flex items-center gap-1.5">
                   <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><path d="M2.5 3.2v9.6c1.7-.6 3.4-.6 5.5 0 2.1-.6 3.8-.6 5.5 0V3.2c-1.7-.6-3.4-.6-5.5 0C5.9 2.6 4.2 2.6 2.5 3.2z"/><path d="M8 3.2v9.6"/></svg>
                   <span>Más información</span>
-                </a>
+                </button>
               </div>
             </div>
             <img src={IMG_FIN_VOICE_BANNER} alt="" className="flex-shrink-0 rounded-[8px] object-cover" style={{ width: 400, height: 260 }} />
@@ -14936,8 +15020,20 @@ const FIN_INDUSTRY_TABS: { label: string; iconAsset: string; iconInset: string; 
   { label: 'Servicios financieros', iconAsset: 'f703656b-8581-4dd8-9698-22db4d8cfaee', iconInset: '18.75% 0' },
 ];
 
-function FinComenzarContent() {
+function FinComenzarContent({ onStart }: { onStart?: () => void }) {
   const [previewTab, setPreviewTab] = useState<'persoTareas' | 'transferencia'>('persoTareas');
+  const [activeIndustry, setActiveIndustry] = useState<string>(() => FIN_INDUSTRY_TABS.find((t: any) => t.active)?.label || FIN_INDUSTRY_TABS[0]?.label || '');
+  const [selectedQuestion, setSelectedQuestion] = useState<number>(0);
+  const previewQuestions = [
+    '¿Cuál es el horario de su equipo de asistencia?',
+    '¿Pueden mejorar mis ofertas de tarjetas de crédito?',
+    '¿Tienen una aplicación móvil?',
+  ];
+  const previewAnswers = [
+    'Nuestra asistencia por chat está disponible las 24 hrs./7 días a la semana. La asistencia telefónica y por correo electrónico está disponible de lunes a viernes durante el horario laboral, por lo que siempre hay alguien disponible cuando necesitas ayuda.',
+    'Para revisar y mejorar las ofertas de tu tarjeta de crédito necesitamos validar tu identidad. Inicia sesión y abre la sección "Mis productos" para ver opciones disponibles para ti.',
+    'Sí, contamos con aplicaciones móviles para iOS y Android. Puedes descargarlas desde la App Store o Google Play buscando el nombre de la empresa.',
+  ];
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -14952,7 +15048,7 @@ function FinComenzarContent() {
               <p className="mt-4 text-[14px] text-[#646462] leading-[20px]">
                 Responde a las consultas de los clientes y lleva a cabo acciones complejas para resolver incluso los problemas más difíciles.
               </p>
-              <button className="mt-6 h-8 px-3 rounded-full bg-[#222] text-[#f8f8f7] text-[14px] font-semibold inline-flex items-center gap-2 hover:bg-black leading-[16px]">
+              <button onClick={onStart} className="mt-6 h-8 px-3 rounded-full bg-[#222] text-[#f8f8f7] text-[14px] font-semibold inline-flex items-center gap-2 hover:bg-black leading-[16px]">
                 <span className="relative w-4 h-4 overflow-hidden block flex-shrink-0">
                   <img src={`${FIGMA_CDN}/e4cc1589-cd85-4651-b069-7cddec16bfff`} alt="" className="absolute" style={{ inset: '12.5% 6.25%' }} />
                 </span>
@@ -14977,11 +15073,12 @@ function FinComenzarContent() {
             <h3 className="text-[20px] font-serif text-[#1a1a1a]" style={{ fontFamily: "'Tiempos Headline', Georgia, serif" }}>Seleccione su industria</h3>
             <p className="mt-2 text-[14px] text-[#646462]">Vea cómo empresas como la suya automatizan con Fin y qué tipo de impacto podría lograr.</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {FIN_INDUSTRY_TABS.map(t => (
+              {FIN_INDUSTRY_TABS.map((t: any) => (
                 <button
                   key={t.label}
+                  onClick={() => setActiveIndustry(t.label)}
                   className={`pt-[6.87px] pb-[7.98px] px-[12px] rounded-full font-['Inter'] font-semibold text-[14px] leading-[16px] inline-flex items-center gap-2 ${
-                    t.active
+                    activeIndustry === t.label
                       ? 'bg-[#222] text-[#f8f8f7]'
                       : 'bg-[#f8f8f7] text-[#1a1a1a] hover:bg-[#ededea]'
                   }`}
@@ -15050,7 +15147,7 @@ function FinComenzarContent() {
                 <p className="mt-3 text-[13px] text-[#1a1a1a] leading-[20px]">
                   Proporcione a Fin contenido de su centro de ayuda y responderá preguntas frecuentes al instante. Comience poco a poco con algunas consultas informativas, como sus preguntas frecuentes principales. Visite Fin Studio para ver cómo se hace.
                 </p>
-                <button className="mt-5 h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
+                <button onClick={onStart} className="mt-5 h-8 px-3 rounded-[8px] bg-[#1a1a1a] text-white text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-black">
                   <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4" />
                   <span>Guía de configuración</span>
                 </button>
@@ -15102,12 +15199,12 @@ function FinComenzarContent() {
                 <div className="px-4 py-3 border-b border-[#e9eae6]">
                   <p className="text-[11px] font-mono tracking-[1px] uppercase text-[#646462]">Preguntas frecuentes</p>
                 </div>
-                {[
-                  '¿Cuál es el horario de su equipo de asistencia?',
-                  '¿Pueden mejorar mis ofertas de tarjetas de crédito?',
-                  '¿Tienen una aplicación móvil?',
-                ].map((q, i) => (
-                  <button key={q} className={`w-full text-left px-4 py-3 text-[13px] text-[#1a1a1a] hover:bg-[#f8f8f7] ${i < 2 ? 'border-b border-[#e9eae6]' : ''}`}>
+                {previewQuestions.map((q, i) => (
+                  <button
+                    key={q}
+                    onClick={() => setSelectedQuestion(i)}
+                    className={`w-full text-left px-4 py-3 text-[13px] hover:bg-[#f8f8f7] ${i === selectedQuestion ? 'bg-[#f8f8f7] text-[#1a1a1a] font-semibold' : 'text-[#1a1a1a]'} ${i < previewQuestions.length - 1 ? 'border-b border-[#e9eae6]' : ''}`}
+                  >
                     {q}
                   </button>
                 ))}
@@ -15129,18 +15226,18 @@ function FinComenzarContent() {
                       Esta es una vista previa de cómo Fin respondería a las preguntas de los clientes que necesitan <span className="font-semibold">contenido de asistencia al cliente.</span>
                     </p>
                   </div>
-                  {/* User question (dark, right) */}
+                  {/* User question (dark, right) — reflects selected preview question */}
                   <div className="self-end bg-[#222] border border-[#e9eae6] rounded-[16px] px-[13px] pt-[16px] pb-[23px] w-[281px]">
-                    <p className="text-[14px] text-[#f8f8f7] leading-[20px]">Tengo problemas para contactar con alguien, ¿cuándo está disponible su equipo de asistencia?</p>
+                    <p className="text-[14px] text-[#f8f8f7] leading-[20px]">{previewQuestions[selectedQuestion]}</p>
                   </div>
-                  {/* Fin response */}
+                  {/* Fin response — matched answer */}
                   <div className="bg-[#f8f8f7] border border-[#e9eae6] rounded-[16px] px-[13px] py-[17px] w-[281px]">
                     <div className="flex items-center gap-2 mb-3">
                       <img src={IMG_FIN_LOGO_MARK} alt="" className="w-4 h-4" />
                       <span className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px]">Fin • AI Agent</span>
                     </div>
                     <p className="text-[14px] text-[#1a1a1a] leading-[20px]">
-                      Nuestra asistencia por chat está disponible las 24 hrs./7 días a la semana. La asistencia telefónica y por correo electrónico está disponible de lunes a viernes durante el horario laboral, por lo que siempre hay alguien disponible cuando necesitas ayuda.
+                      {previewAnswers[selectedQuestion]}
                     </p>
                   </div>
                 </div>
@@ -15163,9 +15260,11 @@ function FinComenzarContent() {
 function FinDesempenoContent() {
   // Live numbers — pull stats + cases so we can compute Fin-specific KPIs
   // (automation %, engagement %, resolution %) without faking anything.
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
   const { data: stats } = useApi(() => aiApi.stats(), [], null);
   const { data: cases } = useApi(() => casesApi.list(), [], []);
-  const { data: overview } = useApi(() => reportsApi.overview('30d', 'all'), [], null);
+  const { data: overview } = useApi(() => reportsApi.overview(period, 'all'), [period], null);
+  const { dismissed: bannerDismissed, dismiss: dismissBanner } = useDismissibleHero('desempeno');
   const totals = useMemo(() => {
     const list = Array.isArray(cases) ? cases : [];
     const total = list.length;
@@ -15198,10 +15297,12 @@ function FinDesempenoContent() {
   }, [cases, stats, overview]);
   const periodLabel = useMemo(() => {
     const end = new Date();
-    const start = new Date(); start.setDate(start.getDate() - 30);
+    const start = new Date();
+    const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+    start.setDate(start.getDate() - days);
     const fmt = (d: Date) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
     return `${fmt(start)} – ${fmt(end)}`;
-  }, []);
+  }, [period]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -15210,14 +15311,16 @@ function FinDesempenoContent() {
         <div>
           <h2 className="text-[20px] font-bold text-[#1a1a1a] leading-[26px]">Rendimiento de Support</h2>
           <div className="mt-2 flex items-center gap-3">
-            <button className="h-7 px-2.5 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] inline-flex items-center gap-1.5 text-[#1a1a1a] hover:bg-[#f8f8f7]">
-              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#1a1a1a]" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5 2v3M11 2v3"/></svg>
-              <span>{periodLabel}</span>
-            </button>
-            <button className="h-7 px-2 text-[12px] inline-flex items-center gap-1.5 text-[#646462] hover:text-[#1a1a1a]">
-              <svg viewBox="0 0 12 12" className="w-3 h-3 fill-none stroke-current" strokeWidth="1.4"><path d="M6 2v8M2 6h8" strokeLinecap="round"/></svg>
-              <span>Añadir filtro</span>
-            </button>
+            <select
+              value={period}
+              onChange={e => setPeriod(e.target.value as '7d' | '30d' | '90d')}
+              className="h-7 px-2 rounded-[6px] border border-[#e9eae6] bg-white text-[12px] text-[#1a1a1a]"
+            >
+              <option value="7d">Últimos 7 días</option>
+              <option value="30d">Últimos 30 días</option>
+              <option value="90d">Últimos 90 días</option>
+            </select>
+            <span className="text-[12px] text-[#646462]">{periodLabel}</span>
           </div>
         </div>
         <button className="h-7 px-2.5 text-[12px] inline-flex items-center gap-1.5 text-[#0070c0] hover:underline">
@@ -15228,6 +15331,7 @@ function FinDesempenoContent() {
 
       <div className="flex-1 overflow-y-auto min-h-0 p-6">
         {/* Pro trial banner */}
+        {!bannerDismissed && (
         <div className="bg-white rounded-[12px] border border-[#e9eae6] p-5 flex items-center gap-5 mb-5 relative">
           <div className="w-[180px] h-[100px] flex-shrink-0 rounded-[8px] overflow-hidden bg-gradient-to-br from-[#fef3c7] via-[#f9d6a8] to-[#e8b478] relative flex items-center justify-center">
             <div className="absolute inset-3 bg-white rounded-md p-2 flex flex-col gap-1">
@@ -15246,10 +15350,11 @@ function FinDesempenoContent() {
               <span>Más información</span>
             </a>
           </div>
-          <button className="absolute top-3 right-3 w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center">
+          <button onClick={dismissBanner} title="Ocultar" className="absolute top-3 right-3 w-7 h-7 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center">
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-[#646462]" strokeWidth="1.4"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
           </button>
         </div>
+        )}
 
         {/* Top KPI row */}
         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -16189,7 +16294,7 @@ function FinAiView() {
 
   function renderSub() {
     switch (sub) {
-      case 'allRoles':       return <FinAllRolesContent />;
+      case 'allRoles':       return <FinAllRolesContent onStart={() => setSub('anaGetStarted')} />;
       case 'capacitar':      return <FinPlaceholderContent title="Capacitar"   subtitle="Configura el contenido, las atribuciones y los procedimientos que entrenan a Fin." />;
       case 'capContent':     return <FinContenidoContent />;
       case 'capGuidance':    return <FinOrientacionContent />;
@@ -16202,7 +16307,7 @@ function FinAiView() {
       case 'depChat':        return <FinDespliegueChatContent />;
       case 'depEmail':       return <FinDespliegueEmailContent />;
       case 'depPhone':       return <FinDespliegueTelefonoContent />;
-      case 'anaGetStarted':  return <FinComenzarContent />;
+      case 'anaGetStarted':  return <FinComenzarContent onStart={() => setSub('capContent')} />;
       case 'analizar':
       case 'anaPerformance': return <FinDesempenoContent />;
       case 'anaRecommendations': return <FinPlaceholderContent title="Recomendaciones" subtitle="Sugerencias de Fin para mejorar la cobertura, el tono y la resolución." />;
