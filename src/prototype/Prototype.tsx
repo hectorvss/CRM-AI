@@ -975,6 +975,21 @@ type FinAtributo = {
   conditions: FinAtributoCondition[];
   enabled: boolean;
 };
+type FinProcedimientoStep = {
+  id: string;
+  kind: 'verification' | 'action' | 'condition';
+  title: string;
+  body: string;
+};
+type FinProcedimiento = {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  steps: FinProcedimientoStep[];
+  enabled: boolean;
+  createdAt: number;
+};
 
 function relativeTime(value?: string | null) {
   if (!value) return 'Ahora';
@@ -18903,35 +18918,417 @@ function FinEscalamientoContent() {
 }
 
 // ─── Capacitar > Procedimientos (Figma 1:9083) ───────────────────────────────
+// ─── FinProcedimientoEditor: full-drawer create/edit modal for one procedure ─
+function FinProcedimientoEditor({
+  initial,
+  onSave,
+  onClose,
+  onAction,
+  onToggleEnable,
+}: {
+  initial: FinProcedimiento;
+  onSave: (next: FinProcedimiento) => void;
+  onClose: () => void;
+  onAction: (msg: string, type?: 'success' | 'error') => void;
+  onToggleEnable: (next: boolean) => void;
+}) {
+  const isNew = !initial.name && initial.steps.length === 0 && !initial.prompt;
+  const [name, setName] = useState(initial.name);
+  const [description, setDescription] = useState(initial.description);
+  const [prompt, setPrompt] = useState(initial.prompt);
+  const [steps, setSteps] = useState<FinProcedimientoStep[]>(initial.steps);
+  const [enabled, setEnabled] = useState(initial.enabled);
+  const [aiView, setAiView] = useState<null | { running: boolean; produced: FinProcedimientoStep[] }>(null);
+  const aiCancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName || '').toUpperCase();
+      const editing = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (!editing) onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function save() {
+    const next: FinProcedimiento = {
+      ...initial,
+      name: name.trim(),
+      description,
+      prompt,
+      steps,
+      enabled,
+    };
+    onSave(next);
+    onAction('Procedimiento guardado');
+  }
+  function handleToggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    onToggleEnable(next);
+  }
+  function addStep(kind: FinProcedimientoStep['kind']) {
+    setSteps(s => [...s, {
+      id: `step_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      kind,
+      title: '',
+      body: '',
+    }]);
+  }
+  function updateStep(id: string, patch: Partial<FinProcedimientoStep>) {
+    setSteps(s => s.map(it => it.id === id ? { ...it, ...patch } : it));
+  }
+  function removeStep(id: string) {
+    setSteps(s => s.filter(it => it.id !== id));
+  }
+
+  function fallbackStepsFromPrompt(text: string): FinProcedimientoStep[] {
+    const sentences = text.split(/[\.!?\n]+/).map(s => s.trim()).filter(s => s.length > 4).slice(0, 4);
+    const arr: FinProcedimientoStep[] = (sentences.length ? sentences : [text]).slice(0, 4).map((s, i) => ({
+      id: `step_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
+      kind: 'verification',
+      title: `Verificación ${i + 1}`,
+      body: s,
+    }));
+    while (arr.length < 4) {
+      arr.push({
+        id: `step_${Date.now()}_${arr.length}_${Math.floor(Math.random() * 1000)}`,
+        kind: 'verification',
+        title: `Verificación ${arr.length + 1}`,
+        body: 'Define una comprobación adicional necesaria para completar el procedimiento.',
+      });
+    }
+    return arr;
+  }
+
+  async function startAiGeneration() {
+    if (prompt.trim().length < 10) {
+      onAction('Describe primero qué debe hacer el procedimiento', 'error');
+      return;
+    }
+    aiCancelRef.current = { cancelled: false };
+    setAiView({ running: true, produced: [] });
+    let generated: FinProcedimientoStep[] = [];
+    try {
+      const aiPrompt = `Eres un experto en automatización de soporte. A partir de la siguiente descripción de un procedimiento, devuelve un JSON con la forma {"steps":[{"kind":"verification|action|condition","title":"...","body":"..."}]}. Cada paso debe ser una verificación clara y accionable. Devuelve entre 3 y 7 pasos. Sólo JSON, sin markdown.\n\nDescripción: ${prompt.trim()}`;
+      const response: any = await aiApi.copilot('procedure-generator', aiPrompt, []);
+      const raw = String(response?.answer || response?.message || response?.content || '').trim();
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const arr = Array.isArray(parsed?.steps) ? parsed.steps : [];
+      generated = arr.slice(0, 7).map((it: any, i: number): FinProcedimientoStep => {
+        const k = String(it?.kind || 'verification').toLowerCase();
+        const kind: FinProcedimientoStep['kind'] = k === 'action' ? 'action' : k === 'condition' ? 'condition' : 'verification';
+        return {
+          id: `step_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
+          kind,
+          title: String(it?.title || `Paso ${i + 1}`).slice(0, 200),
+          body: String(it?.body || '').slice(0, 1200),
+        };
+      });
+      if (generated.length === 0) generated = fallbackStepsFromPrompt(prompt);
+    } catch {
+      generated = fallbackStepsFromPrompt(prompt);
+    }
+
+    // Animate insertion
+    let i = 0;
+    function appendNext() {
+      if (aiCancelRef.current.cancelled) return;
+      if (i >= generated.length) {
+        setSteps(prev => [...prev, ...generated]);
+        setAiView(null);
+        onAction('Pasos generados con IA');
+        return;
+      }
+      setAiView(v => v ? { ...v, produced: [...v.produced, generated[i]] } : v);
+      i += 1;
+      window.setTimeout(appendNext, 600);
+    }
+    window.setTimeout(appendNext, 400);
+  }
+
+  function cancelAi() {
+    aiCancelRef.current.cancelled = true;
+    setAiView(null);
+  }
+
+  const titleText = isNew ? 'Nuevo procedimiento' : 'Editar procedimiento';
+
+  function kindBadgeClass(kind: FinProcedimientoStep['kind']) {
+    if (kind === 'action') return 'bg-[#ede9fe] text-[#6d28d9]';
+    if (kind === 'condition') return 'bg-[#fef3c7] text-[#92400e]';
+    return 'bg-[#dbeafe] text-[#1e40af]';
+  }
+  function kindLabel(kind: FinProcedimientoStep['kind']) {
+    if (kind === 'action') return 'Acción';
+    if (kind === 'condition') return 'Condición';
+    return 'Verificación';
+  }
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className="absolute top-0 bottom-0 right-0 bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden w-[70%] min-w-[920px] max-w-[1500px] rounded-l-[14px]"
+        onClick={e => e.stopPropagation()}
+      >
+        {aiView ? (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <button
+              onClick={cancelAi}
+              title="Volver"
+              className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#1a1a1a]"
+            >
+              <svg viewBox="0 0 16 16" className="w-4 h-4 fill-none stroke-current" strokeWidth="1.6"><path d="M10 3L5 8l5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="flex items-center gap-1.5 flex-1 min-w-0 text-[13px]">
+              <span className="text-[#646462]">Procedimiento</span>
+              <span className="text-[#a4a4a2]">›</span>
+              <span className="font-semibold text-[#1a1a1a] truncate">Generación con IA</span>
+            </div>
+            <button onClick={cancelAi} className="h-8 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]">Cancelar</button>
+            <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        ) : (
+          <div className="flex-shrink-0 h-[60px] border-b border-[#e9eae6] flex items-center px-5 gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">{titleText}</h2>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f3f3f1] text-[#646462]'}`}>
+                {enabled ? 'Habilitado' : 'Deshabilitado'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {enabled ? (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#b91c1c] hover:bg-[#991b1b] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>
+                  Pausar
+                </button>
+              ) : (
+                <button
+                  onClick={handleToggleEnabled}
+                  className="h-8 px-3 rounded-full bg-[#15803d] hover:bg-[#166534] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 16 16" className="w-3 h-3 fill-current"><path d="M4 3l9 5-9 5z"/></svg>
+                  Habilitar
+                </button>
+              )}
+              <button onClick={save} className="h-8 px-4 rounded-full bg-[#1a1a1a] text-white text-[13px] font-semibold hover:bg-black">Guardar</button>
+              <button onClick={onClose} title="Cerrar (Esc)" className="w-8 h-8 rounded-md hover:bg-[#f8f8f7] flex items-center justify-center text-[#646462]">
+                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {aiView ? (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="w-full px-8 py-12 flex flex-col items-center gap-6">
+              <div className="bg-white border border-[#e9eae6] rounded-[14px] p-8 w-full max-w-[640px] flex flex-col items-center gap-5">
+                <div className="w-12 h-12 rounded-full border-2 border-[#e9eae6] border-t-[#ed621d] animate-spin" />
+                <div className="text-center">
+                  <h3 className="text-[18px] font-bold text-[#1a1a1a]">Generando pasos…</h3>
+                  <p className="mt-1 text-[13px] text-[#646462]">La IA está analizando tu instrucción y dividiéndola en verificaciones.</p>
+                </div>
+                <div className="w-full flex flex-col gap-2 mt-2">
+                  {aiView.produced.map((step, idx) => (
+                    <div key={step.id} className="flex items-start gap-3 p-3 bg-[#f8f8f7] border border-[#e9eae6] rounded-[10px] animate-in fade-in" style={{ animation: 'fadeIn 0.3s ease' }}>
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#15803d] text-white text-[11px] font-bold flex-shrink-0">✓</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-[#1a1a1a]">Paso {idx + 1}: {step.title}</p>
+                        <p className="text-[12px] text-[#646462] mt-0.5 line-clamp-2">{step.body}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {aiView.produced.length === 0 && (
+                    <p className="text-center text-[12.5px] text-[#a4a4a2]">Esperando primer paso…</p>
+                  )}
+                </div>
+                <button
+                  onClick={cancelAi}
+                  className="mt-2 h-9 px-4 rounded-full border border-[#e9eae6] bg-white text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto min-h-0 bg-[#fafaf8]">
+            <div className="w-full px-8 py-8 flex flex-col gap-4">
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Nombre</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Da un nombre claro al procedimiento. Por ejemplo, "Reembolso por daños".</p>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Reembolso por daños, Validación de cuenta…"
+                  className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Descripción</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Resume brevemente cuándo Fin debe ejecutar este procedimiento.</p>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Por ejemplo, cuando el cliente reporte un producto recibido en mal estado…"
+                  className="w-full min-h-[100px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <h3 className="text-[14px] font-semibold text-[#1a1a1a] mb-1">Instrucciones para Fin</h3>
+                <p className="text-[12.5px] text-[#646462] leading-[18px] mb-3">Describe qué debe hacer Fin paso a paso. Si lo prefieres, deja que la IA lo redacte por ti.</p>
+                <textarea
+                  value={prompt}
+                  onChange={e => setPrompt(e.target.value)}
+                  placeholder="Por ejemplo: Si el cliente reporta un producto dañado, primero pídele el número de pedido, luego una foto del daño, comprueba si está dentro del plazo de devolución y si todo es correcto, ofrece un reembolso o un reemplazo."
+                  className="w-full min-h-[160px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[13px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-[11.5px] text-[#646462]">{prompt.length} caracteres</p>
+                  <button
+                    onClick={startAiGeneration}
+                    className="h-9 px-4 rounded-full bg-[#ed621d] hover:bg-[#d4541a] text-white text-[13px] font-semibold flex items-center gap-1.5"
+                  >
+                    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-current"><path d="M8 1.5l1.4 3.6 3.6 1.4-3.6 1.4L8 11.5 6.6 7.9 3 6.5l3.6-1.4L8 1.5z"/></svg>
+                    Escribir con IA
+                  </button>
+                </div>
+              </div>
+              <div className="bg-white border border-[#e9eae6] rounded-[12px] p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1a1a1a]">Pasos de verificación</h3>
+                    <p className="text-[12.5px] text-[#646462] leading-[18px]">Define cada comprobación o acción que Fin debe ejecutar en orden.</p>
+                  </div>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11.5px] text-[#646462]">{steps.length} {steps.length === 1 ? 'paso' : 'pasos'}</span>
+                </div>
+                {steps.length === 0 ? (
+                  <div className="border border-dashed border-[#e9eae6] rounded-[10px] px-4 py-6 text-center text-[12.5px] text-[#646462] bg-[#fafaf8]">
+                    Aún no hay pasos. Escribe instrucciones y pulsa "Escribir con IA", o agrega un paso manualmente.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {steps.map((step, idx) => (
+                      <div key={step.id} className="bg-white border border-[#e9eae6] rounded-[10px] p-3 flex items-start gap-3 hover:border-[#1a1a1a]/30 transition-colors">
+                        <span className="text-[#a4a4a2] text-[14px] mt-1 cursor-grab select-none" title="Arrastrar">⋮⋮</span>
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#1a1a1a] text-white text-[11px] font-bold flex-shrink-0 mt-1">{idx + 1}</span>
+                        <div className="flex-1 min-w-0 flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${kindBadgeClass(step.kind)}`}>{kindLabel(step.kind)}</span>
+                            <Dropdown
+                              value={step.kind}
+                              items={[
+                                { value: 'verification', label: 'Verificación' },
+                                { value: 'action', label: 'Acción' },
+                                { value: 'condition', label: 'Condición' },
+                              ]}
+                              onChange={v => updateStep(step.id, { kind: v as FinProcedimientoStep['kind'] })}
+                              triggerClassName="h-7 px-2 rounded-md border border-[#e9eae6] bg-white flex items-center gap-1 text-[12px] text-[#646462] hover:bg-[#f8f8f7]"
+                            />
+                          </div>
+                          <input
+                            value={step.title}
+                            onChange={e => updateStep(step.id, { title: e.target.value })}
+                            placeholder="Título del paso (ej. Verificar número de pedido)"
+                            className="w-full h-9 px-3 rounded-lg border border-[#e9eae6] text-[13px] font-medium focus:outline-none focus:border-[#1a1a1a]"
+                          />
+                          <textarea
+                            value={step.body}
+                            onChange={e => updateStep(step.id, { body: e.target.value })}
+                            placeholder="Describe qué debe verificar o ejecutar Fin en este paso."
+                            className="w-full min-h-[64px] px-3 py-2 rounded-lg border border-[#e9eae6] text-[12.5px] resize-none focus:outline-none focus:border-[#1a1a1a]"
+                          />
+                        </div>
+                        <button
+                          onClick={() => removeStep(step.id)}
+                          title="Eliminar paso"
+                          className="w-8 h-8 rounded-md flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c] flex-shrink-0"
+                        >
+                          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  <Dropdown
+                    value=""
+                    items={[
+                      { value: 'verification', label: 'Verificación' },
+                      { value: 'action', label: 'Acción' },
+                      { value: 'condition', label: 'Condición' },
+                    ]}
+                    onChange={v => addStep(v as FinProcedimientoStep['kind'])}
+                    triggerLabel="+ Nuevo paso"
+                    triggerClassName="h-9 px-4 rounded-full border border-dashed border-[#1a1a1a]/40 bg-white flex items-center gap-2 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f8f7]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Capacitar > Procedimientos (Figma 1:9083) ───────────────────────────────
 function FinProcedimientosContent() {
   const IMG_PROCEDURES_BANNER = `${FIGMA_CDN}/6888e12d-22f0-4625-92ef-efa11b546d7e`;
   const IMG_PROCEDURES_LINK_BOOK = `${FIGMA_CDN}/4c9f4d1c-6469-49d8-bb4c-5e6a7ec27a9c`;
   const IMG_PROCEDURES_LINK_PRICING = `${FIGMA_CDN}/971e7d25-4645-4ee4-bde7-e6601edd1e8f`;
   const IMG_PROCEDURES_LINK_CHAT = `${FIGMA_CDN}/a4ceca54-462b-4826-94b9-87b715737da0`;
   const IMG_PROCEDURES_CLOSE = `${FIGMA_CDN}/31f0d3a4-c4be-4c92-b209-ce7933b77375`;
-  const { data: workflowsData, refetch } = useApi<any[]>(() => workflowsApi.list(), [], []);
+  const procedimientos = useFinResource<FinProcedimiento>('procedimientos', []);
   const [search, setSearch] = useState('');
-  const [showModal, setShowModal] = useState(false);
   const toast = useFinToast();
+  const [editing, setEditing] = useState<FinProcedimiento | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const procedures = useMemo(() => {
-    const list = Array.isArray(workflowsData) ? workflowsData : [];
-    const procs = list.filter((w: any) => String(w.kind || w.type || '').toLowerCase() === 'procedure');
     const q = search.trim().toLowerCase();
-    return q ? procs.filter((w: any) => String(w.name || w.title || '').toLowerCase().includes(q)) : procs;
-  }, [workflowsData, search]);
-  async function createProcedure(payload: { name: string; description: string }) {
-    try {
-      await workflowsApi.create({
-        kind: 'procedure',
-        name: payload.name,
-        description: payload.description || undefined,
-      });
-      toast.show('Procedimiento creado');
-      setShowModal(false);
-      refetch();
-    } catch (err: any) {
-      toast.show(err?.message || 'No se pudo crear el procedimiento', 'error');
-    }
+    if (!q) return procedimientos.items;
+    return procedimientos.items.filter(p => p.name.toLowerCase().includes(q));
+  }, [procedimientos.items, search]);
+  function startNewBlank() {
+    const created = procedimientos.create({
+      name: '',
+      description: '',
+      prompt: '',
+      steps: [],
+      enabled: false,
+      createdAt: Date.now(),
+    });
+    setEditing(created);
+    setEditorOpen(true);
+  }
+  function openEdit(p: FinProcedimiento) {
+    setEditing(p);
+    setEditorOpen(true);
+  }
+  function handleSave(next: FinProcedimiento) {
+    procedimientos.update(next.id, next);
+    setEditing(next);
+  }
+  function handleToggleEnable(next: boolean) {
+    if (!editing) return;
+    procedimientos.update(editing.id, { enabled: next });
+    setEditing({ ...editing, enabled: next });
+    toast.show(next ? 'Procedimiento habilitado' : 'Procedimiento pausado');
+  }
+  function handleDelete(p: FinProcedimiento, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar el procedimiento "${p.name || 'Sin nombre'}"?`)) return;
+    procedimientos.remove(p.id);
+    toast.show('Procedimiento eliminado');
   }
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -18948,7 +19345,7 @@ function FinProcedimientosContent() {
               <span>Aprender</span>
               <svg viewBox="0 0 16 16" className="w-3 h-3 fill-[#646462]"><path d="M4 6l4 4 4-4z"/></svg>
             </button>
-            <button onClick={() => setShowModal(true)} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
+            <button onClick={startNewBlank} className="h-8 px-3 rounded-[8px] bg-[#1a1a1a] border border-[#1a1a1a] flex items-center gap-1.5 text-[13px] font-semibold text-white hover:bg-black">
               <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-white" strokeWidth="1.6"><path d="M3 8h10M8 3v10" strokeLinecap="round"/></svg>
               <span>Nuevo procedimiento</span>
             </button>
@@ -19021,28 +19418,30 @@ function FinProcedimientosContent() {
                 <div className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-6 text-center text-[13px] text-[#646462]">
                   {search ? 'Ningún procedimiento coincide con la búsqueda.' : 'Aún no hay procedimientos. Pulsa «Nuevo procedimiento» para crear uno.'}
                 </div>
-              ) : procedures.map((p: any) => {
-                const id = String(p.id || p.slug || '');
-                const status = String(p.status || p.state || 'draft').toLowerCase();
-                const statusLabel = status === 'published' ? 'Publicado' : status === 'archived' ? 'Archivado' : 'Draft';
+              ) : procedures.map(p => {
                 return (
-                  <div key={id} className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40">
+                  <div
+                    key={p.id}
+                    onClick={() => openEdit(p)}
+                    className="bg-white border border-[#e9eae6] rounded-[12px] px-4 py-3 flex items-center justify-between hover:bg-[#f8f8f7]/40 cursor-pointer"
+                  >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.name || p.title || 'Untitled'}</p>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[#f1f1ee] border border-[#e9eae6] text-[11px] text-[#646462]">{statusLabel}</span>
+                        <p className="text-[13.5px] font-semibold text-[#1a1a1a]">{p.name.trim() || 'Sin nombre'}</p>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${p.enabled ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#f1f1ee] border border-[#e9eae6] text-[#646462]'}`}>
+                          {p.enabled ? 'Habilitado' : 'Deshabilitado'}
+                        </span>
                       </div>
                       <p className="text-[12.5px] text-[#646462] mt-0.5">{p.description || 'No se ha añadido ninguna descripción.'}</p>
                       <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-[#646462]">
-                        <span>Activado: <span className="text-[#1a1a1a]">{p.runsCount ?? p.runs_count ?? 0}</span></span>
-                        <span>Pendiente: <span className="text-[#1a1a1a]">0</span></span>
-                        <span>Resuelto: <span className="text-[#1a1a1a]">0</span></span>
-                        <span>Entregado: <span className="text-[#1a1a1a]">0</span></span>
-                        <span>Escalado: <span className="text-[#1a1a1a]">0</span></span>
-                        <span>Errores: <span className="text-[#1a1a1a]">0</span></span>
+                        <span>{p.steps.length} {p.steps.length === 1 ? 'paso' : 'pasos'}</span>
                       </div>
                     </div>
-                    <button className="w-8 h-8 rounded-[7px] flex items-center justify-center hover:bg-[#f1f1ee] text-[#646462]">
+                    <button
+                      onClick={e => handleDelete(p, e)}
+                      title="Eliminar"
+                      className="w-8 h-8 rounded-[7px] flex items-center justify-center text-[#646462] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                    >
                       <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-none stroke-current" strokeWidth="1.4"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5v8a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-8" strokeLinecap="round"/></svg>
                     </button>
                   </div>
@@ -19071,14 +19470,13 @@ function FinProcedimientosContent() {
           </div>
         </div>
       </div>
-      {showModal && (
-        <FinSimpleCreateModal
-          title="Nuevo procedimiento"
-          description="Define un proceso de varios pasos que Fin podrá ejecutar (reembolsos, recogidas, validaciones…)."
-          namePlaceholder="Reembolso por daños, Validación de cuenta…"
-          submitLabel="Crear procedimiento"
-          onClose={() => setShowModal(false)}
-          onSubmit={createProcedure}
+      {editorOpen && editing && (
+        <FinProcedimientoEditor
+          initial={editing}
+          onSave={handleSave}
+          onClose={() => setEditorOpen(false)}
+          onAction={(m, t) => toast.show(m, t)}
+          onToggleEnable={handleToggleEnable}
         />
       )}
       {toast.node}
