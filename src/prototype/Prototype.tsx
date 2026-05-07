@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Fragment, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { agentsApi, aiApi, attachmentsApi, auditApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, policyRulesApi, reportsApi, workflowsApi, workspacesApi } from '../api/client';
+import { agentsApi, aiApi, attachmentsApi, auditApi, billingApi, casesApi, connectorsApi, customersApi, iamApi, knowledgeApi, macrosApi, policyRulesApi, reportsApi, workflowsApi, workspacesApi } from '../api/client';
 import { useApi } from '../api/hooks';
 import AIStudio from '../components/AIStudio';
 import SuperAgent from '../components/SuperAgent';
@@ -6312,6 +6312,13 @@ const convFeedItems = [
 ];
 
 function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: me, loading: meLoading } = useApi(() => iamApi.me(), [], null);
+  const displayName = me?.name ?? me?.fullName ?? 'Hector Vidal Sanchez';
+  const displayEmail = me?.email ?? 'hectorvidal041103@gmail.com';
+  const initials = displayName.split(' ').map((p: string) => p[0]).join('').slice(0, 2).toUpperCase();
+  const displayRole = me?.role ?? me?.roleName ?? 'Agente';
+  const location = me?.location ?? 'Elda, Spain';
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -6330,15 +6337,15 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
             <div className="absolute inset-0 flex items-end px-8 pb-5">
               <div className="flex items-end gap-4">
                 <div className="w-[74px] h-[74px] rounded-full bg-[#9ec5fa] border-[3px] border-white flex items-center justify-center text-[22px] font-bold text-[#1a1a1a] flex-shrink-0">
-                  HV
+                  {initials}
                 </div>
                 <div className="flex flex-col gap-0.5 pb-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[20px] font-semibold text-white">Hector Vidal Sanchez</span>
+                    <span className="text-[20px] font-semibold text-white">{displayName}</span>
                     <span className="text-[11px] font-semibold text-white/90 bg-white/25 rounded-[4px] px-2 py-[2px]">Tú</span>
                   </div>
                   <div className="flex items-center gap-3 text-[13px] text-white/80">
-                    <span>Elda, Spain</span>
+                    <span>{location}</span>
                     <span>·</span>
                     <span>9:56 a.m.</span>
                     <span>·</span>
@@ -6362,10 +6369,10 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   <button className="text-[13px] font-semibold text-white bg-[#1a1a1a] rounded-full px-3 py-[5px] hover:bg-[#444]">Editar</button>
                 </div>
                 <div className="px-5 py-3">
-                  <ProfileRow value="Hector Vidal Sanchez">
+                  <ProfileRow value={displayName}>
                     <svg viewBox="0 0 14 14" fill="none" className="w-4 h-4"><circle cx="7" cy="4.5" r="2.3" stroke="#1a1a1a" strokeWidth="1.2"/><path d="M2 12c0-2.5 2.2-4.5 5-4.5s5 2 5 4.5" stroke="#1a1a1a" strokeWidth="1.2" strokeLinecap="round"/></svg>
                   </ProfileRow>
-                  <ProfileRow value="hector.vidal.sanchez">
+                  <ProfileRow value={me?.username ?? me?.handle ?? displayName.toLowerCase().replace(/\s+/g, '.')}>
                     <svg viewBox="0 0 14 14" fill="none" className="w-4 h-4"><rect x="1" y="3" width="12" height="8" rx="1.5" stroke="#1a1a1a" strokeWidth="1.2"/><path d="M1 5l6 4 6-4" stroke="#1a1a1a" strokeWidth="1.2"/></svg>
                   </ProfileRow>
                   <ProfileRow value="Activo">
@@ -6407,7 +6414,7 @@ function PersonalView({ view, onNavigate }: { view: View; onNavigate: (v: View) 
                   </div>
                   <div className="flex items-start gap-3 py-1">
                     <span className="text-[13px] text-[#646462] w-[85px] flex-shrink-0">Correo</span>
-                    <span className="text-[12px] text-[#1a1a1a] break-all">hectorvidal041103@gmail.com</span>
+                    <span className="text-[12px] text-[#1a1a1a] break-all">{displayEmail}</span>
                   </div>
                 </div>
               </div>
@@ -6496,6 +6503,9 @@ function SecurityInput({ label, defaultValue = "", placeholder = "", blue = fals
 }
 
 function SecurityView({ view, onNavigate, onBack }: { view: View; onNavigate: (v: View) => void; onBack: () => void }) {
+  const { data: me } = useApi(() => iamApi.me(), [], null);
+  const displayEmail = me?.email ?? 'hectorvidal041103@gmail.com';
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -6532,7 +6542,7 @@ function SecurityView({ view, onNavigate, onBack }: { view: View; onNavigate: (v
                   <div className="flex items-center gap-3">
                     <input
                       type="text"
-                      defaultValue="hectorvidal041103@gmail.com"
+                      defaultValue={displayEmail}
                       className="border border-[#e9eae6] rounded-[6px] px-3 py-[6px] text-[14px] text-[#1a1a1a] outline-none focus:border-[#1a1a1a] w-[236px]"
                     />
                     <button className="bg-[#f8f8f7] rounded-full px-3 py-[7px] text-[14px] font-semibold text-[#81817e] hover:bg-[#efefed] flex-shrink-0">Guardar</button>
@@ -7270,8 +7280,11 @@ const macrosList = [
 ];
 
 function MacrosView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [selected, setSelected] = useState('1');
-  const macro = macrosList.find(m => m.id === selected)!;
+  const { data: macros, loading: macrosLoading } = useApi(() => macrosApi.list(), [], []);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const list = macros.length > 0 ? macros : macrosList; // fallback to demo data
+  const effectiveId = selectedId ?? list[0]?.id ?? '1';
+  const macro = list.find((m: any) => m.id === effectiveId) ?? list[0];
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -7324,14 +7337,14 @@ function MacrosView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                     Filtrar por
                     <svg viewBox="0 0 10 6" className="w-2.5 h-2.5 fill-[#646462]"><path d="M0 0l5 6 5-6z"/></svg>
                   </button>
-                  <span className="text-[13px] text-[#646462]">4 macros</span>
+                  <span className="text-[13px] text-[#646462]">{macrosLoading ? '…' : `${list.length} macros`}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   <div className="px-4 py-2 text-[12px] font-semibold text-[#646462] uppercase tracking-wide">Macros compartidas</div>
-                  {macrosList.map(m => (
-                    <button key={m.id} onClick={() => setSelected(m.id)}
+                  {list.map((m: any) => (
+                    <button key={m.id} onClick={() => setSelectedId(m.id)}
                       className={`w-full px-4 py-3 text-left text-[13px] border-b border-[#e9eae6] flex items-center gap-2 ${
-                        selected === m.id ? 'bg-[#f0efff] text-[#1a1a1a] font-medium' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
+                        effectiveId === m.id ? 'bg-[#f0efff] text-[#1a1a1a] font-medium' : 'text-[#1a1a1a] hover:bg-[#f8f8f7]'
                       }`}>
                       {m.emoji && <span>{m.emoji}</span>}
                       {m.label}
@@ -7588,9 +7601,25 @@ function SlaView({ view, onNavigate }: { view: View; onNavigate: (v: View) => vo
 // ── AiInboxView ───────────────────────────────────────────────────────────────
 
 function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
-  const [copilot, setCopilot] = useState(true);
-  const [redactar, setRedactar] = useState(true);
-  const [autocompletar, setAutocompletar] = useState(true);
+  const { data: wsCtx } = useApi(() => workspacesApi.currentContext(), [], null);
+  const [copilot, setCopilot] = useState<boolean>(true);
+  const [redactar, setRedactar] = useState<boolean>(true);
+  const [autocompletar, setAutocompletar] = useState<boolean>(true);
+
+  // Hydrate from workspace settings once loaded
+  useEffect(() => {
+    if (!wsCtx) return;
+    if (wsCtx.settings?.ai_copilot_enabled !== undefined) setCopilot(!!wsCtx.settings.ai_copilot_enabled);
+    if (wsCtx.settings?.ai_draft_enabled !== undefined) setRedactar(!!wsCtx.settings.ai_draft_enabled);
+    if (wsCtx.settings?.ai_autocomplete_enabled !== undefined) setAutocompletar(!!wsCtx.settings.ai_autocomplete_enabled);
+  }, [wsCtx]);
+
+  async function persistToggles(key: string, value: boolean) {
+    if (!wsCtx?.id) return;
+    try {
+      await workspacesApi.updateSettings(wsCtx.id, { [key]: value });
+    } catch { /* best-effort */ }
+  }
 
   function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
     return (
@@ -7618,7 +7647,7 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
             {/* Copilot */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
-                <Toggle on={copilot} onToggle={() => setCopilot(v => !v)} />
+                <Toggle on={copilot} onToggle={() => { setCopilot(v => { persistToggles('ai_copilot_enabled', !v); return !v; }); }} />
                 <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Copilot</h4>
               </div>
               <p className="text-[13px] text-[#646462] ml-11">Un asistente personal de IA, impulsado por contenido y conversaciones pasadas.</p>
@@ -7634,7 +7663,7 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
             {/* Redactar */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
-                <Toggle on={redactar} onToggle={() => setRedactar(v => !v)} />
+                <Toggle on={redactar} onToggle={() => { setRedactar(v => { persistToggles('ai_draft_enabled', !v); return !v; }); }} />
                 <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Redactar y resumir con AI</h4>
               </div>
               <p className="text-[13px] text-[#646462] ml-11">Ajustar las respuestas y utilizar resúmenes</p>
@@ -7653,7 +7682,7 @@ function AiInboxView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
             {/* Autocompletar */}
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
-                <Toggle on={autocompletar} onToggle={() => setAutocompletar(v => !v)} />
+                <Toggle on={autocompletar} onToggle={() => { setAutocompletar(v => { persistToggles('ai_autocomplete_enabled', !v); return !v; }); }} />
                 <h4 className="text-[14px] font-semibold text-[#1a1a1a]">Autocompletar con IA</h4>
               </div>
               <p className="text-[13px] text-[#646462] ml-11">Generar título y descripción del folio de atención automáticamente</p>
@@ -7875,6 +7904,9 @@ const CONNECTOR_CARDS: { svg: string; label: string; bg: string }[] = [
 ];
 
 function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
+  const { data: connectors, loading: connectorsLoading } = useApi(() => connectorsApi.list(), [], []);
+  const hasConnectors = connectors.length > 0;
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -7891,18 +7923,56 @@ function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View
             </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0 px-12 py-12 flex flex-col items-center">
-            <h2 className="text-[28px] font-bold text-[#1a1a1a] text-center mb-3 leading-tight">Incorpore datos de sus clientes<br/>en tiempo real en Intercom</h2>
-            <p className="text-[14px] text-[#646462] text-center mb-10 max-w-[600px]">Conéctese a cualquier sistema externo o API personalizada con Conectores de datos sin código. Impulse Fin y el servicio de asistencia con datos en tiempo real para ofrecer asistencia más personalizada.</p>
-            <div className="grid grid-cols-3 gap-4 w-full max-w-[800px]">
-              {CONNECTOR_CARDS.map(card => (
-                <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
-                  <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
-                    <img src={card.svg} alt="" className="w-4 h-4" />
-                  </div>
-                  <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
-                </button>
-              ))}
-            </div>
+            {hasConnectors ? (
+              <div className="w-full max-w-[800px]">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-[18px] font-bold text-[#1a1a1a]">Tus conectores ({connectors.length})</h2>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {connectors.map((c: any) => (
+                    <div key={c.id} className="border border-[#e9eae6] rounded-[12px] px-5 py-4 flex items-center gap-4 hover:bg-[#fafaf9]">
+                      <div className="w-10 h-10 rounded-[10px] bg-[#f3f3f1] flex items-center justify-center flex-shrink-0 text-[18px]">
+                        {c.icon ?? '🔌'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold text-[#1a1a1a]">{c.name ?? c.label ?? c.id}</p>
+                        <p className="text-[12px] text-[#646462] truncate">{c.description ?? c.type ?? ''}</p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0 ${
+                        c.status === 'active' || c.isActive ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#f3f3f1] text-[#646462]'
+                      }`}>
+                        {c.status === 'active' || c.isActive ? 'Activo' : c.status ?? 'Inactivo'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-8 grid grid-cols-3 gap-4">
+                  {CONNECTOR_CARDS.map(card => (
+                    <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
+                      <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
+                        <img src={card.svg} alt="" className="w-4 h-4" />
+                      </div>
+                      <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-[28px] font-bold text-[#1a1a1a] text-center mb-3 leading-tight">Incorpore datos de sus clientes<br/>en tiempo real en Intercom</h2>
+                <p className="text-[14px] text-[#646462] text-center mb-10 max-w-[600px]">Conéctese a cualquier sistema externo o API personalizada con Conectores de datos sin código. Impulse Fin y el servicio de asistencia con datos en tiempo real para ofrecer asistencia más personalizada.</p>
+                <div className="grid grid-cols-3 gap-4 w-full max-w-[800px]">
+                  {CONNECTOR_CARDS.map(card => (
+                    <button key={card.label} className="bg-white border border-[#e9eae6] rounded-[12px] p-[17px] flex flex-col items-start justify-between gap-[46px] text-left hover:border-[#c8c9c4] hover:shadow-sm transition-all min-h-[144px]">
+                      <div className="w-11 h-11 rounded-[12px] flex items-center justify-center" style={{ background: card.bg }}>
+                        <img src={card.svg} alt="" className="w-4 h-4" />
+                      </div>
+                      <p className="text-[14px] font-semibold text-[#1a1a1a] leading-[20px] whitespace-pre-line">{card.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -7914,6 +7984,12 @@ function ConnectorsView({ view, onNavigate }: { view: View; onNavigate: (v: View
 
 function LabelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [search, setSearch] = useState('');
+  const { data: tags, loading: tagsLoading } = useApi(() =>
+    fetch('/api/tags').then(r => r.ok ? r.json() : []).then((d: any) => Array.isArray(d) ? d : []),
+    [], []
+  );
+  const labelRows = tags.length > 0 ? tags : [{ name: 'Feature Request', createdAt: '1h ago', createdBy: '—', people: 0, companies: 0, conversations: 0, messages: 0 }];
+
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden p-2 gap-2">
       <TrialBanner />
@@ -7937,15 +8013,19 @@ function LabelsView({ view, onNavigate }: { view: View; onNavigate: (v: View) =>
                   <th key={h} className="text-left px-4 py-2 font-medium text-[#646462] text-[12px]">{h} <span className="text-[#ccc]">↕</span></th>
                 ))}
               </tr></thead>
-              <tbody><tr className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
-                <td className="px-4 py-3"><span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 5l5-3 7 3-5 9-7-9z"/></svg>Feature Request</span></td>
-                <td className="px-4 py-3 text-[#646462]">1h ago</td>
-                <td className="px-4 py-3 text-[#646462]">—</td>
-                <td className="px-4 py-3 text-[#646462]">0</td>
-                <td className="px-4 py-3 text-[#646462]">0</td>
-                <td className="px-4 py-3 text-[#646462]">0</td>
-                <td className="px-4 py-3 text-[#646462]">0</td>
-              </tr></tbody>
+              <tbody>
+                {labelRows.map((lbl: any, i: number) => (
+                  <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                    <td className="px-4 py-3"><span className="flex items-center gap-2"><svg viewBox="0 0 16 16" className="w-3.5 h-3.5 fill-[#646462]"><path d="M2 5l5-3 7 3-5 9-7-9z"/></svg>{lbl.name ?? lbl.label ?? lbl.tag}</span></td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.createdAt ?? '—'}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.createdBy ?? '—'}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.people ?? 0}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.companies ?? 0}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.conversations ?? 0}</td>
+                    <td className="px-4 py-3 text-[#646462]">{lbl.messages ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         </div>
@@ -8597,6 +8677,13 @@ function WorkspaceMultilingualView({ view, onNavigate }: { view: View; onNavigat
 
 function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) => void }) {
   const [tab, setTab] = useState<'suscripcion' | 'facturas' | 'pago'>('suscripcion');
+  const { data: sub, loading: subLoading } = useApi(() => billingApi.subscription('org_default'), [], null);
+  const { data: usageData, loading: usageLoading } = useApi(() => billingApi.usage(), [], null);
+  const { data: ledger, loading: ledgerLoading } = useApi(() => billingApi.ledger('org_default'), [], []);
+  const planName = sub?.planId ?? sub?.plan_id ?? sub?.plan?.name ?? 'Advanced';
+  const trialEnd = sub?.trialEndsAt ?? sub?.trial_ends_at ?? null;
+  const trialEndStr = trialEnd ? new Date(trialEnd).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : '20 may 2026';
+  const monthlyAmount = sub?.amountCents != null ? `USD ${(sub.amountCents / 100).toFixed(2)}` : 'USD 0.00';
   const tabs = [
     { id: 'suscripcion' as const, label: 'Suscripción' },
     { id: 'facturas'    as const, label: 'Facturas' },
@@ -8635,9 +8722,9 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h2 className="text-[16px] font-bold text-[#1a1a1a]">Prueba gratuita</h2>
-                  <p className="text-[13px] text-[#646462] mt-1">Fecha de finalización de la prueba: 20 may 2026</p>
+                  <p className="text-[13px] text-[#646462] mt-1">{`Fecha de finalización de la prueba: ${trialEndStr}`}</p>
                 </div>
-                <p className="text-[14px] font-semibold text-[#1a1a1a]">USD 0.00</p>
+                <p className="text-[14px] font-semibold text-[#1a1a1a]">{monthlyAmount}</p>
               </div>
               {/* Plan card */}
               <div className="border border-[#e9eae6] rounded-[12px] mb-4">
@@ -8646,7 +8733,7 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
                   <button className="text-[13px] text-[#646462] flex items-center gap-1 hover:text-[#1a1a1a]">≡ Ver funciones incluidas</button>
                 </div>
                 <div className="px-5 py-4 flex items-center gap-3">
-                  <span className="text-[14px] font-medium text-[#1a1a1a]">Advanced</span>
+                  <span className="text-[14px] font-medium text-[#1a1a1a]">{subLoading ? '…' : planName}</span>
                   <span className="bg-[#e0e7ff] text-[#4338ca] rounded-full px-2 py-0.5 text-[11px] font-medium">Prueba De Advanced</span>
                   <button className="text-[13px] text-[#646462] hover:text-[#1a1a1a] flex items-center gap-1 ml-auto">⚙ Cambiar plan</button>
                 </div>
@@ -8669,7 +8756,27 @@ function BillingView({ view, onNavigate }: { view: View; onNavigate: (v: View) =
             </>}
 
             {tab === 'facturas' && (
-              <p className="text-[13px] text-[#646462]">No hay facturas disponibles aún.</p>
+              ledgerLoading ? (
+                <p className="text-[13px] text-[#646462]">Cargando facturas…</p>
+              ) : ledger.length === 0 ? (
+                <p className="text-[13px] text-[#646462]">No hay facturas disponibles aún.</p>
+              ) : (
+                <table className="w-full text-[13px]">
+                  <thead><tr className="border-b border-[#e9eae6]">
+                    {['Fecha', 'Descripción', 'Importe', 'Estado'].map(h => <th key={h} className="text-left px-4 py-2 font-medium text-[#646462]">{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {ledger.map((row: any, i: number) => (
+                      <tr key={i} className="border-b border-[#f3f3f1] hover:bg-[#fafaf9]">
+                        <td className="px-4 py-3">{row.date ? new Date(row.date).toLocaleDateString('es-ES') : '—'}</td>
+                        <td className="px-4 py-3 text-[#1a1a1a]">{row.description ?? row.desc ?? '—'}</td>
+                        <td className="px-4 py-3">{row.amountCents != null ? `USD ${(row.amountCents / 100).toFixed(2)}` : row.amount ?? '—'}</td>
+                        <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${row.status === 'paid' ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#fef9c3] text-[#854d0e]'}`}>{row.status ?? '—'}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
             )}
 
             {tab === 'pago' && <>
