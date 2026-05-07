@@ -13411,13 +13411,13 @@ function KnowledgeArticleEditor({
   const authorInitial = (authorName[0] || '?').toUpperCase();
 
   return (
-    // Drawer-style overlay: dimmed backdrop catches clicks to dismiss; the
-    // editor card sits inset from the edges so the LeftNav rail and a slice
-    // of the underlying view stay visible — same behaviour as the legacy
-    // Intercom editor in the screenshots.
-    <div className="fixed inset-0 z-50 bg-black/35 flex" onClick={onClose}>
+    // Slide-from-right drawer: takes ~70% of the viewport so the LeftNav,
+    // Knowledge sidebar, and a slice of the underlying view remain visible
+    // and live on the left — matches the Intercom screenshot exactly.
+    // Backdrop is transparent (no dimming) and click-outside dismisses.
+    <div className="fixed inset-0 z-50" onClick={onClose}>
       <div
-        className="my-3 mr-3 ml-[88px] flex-1 bg-white rounded-[14px] shadow-[0px_24px_60px_rgba(20,20,20,0.28)] border border-[#e9eae6] flex flex-col overflow-hidden"
+        className="absolute right-0 top-0 bottom-0 w-[70%] min-w-[920px] max-w-[1500px] bg-white border-l border-[#e9eae6] shadow-[-12px_0_36px_rgba(20,20,20,0.14)] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
       {/* Header */}
